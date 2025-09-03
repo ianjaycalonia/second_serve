@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Donors Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="scripts/css/donorDashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<!--  for Mobile -->
+<div class="offcanvas offcanvas-start sidebar" tabindex="-1" id="sidebarOffcanvas">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title text-gray">Menu</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <nav class="nav flex-column px-2">
+      <a href="DonorDashboard.html" class="nav-link active"><i class="bi bi-house-door-fill me-2"></i> Dashboard</a>
+      <a href="donorsMyDonation.html" class="nav-link"><i class="bi bi-box-seam me-2"></i> My Donations</a>
+      <a href="schedulePickups.html" class="nav-link"><i class="bi bi-building-add me-2"></i> Schedule Pickups</a>
+      <a href="donationHistory.html" class="nav-link"><i class="bi bi-people me-2"></i> Donation History</a>
+    </nav>
+  </div>
+</div>
+
+<!-- Navbar -->
+<nav class="navbar fixed-top navbar-expand-lg" style="background-color: #ffe0b3; z-index: 1040;">
+  <div class="container-fluid">
+    <button class="btn d-lg-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarOffcanvas">
+      <i class="bi bi-list fs-3"></i>
+    </button>
+    <div class="text-center mb-1 mt-1 ms-2">
+      <span class="navbar-brand fw-semibold">Second Serve by Simply Share</span>
+    </div>
+    <div class="d-flex align-items-center ms-auto">
+      <input type="search" class="form-control me-3 d-none d-md-block" placeholder="Search..." style="width: 200px;">
+      <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
+        <i class="bi bi-bell-fill fs-5"></i>
+      </a>
+      <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
+        <i class="bi bi-envelope-fill fs-5"></i>
+      </a>
+      <div class="dropdown">
+        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-person-circle fs-5"></i>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Profile</a></li>
+          <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- Sidebar for Desktop -->
+<div class="sidebar d-none d-lg-flex flex-column position-fixed">
+  <nav class="side_nav nav flex-column px-3">
+    <a href="DonorDashboard.html" class="nav-link active"><i class="bi bi-house-door-fill me-2"></i> Dashboard</a>
+    <a href="donorsMyDonation.html" class="nav-link"><i class="bi bi-box-seam me-2"></i> My Donations</a>
+    <a href="schedulePickups.html" class="nav-link"><i class="bi bi-building-add me-2"></i> Schedule Pickups</a>
+    <a href="donationHistory.html" class="nav-link"><i class="bi bi-people me-2"></i> Donation History</a>
+  </nav>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+  <h5 class="mb-3">Welcome, <span class="user-name"></span></h5>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+       <div class="card card-summary p-3" style="background-color: #ffe0b2;">
+        <h6>Total Donations Made</h6>
+          <div class="d-flex align-items-center"> 
+            <i class="bi bi-recycle display-2"></i>
+              <div class="d-flex flex-column ms-2"> 
+              <p class="display-6 mb-0">200</p>
+               <p class="text-muted">meals donated</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      <div class="col-md-3">
+      <div class="card card-summary p-3">
+      <h6>Schedule Delivers</h6>
+      <div class="d-flex align-items-center"> 
+        <i class="bi bi-clock display-2"></i>
+        <div class="d-flex flex-column ms-2"> 
+          <p class="display-6 mb-0">40</p>
+          <p class="text-muted">Deliveries</p>
+        </div>
+      </div>
+    </div>
+  </div>
+    <div class="col-md-3">
+  <div class="card card-summary p-3" style="background-color: #ffeb3b;">
+    <h6>Pending Donation</h6>
+    <div class="d-flex align-items-center"> 
+      <i class="bi bi-calendar-check-fill display-2"></i>
+      <div class="d-flex flex-column ms-2"> 
+        <p class="display-6 mb-0">15</p>
+        <p class="text-muted">Pending</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <div class="col-md-3">
+  <div class="card card-summary p-3" style="background-color: #ff4d4d;">
+    <h6>Canceled Donation</h6>
+    <div class="d-flex align-items-center"> 
+      <i class="bi bi-x-lg display-2"></i>
+      <div class="d-flex flex-column ms-2"> 
+        <p class="display-6 mb-0">8</p>
+        <p class="text-muted mb-0">Cancelled</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+  </div>
+  <div class="row g-4">
+  <div class="col-md-8 d-flex">
+    <div class="card card-shadow p-4 w-100 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0 fs-5">Metrics</h6>
+        <button class="donation btn w-25" type="button" data-bs-toggle="modal" data-bs-target="#donationModal">New Donation</button>
+      </div>
+
+      <div style="height: 300px;">
+        <canvas id="lineChart"></canvas>
+      </div>
+
+      <div class="text-center mt-3">
+        <button class="btn btn-secondary fs-6 mb-3 mt-3 w-25" type="button">Donation History</button>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4 d-flex flex-column gap-4">
+    <div class="card card-shadow p-4 w-100 h-100 d-flex flex-column">
+      <div class="fs-5 mb-3 text-start">Calendar Events</div>
+    </div>
+    <div class="card card-shadow p-4 w-100 h-100 d-flex flex-column">
+      <div class="fs-5 mb-3 text-start">Activity Feed</div>
+      <div class="flex-grow-1 activity-feed">
+        <div class="details mb-2"><strong>8:15 AM</strong><br>New Recipient registered: “Helping Hands Shelter”</div>
+        <div class="details mb-2"><strong>4:00 PM</strong><br>Donation from “DailyBites” successfully delivered</div>
+      </div>
+      <a href="#" class="text-decoration-none text-center mt-3">View All Activity >></a>
+    </div>
+  </div>
+</div>
+
+  <!-- Donation History Section -->
+  <div id="donationHistorySection" class="mt-4">
+    <div class="card card-shadow p-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0">My Donation History</h6>
+        <div class="d-flex align-items-center gap-2">
+          <div class="spinner-border spinner-border-sm text-warning d-none" id="historySpinner" role="status" aria-label="Loading"></div>
+          <button id="refreshHistoryBtn" class="btn btn-sm btn-outline-secondary">Refresh</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Item</th>
+              <th style="width: 10%">Type</th>
+              <th style="width: 8%">Qty</th>
+              <th style="width: 14%">Expiry</th>
+              <th style="width: 14%">Status</th>
+              <th style="width: 14%">Image</th>
+            </tr>
+          </thead>
+          <tbody id="donationHistoryBody">
+            <tr><td colspan="6" class="text-muted text-center">No data</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <nav>
+        <ul id="historyPagination" class="pagination pagination-sm mb-0 justify-content-end"></ul>
+      </nav>
+    </div>
+  </div>
+
+</div>
+<!-- Notifications Modal -->
+<div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="list-group">
+          <div class="list-group-item d-flex align-items-start">
+            <i class="bi bi-bell me-3 text-warning"></i>
+            <div>
+              <div class="fw-semibold">Your donation "Fresh Produce" was delivered</div>
+              <small class="text-muted">2h ago</small>
+            </div>
+          </div>
+          <div class="list-group-item d-flex align-items-start">
+            <i class="bi bi-info-circle me-3 text-primary"></i>
+            <div>
+              <div class="fw-semibold">Pickup scheduled for tomorrow 10:00 AM</div>
+              <small class="text-muted">Yesterday</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+<!-- Messages Modal -->
+<div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex" style="min-height: 300px;">
+          <div class="border-end pe-3 me-3" style="width: 220px;">
+            <input class="form-control form-control-sm mb-2" placeholder="Search conversations">
+            <div class="list-group small">
+              <a href="#" class="list-group-item list-group-item-action active">Cebu Food Bank</a>
+              <a href="#" class="list-group-item list-group-item-action">Helping Hands</a>
+            </div>
+          </div>
+          <div class="flex-grow-1 d-flex flex-column">
+            <div class="flex-grow-1 overflow-auto mb-2">
+              <div class="text-muted small mb-2">Today</div>
+              <div class="d-flex mb-2">
+                <div class="p-2 rounded bg-light">Hello! Thanks for your donation.</div>
+              </div>
+              <div class="d-flex justify-content-end mb-2">
+                <div class="p-2 rounded bg-warning-subtle">You're welcome! Happy to help.</div>
+              </div>
+            </div>
+            <div class="input-group">
+              <input type="text" class="form-control" placeholder="Type a message...">
+              <button class="btn btn-warning" type="button"><i class="bi bi-send"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Donation Modal -->
+<div class="modal fade" id="donationModal" tabindex="-1" aria-labelledby="donationModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="donationModalLabel">Make a Donation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="donationForm" enctype="multipart/form-data" novalidate>
+          <div class="mb-3">
+            <label for="donationType" class="form-label">Donation Type</label>
+            <select id="donationType" class="form-select" required>
+              <option value="">Select type</option>
+              <option value="food">Food</option>
+              <option value="non-food">Non-Food</option>
+            </select>
+            <div class="invalid-feedback">Please select a donation type.</div>
+          </div>
+          <div class="mb-2 d-flex justify-content-between align-items-center">
+            <label class="form-label mb-0">Donation Items</label>
+            <button type="button" id="addItemBtn" class="btn btn-sm btn-outline-primary">Add Donation Item</button>
+          </div>
+          <div class="mb-3">
+            <label for="receiptImage" class="form-label">Receipt Image (required, max 2MB)</label>
+            <input type="file" id="receiptImage" class="form-control" accept="image/*" required>
+            <div class="mt-2 d-none" id="receiptImagePreviewWrap">
+              <img id="receiptImagePreview" class="img-thumbnail" alt="Receipt preview" style="max-height: 140px; object-fit: contain;">
+            </div>
+          </div>
+          <datalist id="itemsDatalist"></datalist>
+          <div id="itemsContainer" class="d-flex flex-column gap-3">
+            <!-- Dynamic rows inserted here -->
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="submitDonationBtn" class="btn btn-warning">Submit Donation</button>
+      </div>
+    </div>
+  </div>
+ </div>
+
+<!-- Toast Container -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+  <div id="feedbackToast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="toastBody">Action completed.</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+  </div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="scripts/js/auth.js"></script>
+<script src="scripts/js/donorDashboard.js"></script>
+<script>
+// Donation modal + history logic
+(function(){
+  'use strict';
+
+  const $modal = $('#donationModal');
+  const $form = $('#donationForm');
+  const $submitBtn = $('#submitDonationBtn');
+  const $itemsContainer = $('#itemsContainer');
+  const $addItemBtn = $('#addItemBtn');
+  const $datalist = $('#itemsDatalist');
+  const toastEl = document.getElementById('feedbackToast');
+  const toast = toastEl ? new bootstrap.Toast(toastEl) : null;
+
+  function getStoredUser(){
+    try{ const s = sessionStorage.getItem('user') || localStorage.getItem('user'); return s ? JSON.parse(s) : null; }catch(_){ return null; }
+  }
+  
+  // Dynamic items
+  function itemRowTemplate(id){
+    return `
+    <div class="card p-3 border position-relative item-row" data-id="${id}">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-7">
+          <label class="form-label mb-1">Item Name</label>
+          <input type="text" class="form-control item-name" list="itemsDatalist" placeholder="Search or type new" required>
+          <div class="invalid-feedback">Item name is required.</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label mb-1">Quantity</label>
+          <input type="number" class="form-control item-qty" min="1" required>
+          <div class="invalid-feedback">Min 1</div>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label mb-1">Expiry Date</label>
+          <input type="date" class="form-control item-expiry">
+        </div>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-danger position-absolute" style="top:8px; right:8px" aria-label="Remove item">Remove</button>
+    </div>`;
+  }
+
+  let __rowId = 1;
+  function addItemRow(){
+    $itemsContainer.append(itemRowTemplate(__rowId++));
+  }
+  function removeItemRow(btn){
+    $(btn).closest('.item-row').remove();
+  }
+
+  $addItemBtn.on('click', addItemRow);
+  $itemsContainer.on('click', '.btn-outline-danger', function(){ removeItemRow(this); });
+  // Single receipt image preview + limit
+  const $receiptInput = $('#receiptImage');
+  const $receiptWrap = $('#receiptImagePreviewWrap');
+  const $receiptPrev = $('#receiptImagePreview');
+  $receiptInput.on('change', function(){
+    const f = this.files && this.files[0];
+    if (!f){ $receiptWrap.addClass('d-none'); $receiptPrev.attr('src',''); return; }
+    if (f.size > 2 * 1024 * 1024){
+      this.value = '';
+      $receiptWrap.addClass('d-none');
+      $receiptPrev.attr('src','');
+      showToast('Receipt image exceeds 2MB. Please choose a smaller file.', 'danger');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => { $receiptPrev.attr('src', e.target.result); $receiptWrap.removeClass('d-none'); };
+    reader.readAsDataURL(f);
+  });
+
+  function setSubmitting(isLoading){
+    if (isLoading){
+      $submitBtn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...');
+    } else {
+      $submitBtn.prop('disabled', false).text('Submit Donation');
+    }
+  }
+
+  function showToast(msg, variant){
+    try{
+      const body = document.getElementById('toastBody');
+      body.textContent = msg || 'Done';
+      const el = document.getElementById('feedbackToast');
+      el.className = 'toast align-items-center text-bg-' + (variant || 'dark') + ' border-0';
+      bootstrap.Toast.getOrCreateInstance(el).show();
+    }catch(_){ alert(msg); }
+  }
+
+  function validateForm(){
+    let ok = true;
+    $form.find('.is-invalid').removeClass('is-invalid');
+    const type = $('#donationType').val();
+    if (!type){ $('#donationType').addClass('is-invalid'); ok = false; }
+    // At least one item row
+    const rows = $itemsContainer.find('.item-row');
+    if (rows.length === 0){
+      showToast('Add at least one donation item.', 'danger');
+      return false;
+    }
+    rows.each(function(){
+      const $row = $(this);
+      const name = $row.find('.item-name').val().trim();
+      const qty = parseInt($row.find('.item-qty').val(), 10);
+      if (!name){ $row.find('.item-name').addClass('is-invalid'); ok = false; }
+      if (!qty || qty < 1){ $row.find('.item-qty').addClass('is-invalid'); ok = false; }
+      // no per-row images anymore
+    });
+    // Require a receipt image
+    if (!($receiptInput[0].files && $receiptInput[0].files[0])){
+      showToast('Receipt image is required to submit a donation.', 'danger');
+      $receiptInput.addClass('is-invalid');
+      ok = false;
+    } else {
+      $receiptInput.removeClass('is-invalid');
+    }
+    return ok;
+  }
+
+  // Submit: single multipart request to /batch with arrays for items and one receipt image
+  $submitBtn.on('click', function(){
+    if (!validateForm()) return;
+    const rows = $itemsContainer.find('.item-row');
+    setSubmitting(true);
+    const fd = new FormData();
+    fd.append('type', $('#donationType').val());
+    rows.each(function(){
+      const $row = $(this);
+      fd.append('name[]', $row.find('.item-name').val().trim());
+      fd.append('quantity[]', $row.find('.item-qty').val());
+      const expiry = $row.find('.item-expiry').val();
+      fd.append('expiry_date[]', expiry || '');
+    });
+    if ($receiptInput[0].files && $receiptInput[0].files[0]){
+      fd.append('image', $receiptInput[0].files[0]);
+    }
+
+    $.ajax({
+      url: `${API_BASE_URL}/donations/index.php/batch`,
+      method: 'POST',
+      data: fd,
+      processData: false,
+      contentType: false,
+      dataType: 'json',
+      xhrFields: { withCredentials: true },
+      success: function(){
+        showToast('Donation submitted successfully', 'success');
+        $form[0].reset();
+        $itemsContainer.empty();
+        addItemRow();
+        const modal = bootstrap.Modal.getInstance($modal[0]);
+        modal?.hide();
+        fetchHistory(true);
+      },
+      error: function(err){
+        const msg = err?.responseJSON?.error || 'Failed to submit donation';
+        showToast(msg, 'danger');
+      },
+      complete: function(){ setSubmitting(false); }
+    });
+  });
+
+  // History listing with simple pagination
+  const PAGE_SIZE = 50; // larger page size since we render grouped
+  let __items = [];
+  let __page = 1;
+
+  function badge(status){
+    switch(status){
+      case 'Pending': return '<span class="badge bg-warning text-dark">Pending</span>';
+      case 'Allocated': return '<span class="badge bg-info text-dark">Allocated</span>';
+      case 'Completed': return '<span class="badge bg-success">Completed</span>';
+      case 'Cancelled': return '<span class="badge bg-secondary">Cancelled</span>';
+      default: return `<span class="badge bg-light text-dark">${status||'Unknown'}</span>`;
+    }
+  }
+
+  function fmtDate(s){
+    if(!s) return '';
+    const d = new Date(s);
+    return isNaN(d) ? s : d.toLocaleDateString();
+  }
+
+  function imageCell(url){
+    if (!url) return '';
+    const safe = String(url).replace(/"/g, '&quot;');
+    // Constrain to smaller height to align well with badges in headers
+    return `<a href="${safe}" target="_blank" rel="noopener" class="d-inline-flex align-items-center flex-shrink-0"><img src="${safe}" class="img-thumbnail" style="max-height:40px; width:auto"></a>`;
+  }
+
+  function renderPage(){
+    const start = (Math.max(1,__page)-1) * PAGE_SIZE;
+    const pageItems = __items.slice(start, start + PAGE_SIZE);
+    // Group by batch_id; singles are their own group
+    const groups = new Map();
+    pageItems.forEach(r => {
+      const key = r.batch_id ? `b-${r.batch_id}` : `s-${r.id}`;
+      if (!groups.has(key)){
+        groups.set(key, { batch_id: r.batch_id || null, items: [] });
+      }
+      groups.get(key).items.push(r);
+    });
+
+    let htmlRows = '';
+    groups.forEach(group => {
+      const isBatch = !!group.batch_id;
+      if (isBatch){
+        const count = group.items.length;
+        const first = group.items[0] || {};
+        if (count <= 1){
+          // Single-item batch: render as a normal row (no expand/collapse)
+          const r = first;
+          htmlRows += `
+            <tr>
+              <td>${r.name || ''}</td>
+              <td>${r.type || ''}</td>
+              <td>${r.quantity ?? ''}</td>
+              <td>${fmtDate(r.expiry_date)}</td>
+              <td>${badge(r.status)}</td>
+              <td>${ imageCell(r.image_full_url) }</td>
+            </tr>
+          `;
+        } else {
+          const title = `Donation • ${count} item${count>1?'s':''}`;
+          htmlRows += `
+            <tr class="table-active group-row" data-batch-id="${group.batch_id}">
+              <td colspan="4" class="py-2">
+                <div class="fw-semibold"><button class="btn btn-sm btn-outline-secondary me-2 batch-toggle" type="button" aria-label="Toggle">Show</button>${title}</div>
+              </td>
+              <td class="py-2 align-middle">${badge(first.status || 'Pending')}</td>
+              <td class="py-2 align-middle">${imageCell(first.image_full_url)}</td>
+            </tr>
+            <tr class="child-container d-none" data-batch-id="${group.batch_id}">
+              <td colspan="6" class="p-0">
+                <table class="table table-sm mb-0">
+                  <tbody>
+                    ${group.items.map(r => `
+                      <tr>
+                        <td>${r.name || ''}</td>
+                        <td style="width:10%">${r.type || ''}</td>
+                        <td style="width:8%">${r.quantity ?? ''}</td>
+                        <td style="width:14%">${fmtDate(r.expiry_date)}</td>
+                        <td style="width:14%">${badge(r.status)}</td>
+                        <td style="width:14%">${ imageCell(r.image_full_url) }</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          `;
+        }
+      } else {
+        const r = group.items[0];
+        htmlRows += `
+          <tr>
+            <td>${r.name || ''}</td>
+            <td>${r.type || ''}</td>
+            <td>${r.quantity ?? ''}</td>
+            <td>${fmtDate(r.expiry_date)}</td>
+            <td>${badge(r.status)}</td>
+            <td>${ imageCell(r.image_full_url) }</td>
+          </tr>
+        `;
+      }
+    });
+    document.getElementById('donationHistoryBody').innerHTML = htmlRows || '<tr><td colspan="6" class="text-center text-muted">No donations yet</td></tr>';
+
+    // Pagination controls
+    const totalPages = Math.max(1, Math.ceil(__items.length / PAGE_SIZE));
+    const $pg = $('#historyPagination');
+    let html = '';
+    function li(p, label, disabled, active){
+      return `<li class="page-item ${disabled?'disabled':''} ${active?'active':''}"><a class="page-link" href="#" data-page="${p}">${label}</a></li>`;
+    }
+    html += li(__page-1, '«', __page<=1, false);
+    for(let p=1;p<=totalPages && p<=7;p++){
+      html += li(p, p, false, p===__page);
+    }
+    html += li(__page+1, '»', __page>=totalPages, false);
+    $pg.html(html);
+  }
+
+  function setHistoryLoading(on){
+    $('#historySpinner').toggleClass('d-none', !on);
+  }
+
+  function fetchHistory(reset){
+    if (reset) __page = 1;
+    setHistoryLoading(true);
+    $.ajax({
+      url: `${API_BASE_URL}/donations/index.php/list`,
+      method: 'GET',
+      dataType: 'json',
+      xhrFields: { withCredentials: true },
+      success: function(resp){
+        __items = resp?.data?.items || [];
+        // Populate datalist from unique item names
+        const names = Array.from(new Set(__items.map(x => (x.name||'').trim()).filter(Boolean))).sort();
+        $datalist.html(names.map(n => `<option value="${n}"></option>`).join(''));
+        renderPage();
+      },
+      error: function(err){
+        showToast(err.responseJSON?.error || 'Failed to load history', 'danger');
+      },
+      complete: function(){ setHistoryLoading(false); }
+    });
+  }
+
+  // Handle pagination clicks
+  $(document).on('click', '#historyPagination a.page-link', function(e){
+    e.preventDefault();
+    const p = parseInt(this.dataset.page, 10);
+    if (!isNaN(p)) { __page = p; renderPage(); }
+  });
+
+  // Toggle batch children
+  $(document).on('click', '.batch-toggle', function(){
+    const $groupRow = $(this).closest('tr.group-row');
+    const batchId = $groupRow.data('batch-id');
+    const $child = $(`tr.child-container[data-batch-id="${batchId}"]`);
+    const showing = !$child.hasClass('d-none');
+    $child.toggleClass('d-none', showing);
+    $(this).text(showing ? 'Show' : 'Hide');
+  });
+
+  // Refresh button
+  $('#refreshHistoryBtn').on('click', function(){ fetchHistory(true); });
+
+  // When modal opens, ensure at least one item row exists
+  $modal.on('show.bs.modal', function(){ if ($itemsContainer.find('.item-row').length === 0) addItemRow(); });
+
+  // Initial load
+  fetchHistory(true);
+})();
+</script>
+</body>
+</html>

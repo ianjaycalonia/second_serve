@@ -1,0 +1,141 @@
+body {
+  background-color: #fff6e9;
+  padding-top: 56px; /* To prevent content from hiding behind fixed navbar */
+}
+
+.sidebar {
+  background-color: #ffe0b3;
+  min-height: 100vh;
+  width: 300px;
+  position: fixed;
+  top: 0;
+  left: -300px; /* Hidden by default on mobile */
+  z-index: 1040; /* Sidebar behind navbar */
+  transition: all 0.3s;
+}
+
+.sidebar.show {
+  left: 0;
+}
+
+.offcanvas-backdrop {
+  z-index: 1030; 
+}
+
+
+.navbar {
+  z-index: 1050;
+  position: fixed;
+  top: 0;
+  width: 100%;
+}
+
+
+.navbar .container-fluid {
+  padding-left: 15px;
+  padding-right: 15px;
+}
+
+.sidebar .nav-link {
+  color: #3e3e3e;
+  margin-top: 5px;
+}
+
+.sidebar .nav-link.active {
+  background-color: #ff9933;
+  color: white !important;
+  border-radius: 5px;
+}
+
+.sidebar .nav-link:hover {
+  background-color: #ff9933;
+  color: white;
+  border-radius: 5px;
+}
+
+.main {
+  margin-left: 300px;
+  padding: 30px;
+  transition: margin-left 0.3s ease; 
+}
+
+.card-total {
+  background-color: #ffe0b2;
+}
+
+.card-summary {
+  background-color: #e0f7fa;
+}
+
+.card,
+.card-total,
+.card-summary {
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card h6 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.display-6 {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.form-select-sm {
+  font-size: 0.875rem;
+}
+
+.btn-warning {
+  background-color: #ff9933;
+  border: none;
+}
+
+.btn-warning:hover {
+  background-color: #e67e00;
+}
+
+.table-sm th,
+.table-sm td {
+  padding: 0.5rem;
+}
+
+.table thead th {
+  font-size: 14px;
+}
+
+.table tbody td {
+  font-size: 13px;
+}
+
+
+@media (max-width: 991px) {
+  .sidebar {
+    position: absolute;
+    top: 0;
+    left: -300px;
+  }
+
+  .sidebar.show {
+    left: 0;
+  }
+
+  .main {
+    margin-left: 0;
+    padding: 15px;
+  }
+}
+
+
+@media (min-width: 992px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+  }
+
+  .main {
+    margin-left: 300px;
+  }
+}
