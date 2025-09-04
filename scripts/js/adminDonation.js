@@ -15,6 +15,156 @@
     return d.toLocaleDateString();
   }
 
+  // Wire submit of Food Safety Checklist (Passed)
+  $(document).on('click', '#foodSafetySubmitBtn', function(){
+    const formEl = document.getElementById('foodSafetyForm');
+    if (!formEl) return;
+    const btn = this;
+    const fd = new FormData(formEl);
+    // Validation rules
+    const packagingOk = document.getElementById('fsPackaging').checked;
+    const spoilageOk = document.getElementById('fsSpoilage').checked;
+    const receiptInput = document.getElementById('fsReceipt');
+    const isBatch = !!(fd.get('batch_id'));
+
+    if (!packagingOk || !spoilageOk) {
+      alert('Please confirm packaging is in good condition and no signs of spoilage.');
+      return;
+    }
+    if (!receiptInput || !(receiptInput.files && receiptInput.files.length > 0)) {
+      alert('Receipt photo is required.');
+      return;
+    }
+    // Client-side size limit: 2 MB
+    const MAX_BYTES_FAIL = 2 * 1024 * 1024;
+    if (receiptInput.files[0] && receiptInput.files[0].size > MAX_BYTES_FAIL) {
+      alert('Receipt photo must be 2 MB or smaller.');
+      return;
+    }
+    // Client-side size limits: 2 MB per image
+    const MAX_BYTES = 2 * 1024 * 1024;
+    if (receiptInput.files[0] && receiptInput.files[0].size > MAX_BYTES) {
+      alert('Receipt photo must be 2 MB or smaller.');
+      return;
+    }
+    // Require an expiry photo for each item
+    const itemRows = Array.from(document.querySelectorAll('#fsBatchItems .fs-item-row'));
+    if (itemRows.length === 0) {
+      alert('Please provide at least one item with an expiry photo.');
+      return;
+    }
+    for (const row of itemRows) {
+      const input = row.querySelector('.fs-item-photo');
+      if (!input || !(input.files && input.files.length > 0)) {
+        alert('Please provide an expiry photo for each item.');
+        return;
+      }
+      if (input.files[0] && input.files[0].size > MAX_BYTES) {
+        alert('Each expiry photo must be 2 MB or smaller.');
+        return;
+      }
+    }
+    // Proceed to submit (passed)
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    $.ajax({
+      url: `${API_BASE_URL}/food_safety_checks/create.php`,
+      method: 'POST',
+      data: (function(){ fd.set('result','passed'); return fd; })(),
+      processData: false,
+      contentType: false,
+      dataType: 'json',
+      xhrFields: { withCredentials: true },
+      success: function(resp){
+        // Close modal
+        try {
+          const modalEl = document.getElementById('foodSafetyModal');
+          const inst = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+          inst.hide();
+        } catch(_) {}
+
+        // Update status to Picked Up (batch or single)
+        const donationId = fd.get('donation_id');
+        const batchId = fd.get('batch_id');
+        showBanner('success', 'Food safety check submitted. Marked as Picked Up.');
+        if (batchId) {
+          updateStatusBatch(batchId, 'Picked Up');
+        } else if (donationId) {
+          updateStatus(donationId, 'Picked Up');
+        } else {
+          fetchList();
+        }
+      },
+      error: function(err){
+        console.error('Food safety submit error', err);
+        alert(err?.responseJSON?.error || 'Failed to submit food safety check');
+      },
+      complete: function(){
+        btn.disabled = false;
+        btn.textContent = 'Submit Check';
+      }
+    });
+  });
+
+  // Wire submit of Food Safety Checklist (Failed)
+  $(document).on('click', '#foodSafetyFailBtn', function(){
+    const formEl = document.getElementById('foodSafetyForm');
+    if (!formEl) return;
+    const btn = this;
+    const fd = new FormData(formEl);
+    const failReason = (document.getElementById('fsFailReason').value || '').trim();
+    const receiptInput = document.getElementById('fsReceipt');
+
+    // Validation for fail path
+    if (!failReason) {
+      alert('Please provide a failure reason.');
+      return;
+    }
+    if (!receiptInput || !(receiptInput.files && receiptInput.files.length > 0)) {
+      alert('Receipt photo is required.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    $.ajax({
+      url: `${API_BASE_URL}/food_safety_checks/create.php`,
+      method: 'POST',
+      data: (function(){ fd.set('result','failed'); return fd; })(),
+      processData: false,
+      contentType: false,
+      dataType: 'json',
+      xhrFields: { withCredentials: true },
+      success: function(){
+        try {
+          const modalEl = document.getElementById('foodSafetyModal');
+          const inst = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+          inst.hide();
+        } catch(_) {}
+        const donationId = fd.get('donation_id');
+        const batchId = fd.get('batch_id');
+        showBanner('danger', 'Food safety check marked as Failed.');
+        if (batchId) {
+          updateStatusBatch(batchId, 'Failed Safety');
+        } else if (donationId) {
+          updateStatus(donationId, 'Failed Safety');
+        } else {
+          fetchList();
+        }
+      },
+      error: function(err){
+        console.error('Food safety fail submit error', err);
+        alert(err?.responseJSON?.error || 'Failed to submit failure result');
+      },
+      complete: function(){
+        btn.disabled = false;
+        btn.textContent = 'Mark as Failed';
+      }
+    });
+  });
+
   function updateStatusBatch(batchId, status){
     setLoadingUI(true);
     $.ajax({
@@ -124,6 +274,8 @@
     switch(st){
       case 'Pending': return '<span class="badge bg-warning text-dark">Pending</span>';
       case 'Allocated': return '<span class="badge bg-info text-dark">Allocated</span>';
+      case 'Picked Up': return '<span class="badge bg-primary">Picked Up</span>';
+      case 'Failed Safety': return '<span class="badge bg-danger">Failed Safety</span>';
       case 'Completed': return '<span class="badge bg-success">Completed</span>';
       case 'Cancelled': return '<span class="badge bg-secondary">Cancelled</span>';
       case 'Mixed': return '<span class="badge bg-light text-dark">Mixed</span>';
@@ -132,21 +284,16 @@
   }
 
   function actionButtons(row){
-    // For grouped batches, show batch-level actions
+    // Replace plain actions with Food Safety Check entry point
     if (row.is_group) {
-      const disabled = false; // actions enabled for batch rows
       return [
-        `<button class="btn btn-sm btn-outline-primary me-1 act-allocate-batch" ${disabled?'disabled':''} data-batch-id="${row.batch_id}">Allocate</button>`,
-        `<button class="btn btn-sm btn-outline-success me-1 act-complete-batch" ${disabled?'disabled':''} data-batch-id="${row.batch_id}">Complete</button>`,
-        `<button class="btn btn-sm btn-outline-secondary me-1 act-cancel-batch" ${disabled?'disabled':''} data-batch-id="${row.batch_id}">Cancel</button>`,
+        `<button class="btn btn-sm btn-warning me-1 act-food-safety-batch" data-batch-id="${row.batch_id}">Food Safety Check</button>`,
         `<button class="btn btn-sm btn-outline-danger act-delete-batch" data-batch-id="${row.batch_id}">Delete</button>`
       ].join('');
     }
     const disabled = row.status === 'Completed' || row.status === 'Cancelled';
     return [
-      `<button class="btn btn-sm btn-outline-primary me-1 act-allocate" ${disabled?'disabled':''} data-id="${row.id}">Allocate</button>`,
-      `<button class="btn btn-sm btn-outline-success me-1 act-complete" ${disabled?'disabled':''} data-id="${row.id}">Complete</button>`,
-      `<button class="btn btn-sm btn-outline-secondary me-1 act-cancel" ${disabled?'disabled':''} data-id="${row.id}">Cancel</button>`,
+      `<button class="btn btn-sm btn-warning me-1 act-food-safety" ${disabled?'disabled':''} data-id="${row.id}">Food Safety Check</button>`,
       `<button class="btn btn-sm btn-outline-danger act-delete" data-id="${row.id}">Delete</button>`
     ].join('');
   }
@@ -156,10 +303,10 @@
   }
 
   function receiptCell(row){
-    const url = row.image_url;
+    const url = row.image_full_url || row.image_url;
     if (url && typeof url === 'string') {
       const safeUrl = url.replace(/"/g, '&quot;');
-      return `<a href="${safeUrl}" target="_blank" rel="noopener" class="link-primary"><i class="bi bi-receipt"></i> View</a>`;
+      return `<button type="button" class="btn btn-link p-0 act-view-receipt" data-url="${safeUrl}"><i class="bi bi-receipt"></i> View</button>`;
     }
     return '<span class="text-muted">None</span>';
   }
@@ -362,80 +509,117 @@
     $tbody.off('click', '.act-complete-batch');
     $tbody.off('click', '.act-cancel-batch');
     $tbody.off('click', '.act-delete-batch');
+    $tbody.off('click', '.act-food-safety');
+    $tbody.off('click', '.act-food-safety-batch');
+    $tbody.off('click', '.act-view-receipt');
 
-    $tbody.on('click', '.act-allocate', function(){
+    // Food Safety openers
+    function renderItemRows(items){
+      const wrap = document.getElementById('fsBatchItems');
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      (items || []).forEach((it, idx) => {
+        const id = it.id || it.donation_id || it.item_id || it; // support various shapes
+        const name = (it.name || it.type || `Item #${id}`);
+        const row = document.createElement('div');
+        row.className = 'fs-item-row border rounded p-2';
+        row.innerHTML = `
+          <input type="hidden" name="item_ids[]" value="${id}">
+          <div class="d-flex align-items-center gap-2">
+            <div class="flex-grow-1 small text-muted">${name}</div>
+            <div style="min-width:220px;">
+              <label class="form-label mb-1">Expiry photo</label>
+              <input type="file" class="form-control form-control-sm fs-item-photo" name="item_photos[]" accept="image/*" capture="camera">
+            </div>
+          </div>`;
+        wrap.appendChild(row);
+      });
+    }
+
+    function openFoodSafetyModal(opts){
+      try {
+        const donationId = opts?.donationId || '';
+        const batchId = opts?.batchId || '';
+        const form = document.getElementById('foodSafetyForm');
+        if (!form) { alert('Food Safety form not found on this page.'); return; }
+        // reset
+        form.reset();
+        document.getElementById('fsDonationId').value = donationId;
+        document.getElementById('fsBatchId').value = batchId;
+        // populate items section
+        if (batchId) {
+          // fetch batch items
+          $.ajax({
+            url: `${API_BASE_URL}/donations/index.php/batch/${batchId}`,
+            method: 'GET',
+            dataType: 'json',
+            xhrFields: { withCredentials: true },
+            success: function(resp){
+              const items = resp?.data?.items || [];
+              renderItemRows(items);
+            },
+            error: function(){
+              renderItemRows([]);
+            }
+          });
+        } else if (donationId) {
+          // single donation: one item row
+          renderItemRows([{ id: donationId, name: `Donation #${donationId}` }]);
+        } else {
+          renderItemRows([]);
+        }
+        const modalEl = document.getElementById('foodSafetyModal');
+        const inst = bootstrap.Modal.getOrCreateInstance(modalEl);
+        inst.show();
+      } catch(e) { console.error(e); }
+    }
+
+    $tbody.on('click', '.act-food-safety', function(){
       const id = $(this).data('id');
-      openConfirmModal({
-        title: 'Allocate Donation',
-        body: '<p class="mb-0">Allocating donation…</p>',
-        confirmText: 'Allocate',
-        confirmClass: 'btn-primary',
-        onConfirm: function(){ updateStatus(id, 'Allocated'); }
-      });
+      openFoodSafetyModal({ donationId: id });
     });
-    $tbody.on('click', '.act-complete', function(){
-      const id = $(this).data('id');
-      openConfirmModal({
-        title: 'Complete Donation',
-        body: '<p class="mb-0">Completing donation…</p>',
-        confirmText: 'Complete',
-        confirmClass: 'btn-success',
-        onConfirm: function(){ updateStatus(id, 'Completed'); }
-      });
-    });
-    $tbody.on('click', '.act-cancel', function(){
-      const id = $(this).data('id');
-      openConfirmModal({
-        title: 'Cancel Donation',
-        body: '<p class="mb-0">Cancelling donation…</p>',
-        confirmText: 'Cancel',
-        confirmClass: 'btn-secondary',
-        onConfirm: function(){ updateStatus(id, 'Cancelled'); }
-      });
-    });
-    $tbody.on('click', '.act-delete', function(){
-      const id = $(this).data('id');
-      deleteDonation(id);
-    });
-    // Expand/collapse when clicking name or button on group row
-    $tbody.on('click', '.batch-toggle', function(){
-      const $tr = $(this).closest('tr.group-row');
-      toggleBatchRow($tr);
-    });
-    // Batch actions
-    $tbody.on('click', '.act-allocate-batch', function(){
-      const batchId = $(this).data('batch-id');
-      openConfirmModal({
-        title: 'Allocate Batch',
-        body: '<p class="mb-0">Allocating all items in this batch…</p>',
-        confirmText: 'Allocate',
-        confirmClass: 'btn-primary',
-        onConfirm: function(){ updateStatusBatch(batchId, 'Allocated'); }
-      });
-    });
-    $tbody.on('click', '.act-complete-batch', function(){
-      const batchId = $(this).data('batch-id');
-      openConfirmModal({
-        title: 'Complete Batch',
-        body: '<p class="mb-0">Completing all items in this batch…</p>',
-        confirmText: 'Complete',
-        confirmClass: 'btn-success',
-        onConfirm: function(){ updateStatusBatch(batchId, 'Completed'); }
-      });
-    });
-    $tbody.on('click', '.act-cancel-batch', function(){
-      const batchId = $(this).data('batch-id');
-      openConfirmModal({
-        title: 'Cancel Batch',
-        body: '<p class="mb-0">Cancelling all items in this batch…</p>',
-        confirmText: 'Cancel',
-        confirmClass: 'btn-secondary',
-        onConfirm: function(){ updateStatusBatch(batchId, 'Cancelled'); }
-      });
-    });
+    // (Deprecated old batch actions removed)
     $tbody.on('click', '.act-delete-batch', function(){
       const batchId = $(this).data('batch-id');
       deleteBatch(batchId);
+    });
+
+    // Open image viewer modal for receipt images
+    $tbody.on('click', '.act-view-receipt', function(){
+      try {
+        const url = $(this).data('url');
+        const img = document.getElementById('imageViewerImg');
+        const wrap = document.getElementById('imageViewerWrap');
+        const modalEl = document.getElementById('imageViewerModal');
+        if (!url) return;
+        if (!img || !modalEl) { window.open(url, '_blank'); return; }
+        img.src = url;
+        // Reset zoom state
+        let scale = 1;
+        function apply(){ img.style.transform = `scale(${scale})`; }
+        apply();
+        // Wire zoom buttons (replace nodes to clear old listeners)
+        const btnIn0 = document.getElementById('imgZoomInBtn');
+        const btnOut0 = document.getElementById('imgZoomOutBtn');
+        const btnReset0 = document.getElementById('imgZoomResetBtn');
+        if (btnIn0) {
+          const n = btnIn0.cloneNode(true); btnIn0.parentNode.replaceChild(n, btnIn0);
+          n.addEventListener('click', () => { scale = Math.min(5, +(scale + 0.2).toFixed(2)); apply(); });
+        }
+        if (btnOut0) {
+          const n = btnOut0.cloneNode(true); btnOut0.parentNode.replaceChild(n, btnOut0);
+          n.addEventListener('click', () => { scale = Math.max(0.2, +(scale - 0.2).toFixed(2)); apply(); });
+        }
+        if (btnReset0) {
+          const n = btnReset0.cloneNode(true); btnReset0.parentNode.replaceChild(n, btnReset0);
+          n.addEventListener('click', () => { scale = 1; apply(); if (wrap) wrap.scrollTo({top:0,left:0}); });
+        }
+        // Show modal
+        const inst = bootstrap.Modal.getOrCreateInstance(modalEl);
+        inst.show();
+      } catch(e) {
+        console.error('image modal error', e);
+      }
     });
   }
 

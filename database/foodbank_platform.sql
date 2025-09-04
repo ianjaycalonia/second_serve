@@ -17,6 +17,9 @@ SET time_zone = "+00:00";
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8mb4 */;
 
+-- Disable FK checks for idempotent imports
+SET FOREIGN_KEY_CHECKS=0;
+
 --
 -- Database: `foodbank_platform`
 --
@@ -27,17 +30,24 @@ SET time_zone = "+00:00";
 -- Table structure for table `donations`
 --
 
+DROP TABLE IF EXISTS `donations`;
 CREATE TABLE `donations` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `donor_id` int(11) NOT NULL,
+  `batch_id` varchar(36) DEFAULT NULL,
   `type` varchar(50) NOT NULL,
   `name` varchar(255) NOT NULL,
   `quantity` int(11) NOT NULL,
   `expiry_date` date DEFAULT NULL,
   `packaging` varchar(100) DEFAULT NULL,
   `image_url` varchar(255) DEFAULT NULL,
-  `status` enum('Pending','Allocated','Completed','Cancelled') DEFAULT 'Pending',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `status` enum('Pending','Allocated','Picked Up','Failed Safety','Completed','Cancelled') DEFAULT 'Pending',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `donor_id` (`donor_id`),
+  KEY `batch_id` (`batch_id`),
+  KEY `status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -46,13 +56,7 @@ CREATE TABLE `donations` (
 -- Table structure for table `donation_monitoring`
 --
 
-CREATE TABLE `donation_monitoring` (
-  `monitoring_id` int(11) NOT NULL,
-  `donation_id` int(11) NOT NULL,
-  `status` enum('pending','en_route_inhouse','en_route_thirdparty','delivered','received') DEFAULT 'pending',
-  `updated_by` int(11) NOT NULL,
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- (removed unused table donation_monitoring)
 
 -- --------------------------------------------------------
 
@@ -60,15 +64,9 @@ CREATE TABLE `donation_monitoring` (
 -- Table structure for table `matches`
 --
 
-CREATE TABLE `matches` (
-  `match_id` int(11) NOT NULL,
-  `donation_id` int(11) NOT NULL,
-  `recipient_id` int(11) NOT NULL,
-  `suggested_score` decimal(5,2) DEFAULT NULL,
-  `approved_by_admin` tinyint(1) DEFAULT 0,
-  `final_status` enum('accepted','rejected','changed') DEFAULT 'rejected',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- (removed unused table matches)
+
+-- (removed duplicate early index block for food_safety_checks; see consolidated indexes later)
 
 -- --------------------------------------------------------
 
@@ -76,13 +74,7 @@ CREATE TABLE `matches` (
 -- Table structure for table `messages`
 --
 
-CREATE TABLE `messages` (
-  `message_id` int(11) NOT NULL,
-  `sender_id` int(11) NOT NULL,
-  `recipient_id` int(11) NOT NULL,
-  `content` text NOT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- (removed unused table messages)
 
 -- --------------------------------------------------------
 
@@ -90,13 +82,7 @@ CREATE TABLE `messages` (
 -- Table structure for table `reports`
 --
 
-CREATE TABLE `reports` (
-  `report_id` int(11) NOT NULL,
-  `generated_by` int(11) NOT NULL,
-  `report_type` enum('donations','waste_reduction','beneficiaries') DEFAULT NULL,
-  `generated_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `file_url` varchar(255) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- (removed unused table reports)
 
 -- --------------------------------------------------------
 
@@ -104,16 +90,7 @@ CREATE TABLE `reports` (
 -- Table structure for table `requests`
 --
 
-CREATE TABLE `requests` (
-  `request_id` int(11) NOT NULL,
-  `recipient_id` int(11) NOT NULL,
-  `donation_id` int(11) DEFAULT NULL,
-  `request_type` enum('normal','call_for_donation') DEFAULT 'normal',
-  `description` text DEFAULT NULL,
-  `quantity_needed` int(11) DEFAULT NULL,
-  `status` enum('pending_admin','approved','rejected','fulfilled') DEFAULT 'pending_admin',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- (removed unused table requests)
 
 -- --------------------------------------------------------
 
@@ -121,8 +98,9 @@ CREATE TABLE `requests` (
 -- Table structure for table `users`
 --
 
+DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
-  `user_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
   `email` varchar(100) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
@@ -131,7 +109,10 @@ CREATE TABLE `users` (
   `contact_number` varchar(20) DEFAULT NULL,
   `address` text DEFAULT NULL,
   `status` enum('pending','approved','rejected') DEFAULT 'pending',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `last_login` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`user_id`),
+  UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -144,107 +125,91 @@ INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `organ
 (3, 'Kyle John Grengia', 'kylegwapo@gmail.com', '$2y$10$UdKbfVcKAWLqqQ7WZ2OYjOgtskIh/ji9qndf91Xg2NP7uAqG6oN7.', 'recipient', 'ABC corp', NULL, NULL, 'approved', '2025-08-30 08:09:38');
 
 --
--- Indexes for dumped tables
---
+-- (removed indexes for unused table reports)
+
+-- (removed indexes for unused table requests)
 
 --
--- Indexes for table `donations`
---
-ALTER TABLE `donations`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `donor_id` (`donor_id`);
+-- (indexes moved inline in CREATE TABLE `users`)
 
 --
--- Indexes for table `donation_monitoring`
---
-ALTER TABLE `donation_monitoring`
-  ADD PRIMARY KEY (`monitoring_id`),
-  ADD KEY `donation_id` (`donation_id`),
-  ADD KEY `updated_by` (`updated_by`);
-
---
--- Indexes for table `matches`
---
-ALTER TABLE `matches`
-  ADD PRIMARY KEY (`match_id`),
-  ADD KEY `donation_id` (`donation_id`),
-  ADD KEY `recipient_id` (`recipient_id`);
-
---
--- Indexes for table `messages`
---
-ALTER TABLE `messages`
-  ADD PRIMARY KEY (`message_id`),
-  ADD KEY `sender_id` (`sender_id`),
-  ADD KEY `recipient_id` (`recipient_id`);
-
---
--- Indexes for table `reports`
---
-ALTER TABLE `reports`
-  ADD PRIMARY KEY (`report_id`),
-  ADD KEY `generated_by` (`generated_by`);
-
---
--- Indexes for table `requests`
---
-ALTER TABLE `requests`
-  ADD PRIMARY KEY (`request_id`),
-  ADD KEY `recipient_id` (`recipient_id`),
-  ADD KEY `donation_id` (`donation_id`);
-
---
--- Indexes for table `users`
---
-ALTER TABLE `users`
-  ADD PRIMARY KEY (`user_id`),
-  ADD UNIQUE KEY `email` (`email`);
+-- (indexes will be defined inline or below after CREATEs)
 
 --
 -- AUTO_INCREMENT for dumped tables
 --
 
 --
--- AUTO_INCREMENT for table `donations`
---
-ALTER TABLE `donations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+-- (AUTO_INCREMENT moved inline in CREATE TABLE `donations`)
+
+-- --------------------------------------------------------
 
 --
--- AUTO_INCREMENT for table `donation_monitoring`
+-- Table structure for table `food_safety_checks`
 --
-ALTER TABLE `donation_monitoring`
-  MODIFY `monitoring_id` int(11) NOT NULL AUTO_INCREMENT;
+
+DROP TABLE IF EXISTS `food_safety_checks`;
+CREATE TABLE `food_safety_checks` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `donation_id` int(11) DEFAULT NULL,
+  `batch_id` varchar(36) DEFAULT NULL,
+  `packaging_ok` tinyint(1) DEFAULT NULL,
+  `spoilage_ok` tinyint(1) DEFAULT NULL,
+  `storage_temp` varchar(50) DEFAULT NULL,
+  `expiry_date` date DEFAULT NULL,
+  `receipt_image` varchar(255) NOT NULL,
+  `result` enum('passed','failed') NOT NULL,
+  `fail_reason` text DEFAULT NULL,
+  `created_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `donation_id` (`donation_id`),
+  KEY `batch_id` (`batch_id`),
+  KEY `created_by` (`created_by`),
+  KEY `result` (`result`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
 
 --
--- AUTO_INCREMENT for table `matches`
+-- Table structure for table `food_safety_item_photos`
 --
-ALTER TABLE `matches`
-  MODIFY `match_id` int(11) NOT NULL AUTO_INCREMENT;
+
+DROP TABLE IF EXISTS `food_safety_item_photos`;
+CREATE TABLE `food_safety_item_photos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `check_id` int(11) NOT NULL,
+  `donation_item_id` int(11) DEFAULT NULL,
+  `photo_url` varchar(255) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `check_id` (`check_id`),
+  KEY `donation_item_id` (`donation_item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
 
 --
--- AUTO_INCREMENT for table `messages`
---
-ALTER TABLE `messages`
-  MODIFY `message_id` int(11) NOT NULL AUTO_INCREMENT;
+-- (indexes moved inline in CREATE TABLE statements above)
+
+-- (removed auto_increment for unused table donation_monitoring)
+
+-- (removed auto_increment for unused table matches)
+
+-- (removed auto_increment for unused table messages)
+
+-- (removed auto_increment for unused table reports)
+
+-- (removed auto_increment for unused table requests)
 
 --
--- AUTO_INCREMENT for table `reports`
---
-ALTER TABLE `reports`
-  MODIFY `report_id` int(11) NOT NULL AUTO_INCREMENT;
+-- (AUTO_INCREMENT moved inline in CREATE TABLE `users`)
 
 --
--- AUTO_INCREMENT for table `requests`
---
-ALTER TABLE `requests`
-  MODIFY `request_id` int(11) NOT NULL AUTO_INCREMENT;
+-- (AUTO_INCREMENT moved inline in CREATE TABLE `food_safety_checks`)
 
 --
--- AUTO_INCREMENT for table `users`
---
-ALTER TABLE `users`
-  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+-- (AUTO_INCREMENT moved inline in CREATE TABLE `food_safety_item_photos`)
 
 --
 -- Constraints for dumped tables
@@ -256,39 +221,30 @@ ALTER TABLE `users`
 ALTER TABLE `donations`
   ADD CONSTRAINT `donations_ibfk_1` FOREIGN KEY (`donor_id`) REFERENCES `users` (`user_id`);
 
---
--- Constraints for table `donation_monitoring`
---
-ALTER TABLE `donation_monitoring`
-  ADD CONSTRAINT `donation_monitoring_ibfk_1` FOREIGN KEY (`donation_id`) REFERENCES `donations` (`id`),
-  ADD CONSTRAINT `donation_monitoring_ibfk_2` FOREIGN KEY (`updated_by`) REFERENCES `users` (`user_id`);
+-- (removed FKs for unused table donation_monitoring)
+
+-- (removed FKs for unused table matches)
+
+-- (removed FKs for unused table messages)
+
+-- (removed FKs for unused table reports)
+
+-- (removed FKs for unused table requests)
 
 --
--- Constraints for table `matches`
+-- Constraints for table `food_safety_checks`
 --
-ALTER TABLE `matches`
-  ADD CONSTRAINT `matches_ibfk_1` FOREIGN KEY (`donation_id`) REFERENCES `donations` (`id`),
-  ADD CONSTRAINT `matches_ibfk_2` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`);
+ALTER TABLE `food_safety_checks`
+  ADD CONSTRAINT `food_safety_checks_ibfk_1` FOREIGN KEY (`donation_id`) REFERENCES `donations` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `food_safety_checks_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 --
--- Constraints for table `messages`
+-- Constraints for table `food_safety_item_photos`
 --
-ALTER TABLE `messages`
-  ADD CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`user_id`),
-  ADD CONSTRAINT `messages_ibfk_2` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`);
-
---
--- Constraints for table `reports`
---
-ALTER TABLE `reports`
-  ADD CONSTRAINT `reports_ibfk_1` FOREIGN KEY (`generated_by`) REFERENCES `users` (`user_id`);
-
---
--- Constraints for table `requests`
---
-ALTER TABLE `requests`
-  ADD CONSTRAINT `requests_ibfk_1` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`),
-  ADD CONSTRAINT `requests_ibfk_2` FOREIGN KEY (`donation_id`) REFERENCES `donations` (`id`);
+ALTER TABLE `food_safety_item_photos`
+  ADD CONSTRAINT `food_safety_item_photos_ibfk_1` FOREIGN KEY (`check_id`) REFERENCES `food_safety_checks` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `food_safety_item_photos_ibfk_2` FOREIGN KEY (`donation_item_id`) REFERENCES `donations` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ SET FOREIGN_KEY_CHECKS=1;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

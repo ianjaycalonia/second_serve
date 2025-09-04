@@ -155,7 +155,7 @@ class Donation
     // Update status
     public function updateStatus(int $id, string $status): void
     {
-        $allowed = ['Pending','Allocated','Completed','Cancelled'];
+        $allowed = ['Pending','Allocated','Picked Up','Failed Safety','Completed','Cancelled'];
         if (!in_array($status, $allowed, true)) {
             throw new Exception('Invalid status value');
         }
@@ -183,7 +183,7 @@ class Donation
     // Batch: update status for all items in a batch (non-archived)
     public function updateStatusByBatch(string $batchId, string $status): void
     {
-        if (!in_array($status, ['Pending', 'Allocated', 'Completed', 'Cancelled'], true)) {
+        if (!in_array($status, ['Pending','Allocated','Picked Up','Failed Safety','Completed','Cancelled'], true)) {
             throw new Exception('Invalid status value');
         }
         $this->db->query("UPDATE donations SET status = ? WHERE deleted_at IS NULL AND batch_id = ?", [$status, $batchId]);
@@ -193,6 +193,22 @@ class Donation
     public function deleteByBatch(string $batchId): void
     {
         $this->db->query("UPDATE donations SET deleted_at = NOW() WHERE deleted_at IS NULL AND batch_id = ?", [$batchId]);
+    }
+
+    // Search distinct item names for suggestions
+    public function searchItemNames(string $q = '', int $limit = 20): array
+    {
+        $limit = max(1, min(100, (int)$limit));
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $sql = "SELECT DISTINCT name FROM donations WHERE deleted_at IS NULL AND name LIKE ? ORDER BY name ASC LIMIT $limit";
+            $rows = $this->db->query($sql, [$like])->fetchAll();
+        } else {
+            // Return most frequent names when no query provided
+            $sql = "SELECT name FROM donations WHERE deleted_at IS NULL AND name IS NOT NULL AND name<>'' GROUP BY name ORDER BY COUNT(*) DESC, name ASC LIMIT $limit";
+            $rows = $this->db->query($sql)->fetchAll();
+        }
+        return array_values(array_filter(array_map(function($r){ return $r['name'] ?? null; }, $rows), function($v){ return $v !== null && $v !== ''; }));
     }
 }
 

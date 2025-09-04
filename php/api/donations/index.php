@@ -147,11 +147,45 @@ try {
         } else {
             sendJson(['success' => false, 'error' => 'Forbidden'], 403);
         }
-        // Attach absolute image URL
+        // Attach absolute image URL; if donation has no image, fall back to latest food safety receipt image
+        $db = Database::getInstance();
         foreach ($items as &$it) {
-            $it['image_full_url'] = buildImageFullUrl($it['image_url'] ?? '');
+            $imageUrl = $it['image_url'] ?? '';
+            $full = buildImageFullUrl($imageUrl);
+            if ($full === '' || $imageUrl === null || $imageUrl === '') {
+                // Try to get the latest receipt from food safety checks by batch or donation
+                if (!empty($it['batch_id'])) {
+                    $row = $db->query(
+                        "SELECT receipt_image FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
+                        [$it['batch_id']]
+                    )->fetch();
+                    if ($row && !empty($row['receipt_image'])) {
+                        $full = buildImageFullUrl($row['receipt_image']);
+                    }
+                } else if (!empty($it['id'])) {
+                    $row = $db->query(
+                        "SELECT receipt_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                        [(int)$it['id']]
+                    )->fetch();
+                    if ($row && !empty($row['receipt_image'])) {
+                        $full = buildImageFullUrl($row['receipt_image']);
+                    }
+                }
+            }
+            $it['image_full_url'] = $full;
         }
         sendJson(['success' => true, 'data' => ['items' => $items]]);
+    }
+
+    // GET /api/donations/items?q=apple&limit=20
+    if ($method === 'GET' && preg_match('#^/(items|items/)\z#', $sub)) {
+        // Donors and admins can search names
+        requireRole(['donor','admin']);
+        $q = isset($_GET['q']) ? sanitize($_GET['q']) : '';
+        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
+        $names = $service->searchItemNames($q, $limit);
+        // Simple list response; front-end maps to Select2 results
+        sendJson(['success' => true, 'items' => $names]);
     }
 
     // GET /api/donations/{id}
@@ -245,6 +279,11 @@ function readCreatePayload(): array {
 function saveUploadedImage(array $file): string {
     if ($file['error'] !== UPLOAD_ERR_OK) {
         throw new Exception('Upload error');
+    }
+    // 2 MB size limit
+    $maxBytes = 2 * 1024 * 1024; // 2 MB
+    if (isset($file['size']) && $file['size'] > $maxBytes) {
+        throw new Exception('Image exceeds 2 MB limit');
     }
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mime = finfo_file($finfo, $file['tmp_name']);
