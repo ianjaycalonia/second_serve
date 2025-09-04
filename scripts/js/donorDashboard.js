@@ -39,6 +39,8 @@
     const $addItemBtn = $('#addItemBtn');
     const $datalist = $('#itemsDatalist');
 
+    // No image upload for donors anymore
+
     function initSelect2($el){
       if (!$el || !$el.length || !$.fn.select2) return;
       $el.select2({
@@ -73,6 +75,8 @@
         $submitBtn.prop('disabled', false).text('Submit Donation');
       }
     }
+
+    // (Image upload removed for donors)
 
     // Dynamic items UI
     function itemRowTemplate(id){
@@ -137,7 +141,7 @@
     return ok;
   }
 
-    // Submit: single multipart request to /batch with arrays for items (no receipt image)
+    // Submit: single multipart request to /batch with arrays for items (no images)
     $submitBtn.on('click', function(){
     if (!validateForm()) return;
     const rows = $itemsContainer.find('.item-row');
@@ -151,6 +155,7 @@
       const expiry = $row.find('.item-expiry').val();
       fd.append('expiry_date[]', expiry || '');
     });
+    // No image field appended
 
     $.ajax({
       url: `${API_BASE_URL}/donations/index.php/batch`,
@@ -167,6 +172,7 @@
         addItemRow();
         const modal = bootstrap.Modal.getInstance($modal[0]);
         modal?.hide();
+        // nothing to reset related to images
         fetchHistory(true);
       },
       error: function(err){
@@ -178,7 +184,7 @@
   });
 
     // History listing with simple pagination
-    const PAGE_SIZE = 50;
+    const PAGE_SIZE = 3; // Only show last 3 batches on dashboard
     let __items = [];
     let __page = 1;
 
@@ -205,12 +211,12 @@
   }
 
   function renderPage(){
-    const start = (Math.max(1,__page)-1) * PAGE_SIZE;
-    const pageItems = __items.slice(start, start + PAGE_SIZE);
     const groups = new Map();
-    pageItems.forEach(r => {
-      const key = r.batch_id ? `b-${r.batch_id}` : `s-${r.id}`;
-      if (!groups.has(key)) groups.set(key, { batch_id: r.batch_id || null, items: [] });
+    // __items already filtered to only selected batches
+    __items.forEach(r => {
+      if (!r.batch_id) return; // only batches
+      const key = `b-${r.batch_id}`;
+      if (!groups.has(key)) groups.set(key, { batch_id: r.batch_id, items: [] });
       groups.get(key).items.push(r);
     });
 
@@ -262,31 +268,13 @@
             </tr>
           `;
         }
-      } else {
-        const r = group.items[0];
-        htmlRows += `
-          <tr>
-            <td>${r.name || ''}</td>
-            <td>${r.type || ''}</td>
-            <td>${r.quantity ?? ''}</td>
-            <td>${fmtDate(r.expiry_date)}</td>
-            <td>${badge(r.status)}</td>
-            <td>${ imageCell(r.image_full_url) }</td>
-          </tr>
-        `;
       }
     });
     document.getElementById('donationHistoryBody').innerHTML = htmlRows || '<tr><td colspan="6" class="text-center text-muted">No donations yet</td></tr>';
 
-    // Pagination controls
-    const totalPages = Math.max(1, Math.ceil(__items.length / PAGE_SIZE));
+    // Hide pagination on dashboard when only showing last 3
     const $pg = $('#historyPagination');
-    let html = '';
-    function li(p, label, disabled, active){ return `<li class="page-item ${disabled?'disabled':''} ${active?'active':''}"><a class="page-link" href="#" data-page="${p}">${label}</a></li>`; }
-    html += li(__page-1, '«', __page<=1, false);
-    for(let p=1;p<=totalPages && p<=7;p++){ html += li(p, p, false, p===__page); }
-    html += li(__page+1, '»', __page>=totalPages, false);
-    $pg.html(html);
+    $pg.empty().hide();
   }
 
     function setHistoryLoading(on){ $('#historySpinner').toggleClass('d-none', !on); }
@@ -300,9 +288,21 @@
       dataType: 'json',
       xhrFields: { withCredentials: true },
       success: function(resp){
-        __items = resp?.data?.items || [];
+        const items = resp?.data?.items || [];
+        // Determine last 3 distinct batches by first appearance order (assumes items are sorted newest first)
+        const seen = new Set();
+        const batchOrder = [];
+        for (const it of items){
+          if (it.batch_id && !seen.has(it.batch_id)){
+            seen.add(it.batch_id);
+            batchOrder.push(it.batch_id);
+            if (batchOrder.length >= 3) break;
+          }
+        }
+        // Keep only items belonging to those batches
+        __items = items.filter(it => it.batch_id && seen.has(it.batch_id));
         // Populate datalist from unique item names (legacy fallback, kept harmless)
-        const names = Array.from(new Set(__items.map(x => (x.name||'').trim()).filter(Boolean))).sort();
+        const names = Array.from(new Set(items.map(x => (x.name||'').trim()).filter(Boolean))).sort();
         $datalist.html(names.map(n => `<option value="${n}"></option>`).join(''));
         renderPage();
       },

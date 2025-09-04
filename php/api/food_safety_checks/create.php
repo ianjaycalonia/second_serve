@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/Donation.php';
+require_once __DIR__ . '/../../core/Notification.php';
 
 // CORS / preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -24,10 +25,10 @@ try {
         if (!isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
             throw new Exception('Upload error');
         }
-        // 2 MB size limit
-        $maxBytes = 2 * 1024 * 1024; // 2 MB
+        // Allow larger raw uploads from phones; we'll compress server-side
+        $maxBytes = 15 * 1024 * 1024; // 15 MB
         if (isset($file['size']) && $file['size'] > $maxBytes) {
-            throw new Exception('Image exceeds 2 MB limit');
+            throw new Exception('Image too large');
         }
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime = finfo_file($finfo, $file['tmp_name']);
@@ -44,11 +45,67 @@ try {
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
-        $filename = $subdir . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $allowed[$mime];
-        $dest = $dir . '/' . $filename;
-        if (!move_uploaded_file($file['tmp_name'], $dest)) {
-            throw new Exception('Failed to move uploaded file');
+
+        // If GD is unavailable, save the original file without processing as a safe fallback
+        $gdAvailable = extension_loaded('gd')
+            && function_exists('imagecreatetruecolor')
+            && function_exists('imagecopyresampled')
+            && function_exists('imagejpeg');
+        if (!$gdAvailable) {
+            $ext = $allowed[$mime];
+            $filename = $subdir . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+            $dest = $dir . '/' . $filename;
+            if (!move_uploaded_file($file['tmp_name'], $dest)) {
+                throw new Exception('Failed to save image');
+            }
+            return 'images/uploads/' . $subdir . '/' . $filename;
         }
+
+        // Load source
+        switch ($mime) {
+            case 'image/jpeg':
+                if (!function_exists('imagecreatefromjpeg')) { throw new Exception('JPEG not supported by GD'); }
+                $src = imagecreatefromjpeg($file['tmp_name']);
+                break;
+            case 'image/png':
+                if (!function_exists('imagecreatefrompng')) { throw new Exception('PNG not supported by GD'); }
+                $src = imagecreatefrompng($file['tmp_name']);
+                break;
+            case 'image/gif':
+                if (!function_exists('imagecreatefromgif')) { throw new Exception('GIF not supported by GD'); }
+                $src = imagecreatefromgif($file['tmp_name']);
+                break;
+            default:
+                $src = null;
+        }
+        if (!$src) {
+            throw new Exception('Failed to read image');
+        }
+        $w = imagesx($src);
+        $h = imagesy($src);
+        $maxDim = 1600; // cap long edge
+        $scale = 1.0;
+        $maxSide = max($w, $h);
+        if ($maxSide > $maxDim) {
+            $scale = $maxDim / $maxSide;
+        }
+        $nw = max(1, (int)round($w * $scale));
+        $nh = max(1, (int)round($h * $scale));
+        $dst = imagecreatetruecolor($nw, $nh);
+        // Fill background white for formats with transparency when converting to JPEG
+        $white = imagecolorallocate($dst, 255, 255, 255);
+        imagefill($dst, 0, 0, $white);
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+        imagedestroy($src);
+
+        // Save as JPEG for size efficiency
+        $filename = $subdir . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.jpg';
+        $dest = $dir . '/' . $filename;
+        if (!imagejpeg($dst, $dest, 80)) { // quality 80
+            imagedestroy($dst);
+            throw new Exception('Failed to save image');
+        }
+        imagedestroy($dst);
         return 'images/uploads/' . $subdir . '/' . $filename;
     };
 
@@ -82,7 +139,7 @@ try {
         $receiptUrl = $saveImage($_FILES['receipt_image'], 'food_safety');
     } catch (Exception $ex) {
         $msg = $ex->getMessage();
-        if (preg_match('/exceeds 2 MB|Unsupported image type/i', $msg)) {
+        if (preg_match('/exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD/i', $msg)) {
             sendJson(['success' => false, 'error' => $msg], 400);
         }
         throw $ex;
@@ -134,7 +191,7 @@ try {
                 $url = $saveImage($files[$i], 'food_safety');
             } catch (Exception $ex) {
                 $msg = $ex->getMessage();
-                if (preg_match('/exceeds 2 MB|Unsupported image type/i', $msg)) {
+                if (preg_match('/exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD/i', $msg)) {
                     sendJson(['success' => false, 'error' => $msg], 400);
                 }
                 throw $ex;
@@ -157,8 +214,58 @@ try {
 
     if ($batchId) {
         $service->updateStatusByBatch($batchId, $newStatus);
+        // Notify all donors in the batch about status change
+        try {
+            $rows = $db->query(
+                "SELECT DISTINCT d.donor_id, u.name AS donor_name
+                 FROM donations d
+                 JOIN users u ON u.user_id = d.donor_id
+                 WHERE d.batch_id = ?",
+                [$batchId]
+            )->fetchAll();
+            if ($rows) {
+                $notif = new Notification();
+                foreach ($rows as $r) {
+                    if (empty($r['donor_id'])) continue;
+                    $msg = 'Your batch donation status updated to ' . $newStatus;
+                    if ($result === 'failed' && !empty($failReason)) {
+                        $msg .= '. Reason: ' . $failReason;
+                    }
+                    $notif->create([
+                        'user_id' => (int)$r['donor_id'],
+                        'type' => 'status_updated',
+                        'reference_type' => 'batch',
+                        'reference_id' => null,
+                        'message' => $msg,
+                    ]);
+                }
+            }
+        } catch (Exception $e) { error_log('Batch donor notify fail: '.$e->getMessage()); }
     } elseif ($donationId) {
         $service->updateStatus($donationId, $newStatus);
+        // Notify the donor of this donation
+        try {
+            $row = $db->query(
+                "SELECT d.id, d.name, d.donor_id, u.name AS donor_name
+                 FROM donations d JOIN users u ON u.user_id = d.donor_id
+                 WHERE d.id = ?",
+                [$donationId]
+            )->fetch();
+            if ($row && !empty($row['donor_id'])) {
+                $notif = new Notification();
+                $msg = 'Donation "' . ($row['name'] ?? ('#'.$donationId)) . '" status updated to ' . $newStatus;
+                if ($result === 'failed' && !empty($failReason)) {
+                    $msg .= '. Reason: ' . $failReason;
+                }
+                $notif->create([
+                    'user_id' => (int)$row['donor_id'],
+                    'type' => 'status_updated',
+                    'reference_type' => 'donation',
+                    'reference_id' => (int)$donationId,
+                    'message' => $msg,
+                ]);
+            }
+        } catch (Exception $e) { error_log('Single donor notify fail: '.$e->getMessage()); }
     }
 
     $db->commit();

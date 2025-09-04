@@ -1,0 +1,92 @@
+<?php
+// php/api/dashboard/summary.php
+// Returns aggregated figures for the admin dashboard
+
+require_once __DIR__ . '/../../includes/config.php';
+
+// CORS preflight handling (match pattern used in other APIs)
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    setCorsHeaders();
+    http_response_code(204);
+    exit;
+}
+
+setCorsHeaders();
+header('Content-Type: application/json');
+
+try {
+    // Authenticate and require admin
+    requireRole('admin');
+
+    $db = Database::getInstance();
+
+    // Total meals donated (sum of quantities of completed/picked up donations)
+    $row = $db->query(
+        "SELECT COALESCE(SUM(quantity), 0) AS total_meals FROM donations WHERE status IN ('Picked Up','Completed') AND deleted_at IS NULL"
+    )->fetch();
+    $totalMeals = (int)($row['total_meals'] ?? 0);
+
+    // Upcoming pickups: donations still Pending
+    $row = $db->query(
+        "SELECT COUNT(*) AS upcoming FROM donations WHERE status = 'Pending' AND deleted_at IS NULL"
+    )->fetch();
+    $upcomingPickups = (int)($row['upcoming'] ?? 0);
+
+    // Active donors and recipients (approved users)
+    $row = $db->query("SELECT COUNT(*) AS c FROM users WHERE role = 'donor' AND status = 'approved'")->fetch();
+    $activeDonors = (int)($row['c'] ?? 0);
+
+    $row = $db->query("SELECT COUNT(*) AS c FROM users WHERE role = 'recipient' AND status = 'approved'")->fetch();
+    $activeRecipients = (int)($row['c'] ?? 0);
+
+    // Weekly trend (last 7 days): donations created per day
+    $trendRows = $db->query(
+        "SELECT DATE(created_at) AS d, COUNT(*) AS cnt
+         FROM donations
+         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND deleted_at IS NULL
+         GROUP BY DATE(created_at)
+         ORDER BY d ASC"
+    )->fetchAll();
+
+    $labels = [];
+    $data = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $date = new DateTime();
+        $date->setTime(0,0);
+        $date->modify("-{$i} day");
+        $key = $date->format('Y-m-d');
+        $labels[] = $date->format('D');
+        $match = 0;
+        foreach ($trendRows as $r) {
+            if ($r['d'] === $key) { $match = (int)$r['cnt']; break; }
+        }
+        $data[] = $match;
+    }
+
+    // Debug: counts by status to help frontend verify mappings
+    $statusBreakdown = $db->query(
+        "SELECT status, COUNT(*) AS c FROM donations WHERE deleted_at IS NULL GROUP BY status ORDER BY status"
+    )->fetchAll();
+
+    sendJson([
+        'success' => true,
+        'data' => [
+            'totals' => [
+                'meals' => $totalMeals,
+                'upcoming_pickups' => $upcomingPickups,
+                'active_donors' => $activeDonors,
+                'active_recipients' => $activeRecipients,
+            ],
+            'trend' => [
+                'labels' => $labels,
+                'data' => $data,
+            ],
+            'debug' => [
+                'status_counts' => $statusBreakdown
+            ]
+        ]
+    ]);
+} catch (Exception $e) {
+    error_log('Dashboard summary error: ' . $e->getMessage());
+    sendJson(['error' => 'Server error'], 500);
+}

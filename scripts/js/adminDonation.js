@@ -35,16 +35,10 @@
       alert('Receipt photo is required.');
       return;
     }
-    // Client-side size limit: 2 MB
-    const MAX_BYTES_FAIL = 2 * 1024 * 1024;
-    if (receiptInput.files[0] && receiptInput.files[0].size > MAX_BYTES_FAIL) {
-      alert('Receipt photo must be 2 MB or smaller.');
-      return;
-    }
-    // Client-side size limits: 2 MB per image
-    const MAX_BYTES = 2 * 1024 * 1024;
+    // Relax client-side size limit; server now compresses and allows up to 15 MB
+    const MAX_BYTES = 15 * 1024 * 1024;
     if (receiptInput.files[0] && receiptInput.files[0].size > MAX_BYTES) {
-      alert('Receipt photo must be 2 MB or smaller.');
+      alert('Receipt photo is too large (limit 15 MB).');
       return;
     }
     // Require an expiry photo for each item
@@ -60,7 +54,7 @@
         return;
       }
       if (input.files[0] && input.files[0].size > MAX_BYTES) {
-        alert('Each expiry photo must be 2 MB or smaller.');
+        alert('Each expiry photo is too large (limit 15 MB).');
         return;
       }
     }
@@ -98,7 +92,9 @@
       },
       error: function(err){
         console.error('Food safety submit error', err);
-        alert(err?.responseJSON?.error || 'Failed to submit food safety check');
+        const status = err?.status;
+        const text = (err?.responseJSON && err.responseJSON.error) ? err.responseJSON.error : (err?.responseText || '').toString().slice(0, 500);
+        alert(text || (`Failed to submit food safety check${status ? ` (HTTP ${status})` : ''}`));
       },
       complete: function(){
         btn.disabled = false;
@@ -156,7 +152,9 @@
       },
       error: function(err){
         console.error('Food safety fail submit error', err);
-        alert(err?.responseJSON?.error || 'Failed to submit failure result');
+        const status = err?.status;
+        const text = (err?.responseJSON && err.responseJSON.error) ? err.responseJSON.error : (err?.responseText || '').toString().slice(0, 500);
+        alert(text || (`Failed to submit failure result${status ? ` (HTTP ${status})` : ''}`));
       },
       complete: function(){
         btn.disabled = false;
@@ -271,29 +269,56 @@
   }
 
   function badgeForStatus(st){
-    switch(st){
-      case 'Pending': return '<span class="badge bg-warning text-dark">Pending</span>';
-      case 'Allocated': return '<span class="badge bg-info text-dark">Allocated</span>';
-      case 'Picked Up': return '<span class="badge bg-primary">Picked Up</span>';
-      case 'Failed Safety': return '<span class="badge bg-danger">Failed Safety</span>';
-      case 'Completed': return '<span class="badge bg-success">Completed</span>';
-      case 'Cancelled': return '<span class="badge bg-secondary">Cancelled</span>';
-      case 'Mixed': return '<span class="badge bg-light text-dark">Mixed</span>';
+    const s = normalizeStatus(st);
+    switch(s){
+      case 'pending': return '<span class="badge bg-warning text-dark">Pending</span>';
+      case 'allocated': return '<span class="badge bg-info text-dark">Allocated</span>';
+      case 'picked up': return '<span class="badge bg-primary">Picked Up</span>';
+      case 'arrived at warehouse': return '<span class="badge bg-dark">Arrived at warehouse</span>';
+      case 'failed safety': return '<span class="badge bg-danger">Failed Safety</span>';
+      case 'completed': return '<span class="badge bg-success">Completed</span>';
+      case 'cancelled': return '<span class="badge bg-secondary">Cancelled</span>';
+      case 'mixed': return '<span class="badge bg-light text-dark">Mixed</span>';
       default: return `<span class="badge bg-light text-dark">${st||'Unknown'}</span>`;
     }
   }
 
+  function normalizeStatus(st){
+    const s = String(st||'').trim().toLowerCase();
+    if (s === 'picked up' || s === 'picked-up' || s === 'pickedup') return 'picked up';
+    if (s === 'arrived at warehouse' || s === 'arrived at Warehouse'.toLowerCase()) return 'arrived at warehouse';
+    if (s === 'failed safety' || s === 'failed') return 'failed safety';
+    if (s === 'in progress') return 'allocated'; // legacy mapping if any
+    return s;
+  }
+
   function actionButtons(row){
     // Replace plain actions with Food Safety Check entry point
+    const statusNorm = normalizeStatus(row.status);
     if (row.is_group) {
+      // Batch actions
+      if (statusNorm === 'picked up') {
+        return [
+          `<button class="btn btn-sm btn-success me-1 act-received-batch" data-batch-id="${row.batch_id}">Received</button>`,
+          `<button class="btn btn-sm btn-outline-danger act-delete-batch" data-batch-id="${row.batch_id}">Delete</button>`
+        ].join('');
+      }
+      const hideFs = (statusNorm === 'failed safety' || statusNorm === 'completed' || statusNorm === 'cancelled' || statusNorm === 'arrived at warehouse');
       return [
-        `<button class="btn btn-sm btn-warning me-1 act-food-safety-batch" data-batch-id="${row.batch_id}">Food Safety Check</button>`,
+        hideFs ? '' : `<button class="btn btn-sm btn-warning me-1 act-food-safety-batch" data-batch-id="${row.batch_id}">Food Safety Check</button>`,
         `<button class="btn btn-sm btn-outline-danger act-delete-batch" data-batch-id="${row.batch_id}">Delete</button>`
       ].join('');
     }
-    const disabled = row.status === 'Completed' || row.status === 'Cancelled';
+    // Single item actions
+    if (statusNorm === 'picked up') {
+      return [
+        `<button class="btn btn-sm btn-success me-1 act-received" data-id="${row.id}">Received</button>`,
+        `<button class="btn btn-sm btn-outline-danger act-delete" data-id="${row.id}">Delete</button>`
+      ].join('');
+    }
+    const disabled = (statusNorm === 'completed' || statusNorm === 'cancelled' || statusNorm === 'failed safety' || statusNorm === 'arrived at warehouse');
     return [
-      `<button class="btn btn-sm btn-warning me-1 act-food-safety" ${disabled?'disabled':''} data-id="${row.id}">Food Safety Check</button>`,
+      disabled ? '' : `<button class="btn btn-sm btn-warning me-1 act-food-safety" data-id="${row.id}">Food Safety Check</button>`,
       `<button class="btn btn-sm btn-outline-danger act-delete" data-id="${row.id}">Delete</button>`
     ].join('');
   }
@@ -511,7 +536,15 @@
     $tbody.off('click', '.act-delete-batch');
     $tbody.off('click', '.act-food-safety');
     $tbody.off('click', '.act-food-safety-batch');
+    $tbody.off('click', '.act-received');
+    $tbody.off('click', '.act-received-batch');
     $tbody.off('click', '.act-view-receipt');
+
+    // Batch toggle show/hide for grouped rows
+    $tbody.on('click', '.batch-toggle', function(){
+      const $tr = $(this).closest('tr');
+      toggleBatchRow($tr);
+    });
 
     // Food Safety openers
     function renderItemRows(items){
@@ -578,10 +611,27 @@
       const id = $(this).data('id');
       openFoodSafetyModal({ donationId: id });
     });
+    // Batch Food Safety opener (for grouped rows)
+    $tbody.on('click', '.act-food-safety-batch', function(){
+      const batchId = $(this).data('batch-id');
+      openFoodSafetyModal({ batchId });
+    });
     // (Deprecated old batch actions removed)
     $tbody.on('click', '.act-delete-batch', function(){
       const batchId = $(this).data('batch-id');
       deleteBatch(batchId);
+    });
+
+    // Mark as Received (Arrived at warehouse)
+    $tbody.on('click', '.act-received', function(){
+      const id = $(this).data('id');
+      if (!id) return;
+      updateStatus(id, 'Arrived at warehouse');
+    });
+    $tbody.on('click', '.act-received-batch', function(){
+      const batchId = $(this).data('batch-id');
+      if (!batchId) return;
+      updateStatusBatch(batchId, 'Arrived at warehouse');
     });
 
     // Open image viewer modal for receipt images

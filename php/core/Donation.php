@@ -155,7 +155,7 @@ class Donation
     // Update status
     public function updateStatus(int $id, string $status): void
     {
-        $allowed = ['Pending','Allocated','Picked Up','Failed Safety','Completed','Cancelled'];
+        $allowed = ['Pending','Allocated','Picked Up','Arrived at warehouse','Failed Safety','Completed','Cancelled'];
         if (!in_array($status, $allowed, true)) {
             throw new Exception('Invalid status value');
         }
@@ -183,7 +183,7 @@ class Donation
     // Batch: update status for all items in a batch (non-archived)
     public function updateStatusByBatch(string $batchId, string $status): void
     {
-        if (!in_array($status, ['Pending','Allocated','Picked Up','Failed Safety','Completed','Cancelled'], true)) {
+        if (!in_array($status, ['Pending','Allocated','Picked Up','Arrived at warehouse','Failed Safety','Completed','Cancelled'], true)) {
             throw new Exception('Invalid status value');
         }
         $this->db->query("UPDATE donations SET status = ? WHERE deleted_at IS NULL AND batch_id = ?", [$status, $batchId]);

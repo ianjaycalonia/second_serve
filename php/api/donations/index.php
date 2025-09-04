@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/Donation.php';
+require_once __DIR__ . '/../../core/Notification.php';
 
 // Handle CORS / preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -79,6 +80,35 @@ try {
         $payload['expiry_date'] = !empty($payload['expiry_date']) ? sanitize($payload['expiry_date']) : null;
 
         $newId = $service->create($payload);
+
+        // Notify all admins: new donation created
+        try {
+            $db = Database::getInstance();
+            $admins = $db->query("SELECT user_id, name FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll();
+            if ($admins) {
+                $notif = new Notification();
+                $donorName = '';
+                // Try to get donor organization name (fallback to person name) for message context
+                try {
+                    $row = $db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [(int)$payload['donor_id']])->fetch();
+                    if ($row) {
+                        $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : '');
+                    }
+                } catch (Exception $e) { /* ignore */ }
+                foreach ($admins as $admin) {
+                    $notif->create([
+                        'user_id' => (int)$admin['user_id'],
+                        'type' => 'donation_created',
+                        'reference_type' => 'donation',
+                        'reference_id' => (int)$newId,
+                        'message' => ($donorName ? ($donorName . ' ') : '') . 'submitted a new donation: ' . ($payload['name'] ?? 'item'),
+                    ]);
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Failed to create admin notifications for donation: ' . $e->getMessage());
+        }
+
         sendJson(['success' => true, 'donation_id' => $newId]);
     }
 
@@ -129,7 +159,37 @@ try {
             ];
             $ids[] = $service->create($payload);
         }
-        sendJson(['success' => true, 'created_ids' => $ids, 'created_count' => count($ids)]);
+
+        // Notify all approved admins once for the batch submission
+        try {
+            $db = Database::getInstance();
+            $admins = $db->query("SELECT user_id, name FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll();
+            if ($admins) {
+                $notif = new Notification();
+                // Try to get donor org name (fallback to person name) for message context
+                $donorName = '';
+                try {
+                    $row = $db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [$donorId])->fetch();
+                    if ($row) {
+                        $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : '');
+                    }
+                } catch (Exception $e) { /* ignore */ }
+                $countItems = count($ids);
+                foreach ($admins as $admin) {
+                    $notif->create([
+                        'user_id' => (int)$admin['user_id'],
+                        'type' => 'donation_created',
+                        'reference_type' => 'batch',
+                        'reference_id' => null,
+                        'message' => ($donorName ? ($donorName . ' ') : '') . 'submitted a new donation batch (' . $countItems . ' items)',
+                    ]);
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Failed to create admin notifications for donation batch: ' . $e->getMessage());
+        }
+
+        sendJson(['success' => true, 'created_ids' => $ids, 'created_count' => count($ids), 'batch_id' => $batchId]);
     }
 
     // GET /api/donations/list?status=pending&donor_id=12
@@ -173,6 +233,24 @@ try {
                 }
             }
             $it['image_full_url'] = $full;
+
+            // Attach latest food safety result and fail reason (if any)
+            $reason = null; $result = null;
+            if (!empty($it['batch_id'])) {
+                $row = $db->query(
+                    "SELECT result, fail_reason FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
+                    [$it['batch_id']]
+                )->fetch();
+                if ($row) { $result = $row['result'] ?? null; $reason = $row['fail_reason'] ?? null; }
+            } else if (!empty($it['id'])) {
+                $row = $db->query(
+                    "SELECT result, fail_reason FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                    [(int)$it['id']]
+                )->fetch();
+                if ($row) { $result = $row['result'] ?? null; $reason = $row['fail_reason'] ?? null; }
+            }
+            if ($result !== null) { $it['safety_result'] = $result; }
+            if ($reason !== null && $reason !== '') { $it['fail_reason'] = $reason; }
         }
         sendJson(['success' => true, 'data' => ['items' => $items]]);
     }
@@ -210,6 +288,25 @@ try {
             sendJson(['success' => false, 'error' => 'status is required'], 400);
         }
         $service->updateStatus($id, $status);
+
+        // Notify donor about status update
+        try {
+            $db = Database::getInstance();
+            $row = $db->query("SELECT d.id, d.name, d.donor_id, u.name AS donor_name FROM donations d JOIN users u ON u.user_id = d.donor_id WHERE d.id = ?", [$id])->fetch();
+            if ($row && !empty($row['donor_id'])) {
+                $notif = new Notification();
+                $notif->create([
+                    'user_id' => (int)$row['donor_id'],
+                    'type' => 'status_updated',
+                    'reference_type' => 'donation',
+                    'reference_id' => (int)$id,
+                    'message' => 'Donation "' . ($row['name'] ?? ('#'.$id)) . '" status updated to ' . $status,
+                ]);
+            }
+        } catch (Exception $e) {
+            error_log('Failed to create donor status notification: ' . $e->getMessage());
+        }
+
         sendJson(['success' => true, 'message' => 'Status updated']);
     }
 
@@ -239,6 +336,32 @@ try {
         $input = getJsonInput();
         $status = $input['status'] ?? '';
         $service->updateStatusByBatch($batchId, $status);
+        // Notify all donors in the batch about status change
+        try {
+            $db = Database::getInstance();
+            $rows = $db->query(
+                "SELECT DISTINCT d.donor_id, u.name AS donor_name
+                 FROM donations d
+                 JOIN users u ON u.user_id = d.donor_id
+                 WHERE d.batch_id = ?",
+                [$batchId]
+            )->fetchAll();
+            if ($rows) {
+                $notif = new Notification();
+                foreach ($rows as $r) {
+                    if (empty($r['donor_id'])) continue;
+                    $msg = 'Your batch donation status updated to ' . $status;
+                    $notif->create([
+                        'user_id' => (int)$r['donor_id'],
+                        'type' => 'status_updated',
+                        'reference_type' => 'batch',
+                        'reference_id' => null,
+                        'message' => $msg,
+                    ]);
+                }
+            }
+        } catch (Exception $e) { error_log('Batch donor notify fail: ' . $e->getMessage()); }
+
         sendJson(['success' => true]);
     }
 
@@ -280,10 +403,10 @@ function saveUploadedImage(array $file): string {
     if ($file['error'] !== UPLOAD_ERR_OK) {
         throw new Exception('Upload error');
     }
-    // 2 MB size limit
-    $maxBytes = 2 * 1024 * 1024; // 2 MB
+    // Raise raw upload size limit (accept larger phone photos)
+    $maxBytes = 15 * 1024 * 1024; // 15 MB
     if (isset($file['size']) && $file['size'] > $maxBytes) {
-        throw new Exception('Image exceeds 2 MB limit');
+        throw new Exception('Image too large');
     }
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mime = finfo_file($finfo, $file['tmp_name']);
@@ -300,11 +423,52 @@ function saveUploadedImage(array $file): string {
     if (!is_dir($dir)) {
         mkdir($dir, 0775, true);
     }
-    $filename = 'donation_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $allowed[$mime];
-    $dest = $dir . '/' . $filename;
-    if (!move_uploaded_file($file['tmp_name'], $dest)) {
-        throw new Exception('Failed to move uploaded file');
+
+    // Compress and resize on the server
+    $maxDim = 1600; // cap larger side
+    $quality = 80;  // JPEG quality
+
+    // Load source image
+    switch ($mime) {
+        case 'image/jpeg':
+            $src = imagecreatefromjpeg($file['tmp_name']);
+            break;
+        case 'image/png':
+            $src = imagecreatefrompng($file['tmp_name']);
+            break;
+        case 'image/gif':
+            $src = imagecreatefromgif($file['tmp_name']);
+            break;
+        default:
+            $src = null;
     }
+    if (!$src) {
+        throw new Exception('Failed to read image');
+    }
+    $w = imagesx($src);
+    $h = imagesy($src);
+    $scale = 1.0;
+    $maxSide = max($w, $h);
+    if ($maxSide > $maxDim) {
+        $scale = $maxDim / $maxSide;
+    }
+    $nw = max(1, (int)round($w * $scale));
+    $nh = max(1, (int)round($h * $scale));
+    $dst = imagecreatetruecolor($nw, $nh);
+    // Fill white background for formats with transparency when converting to JPEG
+    $white = imagecolorallocate($dst, 255, 255, 255);
+    imagefill($dst, 0, 0, $white);
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+    imagedestroy($src);
+
+    // Always save as JPEG to reduce size
+    $filename = 'donation_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.jpg';
+    $dest = $dir . '/' . $filename;
+    if (!imagejpeg($dst, $dest, $quality)) {
+        imagedestroy($dst);
+        throw new Exception('Failed to save image');
+    }
+    imagedestroy($dst);
     return 'images/uploads/donations/' . $filename;
 }
 

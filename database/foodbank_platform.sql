@@ -244,6 +244,38 @@ ALTER TABLE `food_safety_checks`
 ALTER TABLE `food_safety_item_photos`
   ADD CONSTRAINT `food_safety_item_photos_ibfk_1` FOREIGN KEY (`check_id`) REFERENCES `food_safety_checks` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `food_safety_item_photos_ibfk_2` FOREIGN KEY (`donation_item_id`) REFERENCES `donations` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `notifications`
+--
+
+DROP TABLE IF EXISTS `notifications`;
+CREATE TABLE `notifications` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `type` varchar(100) NOT NULL,
+  `reference_type` varchar(100) DEFAULT NULL,
+  `reference_id` int(11) DEFAULT NULL,
+  `message` varchar(255) NOT NULL,
+  `read_status` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `read_status` (`read_status`),
+  KEY `created_at` (`created_at`),
+  KEY `type` (`type`),
+  KEY `ref_type_ref_id` (`reference_type`,`reference_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Constraints for table `notifications`
+--
+ALTER TABLE `notifications`
+  ADD CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
  SET FOREIGN_KEY_CHECKS=1;
 COMMIT;
 
