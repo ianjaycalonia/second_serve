@@ -78,15 +78,20 @@
       const unread = items.filter(n => !n.read_status).length;
       badgeEl.textContent = unread > 0 ? String(unread) : '';
       badgeEl.style.display = unread > 0 ? '' : 'none';
-      // Visually highlight the bell when there are unread notifications
-      if (bellIcon) {
-        if (unread > 0) {
-          bellIcon.classList.add('text-danger');
-          bellAnchor && bellAnchor.setAttribute('aria-label', 'Open notifications (unread)');
-        } else {
-          bellIcon.classList.remove('text-danger');
-          bellAnchor && bellAnchor.setAttribute('aria-label', 'Open notifications');
-        }
+    }
+    // Visually highlight the bell when there are unread notifications
+    const unreadCount = items.filter(n => !n.read_status).length;
+    if (bellIcon && bellAnchor) {
+      if (unreadCount > 0) {
+        bellIcon.classList.add('text-danger');
+        bellAnchor.classList.add('text-danger');
+        bellAnchor.setAttribute('aria-label', 'Open notifications (unread)');
+        bellAnchor.setAttribute('title', 'You have unread notifications');
+      } else {
+        bellIcon.classList.remove('text-danger');
+        bellAnchor.classList.remove('text-danger');
+        bellAnchor.setAttribute('aria-label', 'Open notifications');
+        bellAnchor.removeAttribute('title');
       }
     }
 

@@ -207,32 +207,37 @@ try {
         } else {
             sendJson(['success' => false, 'error' => 'Forbidden'], 403);
         }
-        // Attach absolute image URL; if donation has no image, fall back to latest food safety receipt image
+        // Attach absolute image URL and always attach the latest food safety receipt URL (receipt_full_url)
         $db = Database::getInstance();
         foreach ($items as &$it) {
+            // Primary image (original donation image)
             $imageUrl = $it['image_url'] ?? '';
-            $full = buildImageFullUrl($imageUrl);
-            if ($full === '' || $imageUrl === null || $imageUrl === '') {
-                // Try to get the latest receipt from food safety checks by batch or donation
-                if (!empty($it['batch_id'])) {
-                    $row = $db->query(
-                        "SELECT receipt_image FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
-                        [$it['batch_id']]
-                    )->fetch();
-                    if ($row && !empty($row['receipt_image'])) {
-                        $full = buildImageFullUrl($row['receipt_image']);
-                    }
-                } else if (!empty($it['id'])) {
-                    $row = $db->query(
-                        "SELECT receipt_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
-                        [(int)$it['id']]
-                    )->fetch();
-                    if ($row && !empty($row['receipt_image'])) {
-                        $full = buildImageFullUrl($row['receipt_image']);
-                    }
+            $donationImageFull = buildImageFullUrl($imageUrl);
+
+            // Latest food safety receipt (by batch or donation)
+            $receiptFull = '';
+            if (!empty($it['batch_id'])) {
+                $row = $db->query(
+                    "SELECT receipt_image FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
+                    [$it['batch_id']]
+                )->fetch();
+                if ($row && !empty($row['receipt_image'])) {
+                    $receiptFull = buildImageFullUrl($row['receipt_image']);
+                }
+            } else if (!empty($it['id'])) {
+                $row = $db->query(
+                    "SELECT receipt_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                    [(int)$it['id']]
+                )->fetch();
+                if ($row && !empty($row['receipt_image'])) {
+                    $receiptFull = buildImageFullUrl($row['receipt_image']);
                 }
             }
-            $it['image_full_url'] = $full;
+
+            // Keep previous behavior for image_full_url: prefer donation image, otherwise fall back to receipt
+            $it['image_full_url'] = ($donationImageFull !== '') ? $donationImageFull : $receiptFull;
+            // Always include explicit receipt_full_url for front-end
+            if ($receiptFull !== '') { $it['receipt_full_url'] = $receiptFull; }
 
             // Attach latest food safety result and fail reason (if any)
             $reason = null; $result = null;

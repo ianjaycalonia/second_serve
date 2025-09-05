@@ -18,10 +18,11 @@ body {
 
 /* Main Styles */
 :root {
-  --primary-color: #ffc107;
-  --secondary-color: #ff9800;
-  --light-color: #fff3e0;
-  --dark-color: #e65100;
+  /* Align with AdminDashboard palette */
+  --primary-color: #00a0b0; /* teal */
+  --secondary-color: #ed3f34; /* red accent */
+  --light-color: #e8f7f9;
+  --dark-color: #007d8a; /* darker teal */
 }
 
 html, body {
@@ -39,7 +40,7 @@ body {
 
 /* Hero Section */
 .hero-section {
-  background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+  background: linear-gradient(135deg, var(--primary-color) 0%, rgba(0,160,176,0.75) 100%);
   color: white;
   padding: 5rem 0;
   margin-bottom: 3rem;
@@ -71,9 +72,9 @@ body {
 
 /* Buttons */
 .btn-login {
-  background-color: var(--primary-color);
+  background-color: var(--secondary-color);
   border: none;
-  color: #212529;
+  color: #fff;
   font-weight: 600;
   padding: 0.6rem 2rem;
   border-radius: 25px;
@@ -81,9 +82,21 @@ body {
 }
 
 .btn-login:hover {
-  background-color: var(--dark-color);
-  color: white;
+  background-color: #c3342b; /* darker red/orange */
+  color: #fff;
   transform: translateY(-2px);
+}
+
+/* Reusable accent button (navbar Sign Up) */
+.btn-accent {
+  background-color: var(--secondary-color);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+}
+.btn-accent:hover {
+  background-color: #c3342b;
+  color: #fff;
 }
 
 /* Features Section */
@@ -102,6 +115,10 @@ body {
   padding: 4px 6px;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.05) inset;
 }
+
+/* Brand text colors to match AdminDashboard */
+.brand-text .brand-primary { color: #00a0b0; }
+.brand-text .brand-accent { color: #ed3f34; }
 
 /* Footer */
 .footer {

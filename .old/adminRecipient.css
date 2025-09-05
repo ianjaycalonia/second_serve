@@ -73,17 +73,6 @@ nav {
       display: flex;
       align-items: center;
       gap: 10px;
-
-      .logo {
-        height: 40px;
-        width: auto;
-      }
-    }
-
-    .toggle {
-      display: flex;
-      align-items: center;
-      gap: 10px;
     }
 
     .nav-icons {

@@ -16,6 +16,11 @@
           <button id="sidebarToggle" class="btn">
             <i class="bi bi-list fs-4"></i>
           </button>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
           <div class="brand d-none d-md-block">
             Second Serve by <span>Simply</span><span>Share</span>
           </div>
@@ -115,28 +120,27 @@
         <select id="statusSelectMobile" class="form-select form-select-sm">
           <option selected>All</option>
           <option>Pending</option>
-          <option>Allocated</option>
           <option>Picked Up</option>
           <option>Arrived at warehouse</option>
           <option>Failed Safety</option>
-          <option>Completed</option>
           <option>Cancelled</option>
         </select>
       </li>
       <li class="mb-2">
         <label class="form-label mb-1" for="categorySelectMobile">Category:</label>
         <select id="categorySelectMobile" class="form-select form-select-sm">
-          <option>Other</option>
-          <option>Meals</option>
-          <option>Produce</option>
+          <option>All</option>
+          <option>Food</option>
+          <option>Non-Food</option>
         </select>
       </li>
       <li>
         <label class="form-label mb-1" for="dateSelectMobile">Date:</label>
         <select id="dateSelectMobile" class="form-select form-select-sm">
-          <option>Custom</option>
+          <option>All</option>
           <option>Today</option>
           <option>This Week</option>
+          <option>This Month</option>
         </select>
       </li>
     </ul>
@@ -155,29 +159,47 @@
       <select id="statusSelectDesktop" class="form-select form-select-sm" style="min-width: 140px;">
         <option selected>All</option>
         <option>Pending</option>
-        <option>Allocated</option>
         <option>Picked Up</option>
         <option>Arrived at warehouse</option>
         <option>Failed Safety</option>
-        <option>Completed</option>
         <option>Cancelled</option>
       </select>
     </div>
     <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px;">
       <label class="form-label mb-0" for="categorySelectDesktop">Category:</label>
       <select id="categorySelectDesktop" class="form-select form-select-sm">
-        <option>Other</option>
-        <option>Meals</option>
-        <option>Produce</option>
+        <option>All</option>
+        <option>Food</option>
+        <option>Non-Food</option>
       </select>
     </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="deleteConfirmModalLabel">Confirm Deletion</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="deleteConfirmText">Are you sure you want to delete this donation? This action cannot be undone.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="deleteConfirmBtn" data-id="" data-batch="">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
     <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px;">
       <label class="form-label mb-0" for="dateSelectDesktop">Date:</label>
       <select id="dateSelectDesktop" class="form-select form-select-sm">
-        <option>Custom</option>
+        <option>All</option>
         <option>Today</option>
         <option>This Week</option>
+        <option>This Month</option>
       </select>
     </div>
   </div>
@@ -187,7 +209,7 @@
     <table class="table table-bordered table-striped align-middle">
       <thead class="table-light">
         <tr>
-          <th>Donor Name</th>
+          <th>Organization</th>
           <th>Items Donated</th>
           <th>Quantity</th>
           <th>Submission Date</th>
@@ -233,11 +255,24 @@
           <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <div id="notificationsList"></div>
+        <div class="modal-body p-0">
+          <ul id="notificationsList" class="list-group list-group-flush">
+            <!-- Notifications will be inserted here by notifications.js -->
+            <li class="list-group-item text-center text-muted py-4">
+              <div class="spinner-border spinner-border-sm" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <span class="ms-2">Loading notifications...</span>
+            </li>
+          </ul>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">
+            Mark all as read
+          </button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            Close
+          </button>
         </div>
       </div>
     </div>

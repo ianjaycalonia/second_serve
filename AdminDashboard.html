@@ -22,19 +22,25 @@
           <button id="sidebarToggle" class="btn">
             <i class="bi bi-list fs-4"></i>
           </button>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
           <div class="brand d-none d-md-block">
             Second Serve by <span>Simply</span><span>Share</span>
           </div>
         </div>
         <div class="nav-icons">
           <a
-            class="nav-link me-3"
+            class="nav-link me-3 position-relative"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#notificationsModal"
             aria-label="Open notifications"
           >
             <i class="bi bi-bell-fill fs-5"></i>
+            <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: .6rem;"></span>
           </a>
           <a
             class="nav-link me-3"
@@ -109,7 +115,7 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Total Donations</h6>
+              <h6 class="card-title">Total SuccessfulDonations</h6>
               <div class="card-elements">
                 <div class="card-icon">
                   <i class="bi bi-bucket-fill"></i>
@@ -126,14 +132,14 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Upcoming Donations</h6>
+              <h6 class="card-title">To Pick Up</h6>
               <div class="card-elements">
                 <div class="card-icon">
                   <i class="bi bi-truck"></i>
                 </div>
                 <div class="card-text">
                   <h3 class="mb-0" id="upcomingDonations">0</h3>
-                  <small class="text-muted">All Time</small>
+                  <small class="text-muted">Today</small>
                 </div>
               </div>
             </div>
@@ -173,6 +179,50 @@
             </div>
           </div>
         </div>
+
+        <div class="col-12 col-lg-9">
+          <div class="card card-accent p-4 w-100 h-100">
+            <div class="d-flex justify-content-between mb-3">
+              <h6 class="mb-0">Charts</h6>
+              <select class="form-select w-auto">
+                <option>This week</option>
+                <option>Last week</option>
+              </select>
+            </div>
+            <div style="height: 300px">
+              <canvas id="lineChart"></canvas>
+            </div>
+            <div class="fs-6 mb-3 mt-3 text-center">Pickups this week</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-3">
+          <div class="card card-accent p-4 w-100 h-100 d-flex flex-column">
+            <div class="fs-5 mb-3 text-start">Activity Feed</div>
+            <div class="flex-grow-1 activity-feed">
+              <div class="details mb-2">
+                <strong>10:45 AM</strong><br />Donor "ABC Foods" submitted 20
+                packs of rice
+              </div>
+              <div class="details mb-2">
+                <strong>9:30 AM</strong><br />Pickup scheduled for "XYZ Bakery"
+                at 3 PM
+              </div>
+              <div class="details mb-2">
+                <strong>8:15 AM</strong><br />New Recipient registered: “Helping
+                Hands Shelter”
+              </div>
+              <div class="details mb-2">
+                <strong>4:00 PM</strong><br />Donation from “DailyBites”
+                successfully delivered
+              </div>
+            </div>
+
+            <a href="#" class="text-decoration-none text-center mt-3"
+              >View All Activity >></a
+            >
+          </div>
+        </div>
       </div>
 
       <!-- Notifications Modal -->
@@ -196,23 +246,22 @@
                 aria-label="Close"
               ></button>
             </div>
-            <div class="modal-body">
-              <div class="list-group">
-                <div class="list-group-item d-flex align-items-start">
-                  <i class="bi bi-bell me-3 text-warning"></i>
-                  <div>
-                    <div class="fw-semibold">Example notification</div>
-                    <small class="text-muted">Just now</small>
+            <div class="modal-body p-0">
+              <ul id="notificationsList" class="list-group list-group-flush">
+                <!-- Notifications will be inserted here by notifications.js -->
+                <li class="list-group-item text-center text-muted py-4">
+                  <div class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">Loading...</span>
                   </div>
-                </div>
-              </div>
+                  <span class="ms-2">Loading notifications...</span>
+                </li>
+              </ul>
             </div>
             <div class="modal-footer">
-              <button
-                type="button"
-                class="btn btn-secondary"
-                data-bs-dismiss="modal"
-              >
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">
+                Mark all as read
+              </button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                 Close
               </button>
             </div>
@@ -289,7 +338,9 @@
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="scripts/js/auth.js"></script>
-    <script src="scripts/js/adminDashboar.js"></script>
+    <script src="scripts/js/notifications.js"></script>
+    <script src="scripts/js/adminDashboard.js"></script>
   </body>
 </html>

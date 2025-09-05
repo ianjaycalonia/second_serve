@@ -6,21 +6,17 @@
   <title>Admin Dashboard</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet"/>
-  <link rel="stylesheet" href="scripts/css/adminRecipient.css">
+  <link rel="stylesheet" href="scripts/css/adminDonors.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
 </head>
 <body class="sidebar-collapsed">
-<nav>
+    <nav>
       <div class="nav-items">
         <div class="toggle">
           <button id="sidebarToggle" class="btn">
             <i class="bi bi-list fs-4"></i>
           </button>
-          <img
-            src="images/simply_share.png"
-            alt="Simply Share Logo"
-            class="logo"
-          />
           <div class="brand d-none d-md-block">
             Second Serve by <span>Simply</span><span>Share</span>
           </div>
@@ -84,10 +80,10 @@
       <a href="Donation.html" class="nav-link"
         ><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a
       >
-      <a href="Donors.html" class="nav-link"
+      <a href="Donors.html" class="nav-link active"
         ><i class="bi bi-person-fill me-2"></i><span>Donors</span></a
       >
-      <a href="Recipient.html" class="nav-link active"
+      <a href="Recipient.html" class="nav-link"
         ><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a
       >
       <a href="ReportAndAnalytics.html" class="nav-link"
@@ -96,11 +92,13 @@
       >
     </aside>
 
+
+<!-- Main Content -->
 <main>
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4>Donations</h4>
   </div>
-<div class="d-flex flex-wrap gap-3 mb-3 p-2 rounded" style="background-color: #00a0b0;">
+<div class="d-flex flex-wrap gap-3 mb-3 p-2 rounded" style="background-color: #ffe6cc;">
   <div class="fw-bold align-self-center">Donor Log</div>
   <div class="dropdown d-lg-none ms-auto">
     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="filtersDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false">
@@ -111,23 +109,23 @@
         <label class="form-label mb-1" for="donorSelectMobile">Status:</label>
         <select id="donorSelectMobile" class="form-select form-select-sm">
           <option>None</option>
-          <option>...</option>
-          <option>...</option>
+          <option>ABC Food</option>
+          <option>Zenith</option>
         </select>
       </li>
       <li class="mb-2">
-        <label class="form-label mb-1" for="statusSelectMobile">Organization Type:</label>
-        <select id="statusSelectMobile" class="form-select form-select-sm">
-          <option>...</option>
-          <option>...</option>
-        </select>
-      </li>
-      <li class="mb-2">
-        <label class="form-label mb-1" for="categorySelectMobile">Region/City:</label>
+        <label class="form-label mb-1" for="categorySelectMobile">Type:</label>
         <select id="categorySelectMobile" class="form-select form-select-sm">
           <option>Other</option>
-          <option>VI</option>
-          <option>VII</option>
+          <option>Meals</option>
+          <option>Produce</option>
+        </select>
+      </li>
+      <li class="mb-2">
+        <label class="form-label mb-1" for="statusSelectMobile">Activity Level:</label>
+        <select id="statusSelectMobile" class="form-select form-select-sm">
+          <option>Pending</option>
+          <option>Completed</option>
         </select>
       </li>
     </ul>
@@ -137,38 +135,42 @@
       <label class="form-label mb-0" for="donorSelectDesktop">Status:</label>
       <select id="donorSelectDesktop" class="form-select form-select-sm">
         <option>None</option>
-        <option>...</option>
-        <option>...</option>
-      </select>
-    </div>
-
-    <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 160px;">
-      <label class="form-label mb-0" for="statusSelectDesktop" style="white-space: nowrap;">Organization Type:</label>
-      <select id="statusSelectDesktop" class="form-select form-select-sm" style="min-width: 140px;">
-        <option>...</option>
-        <option>...</option>
+        <option>ABC Food</option>
+        <option>Zenith</option>
       </select>
     </div>
 
     <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px;">
-      <label class="form-label mb-0" for="categorySelectDesktop">Region/City:</label>
+      <label class="form-label mb-0" for="categorySelectDesktop">Type:</label>
       <select id="categorySelectDesktop" class="form-select form-select-sm">
         <option>Other</option>
-        <option>VI</option>
-        <option>VII</option>
+        <option>Meals</option>
+        <option>Produce</option>
+      </select>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 160px;">
+      <label class="form-label mb-0" for="statusSelectDesktop" style="white-space: nowrap;">Activity Level:</label>
+      <select id="statusSelectDesktop" class="form-select form-select-sm" style="min-width: 140px;">
+        <option>Pending</option>
+        <option>Completed</option>
       </select>
     </div>
   </div>
 </div>
+
+  
+  
+
   <!-- Donations Table -->
   <div class="table-responsive">
     <table class="table table-bordered table-striped align-middle">
       <thead class="table-light">
         <tr>
-          <th>Recipient Name</th>
+          <th>Donor Name</th>
           <th>Type</th>
-          <th>Location</th>
-          <th>Last Pickup Date</th>
+          <th>Toltal Donation</th>
+          <th>Last Donation Date</th>
           <th>Status</th>
           <th>Actions</th>
         </tr>
@@ -176,38 +178,38 @@
       <tbody>
         <tr>
           
-          <td>Food4All</td>
-          <td>Shelter</td>
-          <td>Passay</td>
+          <td>ABC Food</td>
+          <td>Organization</td>
+          <td>20</td>
           <td>May 03, 2025</td>
           <td><span class="badge text-dark">Active</span></td>
           <td><a href="#">View / Edit</a></td>
         </tr>
         <tr>
           
-          <td>Meal Heaven</td>
-          <td>Food Banks</td>
-          <td>Elm Street</td>
+          <td>Fresh Mart</td>
+          <td>Grocery</td>
+          <td>40</td>
           <td>May 06, 2025</td>
-          <td><span class="badge bg-warning text-dark">Pending</span></td>
-          <td><a href="#">View / Edit</a></td>
-        </tr>
-        <tr>
-          
-          <td>Helping Hand</td>
-          <td>Charity</td>
-          <td>Privet Drive</td>
-          <td>May 08, 2025</td>
           <td><span class="badge text-dark">Active</span></td>
           <td><a href="#">View / Edit</a></td>
         </tr>
         <tr>
-         
-          <td>GraceHome</td>
-          <td>Food Bank</td>
-          <td>Oakwood</td>
-          <td>May 11, 2025</td>
+          
+          <td>Yum Bites</td>
+          <td>Fast Food</td>
+          <td>20</td>
+          <td>May 08, 2025</td>
           <td><span class="badge text-dark">InActive</span></td>
+          <td><a href="#">View / Edit</a></td>
+        </tr>
+        <tr>
+         
+          <td>Yummy Home</td>
+          <td>Restaurant</td>
+          <td>50</td>
+          <td>May 11, 2025</td>
+          <td><span class="badge bg-warning text-dark">Pending</span></td>
           <td><a href="#">View / Edit</a></td>
         </tr>
       </tbody>
@@ -223,24 +225,19 @@
         <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body p-0">
-        <ul id="notificationsList" class="list-group list-group-flush">
-          <!-- Notifications will be inserted here by notifications.js -->
-          <li class="list-group-item text-center text-muted py-4">
-            <div class="spinner-border spinner-border-sm" role="status">
-              <span class="visually-hidden">Loading...</span>
+      <div class="modal-body">
+        <div class="list-group">
+          <div class="list-group-item d-flex align-items-start">
+            <i class="bi bi-bell me-3 text-warning"></i>
+            <div>
+              <div class="fw-semibold">Example notification</div>
+              <small class="text-muted">Just now</small>
             </div>
-            <span class="ms-2">Loading notifications...</span>
-          </li>
-        </ul>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">
-          Mark all as read
-        </button>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-          Close
-        </button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -285,8 +282,6 @@
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="scripts/js/auth.js"></script>
-<script src="scripts/js/notifications.js"></script>
-<script src="scripts/js/adminRecipient.js"></script>
-<script src="scripts/js/Recipient.js"></script>
+<script src="scripts/js/adminDonors.js"></script>
 </body>
 </html>
