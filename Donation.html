@@ -9,74 +9,93 @@
   <link rel="stylesheet" href="scripts/css/adminDonation.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
-<!-- for Mobile -->
-<div class="offcanvas offcanvas-start sidebar" tabindex="-1" id="sidebarOffcanvas">
-  <div class="offcanvas-header">
-    <h5 class="offcanvas-title text-gray">Menu</h5>
-    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
-  </div>
-  <div class="offcanvas-body">
-    <nav class="nav flex-column px-2">
-      <a href="AdminDashboard.html" class="nav-link"><i class="bi bi-house-door-fill me-2"></i> Dashboard</a>
-      <a href="#" class="nav-link active"><i class="bi bi-box-seam me-2"></i> Donations</a>
-      <a href="Donors.html" class="nav-link"><i class="bi bi-person me-2"></i> Donors</a>
-      <a href="Recipient.html" class="nav-link"><i class="bi bi-people me-2"></i> Recipients</a>
-      <a href="ReportAndAnalytics.html" class="nav-link"><i class="bi bi-bar-chart me-2"></i> Reports & Analytics</a>
-    </nav>
-  </div>
-</div>
-
-<!-- Navbar -->
-<nav class="navbar fixed-top navbar-expand-lg" style="background-color: #ffe0b3; z-index: 1030;">
-  <div class="container-fluid">
-    <button class="btn d-lg-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarOffcanvas">
-      <i class="bi bi-list fs-3"></i>
-    </button>
-    <div class="text-center mb-1 mt-1 ms-2">
-      <span class="navbar-brand fw-semibold">Second Serve by Simply Share</span>
-    </div>
-    <div class="d-flex align-items-center ms-auto">
-      <input type="search" class="form-control me-3 d-none d-md-block" placeholder="Search..." style="width: 200px;">
-      <a class="nav-link position-relative me-3" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
-        <i class="bi bi-bell-fill fs-5"></i>
-        <span id="notificationsBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display:none"></span>
-      </a>
-      <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
-        <i class="bi bi-envelope-fill fs-5"></i>
-      </a>
-      <div class="dropdown">
-        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-          <i class="bi bi-person-circle fs-5"></i>
-        </a>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Profile</a></li>
-          <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
-          <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
-        </ul>
+<body class="sidebar-collapsed">
+<nav>
+      <div class="nav-items">
+        <div class="toggle">
+          <button id="sidebarToggle" class="btn">
+            <i class="bi bi-list fs-4"></i>
+          </button>
+          <div class="brand d-none d-md-block">
+            Second Serve by <span>Simply</span><span>Share</span>
+          </div>
+        </div>
+        <div class="nav-icons">
+          <a
+            class="nav-link me-3"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <i class="bi bi-bell-fill fs-5"></i>
+          </a>
+          <a
+            class="nav-link me-3"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
+            <i class="bi bi-envelope-fill fs-5"></i>
+          </a>
+          <div class="dropdown">
+            <a
+              class="nav-link dropdown-toggle d-flex align-items-center"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <i class="bi bi-person-circle fs-5"></i>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li>
+                <a class="dropdown-item" href="#"
+                  ><i class="bi bi-person me-2"></i>Profile</a
+                >
+              </li>
+              <li>
+                <a class="dropdown-item" href="#"
+                  ><i class="bi bi-gear me-2"></i>Settings</a
+                >
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#"
+                  ><i class="bi bi-box-arrow-right me-2"></i>Logout</a
+                >
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-</nav>
+    </nav>
+    <div class="sidebar-backdrop" style="display: none"></div>
+    <aside class="collapsed">
+      <a href="AdminDashboard.html" class="nav-link"
+        ><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a
+      >
+      <a href="Donation.html" class="nav-link active"
+        ><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a
+      >
+      <a href="Donors.html" class="nav-link"
+        ><i class="bi bi-person-fill me-2"></i><span>Donors</span></a
+      >
+      <a href="Recipient.html" class="nav-link"
+        ><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a
+      >
+      <a href="ReportAndAnalytics.html" class="nav-link"
+        ><i class="bi bi-bar-chart-fill me-2"></i
+        ><span>Reports & Analytics</span></a
+      >
+    </aside>
 
-<!-- For Desktop -->
-<div class="sidebar d-none d-lg-flex flex-column position-fixed">
-  <nav class="side_nav nav flex-column px-3">
-    <a href="AdminDashboard.html" class="nav-link"><i class="bi bi-house-door-fill me-2"></i> Dashboard</a>
-    <a href="#" class="nav-link active"><i class="bi bi-box-seam me-2"></i> Donations</a>
-    <a href="Donors.html" class="nav-link"><i class="bi bi-building-add me-2"></i> Donors</a>
-    <a href="Recipient.html" class="nav-link"><i class="bi bi-people me-2"></i> Recipients</a>
-    <a href="ReportAndAnalytics.html" class="nav-link"><i class="bi bi-bar-chart me-2"></i> Reports & Analytics</a>
-  </nav>
-</div>
-
-
-<div class="main">
+<main>
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4>Donations</h4>
   </div>
-<div class="d-flex flex-wrap gap-3 mb-3 p-2 rounded" style="background-color: #ffe6cc;">
+<div class="d-flex flex-wrap gap-3 mb-3 p-2 rounded" style="background-color: #00a0b0;">
   <div class="fw-bold align-self-center">Donor Log</div>
   <div class="dropdown d-lg-none ms-auto">
     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="filtersDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false">
@@ -182,7 +201,7 @@
     </table>
   </div>
   <!-- Close .main container -->
-</div>
+</main>
   
   <!-- Image Viewer Modal -->
   <div class="modal fade" id="imageViewerModal" tabindex="-1" aria-hidden="true">
@@ -323,5 +342,6 @@
 <script src="scripts/js/auth.js"></script>
 <script src="scripts/js/notifications.js"></script>
 <script src="scripts/js/adminDonation.js"></script>
+<script src="scripts/js/Donation.js"></script>
 </body>
 </html>
