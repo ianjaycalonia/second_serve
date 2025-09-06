@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Dashboard</title>
-    <link rel="stylesheet" href="scripts/css/adminDashboard.css" />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -40,7 +40,11 @@
             aria-label="Open notifications"
           >
             <i class="bi bi-bell-fill fs-5"></i>
-            <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: .6rem;"></span>
+            <span
+              id="notificationsBadge"
+              class="position-absolute translate-middle badge rounded-pill bg-danger"
+              style="top: 6px; right: 2px; display: none; font-size: 0.6rem"
+            ></span>
           </a>
           <a
             class="nav-link me-3"
@@ -258,10 +262,18 @@
               </ul>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                id="markAllReadBtn"
+              >
                 Mark all as read
               </button>
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal"
+              >
                 Close
               </button>
             </div>
@@ -342,5 +354,6 @@
     <script src="scripts/js/auth.js"></script>
     <script src="scripts/js/notifications.js"></script>
     <script src="scripts/js/adminDashboard.js"></script>
+    <script src="scripts/js/sidebar.js"></script>
   </body>
 </html>

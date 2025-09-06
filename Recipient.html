@@ -1,16 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Admin Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet"/>
-  <link rel="stylesheet" href="scripts/css/adminRecipient.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body class="sidebar-collapsed">
-<nav>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body class="sidebar-collapsed">
+    <nav>
       <div class="nav-items">
         <div class="toggle">
           <button id="sidebarToggle" class="btn">
@@ -96,198 +102,296 @@
       >
     </aside>
 
-<main>
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4>Recipients</h4>
-  </div>
-<div class="d-flex flex-wrap gap-3 mb-3 p-2 rounded" style="background-color: #00a0b0;">
-  <div class="fw-bold align-self-center">Recipients Log</div>
-  <div class="dropdown d-lg-none ms-auto">
-    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="filtersDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false">
-      Filters
-    </button>
-    <ul class="dropdown-menu p-3" aria-labelledby="filtersDropdownBtn" style="min-width: 250px;">
-      <li class="mb-2">
-        <label class="form-label mb-1" for="donorSelectMobile">Status:</label>
-        <select id="donorSelectMobile" class="form-select form-select-sm">
-          <option>None</option>
-          <option>...</option>
-          <option>...</option>
-        </select>
-      </li>
-      <li class="mb-2">
-        <label class="form-label mb-1" for="statusSelectMobile">Organization Type:</label>
-        <select id="statusSelectMobile" class="form-select form-select-sm">
-          <option>...</option>
-          <option>...</option>
-        </select>
-      </li>
-      <li class="mb-2">
-        <label class="form-label mb-1" for="categorySelectMobile">Region/City:</label>
-        <select id="categorySelectMobile" class="form-select form-select-sm">
-          <option>Other</option>
-          <option>VI</option>
-          <option>VII</option>
-        </select>
-      </li>
-    </ul>
-  </div>
-  <div class="d-none d-lg-flex flex-wrap gap-3 ms-auto">
-    <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px;">
-      <label class="form-label mb-0" for="donorSelectDesktop">Status:</label>
-      <select id="donorSelectDesktop" class="form-select form-select-sm">
-        <option>None</option>
-        <option>...</option>
-        <option>...</option>
-      </select>
-    </div>
-
-    <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 160px;">
-      <label class="form-label mb-0" for="statusSelectDesktop" style="white-space: nowrap;">Organization Type:</label>
-      <select id="statusSelectDesktop" class="form-select form-select-sm" style="min-width: 140px;">
-        <option>...</option>
-        <option>...</option>
-      </select>
-    </div>
-
-    <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px;">
-      <label class="form-label mb-0" for="categorySelectDesktop">Region/City:</label>
-      <select id="categorySelectDesktop" class="form-select form-select-sm">
-        <option>Other</option>
-        <option>VI</option>
-        <option>VII</option>
-      </select>
-    </div>
-  </div>
-</div>
-  <!-- Donations Table -->
-  <div class="table-responsive">
-    <table class="table table-bordered table-striped align-middle">
-      <thead class="table-light">
-        <tr>
-          <th>Recipient Name</th>
-          <th>Type</th>
-          <th>Contact Person</th>
-          <th>Location</th>
-          <th>Last Pickup Date</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          
-          <td>Food4All</td>
-          <td>Shelter</td>
-          <td>Passay</td>
-          <td>May 03, 2025</td>
-          <td><span class="badge text-dark">Active</span></td>
-          <td><a href="#">View / Edit</a></td>
-        </tr>
-        <tr>
-          
-          <td>Meal Heaven</td>
-          <td>Food Banks</td>
-          <td>Elm Street</td>
-          <td>May 06, 2025</td>
-          <td><span class="badge bg-warning text-dark">Pending</span></td>
-          <td><a href="#">View / Edit</a></td>
-        </tr>
-        <tr>
-          
-          <td>Helping Hand</td>
-          <td>Charity</td>
-          <td>Privet Drive</td>
-          <td>May 08, 2025</td>
-          <td><span class="badge text-dark">Active</span></td>
-          <td><a href="#">View / Edit</a></td>
-        </tr>
-        <tr>
-         
-          <td>GraceHome</td>
-          <td>Food Bank</td>
-          <td>Oakwood</td>
-          <td>May 11, 2025</td>
-          <td><span class="badge text-dark">InActive</span></td>
-          <td><a href="#">View / Edit</a></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</main>
-
-<!-- Notifications Modal -->
-<div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-scrollable modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <main>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>Recipients</h4>
       </div>
-      <div class="modal-body p-0">
-        <ul id="notificationsList" class="list-group list-group-flush">
-          <!-- Notifications will be inserted here by notifications.js -->
-          <li class="list-group-item text-center text-muted py-4">
-            <div class="spinner-border spinner-border-sm" role="status">
-              <span class="visually-hidden">Loading...</span>
-            </div>
-            <span class="ms-2">Loading notifications...</span>
-          </li>
-        </ul>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">
-          Mark all as read
-        </button>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Messages Modal -->
-<div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-scrollable modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="d-flex" style="min-height: 300px;">
-          <div class="border-end pe-3 me-3" style="width: 220px;">
-            <input class="form-control form-control-sm mb-2" placeholder="Search conversations">
-            <div class="list-group small">
-              <a href="#" class="list-group-item list-group-item-action active">All Users</a>
-              <a href="#" class="list-group-item list-group-item-action">Donors</a>
-              <a href="#" class="list-group-item list-group-item-action">Recipients</a>
-            </div>
+      <div
+        class="d-flex flex-wrap gap-3 mb-3 p-2 rounded"
+        style="background-color: #00a0b0"
+      >
+        <div class="fw-bold align-self-center">Recipients Log</div>
+        <div class="dropdown d-lg-none ms-auto">
+          <button
+            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+            type="button"
+            id="filtersDropdownBtn"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+          >
+            Filters
+          </button>
+          <ul
+            class="dropdown-menu p-3"
+            aria-labelledby="filtersDropdownBtn"
+            style="min-width: 250px"
+          >
+            <li class="mb-2">
+              <label class="form-label mb-1" for="donorSelectMobile"
+                >Status:</label
+              >
+              <select id="donorSelectMobile" class="form-select form-select-sm">
+                <option>None</option>
+                <option>...</option>
+                <option>...</option>
+              </select>
+            </li>
+            <li class="mb-2">
+              <label class="form-label mb-1" for="statusSelectMobile"
+                >Organization Type:</label
+              >
+              <select
+                id="statusSelectMobile"
+                class="form-select form-select-sm"
+              >
+                <option>...</option>
+                <option>...</option>
+              </select>
+            </li>
+            <li class="mb-2">
+              <label class="form-label mb-1" for="categorySelectMobile"
+                >Region/City:</label
+              >
+              <select
+                id="categorySelectMobile"
+                class="form-select form-select-sm"
+              >
+                <option>Other</option>
+                <option>VI</option>
+                <option>VII</option>
+              </select>
+            </li>
+          </ul>
+        </div>
+        <div class="d-none d-lg-flex flex-wrap gap-3 ms-auto">
+          <div
+            class="d-flex align-items-center gap-2 flex-shrink-1"
+            style="min-width: 120px"
+          >
+            <label class="form-label mb-0" for="donorSelectDesktop"
+              >Status:</label
+            >
+            <select id="donorSelectDesktop" class="form-select form-select-sm">
+              <option>None</option>
+              <option>...</option>
+              <option>...</option>
+            </select>
           </div>
-          <div class="flex-grow-1 d-flex flex-column">
-            <div class="flex-grow-1 overflow-auto mb-2">
-              <div class="text-muted small mb-2">Today</div>
-              <div class="d-flex mb-2">
-                <div class="p-2 rounded bg-light">Welcome to admin messaging!</div>
+
+          <div
+            class="d-flex align-items-center gap-2 flex-shrink-1"
+            style="min-width: 160px"
+          >
+            <label
+              class="form-label mb-0"
+              for="statusSelectDesktop"
+              style="white-space: nowrap"
+              >Organization Type:</label
+            >
+            <select
+              id="statusSelectDesktop"
+              class="form-select form-select-sm"
+              style="min-width: 140px"
+            >
+              <option>...</option>
+              <option>...</option>
+            </select>
+          </div>
+
+          <div
+            class="d-flex align-items-center gap-2 flex-shrink-1"
+            style="min-width: 120px"
+          >
+            <label class="form-label mb-0" for="categorySelectDesktop"
+              >Region/City:</label
+            >
+            <select
+              id="categorySelectDesktop"
+              class="form-select form-select-sm"
+            >
+              <option>Other</option>
+              <option>VI</option>
+              <option>VII</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <!-- Donations Table -->
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Recipient Name</th>
+              <th>Type</th>
+              <th>Contact Person</th>
+              <th>Location</th>
+              <th>Last Pickup Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Food4All</td>
+              <td>Shelter</td>
+              <td>Passay</td>
+              <td>May 03, 2025</td>
+              <td><span class="badge text-dark">Active</span></td>
+              <td><a href="#">View / Edit</a></td>
+            </tr>
+            <tr>
+              <td>Meal Heaven</td>
+              <td>Food Banks</td>
+              <td>Elm Street</td>
+              <td>May 06, 2025</td>
+              <td><span class="badge bg-warning text-dark">Pending</span></td>
+              <td><a href="#">View / Edit</a></td>
+            </tr>
+            <tr>
+              <td>Helping Hand</td>
+              <td>Charity</td>
+              <td>Privet Drive</td>
+              <td>May 08, 2025</td>
+              <td><span class="badge text-dark">Active</span></td>
+              <td><a href="#">View / Edit</a></td>
+            </tr>
+            <tr>
+              <td>GraceHome</td>
+              <td>Food Bank</td>
+              <td>Oakwood</td>
+              <td>May 11, 2025</td>
+              <td><span class="badge text-dark">InActive</span></td>
+              <td><a href="#">View / Edit</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <!-- Notifications Modal -->
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body p-0">
+            <ul id="notificationsList" class="list-group list-group-flush">
+              <!-- Notifications will be inserted here by notifications.js -->
+              <li class="list-group-item text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading notifications...</span>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              id="markAllReadBtn"
+            >
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Messages Modal -->
+    <div
+      class="modal fade"
+      id="messagesModal"
+      tabindex="-1"
+      aria-labelledby="messagesModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex" style="min-height: 300px">
+              <div class="border-end pe-3 me-3" style="width: 220px">
+                <input
+                  class="form-control form-control-sm mb-2"
+                  placeholder="Search conversations"
+                />
+                <div class="list-group small">
+                  <a
+                    href="#"
+                    class="list-group-item list-group-item-action active"
+                    >All Users</a
+                  >
+                  <a href="#" class="list-group-item list-group-item-action"
+                    >Donors</a
+                  >
+                  <a href="#" class="list-group-item list-group-item-action"
+                    >Recipients</a
+                  >
+                </div>
               </div>
-            </div>
-            <div class="input-group">
-              <input type="text" class="form-control" placeholder="Type a message...">
-              <button class="btn btn-warning" type="button"><i class="bi bi-send"></i></button>
+              <div class="flex-grow-1 d-flex flex-column">
+                <div class="flex-grow-1 overflow-auto mb-2">
+                  <div class="text-muted small mb-2">Today</div>
+                  <div class="d-flex mb-2">
+                    <div class="p-2 rounded bg-light">
+                      Welcome to admin messaging!
+                    </div>
+                  </div>
+                </div>
+                <div class="input-group">
+                  <input
+                    type="text"
+                    class="form-control"
+                    placeholder="Type a message..."
+                  />
+                  <button class="btn btn-warning" type="button">
+                    <i class="bi bi-send"></i>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</div>
 
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="scripts/js/auth.js"></script>
-<script src="scripts/js/notifications.js"></script>
-<script src="scripts/js/adminRecipient.js"></script>
-<script src="scripts/js/Recipient.js"></script>
-</body>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="scripts/js/auth.js"></script>
+    <script src="scripts/js/notifications.js"></script>
+    <script src="scripts/js/adminRecipient.js"></script>
+    <script src="scripts/js/Recipient.js"></script>
+    <script src="scripts/js/sidebar.js"></script>
+  </body>
 </html>

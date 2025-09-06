@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
-  <link rel="stylesheet" href="scripts/css/adminReportAndAnalytics.css">
-</head>
-<body class="sidebar-collapsed">
-<nav>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Dashboard</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+  </head>
+  <body class="sidebar-collapsed">
+    <nav>
       <div class="nav-items">
         <div class="toggle">
           <button id="sidebarToggle" class="btn">
@@ -96,193 +101,255 @@
       >
     </aside>
 
-  <!-- Main Content -->
-  <main>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4>Reports & Analytics</h4>
-      <select class="form-select form-select-sm w-auto">
-        <option selected>Weekly</option>
-        <option>Monthly</option>
-      </select>
-    </div>
+    <!-- Main Content -->
+    <main>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>Reports & Analytics</h4>
+        <select class="form-select form-select-sm w-auto">
+          <option selected>Weekly</option>
+          <option>Monthly</option>
+        </select>
+      </div>
 
-    <!-- Main Content Cards -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-3">
-       <div class="card card-total p-3">
-        <h6>Total Donations</h6>
-          <div class="d-flex align-items-center"> 
-            <i class="bi bi-recycle display-2"></i>
-              <div class="d-flex flex-column ms-2"> 
-              <p class="display-6 mb-0">200</p>
-               <p class="text-muted">meals donated</p>
+      <!-- Main Content Cards -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-3">
+          <div class="card card-total p-3">
+            <h6>Total Donations</h6>
+            <div class="d-flex align-items-center">
+              <i class="bi bi-recycle display-2"></i>
+              <div class="d-flex flex-column ms-2">
+                <p class="display-6 mb-0">200</p>
+                <p class="text-muted">meals donated</p>
               </div>
             </div>
           </div>
         </div>
-      <div class="col-md-3">
-      <div class="card card-summary p-3">
-      <h6>Total Pickups</h6>
-      <div class="d-flex align-items-center"> 
-        <i class="bi bi-people-fill display-2"></i>
-        <div class="d-flex flex-column ms-2"> 
-          <p class="display-6 mb-0">32</p>
-          <p class="text-muted">pickups</p>
-        </div>
-      </div>
-    </div>
-  </div>
-    <div class="col-md-3">
-    <div class="card card-summary p-3">
-      <h6>Donor Retention Rate</h6>
-      <div class="d-flex align-items-center"> 
-        <i class="bi bi-people-fill display-2"></i>
-        <div class="d-flex flex-column ms-2"> 
-          <p class="display-6 mb-0">65%</p>
-          <p class="text-muted">retention</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card card-summary p-3">
-      <h6>Avg. Response Time</h6>
-      <div class="d-flex align-items-center"> 
-        <i class="bi bi-clock display-2"></i>
-        <div class="d-flex flex-column ms-2"> 
-          <p class="display-6 mb-0">1 hr</p>
-          <p class="text-muted mb-0">average</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  </div>
-    <!-- Graph Placeholders -->
-    <div class="row g-3 mb-4">
-      <div class="col-md-6">
-        <div class="card p-3" style="height: 200px;">
-          <h6>Weekly Donation Volume</h6>
-        </div>
-      </div>
-      <div class="col-md-6">
-        <div class="card p-3" style="height: 200px; display: flex; flex-direction: column; justify-content: space-between;">
-          <div class="d-flex justify-content-between align-items-center">
-            <h6>Pickup Success Rate</h6>
-          </div>
-          <div class="d-flex align-items-center justify-content-center mt-auto">
-            <span class="ms-2">Change View</span>
-            <select class="form-select form-select-sm w-auto ms-2">
-              <option selected>Region</option>
-              <option>City</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- Reports Table -->
-    <div class="card p-3">
-      <div class="d-flex justify-content-between mb-3">
-        <h6>Reports Log</h6>
-        <div class="d-flex gap-2">
-          <button class="btn btn-warning btn-sm">Generate Report</button>
-          <button class="btn btn-secondary btn-sm">Export</button>
-          <button class="btn btn-secondary btn-sm">Print</button>
-        </div>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-bordered table-sm ">
-          <thead class="table-light">
-            <tr>
-              <th>Date</th>
-              <th>Donor</th>
-              <th>Recipient</th>
-              <th>Items</th>
-              <th>Status</th>
-              <th>Drivers</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colspan="7" class="text-center text-muted">No data available</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </main>
-  <!-- Notifications Modal -->
-  <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body p-0">
-          <ul id="notificationsList" class="list-group list-group-flush">
-            <!-- Notifications will be inserted here by notifications.js -->
-            <li class="list-group-item text-center text-muted py-4">
-              <div class="spinner-border spinner-border-sm" role="status">
-                <span class="visually-hidden">Loading...</span>
-              </div>
-              <span class="ms-2">Loading notifications...</span>
-            </li>
-          </ul>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">
-            Mark all as read
-          </button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Messages Modal -->
-  <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="d-flex" style="min-height: 300px;">
-            <div class="border-end pe-3 me-3" style="width: 220px;">
-              <input class="form-control form-control-sm mb-2" placeholder="Search conversations">
-              <div class="list-group small">
-                <a href="#" class="list-group-item list-group-item-action active">All Users</a>
-                <a href="#" class="list-group-item list-group-item-action">Donors</a>
-                <a href="#" class="list-group-item list-group-item-action">Recipients</a>
+        <div class="col-md-3">
+          <div class="card card-summary p-3">
+            <h6>Total Pickups</h6>
+            <div class="d-flex align-items-center">
+              <i class="bi bi-people-fill display-2"></i>
+              <div class="d-flex flex-column ms-2">
+                <p class="display-6 mb-0">32</p>
+                <p class="text-muted">pickups</p>
               </div>
             </div>
-            <div class="flex-grow-1 d-flex flex-column">
-              <div class="flex-grow-1 overflow-auto mb-2">
-                <div class="text-muted small mb-2">Today</div>
-                <div class="d-flex mb-2">
-                  <div class="p-2 rounded bg-light">Welcome to admin messaging!</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card card-summary p-3">
+            <h6>Donor Retention Rate</h6>
+            <div class="d-flex align-items-center">
+              <i class="bi bi-people-fill display-2"></i>
+              <div class="d-flex flex-column ms-2">
+                <p class="display-6 mb-0">65%</p>
+                <p class="text-muted">retention</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card card-summary p-3">
+            <h6>Avg. Response Time</h6>
+            <div class="d-flex align-items-center">
+              <i class="bi bi-clock display-2"></i>
+              <div class="d-flex flex-column ms-2">
+                <p class="display-6 mb-0">1 hr</p>
+                <p class="text-muted mb-0">average</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Graph Placeholders -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-6">
+          <div class="card p-3" style="height: 200px">
+            <h6>Weekly Donation Volume</h6>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div
+            class="card p-3"
+            style="
+              height: 200px;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+            "
+          >
+            <div class="d-flex justify-content-between align-items-center">
+              <h6>Pickup Success Rate</h6>
+            </div>
+            <div
+              class="d-flex align-items-center justify-content-center mt-auto"
+            >
+              <span class="ms-2">Change View</span>
+              <select class="form-select form-select-sm w-auto ms-2">
+                <option selected>Region</option>
+                <option>City</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Reports Table -->
+      <div class="card p-3">
+        <div class="d-flex justify-content-between mb-3">
+          <h6>Reports Log</h6>
+          <div class="d-flex gap-2">
+            <button class="btn btn-warning btn-sm">Generate Report</button>
+            <button class="btn btn-secondary btn-sm">Export</button>
+            <button class="btn btn-secondary btn-sm">Print</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Donor</th>
+                <th>Recipient</th>
+                <th>Items</th>
+                <th>Status</th>
+                <th>Drivers</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="7" class="text-center text-muted">
+                  No data available
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+    <!-- Notifications Modal -->
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body p-0">
+            <ul id="notificationsList" class="list-group list-group-flush">
+              <!-- Notifications will be inserted here by notifications.js -->
+              <li class="list-group-item text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading notifications...</span>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              id="markAllReadBtn"
+            >
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Messages Modal -->
+    <div
+      class="modal fade"
+      id="messagesModal"
+      tabindex="-1"
+      aria-labelledby="messagesModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex" style="min-height: 300px">
+              <div class="border-end pe-3 me-3" style="width: 220px">
+                <input
+                  class="form-control form-control-sm mb-2"
+                  placeholder="Search conversations"
+                />
+                <div class="list-group small">
+                  <a
+                    href="#"
+                    class="list-group-item list-group-item-action active"
+                    >All Users</a
+                  >
+                  <a href="#" class="list-group-item list-group-item-action"
+                    >Donors</a
+                  >
+                  <a href="#" class="list-group-item list-group-item-action"
+                    >Recipients</a
+                  >
                 </div>
               </div>
-              <div class="input-group">
-                <input type="text" class="form-control" placeholder="Type a message...">
-                <button class="btn btn-warning" type="button"><i class="bi bi-send"></i></button>
+              <div class="flex-grow-1 d-flex flex-column">
+                <div class="flex-grow-1 overflow-auto mb-2">
+                  <div class="text-muted small mb-2">Today</div>
+                  <div class="d-flex mb-2">
+                    <div class="p-2 rounded bg-light">
+                      Welcome to admin messaging!
+                    </div>
+                  </div>
+                </div>
+                <div class="input-group">
+                  <input
+                    type="text"
+                    class="form-control"
+                    placeholder="Type a message..."
+                  />
+                  <button class="btn btn-warning" type="button">
+                    <i class="bi bi-send"></i>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="scripts/js/auth.js"></script>
-  <script src="scripts/js/notifications.js"></script>
-  <script src="scripts/js/reportAndAnalytics.js"></script>
-</body>
-
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="scripts/js/auth.js"></script>
+    <script src="scripts/js/notifications.js"></script>
+    <script src="scripts/js/sidebar.js"></script>
+  </body>
 </html>
