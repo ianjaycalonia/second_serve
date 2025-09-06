@@ -60,25 +60,16 @@ try {
     $row = $db->query("SELECT COUNT(*) AS c FROM users WHERE role = 'recipient' AND status = 'approved'")->fetch();
     $activeRecipients = (int)($row['c'] ?? 0);
 
-    // Weekly trend (last 7 days) counted by batches: per day, count DISTINCT batch_id for batched items + COUNT(*) for singles
+    // Weekly trend (last 7 days) counted by DISTINCT completed batches per day (exclude singles)
     $trendRows = $db->query(
-        "SELECT d, SUM(cnt) AS cnt FROM (
-            SELECT DATE(created_at) AS d, COUNT(DISTINCT batch_id) AS cnt
-            FROM donations
-            WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-              AND deleted_at IS NULL
-              AND batch_id IS NOT NULL
-            GROUP BY DATE(created_at)
-            UNION ALL
-            SELECT DATE(created_at) AS d, COUNT(*) AS cnt
-            FROM donations
-            WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-              AND deleted_at IS NULL
-              AND batch_id IS NULL
-            GROUP BY DATE(created_at)
-        ) x
-        GROUP BY d
-        ORDER BY d ASC"
+        "SELECT DATE(created_at) AS d, COUNT(DISTINCT batch_id) AS cnt
+         FROM donations
+         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+           AND deleted_at IS NULL
+           AND batch_id IS NOT NULL
+           AND status = 'Completed'
+         GROUP BY DATE(created_at)
+         ORDER BY d ASC"
     )->fetchAll();
 
     $labels = [];

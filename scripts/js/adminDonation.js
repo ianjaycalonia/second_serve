@@ -17,6 +17,39 @@
       default: return `<span class="badge bg-light text-dark">${status||'Unknown'}</span>`;
     }
   }
+  // Initialize page: load items, populate filters, bind events
+  async function init(){
+    try {
+      const items = await fetchAdminList();
+      // keep a copy of raw items for client-side filtering without refetch
+      window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
+      // Ensure filters start at defaults
+      try {
+        const ids = [
+          'donorSelectDesktop','donorSelectMobile',
+          'statusSelectDesktop','statusSelectMobile',
+          'categorySelectDesktop','categorySelectMobile',
+          'dateSelectDesktop','dateSelectMobile'
+        ];
+        ids.forEach(id => { const el = document.getElementById(id); if (el && el.options && el.options.length) el.selectedIndex = 0; });
+      } catch(_) {}
+      // Populate donors immediately from loaded items, then augment from backend
+      await populateDonorSelects(window.__adminDonationRaw);
+      renderTable(applyFilters(window.__adminDonationRaw));
+      bindImageViewer();
+      bindGroupToggle();
+      bindActions();
+      bindFoodSafetySubmit();
+      bindFilters();
+    } catch(err){
+      console.error('Failed to load donations list:', err);
+      const tbody = document.querySelector('main .table tbody');
+      if (tbody){
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Failed to load donations (${escapeHtml(err.message)})</td></tr>`;
+      }
+    }
+  
+  }
 
   // Simple cache so the modal can build inputs instantly without extra network calls
   const donationCache = {
@@ -675,36 +708,6 @@
     });
   }
 
-  async function init(){
-    try {
-      const items = await fetchAdminList();
-      // keep a copy of raw items for client-side filtering without refetch
-      window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
-      // Ensure filters start at defaults
-      try {
-        const ids = [
-          'donorSelectDesktop','donorSelectMobile',
-          'statusSelectDesktop','statusSelectMobile',
-          'categorySelectDesktop','categorySelectMobile',
-          'dateSelectDesktop','dateSelectMobile'
-        ];
-        ids.forEach(id => { const el = document.getElementById(id); if (el && el.options && el.options.length) el.selectedIndex = 0; });
-      } catch(_) {}
-      renderTable(applyFilters(window.__adminDonationRaw));
-      bindImageViewer();
-      bindGroupToggle();
-      bindActions();
-      bindFoodSafetySubmit();
-      bindFilters();
-    } catch(err){
-      console.error('Failed to load donations list:', err);
-      const tbody = document.querySelector('main .table tbody');
-      if (tbody){
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Failed to load donations (${escapeHtml(err.message)})</td></tr>`;
-      }
-    }
-  }
-
   function getEl(id){ return document.getElementById(id); }
 
   function readFilters(){
@@ -721,7 +724,7 @@
     let out = Array.isArray(items) ? items.slice() : [];
 
     // Donor filter: match donor_org text
-    if (f.donor && f.donor.toLowerCase() !== 'none'){
+    if (f.donor && f.donor.toLowerCase() !== 'all'){
       const q = f.donor.toLowerCase();
       out = out.filter(r => (r.donor_org || r.organization_name || '').toLowerCase().includes(q));
     }
@@ -767,6 +770,60 @@
       }
     }
     return out;
+  }
+
+  // Populate donor dropdowns from current items; then try to augment with backend users list
+  async function populateDonorSelects(currentItems){
+    const desktop = getEl('donorSelectDesktop');
+    const mobile = getEl('donorSelectMobile');
+
+    function buildFromLabels(labels){
+      const uniqueLabels = Array.from(new Set(labels.filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+      [desktop, mobile].forEach(sel => {
+        if (!sel) return;
+        const prev = sel.value || 'All';
+        // Rebuild options safely
+        const frag = document.createDocumentFragment();
+        const optAll = document.createElement('option');
+        optAll.textContent = 'All';
+        optAll.value = 'All';
+        frag.appendChild(optAll);
+        uniqueLabels.forEach(label => {
+          const o = document.createElement('option');
+          o.textContent = label;
+          o.value = label;
+          frag.appendChild(o);
+        });
+        sel.innerHTML = '';
+        sel.appendChild(frag);
+        // Restore previous selection if present, otherwise default to 'All'
+        sel.value = Array.from(sel.options).some(o => o.value === prev) ? prev : 'All';
+      });
+    }
+
+    try {
+      // 1) Immediate build from the currently loaded donation items
+      const labelsFromItems = Array.isArray(currentItems) ? currentItems.map(r => (r.donor_org || r.organization_name || '').trim()).filter(Boolean) : [];
+      buildFromLabels(labelsFromItems);
+
+      // 2) Try to augment with backend donors list (optional)
+      const url = `${API_BASE_URL}/user_api.php?action=list&role=donor&status=approved&t=${Date.now()}`;
+      const res = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      const users = json?.data?.items || [];
+      const labelsFromUsers = users.map(u => ((u.organization_name && u.organization_name.trim()) ? u.organization_name.trim() : (u.name || '').trim())).filter(Boolean);
+      const merged = Array.from(new Set([...(labelsFromItems||[]), ...labelsFromUsers]));
+      buildFromLabels(merged);
+    } catch (err) {
+      // Keep whatever we built from items; do not break the UI
+      console.warn('Donor users list fetch failed; using donor names from items only:', err);
+    }
   }
 
   function bindFilters(){
