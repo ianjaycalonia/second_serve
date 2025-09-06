@@ -56,11 +56,11 @@ async function loadDashboardData() {
             return !isNaN(n) ? n.toLocaleString() : '0';
         };
         
-        // Get the count of donations that have arrived at warehouse
-        const arrivedCount = data.debug?.status_counts?.find(s => s.status === 'Arrived at warehouse')?.c || 0;
+        // Use number of completed batches (distinct batch_id with status Completed)
+        const completedCount = Number(totals.completed_batches || 0);
         
         // Update the dashboard stats
-        document.getElementById('totalDonations').textContent = safeNumber(arrivedCount);
+        document.getElementById('totalDonations').textContent = safeNumber(completedCount);
         document.getElementById('upcomingDonations').textContent = safeNumber(totals.upcoming_pickups || 0);
         document.getElementById('activeDonors').textContent = safeNumber(totals.active_donors || 0);
         document.getElementById('activeRecipients').textContent = safeNumber(totals.active_recipients || 0);

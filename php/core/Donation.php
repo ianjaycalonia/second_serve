@@ -17,8 +17,8 @@ class Donation
         $this->db->beginTransaction();
         try {
             $this->db->query(
-                "INSERT INTO donations (donor_id, batch_id, type, name, quantity, expiry_date, packaging, image_url, status, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())",
+                "INSERT INTO donations (donor_id, batch_id, type, name, quantity, expiry_date, status, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, 'Pending', NOW())",
                 [
                     (int)$payload['donor_id'],
                     $payload['batch_id'] ?? null,
@@ -26,8 +26,6 @@ class Donation
                     $payload['name'],
                     (int)$payload['quantity'],
                     !empty($payload['expiry_date']) ? $payload['expiry_date'] : null,
-                    $payload['packaging'] ?? null,
-                    $payload['image_url'] ?? null,
                 ]
             );
             $id = (int)$this->db->lastInsertId();
@@ -40,16 +38,14 @@ class Donation
                 $this->db->beginTransaction();
                 try {
                     $this->db->query(
-                        "INSERT INTO donations (donor_id, type, name, quantity, expiry_date, packaging, image_url, status, created_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())",
+                        "INSERT INTO donations (donor_id, type, name, quantity, expiry_date, status, created_at)
+                         VALUES (?, ?, ?, ?, ?, 'Pending', NOW())",
                         [
                             (int)$payload['donor_id'],
                             $payload['type'],
                             $payload['name'],
                             (int)$payload['quantity'],
                             !empty($payload['expiry_date']) ? $payload['expiry_date'] : null,
-                            $payload['packaging'] ?? null,
-                            $payload['image_url'] ?? null,
                         ]
                     );
                     $id = (int)$this->db->lastInsertId();
@@ -90,8 +86,6 @@ class Donation
                             NULL AS type,
                             SUM(d.quantity) AS quantity,
                             NULL AS expiry_date,
-                            NULL AS packaging,
-                            MAX(d.image_url) AS image_url,
                             CASE WHEN MIN(d.status) = MAX(d.status) THEN MIN(d.status) ELSE 'Mixed' END AS status,
                             MAX(d.created_at) AS created_at,
                             d.batch_id AS batch_id,
@@ -110,8 +104,6 @@ class Donation
                             d.type,
                             d.quantity,
                             d.expiry_date,
-                            d.packaging,
-                            d.image_url,
                             d.status,
                             d.created_at,
                             NULL AS batch_id,
@@ -127,7 +119,7 @@ class Donation
             return $this->db->query($sql, $params)->fetchAll();
         } else {
             $sql = "SELECT d.id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
-                           d.type, d.name, d.quantity, d.expiry_date, d.packaging, d.image_url, d.status, d.created_at,
+                           d.type, d.name, d.quantity, d.expiry_date, d.status, d.created_at,
                            d.batch_id AS batch_id,
                            0 AS is_group
                     FROM donations d
@@ -143,7 +135,7 @@ class Donation
     {
         $row = $this->db->query(
             "SELECT d.id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
-                    d.type, d.name, d.quantity, d.expiry_date, d.packaging, d.image_url, d.status, d.created_at
+                    d.type, d.name, d.quantity, d.expiry_date, d.status, d.created_at
              FROM donations d
              LEFT JOIN users u ON u.user_id = d.donor_id
              WHERE d.id = ? AND d.deleted_at IS NULL",
@@ -155,7 +147,7 @@ class Donation
     // Update status
     public function updateStatus(int $id, string $status): void
     {
-        $allowed = ['Pending','Allocated','Picked Up','Arrived at warehouse','Failed Safety','Completed','Cancelled'];
+        $allowed = ['Pending','Allocated','Picked Up','Failed Safety','Completed','Cancelled'];
         if (!in_array($status, $allowed, true)) {
             throw new Exception('Invalid status value');
         }
@@ -172,7 +164,7 @@ class Donation
     public function listByBatch(string $batchId): array
     {
         $sql = "SELECT d.id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
-                       d.type, d.name, d.quantity, d.expiry_date, d.packaging, d.image_url, d.status, d.created_at
+                       d.type, d.name, d.quantity, d.expiry_date, d.status, d.created_at
                 FROM donations d
                 LEFT JOIN users u ON u.user_id = d.donor_id
                 WHERE d.deleted_at IS NULL AND d.batch_id = ?
@@ -183,7 +175,7 @@ class Donation
     // Batch: update status for all items in a batch (non-archived)
     public function updateStatusByBatch(string $batchId, string $status): void
     {
-        if (!in_array($status, ['Pending','Allocated','Picked Up','Arrived at warehouse','Failed Safety','Completed','Cancelled'], true)) {
+        if (!in_array($status, ['Pending','Allocated','Picked Up','Failed Safety','Completed','Cancelled'], true)) {
             throw new Exception('Invalid status value');
         }
         $this->db->query("UPDATE donations SET status = ? WHERE deleted_at IS NULL AND batch_id = ?", [$status, $batchId]);

@@ -121,7 +121,8 @@ try {
     } elseif (isset($_POST['storage'])) {
         $storageTemp = sanitize($_POST['storage']);
     }
-    $expiryDate  = isset($_POST['expiry_date']) && $_POST['expiry_date'] !== '' ? sanitize($_POST['expiry_date']) : null;
+    // Deprecated: expiry_date (date). New: expiry_date_image (image path)
+    $expiryDateImageUrl = null;
     $result      = isset($_POST['result']) ? sanitize($_POST['result']) : '';
     $failReason  = isset($_POST['fail_reason']) && $_POST['fail_reason'] !== '' ? sanitize($_POST['fail_reason']) : null;
 
@@ -145,15 +146,25 @@ try {
         throw $ex;
     }
 
-    // Optional item photos (array) with related item_ids[]
-    $itemIds = isset($_POST['item_ids']) ? (array)$_POST['item_ids'] : [];
-    $hasItemPhotos = isset($_FILES['item_photos']) && is_array($_FILES['item_photos']['tmp_name']);
+    // Optional: expiry_date_image (single file)
+    if (!empty($_FILES['expiry_date_image']) && is_uploaded_file($_FILES['expiry_date_image']['tmp_name'])) {
+        try {
+            $expiryDateImageUrl = $saveImage($_FILES['expiry_date_image'], 'food_safety');
+        } catch (Exception $ex) {
+            $msg = $ex->getMessage();
+            if (preg_match('/exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD/i', $msg)) {
+                sendJson(['success' => false, 'error' => $msg], 400);
+            }
+            throw $ex;
+        }
+    }
 
     $db->beginTransaction();
 
-    // Insert main check
+    // Always create a batch-level check row (receipt only) when batch context is present
+    // If only a single donation is provided (no batch), this row is also valid for that donation
     $db->query(
-        "INSERT INTO food_safety_checks (donation_id, batch_id, packaging_ok, spoilage_ok, storage_temp, expiry_date, receipt_image, result, fail_reason, created_by, created_at)
+        "INSERT INTO food_safety_checks (donation_id, batch_id, packaging_ok, spoilage_ok, storage_temp, expiry_date_image, receipt_image, result, fail_reason, created_by, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
         [
             $donationId,
@@ -161,7 +172,7 @@ try {
             $packagingOk,
             $spoilageOk,
             $storageTemp,
-            $expiryDate,
+            $expiryDateImageUrl, // may be null; we will add per-item rows below
             $receiptUrl,
             $result,
             $failReason,
@@ -170,25 +181,28 @@ try {
     );
     $checkId = (int)$db->lastInsertId();
 
-    // Insert per-item photos if provided
-    if ($hasItemPhotos) {
-        // Normalize the _FILES structure into a flat array of file structs
-        $files = [];
-        $fileField = $_FILES['item_photos'];
-        $count = is_array($fileField['tmp_name']) ? count($fileField['tmp_name']) : 0;
-        for ($i = 0; $i < $count; $i++) {
-            if (!is_uploaded_file($fileField['tmp_name'][$i])) { continue; }
-            $files[] = [
-                'name' => $fileField['name'][$i],
-                'type' => $fileField['type'][$i],
-                'tmp_name' => $fileField['tmp_name'][$i],
-                'error' => $fileField['error'][$i],
-                'size' => $fileField['size'][$i],
+    // Per-item expiry: inputs are named expiry_item_photo[DONATION_ID]
+    if (!empty($_FILES['expiry_item_photo']) && is_array($_FILES['expiry_item_photo']['tmp_name'])) {
+        $byIdTmp = $_FILES['expiry_item_photo']['tmp_name'];
+        $byIdErr = $_FILES['expiry_item_photo']['error'];
+        $byIdName = $_FILES['expiry_item_photo']['name'];
+        $byIdType = $_FILES['expiry_item_photo']['type'];
+        $byIdSize = $_FILES['expiry_item_photo']['size'];
+
+        foreach ($byIdTmp as $donId => $tmpPath) {
+            if ($tmpPath === null || $tmpPath === '' || (isset($byIdErr[$donId]) && $byIdErr[$donId] !== UPLOAD_ERR_OK)) {
+                continue; // no file for this item
+            }
+            // Build a file-like array to pass through $saveImage
+            $fileArr = [
+                'tmp_name' => $tmpPath,
+                'error' => $byIdErr[$donId] ?? UPLOAD_ERR_OK,
+                'name' => $byIdName[$donId] ?? ('expiry_' . $donId . '.jpg'),
+                'type' => $byIdType[$donId] ?? 'image/jpeg',
+                'size' => $byIdSize[$donId] ?? 0,
             ];
-        }
-        for ($i = 0; $i < count($files); $i++) {
             try {
-                $url = $saveImage($files[$i], 'food_safety');
+                $perItemUrl = $saveImage($fileArr, 'food_safety');
             } catch (Exception $ex) {
                 $msg = $ex->getMessage();
                 if (preg_match('/exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD/i', $msg)) {
@@ -196,10 +210,22 @@ try {
                 }
                 throw $ex;
             }
-            $donationItemId = isset($itemIds[$i]) ? (int)$itemIds[$i] : null;
+            // Insert a row for this specific donation item with the same receipt reference
             $db->query(
-                "INSERT INTO food_safety_item_photos (check_id, donation_item_id, photo_url, created_at) VALUES (?, ?, ?, NOW())",
-                [$checkId, $donationItemId, $url]
+                "INSERT INTO food_safety_checks (donation_id, batch_id, packaging_ok, spoilage_ok, storage_temp, expiry_date_image, receipt_image, result, fail_reason, created_by, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                [
+                    (int)$donId,
+                    $batchId,
+                    $packagingOk,
+                    $spoilageOk,
+                    $storageTemp,
+                    $perItemUrl,
+                    $receiptUrl,
+                    $result,
+                    $failReason,
+                    (int)currentUserId(),
+                ]
             );
         }
     }

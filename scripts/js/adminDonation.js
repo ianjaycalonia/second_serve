@@ -11,7 +11,6 @@
       case 'Pending': return '<span class="badge bg-warning text-dark">Pending</span>';
       case 'Allocated': return '<span class="badge bg-info text-dark">Allocated</span>';
       case 'Picked Up': return '<span class="badge bg-primary">Picked Up</span>';
-      case 'Arrived at warehouse': return '<span class="badge bg-secondary">Arrived</span>';
       case 'Failed Safety': return '<span class="badge bg-danger">Failed Safety</span>';
       case 'Completed': return '<span class="badge bg-success">Completed</span>';
       case 'Cancelled': return '<span class="badge bg-dark">Cancelled</span>';
@@ -39,6 +38,12 @@
 
   function escapeHtml(str){
     return (str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+  }
+
+  function capFirst(str){
+    if (!str) return '';
+    try { str = String(str); } catch(_) { return ''; }
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
   function fmtDateTime(s){
@@ -109,8 +114,8 @@
         const created = fmtDateTime(group.created_at);
         const statusHtml = badge(first.status || '');
         const dataAttrs = `data-batch="${group.batch_id}" data-status="${first.status ?? ''}"`;
-        const firstWithImg = group.items.find(it => (it.receipt_full_url || it.image_full_url || it.image_url)) || first;
-        const imgUrl = (firstWithImg.receipt_full_url || firstWithImg.image_full_url || firstWithImg.image_url || '');
+        const firstWithImg = group.items.find(it => (it.receipt_full_url || it.image_full_url)) || first;
+        const imgUrl = (firstWithImg.receipt_full_url || firstWithImg.image_full_url || '');
         const isPending = (first.status || '') === 'Pending';
         const imgThumb = isPending
           ? '<div class="d-flex justify-content-center">—</div>'
@@ -121,7 +126,7 @@
           actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-warning action-fs" ${dataAttrs} title="Food Safety Check" aria-label="Food Safety Check"><i class="bi bi-clipboard-check"></i></button>`);
         }
         if ((first.status || '') === 'Picked Up') {
-          actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-success action-receive" ${dataAttrs} title="Mark as Arrived at warehouse" aria-label="Receive"><i class="bi bi-check2-circle"></i></button>`);
+          actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-success action-receive" ${dataAttrs} title="Mark as Completed" aria-label="Mark Completed"><i class="bi bi-check2-circle"></i></button>`);
         }
         actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-danger action-delete" ${dataAttrs} title="Delete donation" aria-label="Delete"><i class="bi bi-trash"></i></button>`);
         const actions = `<div class="d-flex justify-content-center" style="gap:5px;">${actionsBtns.join('')}</div>`;
@@ -153,7 +158,7 @@
                   ${group.items.map(r => `
                     <tr>
                       <td>${escapeHtml(r.name || '')}</td>
-                      <td>${escapeHtml(r.type || '')}</td>
+                      <td>${escapeHtml(capFirst(r.type || ''))}</td>
                       <td>${r.quantity ?? ''}</td>
                       <td>${escapeHtml(r.expiry_date || '')}</td>
                       <td>${badge(r.status)}</td>
@@ -172,7 +177,7 @@
         const qty = (r.quantity !== undefined && r.quantity !== null) ? String(r.quantity) : '';
         const created = fmtDateTime(group.created_at);
         const statusHtml = badge(r.status || '');
-        const imgUrl = r.receipt_full_url || r.image_full_url || r.image_url || '';
+        const imgUrl = r.receipt_full_url || r.image_full_url || '';
         const isPending = (r.status || '') === 'Pending';
         const imgThumb = isPending
           ? '<div class="d-flex justify-content-center">—</div>'
@@ -183,7 +188,7 @@
           actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-warning action-fs" ${dataAttrs} title="Food Safety Check" aria-label="Food Safety Check"><i class="bi bi-clipboard-check"></i></button>`);
         }
         if ((r.status || '') === 'Picked Up') {
-          actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-success action-receive" ${dataAttrs} title="Mark as Arrived at warehouse" aria-label="Receive"><i class="bi bi-check2-circle"></i></button>`);
+          actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-success action-receive" ${dataAttrs} title="Mark as Completed" aria-label="Mark Completed"><i class="bi bi-check2-circle"></i></button>`);
         }
         actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-danger action-delete" ${dataAttrs} title="Delete donation" aria-label="Delete"><i class="bi bi-trash"></i></button>`);
         const actions = `<div class="d-flex justify-content-center" style="gap:5px;">${actionsBtns.join('')}</div>`;
@@ -211,6 +216,7 @@
       if (!btn) return;
       let src = btn.getAttribute('data-img');
       const img = document.getElementById('imageViewerImg');
+      const infoEl = document.getElementById('imageViewerInfo');
       const modalEl = document.getElementById('imageViewerModal');
       if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal){
         const m = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -221,32 +227,71 @@
           img.alt = 'Loading receipt...';
         }
         m.show();
+        if (infoEl){ infoEl.textContent = 'Resolving image URL...'; }
+        const batch = btn.getAttribute('data-batch') || '';
+        const id = btn.getAttribute('data-id') || '';
+        // Try local cache first for instant URL without network
+        if ((!src || src === '') && (batch || id)){
+          try {
+            if (batch && donationCache.byBatch && donationCache.byBatch.has(batch)){
+              const arr = donationCache.byBatch.get(batch) || [];
+              const any = arr.find(it => (it && (it.receipt_full_url || it.image_full_url)));
+              if (any) src = any.receipt_full_url || any.image_full_url || '';
+            } else if (id && donationCache.byId && donationCache.byId.has(String(id))){
+              const it = donationCache.byId.get(String(id));
+              if (it) src = it.receipt_full_url || it.image_full_url || it.image_url || '';
+            }
+          } catch(_e) {}
+        }
         // If no URL was embedded, try to resolve it from latest list data
-        if ((!src || src === '') && (btn.getAttribute('data-batch') || btn.getAttribute('data-id'))){
+        if ((!src || src === '') && (batch || id)){
           try {
             const items = await fetchAdminList();
-            const batch = btn.getAttribute('data-batch') || '';
-            const id = btn.getAttribute('data-id') || '';
             if (batch){
-              const any = items.find(it => it.batch_id === batch && (it.image_full_url || it.image_url));
-              if (any) src = any.image_full_url || any.image_url || '';
+              const any = items.find(it => it.batch_id === batch && (it.receipt_full_url || it.image_full_url));
+              if (any) src = any.receipt_full_url || any.image_full_url || '';
             } else if (id) {
               const it = items.find(it => String(it.id) === String(id));
-              if (it) src = it.image_full_url || it.image_url || '';
+              if (it) src = it.receipt_full_url || it.image_full_url || '';
             }
+            console.debug('Image viewer (after refetch):', { batch, id, resolvedSrc: src });
           } catch(_e) { /* ignore */ }
         }
         if (!src || src === ''){
           // No receipt available
-          img && (img.alt = 'No receipt uploaded yet');
-          alert('No receipt uploaded yet for this donation.');
+          if (img){
+            img.alt = 'No receipt uploaded yet';
+            img.removeAttribute('src');
+          }
+          try {
+            const titleEl = modalEl.querySelector('.modal-title');
+            if (titleEl){ titleEl.textContent = 'Receipt Image (none available)'; }
+          } catch(_) {}
+          if (infoEl){ infoEl.textContent = 'No image URL found for this donation/batch.'; }
+          console.warn('Image viewer: no image URL found for this donation/batch.', { batch, id });
           return;
         }
         if (img && src){
           // Load with error handling
           const tmp = new Image();
-          tmp.onload = () => { img.src = src; img.alt = 'Receipt'; };
-          tmp.onerror = () => { img.alt = 'Failed to load receipt image'; alert('Failed to load receipt image. URL: ' + src); };
+          tmp.onload = () => {
+            img.src = src;
+            img.alt = 'Receipt';
+            try {
+              const titleEl = modalEl.querySelector('.modal-title');
+              if (titleEl){ titleEl.textContent = 'Receipt Image'; }
+            } catch(_) {}
+            if (infoEl){ infoEl.textContent = 'URL: ' + src; }
+          };
+          tmp.onerror = () => {
+            img.alt = 'Failed to load receipt image';
+            try {
+              const titleEl = modalEl.querySelector('.modal-title');
+              if (titleEl){ titleEl.textContent = 'Receipt Image (failed to load)'; }
+            } catch(_) {}
+            if (infoEl){ infoEl.textContent = 'Failed to load URL: ' + src; }
+            console.warn('Failed to load receipt image.', { urlTried: src, batch, id });
+          };
           tmp.src = src;
         }
       }
@@ -388,7 +433,7 @@
             parts.push(`<button type="button" class="btn btn-sm btn-outline-warning action-fs" ${ds} title="Food Safety Check" aria-label="Food Safety Check"><i class="bi bi-clipboard-check"></i></button>`);
           }
           if (newStatus === 'Picked Up'){
-            parts.push(`<button type="button" class="btn btn-sm btn-outline-success action-receive" ${ds} title="Mark as Arrived at warehouse" aria-label="Receive"><i class="bi bi-check2-circle"></i></button>`);
+            parts.push(`<button type="button" class="btn btn-sm btn-outline-success action-receive" ${ds} title="Mark as Completed" aria-label="Mark Completed"><i class="bi bi-check2-circle"></i></button>`);
           }
           parts.push(`<button type="button" class="btn btn-sm btn-outline-danger action-delete" ${ds} title="Delete donation" aria-label="Delete"><i class="bi bi-trash"></i></button>`);
           return `<div class="btn-group btn-group-sm" role="group">${parts.join('')}</div>`;
@@ -508,33 +553,28 @@
         if (elDon) elDon.value = id;
         if (elBatch) elBatch.value = batch;
 
-        // Build per-item expiry photo inputs from cache immediately
+        // Build per-item expiry inputs: one photo per item, mapped by donation_id
         const container = document.getElementById('fsBatchItems');
         if (container){
           let items = [];
-          if (batch && donationCache.byBatch.has(batch)) {
+          if (batch && donationCache.byBatch && donationCache.byBatch.has(batch)){
             items = donationCache.byBatch.get(batch) || [];
-          } else if (id && donationCache.byId.has(String(id))) {
+          } else if (id && donationCache.byId && donationCache.byId.has(String(id))){
             items = [donationCache.byId.get(String(id))];
-          } else if (batch) {
-            // If cache missing for some reason, render a single generic input so the user can still proceed
-            items = [{ id: '', name: '', quantity: '' }];
-          } else if (id) {
-            items = [{ id: id }];
           }
-
-          if (!items.length) {
-            items = [{ id: '', name: '', quantity: '' }];
+          if (!Array.isArray(items) || items.length === 0){
+            // Fallback placeholder if cache missing
+            items = id ? [{ id, name: '', quantity: '' }] : [];
           }
-
           const rows = items.map((it, idx) => {
-            const label = `${idx+1}. ${it?.name ? (it.name + (it.quantity ? ` (x${it.quantity})` : '')) : 'Item' + (it?.id ? ' #' + it.id : '')}`;
+            const label = `${idx+1}. ${escapeHtml(it?.name || '')}${it?.quantity ? ` (x${it.quantity})` : ''}`;
+            const did = String(it?.id || '');
             return `
               <div class="border rounded p-2 d-flex flex-column gap-1">
-                <div class="fw-semibold">${escapeHtml(label)}</div>
-                <input type="hidden" name="item_ids[]" value="${it?.id ?? ''}">
-                <label class="form-label mb-1">Expiry date photo</label>
-                <input type="file" class="form-control" name="item_photos[]" accept="image/*" capture="environment">
+                <div class="fw-semibold">${label || 'Item' + (did ? ' #' + did : '')}</div>
+                <input type="hidden" name="item_ids[]" value="${did}">
+                <label class="form-label mb-1">Expiry date photo (one per item)</label>
+                <input type="file" class="form-control" name="expiry_item_photo[${did}]" accept="image/*" capture="environment">
               </div>
             `;
           });
@@ -549,7 +589,7 @@
         return;
       }
 
-      // Receive (mark as Arrived at warehouse)
+      // Receive (mark as Completed)
       if (recvBtn){
         const id = recvBtn.getAttribute('data-id') || '';
         const batch = recvBtn.getAttribute('data-batch') || '';
@@ -559,7 +599,7 @@
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
-              body: JSON.stringify({ status: 'Arrived at warehouse' })
+              body: JSON.stringify({ status: 'Completed' })
             });
             if (!res.ok) {
               let msg = `HTTP ${res.status}`;
@@ -571,7 +611,7 @@
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
-              body: JSON.stringify({ status: 'Arrived at warehouse' })
+              body: JSON.stringify({ status: 'Completed' })
             });
             if (!res.ok) {
               let msg = `HTTP ${res.status}`;
@@ -580,7 +620,7 @@
             }
           }
           // Optimistic UI update without full refetch
-          const newStatus = 'Arrived at warehouse';
+          const newStatus = 'Completed';
           function buildActionsHtml(ds){
             const parts = [];
             // No FS or Receive for Arrived; only Delete remains

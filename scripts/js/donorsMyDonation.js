@@ -10,7 +10,6 @@
       case 'Pending': return '<span class="badge bg-warning text-dark">Pending</span>';
       case 'Allocated': return '<span class="badge bg-info text-dark">Allocated</span>';
       case 'Picked Up': return '<span class="badge bg-primary">Picked Up</span>';
-      case 'Arrived at warehouse': return '<span class="badge bg-secondary">Arrived</span>';
       case 'Failed Safety': return '<span class="badge bg-danger">Failed Safety</span>';
       case 'Completed': return '<span class="badge bg-success">Completed</span>';
       case 'Cancelled': return '<span class="badge bg-dark">Cancelled</span>';
@@ -26,6 +25,12 @@
 
   function escapeHtml(str){
     return (str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+  }
+
+  function capFirst(str){
+    if (!str) return '';
+    try { str = String(str); } catch(_) { return ''; }
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
   async function fetchAll() {
@@ -94,7 +99,7 @@
                   ${group.items.map(r => `
                     <tr>
                       <td>${escapeHtml(r.name || '')}</td>
-                      <td>${escapeHtml(r.type || '')}</td>
+                      <td>${escapeHtml(capFirst(r.type || ''))}</td>
                       <td>${r.quantity ?? ''}</td>
                       <td>${escapeHtml(r.expiry_date || '')}</td>
                       <td>${badge(r.status)}</td>
@@ -151,13 +156,13 @@
       const batchGroups = groups.filter(g => !!g.batch_id);
       const total = batchGroups.length;
       const pending = batchGroups.filter(g => g.items.some(it => pendingStatuses.has(it.status || ''))).length;
-      const arrived = batchGroups.filter(g => g.items.length > 0 && g.items.every(it => (it.status || '') === 'Arrived at warehouse')).length;
+      const completed = batchGroups.filter(g => g.items.length > 0 && g.items.every(it => (it.status || '') === 'Completed')).length;
       const elTotal = document.getElementById('totalDonationsCount');
       const elPending = document.getElementById('pendingPickupsCount');
       const elArrived = document.getElementById('successfulDeliveriesCount');
       if (elTotal) elTotal.textContent = String(total);
       if (elPending) elPending.textContent = String(pending);
-      if (elArrived) elArrived.textContent = String(arrived);
+      if (elArrived) elArrived.textContent = String(completed);
     } catch (e) {
       console.error('Failed to load donations', e);
     }

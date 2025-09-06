@@ -66,17 +66,12 @@ try {
             }
         }
 
-        // Handle image: base64 or uploaded file
-        if (!empty($payload['image']) && is_string($payload['image'])) {
-            $payload['image_url'] = saveDonationImageBase64($payload['image']);
-        } elseif (!empty($_FILES['image']) && is_uploaded_file($_FILES['image']['tmp_name'])) {
-            $payload['image_url'] = saveUploadedImage($_FILES['image']);
-        }
+        // Enforce policy: no images at donation creation (images are uploaded by admin during Food Safety)
+        $payload['image_url'] = null;
 
         // Sanitize basic strings (not base64)
         $payload['type'] = sanitize($payload['type']);
         $payload['name'] = sanitize($payload['name']);
-        $payload['packaging'] = null; // packaging removed from UI and ignored
         $payload['expiry_date'] = !empty($payload['expiry_date']) ? sanitize($payload['expiry_date']) : null;
 
         $newId = $service->create($payload);
@@ -129,11 +124,8 @@ try {
         $count = max(count($names), count($quantities), count($expiries));
         if ($count === 0) { sendJson(['success' => false, 'error' => 'items are required'], 400); }
 
-        // Optional single receipt image for the whole donation submission
+        // Enforce policy: do not accept images at donation creation/batch
         $receiptImageUrl = null;
-        if (!empty($_FILES['image']) && is_uploaded_file($_FILES['image']['tmp_name'])) {
-            $receiptImageUrl = saveUploadedImage($_FILES['image']);
-        }
 
         // Create a single batch id for this submission
         $batchId = generateUuidV4();
@@ -155,7 +147,6 @@ try {
                 'name' => $name,
                 'quantity' => $qty,
                 'expiry_date' => $expiry,
-                'image_url' => $receiptImageUrl,
             ];
             $ids[] = $service->create($payload);
         }
@@ -210,10 +201,6 @@ try {
         // Attach absolute image URL and always attach the latest food safety receipt URL (receipt_full_url)
         $db = Database::getInstance();
         foreach ($items as &$it) {
-            // Primary image (original donation image)
-            $imageUrl = $it['image_url'] ?? '';
-            $donationImageFull = buildImageFullUrl($imageUrl);
-
             // Latest food safety receipt (by batch or donation)
             $receiptFull = '';
             if (!empty($it['batch_id'])) {
@@ -234,8 +221,8 @@ try {
                 }
             }
 
-            // Keep previous behavior for image_full_url: prefer donation image, otherwise fall back to receipt
-            $it['image_full_url'] = ($donationImageFull !== '') ? $donationImageFull : $receiptFull;
+            // New behavior: image_full_url is the latest receipt for display purposes
+            $it['image_full_url'] = $receiptFull;
             // Always include explicit receipt_full_url for front-end
             if ($receiptFull !== '') { $it['receipt_full_url'] = $receiptFull; }
 
@@ -271,6 +258,56 @@ try {
         sendJson(['success' => true, 'items' => $names]);
     }
 
+    // GET /api/donations/debug?id=123 OR /api/donations/debug?batch=<uuid>
+    // Read-only diagnostics to verify how image URLs are resolved for a specific record
+    if ($method === 'GET' && preg_match('#^/(debug|debug/)\z#', $sub)) {
+        requireRole(['admin']);
+        $db = Database::getInstance();
+        $id = isset($_GET['id']) && $_GET['id'] !== '' ? (int)$_GET['id'] : null;
+        $batch = isset($_GET['batch']) && $_GET['batch'] !== '' ? sanitize($_GET['batch']) : null;
+        if (!$id && !$batch) {
+            sendJson(['success' => false, 'error' => 'Provide id or batch'], 400);
+        }
+        $out = [
+            'input' => ['id' => $id, 'batch' => $batch],
+            'latest_receipt' => null,
+            'receipt_full_url' => '',
+            'fs' => [ 'receipt_image_exists' => null ],
+        ];
+        if ($id) {
+            $row = $db->query(
+                "SELECT receipt_image, created_at FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                [$id]
+            )->fetch();
+            if ($row) {
+                $out['latest_receipt'] = $row;
+                $out['receipt_full_url'] = buildImageFullUrl($row['receipt_image'] ?? '');
+                if (!empty($row['receipt_image'])) {
+                    $rel = ltrim($row['receipt_image'], '/');
+                    $path = __DIR__ . '/../../../' . $rel;
+                    $out['fs']['receipt_image_exists'] = file_exists($path);
+                }
+            }
+            sendJson(['success' => true, 'data' => $out]);
+        }
+        if ($batch) {
+            $row = $db->query(
+                "SELECT receipt_image, created_at FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
+                [$batch]
+            )->fetch();
+            if ($row) {
+                $out['latest_receipt'] = $row;
+                $out['receipt_full_url'] = buildImageFullUrl($row['receipt_image'] ?? '');
+                if (!empty($row['receipt_image'])) {
+                    $rel = ltrim($row['receipt_image'], '/');
+                    $path = __DIR__ . '/../../../' . $rel;
+                    $out['fs']['receipt_image_exists'] = file_exists($path);
+                }
+            }
+            sendJson(['success' => true, 'data' => $out]);
+        }
+    }
+
     // GET /api/donations/{id}
     if ($method === 'GET' && preg_match('#^/(\d+)\/?\z#', $sub, $m)) {
         requireRole(['admin']);
@@ -279,7 +316,18 @@ try {
         if (!$row) {
             sendJson(['success' => false, 'error' => 'Not found'], 404);
         }
-        $row['image_full_url'] = buildImageFullUrl($row['image_url'] ?? '');
+        // Attach latest receipt URL for this donation id
+        try {
+            $db = Database::getInstance();
+            $r = $db->query(
+                "SELECT receipt_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                [$id]
+            )->fetch();
+            if ($r && !empty($r['receipt_image'])) {
+                $row['image_full_url'] = buildImageFullUrl($r['receipt_image']);
+                $row['receipt_full_url'] = $row['image_full_url'];
+            }
+        } catch (Exception $e) { /* ignore */ }
         sendJson(['success' => true, 'data' => $row]);
     }
 
@@ -328,9 +376,19 @@ try {
         requireRole(['admin']);
         $batchId = $m[1];
         $items = $service->listByBatch($batchId);
-        foreach ($items as &$it) {
-            $it['image_full_url'] = buildImageFullUrl($it['image_url'] ?? '');
-        }
+        // Attach latest receipt URL for the batch (same for each item for convenience)
+        try {
+            $db = Database::getInstance();
+            $r = $db->query(
+                "SELECT receipt_image FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
+                [$batchId]
+            )->fetch();
+            $full = '';
+            if ($r && !empty($r['receipt_image'])) { $full = buildImageFullUrl($r['receipt_image']); }
+            if ($full !== '') {
+                foreach ($items as &$it) { $it['image_full_url'] = $full; $it['receipt_full_url'] = $full; }
+            }
+        } catch (Exception $e) { /* ignore */ }
         sendJson(['success' => true, 'data' => ['items' => $items]]);
     }
 
@@ -399,7 +457,6 @@ function readCreatePayload(): array {
         'name' => $_POST['name'] ?? null,
         'quantity' => $_POST['quantity'] ?? null,
         'expiry_date' => $_POST['expiry_date'] ?? null,
-        'packaging' => $_POST['packaging'] ?? null,
     ];
     return $payload;
 }

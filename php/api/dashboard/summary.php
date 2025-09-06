@@ -26,6 +26,16 @@ try {
     )->fetch();
     $totalMeals = (int)($row['total_meals'] ?? 0);
 
+    // Total successful donations by batches (count DISTINCT completed batches)
+    $row = $db->query(
+        "SELECT COUNT(DISTINCT batch_id) AS c
+           FROM donations
+          WHERE deleted_at IS NULL
+            AND batch_id IS NOT NULL
+            AND status = 'Completed'"
+    )->fetch();
+    $completedBatches = (int)($row['c'] ?? 0);
+
     // Upcoming pickups by batches: count each non-null batch_id once and each single (NULL batch_id) once
     $row = $db->query(
         "SELECT 
@@ -99,6 +109,7 @@ try {
                 'upcoming_pickups' => $upcomingPickups,
                 'active_donors' => $activeDonors,
                 'active_recipients' => $activeRecipients,
+                'completed_batches' => $completedBatches,
             ],
             'trend' => [
                 'labels' => $labels,
