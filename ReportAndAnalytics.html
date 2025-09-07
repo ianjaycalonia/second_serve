@@ -83,19 +83,49 @@
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
     <aside class="collapsed">
-      <a href="AdminDashboard.html" class="nav-link"
+      <a
+        href="AdminDashboard.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Dashboard"
         ><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a
       >
-      <a href="Donation.html" class="nav-link"
+      <a
+        href="Donation.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donations"
         ><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a
       >
-      <a href="Donors.html" class="nav-link"
+      <a
+        href="Donors.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donors"
         ><i class="bi bi-person-fill me-2"></i><span>Donors</span></a
       >
-      <a href="Recipient.html" class="nav-link"
+      <a
+        href="Recipient.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Recipients"
         ><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a
       >
-      <a href="ReportAndAnalytics.html" class="nav-link active"
+      <a
+        href="ReportAndAnalytics.html"
+        class="nav-link active"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Reports & Analytics"
         ><i class="bi bi-bar-chart-fill me-2"></i
         ><span>Reports & Analytics</span></a
       >
@@ -103,89 +133,108 @@
 
     <!-- Main Content -->
     <main>
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4>Reports & Analytics</h4>
-        <select class="form-select form-select-sm w-auto">
-          <option selected>Weekly</option>
-          <option>Monthly</option>
-        </select>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="AdminDashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">
+            Reports & Analytics
+          </li>
+        </ol>
       </div>
 
-      <!-- Main Content Cards -->
-      <div class="row g-3 mb-4">
-        <div class="col-md-3">
-          <div class="card card-total p-3">
-            <h6>Total Donations</h6>
-            <div class="d-flex align-items-center">
-              <i class="bi bi-recycle display-2"></i>
-              <div class="d-flex flex-column ms-2">
-                <p class="display-6 mb-0">200</p>
-                <p class="text-muted">meals donated</p>
+      <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
+        <div class="col">
+          <div class="card card-accent h-100">
+            <div class="card-body">
+              <h6 class="card-title">Total Donations</h6>
+              <div class="card-elements">
+                <div class="card-icon">
+                  <i class="bi bi-basket-fill"></i>
+                </div>
+                <div class="card-text">
+                  <h3 class="mb-0" id="totalDonations">0</h3>
+                  <small class="text-muted">Donated</small>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        <div class="col-md-3">
-          <div class="card card-summary p-3">
-            <h6>Total Pickups</h6>
-            <div class="d-flex align-items-center">
-              <i class="bi bi-people-fill display-2"></i>
-              <div class="d-flex flex-column ms-2">
-                <p class="display-6 mb-0">32</p>
-                <p class="text-muted">pickups</p>
+
+        <div class="col">
+          <div class="card card-accent h-100">
+            <div class="card-body">
+              <h6 class="card-title">Total Pickups</h6>
+              <div class="card-elements">
+                <div class="card-icon">
+                  <i class="bi bi-truck"></i>
+                </div>
+                <div class="card-text">
+                  <h3 class="mb-0" id="upcomingDonations">0</h3>
+                  <small class="text-muted">Pickuped</small>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        <div class="col-md-3">
-          <div class="card card-summary p-3">
-            <h6>Donor Retention Rate</h6>
-            <div class="d-flex align-items-center">
-              <i class="bi bi-people-fill display-2"></i>
-              <div class="d-flex flex-column ms-2">
-                <p class="display-6 mb-0">65%</p>
-                <p class="text-muted">retention</p>
+
+        <div class="col">
+          <div class="card card-accent h-100">
+            <div class="card-body">
+              <h6 class="card-title">Donor Retention</h6>
+              <div class="card-elements">
+                <div class="card-icon">
+                  <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="card-text">
+                  <h3 class="mb-0" id="activeDonors">0</h3>
+                  <small class="text-muted">Rate</small>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        <div class="col-md-3">
-          <div class="card card-summary p-3">
-            <h6>Avg. Response Time</h6>
-            <div class="d-flex align-items-center">
-              <i class="bi bi-clock display-2"></i>
-              <div class="d-flex flex-column ms-2">
-                <p class="display-6 mb-0">1 hr</p>
-                <p class="text-muted mb-0">average</p>
+
+        <div class="col">
+          <div class="card card-accent h-100">
+            <div class="card-body">
+              <h6 class="card-title">Avg. Donation Value</h6>
+              <div class="card-elements">
+                <div class="card-icon">
+                  <i class="bi bi-bar-chart-line-fill"></i>
+                </div>
+                <div class="card-text">
+                  <h3 class="mb-0" id="activeRecipients">0</h3>
+                  <small class="text-muted">Average</small>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-      <!-- Graph Placeholders -->
-      <div class="row g-3 mb-4">
-        <div class="col-md-6">
-          <div class="card p-3" style="height: 200px">
-            <h6>Weekly Donation Volume</h6>
-          </div>
-        </div>
-        <div class="col-md-6">
-          <div
-            class="card p-3"
-            style="
-              height: 200px;
-              display: flex;
-              flex-direction: column;
-              justify-content: space-between;
-            "
-          >
-            <div class="d-flex justify-content-between align-items-center">
-              <h6>Pickup Success Rate</h6>
+
+        <div class="col-12 col-lg-6">
+          <div class="card card-accent p-4 w-100 h-100">
+            <div class="d-flex justify-content-between mb-3">
+              <h6 class="mb-0">Donation Volume</h6>
+              <select class="form-select w-auto">
+                <option selected>Daily</option>
+                <option>Weekly</option>
+                <option>Monthly</option>
+                <option>Yearly</option>
+              </select>
             </div>
+            <div style="height: 300px">
+              <canvas id="lineChart"></canvas>
+            </div>
+            <div class="fs-6 mb-2 text-center">
+              <span id="donationTimeframe">Daily</span> Donations
+            </div>
+
             <div
               class="d-flex align-items-center justify-content-center mt-auto"
             >
-              <span class="ms-2">Change View</span>
+              <span class="ms-2">Change View:</span>
               <select class="form-select form-select-sm w-auto ms-2">
                 <option selected>Region</option>
                 <option>City</option>
@@ -193,41 +242,122 @@
             </div>
           </div>
         </div>
-      </div>
-      <!-- Reports Table -->
-      <div class="card p-3">
-        <div class="d-flex justify-content-between mb-3">
-          <h6>Reports Log</h6>
-          <div class="d-flex gap-2">
-            <button class="btn btn-warning btn-sm">Generate Report</button>
-            <button class="btn btn-secondary btn-sm">Export</button>
-            <button class="btn btn-secondary btn-sm">Print</button>
+
+        <div class="col-12 col-lg-6">
+          <div class="card card-accent p-4 w-100 h-100">
+            <div class="d-flex justify-content-between mb-3">
+              <h6 class="mb-0">Pickup Volume</h6>
+              <select class="form-select w-auto">
+                <option selected>Daily</option>
+                <option>Weekly</option>
+                <option>Monthly</option>
+                <option>Yearly</option>
+              </select>
+            </div>
+            <div style="height: 300px">
+              <canvas id="barChart"></canvas>
+            </div>
+            <div class="fs-6 mb-2 text-center">
+              <span id="pickupTimeframe">Daily</span> Pickups
+            </div>
+
+            <div
+              class="d-flex align-items-center justify-content-center mt-auto"
+            >
+              <span class="ms-2">Change View:</span>
+              <select class="form-select form-select-sm w-auto ms-2">
+                <option selected>Region</option>
+                <option>City</option>
+              </select>
+            </div>
           </div>
         </div>
-        <div class="table-responsive">
-          <table class="table table-bordered table-sm">
-            <thead class="table-light">
-              <tr>
-                <th>Date</th>
-                <th>Donor</th>
-                <th>Recipient</th>
-                <th>Items</th>
-                <th>Status</th>
-                <th>Drivers</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colspan="7" class="text-center text-muted">
-                  No data available
-                </td>
-              </tr>
-            </tbody>
-          </table>
+
+        <div class="col-12 col-md-12 col-lg-12">
+          <div class="card card-accent p-3">
+            <div class="d-flex justify-content-between mb-3">
+              <h6>Reports Log</h6>
+              <div class="d-flex gap-2">
+                <button class="btn btn-warning btn-sm">Generate Report</button>
+                <button class="btn btn-secondary btn-sm">Export</button>
+                <button class="btn btn-secondary btn-sm">Print</button>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-evenly mb-3 flex-wrap gap-2">
+              <div class="d-flex align-items-center">
+                <span class="me-2">Show:</span>
+                <select class="form-select form-select-sm w-auto">
+                  <option selected>All</option>
+                  <option>Last 7 Days</option>
+                  <option>Last 30 Days</option>
+                </select>
+              </div>
+
+              <div class="d-flex align-items-center">
+                <span class="me-2">Sort By:</span>
+                <select class="form-select form-select-sm w-auto">
+                  <option selected>Date</option>
+                  <option>Amount</option>
+                  <option>Status</option>
+                </select>
+              </div>
+
+              <div class="d-flex align-items-center">
+                <span class="me-2">Filter By:</span>
+                <select class="form-select form-select-sm w-auto">
+                  <option selected>All</option>
+                  <option>Donations</option>
+                  <option>Pickups</option>
+                </select>
+              </div>
+
+              <div class="d-flex align-items-center">
+                <span class="me-2">Group By:</span>
+                <select class="form-select form-select-sm w-auto">
+                  <option selected>None</option>
+                  <option>Region</option>
+                  <option>City</option>
+                </select>
+              </div>
+
+              <div class="d-flex align-items-center">
+                <span class="me-2">Search:</span>
+                <input
+                  type="text"
+                  class="form-control form-control-sm w-auto"
+                  placeholder="Search reports"
+                />
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>Date</th>
+                    <th>Donor</th>
+                    <th>Recipient</th>
+                    <th>Items</th>
+                    <th>Volume</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="7" class="text-center text-muted">
+                      No data available
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </main>
+
     <!-- Notifications Modal -->
     <div
       class="modal fade"

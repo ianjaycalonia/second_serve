@@ -84,28 +84,64 @@
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
     <aside class="collapsed">
-      <a href="AdminDashboard.html" class="nav-link"
+      <a
+        href="AdminDashboard.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Dashboard"
         ><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a
       >
-      <a href="Donation.html" class="nav-link active"
+      <a
+        href="Donation.html"
+        class="nav-link active"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donations"
         ><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a
       >
-      <a href="Donors.html" class="nav-link"
+      <a
+        href="Donors.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donors"
         ><i class="bi bi-person-fill me-2"></i><span>Donors</span></a
       >
-      <a href="Recipient.html" class="nav-link"
+      <a
+        href="Recipient.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Recipients"
         ><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a
       >
-      <a href="ReportAndAnalytics.html" class="nav-link"
+      <a
+        href="ReportAndAnalytics.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Reports & Analytics"
         ><i class="bi bi-bar-chart-fill me-2"></i
         ><span>Reports & Analytics</span></a
       >
     </aside>
 
     <main>
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4>Donations</h4>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="AdminDashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">Donations</li>
+        </ol>
       </div>
+
       <div
         class="d-flex flex-wrap gap-3 mb-3 p-2 rounded"
         style="background-color: #00a0b0"
@@ -634,6 +670,6 @@
     <script src="scripts/js/auth.js"></script>
     <script src="scripts/js/notifications.js"></script>
     <script src="scripts/js/adminDonation.js"></script>
-    <script src="scripts/js/Donation.js"></script>
+    <script src="scripts/js/sidebar.js"></script>
   </body>
 </html>
