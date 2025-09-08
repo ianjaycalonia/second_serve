@@ -28,7 +28,7 @@
   <div class="offcanvas-body">
     <nav class="nav flex-column px-2">
       <a href="DonorDashboard.html" class="nav-link active"><i class="bi bi-house-door-fill me-2"></i> Dashboard</a>
-      <a href="donorsMyDonation.html" class="nav-link"><i class="bi bi-box-seam me-2"></i> My Donations</a>
+      <a href="MyDonations.html" class="nav-link"><i class="bi bi-box-seam me-2"></i> My Donations</a>
       <a href="schedulePickups.html" class="nav-link"><i class="bi bi-building-add me-2"></i> Schedule Pickups</a>
       <a href="donationHistory.html" class="nav-link"><i class="bi bi-people me-2"></i> Donation History</a>
     </nav>
@@ -70,7 +70,7 @@
 <div class="sidebar d-none d-lg-flex flex-column position-fixed">
   <nav class="side_nav nav flex-column px-3">
     <a href="DonorDashboard.html" class="nav-link active"><i class="bi bi-house-door-fill me-2"></i> Dashboard</a>
-    <a href="donorsMyDonation.html" class="nav-link"><i class="bi bi-box-seam me-2"></i> My Donations</a>
+    <a href="MyDonations.html" class="nav-link"><i class="bi bi-box-seam me-2"></i> My Donations</a>
     <a href="schedulePickups.html" class="nav-link"><i class="bi bi-building-add me-2"></i> Schedule Pickups</a>
     <a href="donationHistory.html" class="nav-link"><i class="bi bi-people me-2"></i> Donation History</a>
   </nav>
@@ -244,7 +244,7 @@
       <a href="DonorDashboard.html" class="nav-link active"
         ><i class="bi bi-house-door-fill me-2"></i> <span>Dashboard</span></a
       >
-      <a href="donorsMyDonation.html" class="nav-link"
+      <a href="MyDonations.html" class="nav-link"
         ><i class="bi bi-box-seam me-2"></i> <span>My Donations</span></a
       >
       <a href="schedulePickups.html" class="nav-link"
@@ -353,15 +353,7 @@
               <canvas id="lineChart"></canvas>
             </div>
 
-            <div class="text-center mt-3">
-              <button
-                class="btn fs-6"
-                style="background-color: #00a0b0; color: white"
-                type="button"
-              >
-                Donation History
-              </button>
-            </div>
+            
           </div>
         </div>
 
@@ -395,6 +387,7 @@
       </div>
     </main>
 
+    
     <!-- Notifications Modal -->
     <div
       class="modal fade"
@@ -508,10 +501,13 @@
       aria-labelledby="donationModalLabel"
       aria-hidden="true"
     >
-      <div class="modal-dialog modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="donationModalLabel">Make a Donation</h5>
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content rounded-3 shadow">
+          <div class="modal-header border-0 pb-0">
+            <div>
+              <h5 class="modal-title" id="donationModalLabel">Make a Donation</h5>
+              <div class="text-muted small">Provide your donation details below. You can add multiple items.</div>
+            </div>
             <button
               type="button"
               class="btn-close"
@@ -519,46 +515,45 @@
               aria-label="Close"
             ></button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body pt-3">
             <form id="donationForm" enctype="multipart/form-data" novalidate>
-              <div class="mb-3">
-                <label for="donationType" class="form-label"
-                  >Donation Type</label
-                >
-                <select id="donationType" class="form-select" required>
-                  <option value="">Select type</option>
-                  <option value="food">Food</option>
-                  <option value="non-food">Non-Food</option>
-                </select>
-                <div class="invalid-feedback">
-                  Please select a donation type.
+              <div class="row g-3">
+                <div class="col-12 col-md-6">
+                  <label for="donationType" class="form-label">Category</label>
+                  <select id="donationType" class="form-select" required>
+                    <option value="">Select category</option>
+                    <option value="Rice">Rice</option>
+                    <option value="Canned Goods">Canned Goods</option>
+                    <option value="Frozen Meat">Frozen Meat</option>
+                    <option value="Bread &amp; Pastries">Bread &amp; Pastries</option>
+                    <option value="Beverages">Beverages</option>
+                    <option value="Snacks">Snacks</option>
+                  </select>
+                  <div class="form-text">Choose the category that best fits your donation.</div>
+                  <div class="invalid-feedback">Please select a donation type.</div>
                 </div>
               </div>
-              <div class="mb-3">
+
+              <hr class="my-4" />
+
+              <div class="d-flex align-items-center justify-content-between mb-2">
                 <label class="form-label mb-0">Donation Items</label>
-              </div>
-              <div
-                class="mb-2 d-flex justify-content-between align-items-center"
-              >
-                <span></span>
-                <button
-                  type="button"
-                  id="addItemBtn"
-                  class="btn btn-sm btn-outline-primary"
-                >
-                  Add Donation Item
+                <button type="button" id="addItemBtn" class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-plus-lg"></i> Add Donation Item
                 </button>
               </div>
+              <div class="text-muted small mb-2">Add each item with its name and quantity. Expiry is optional.</div>
               <datalist id="itemsDatalist"></datalist>
               <div id="itemsContainer" class="d-flex flex-column gap-3">
                 <!-- Dynamic rows inserted here -->
               </div>
             </form>
           </div>
-          <div class="modal-footer">
+          <div class="modal-footer border-0 pt-0">
+            <div class="me-auto text-muted small">You can review your items before submitting.</div>
             <button
               type="button"
-              class="btn btn-secondary"
+              class="btn btn-outline-secondary"
               data-bs-dismiss="modal"
             >
               Cancel

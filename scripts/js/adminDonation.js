@@ -212,10 +212,12 @@
         const statusHtml = badge(r.status || '');
         const imgUrl = r.receipt_full_url || r.image_full_url || '';
         const isPending = (r.status || '') === 'Pending';
+        // If this donation belongs to a batch (even if it's a singleton batch), keep the batch id
+        const batchForSingle = r.batch_id ? String(r.batch_id) : '';
         const imgThumb = isPending
           ? '<div class="d-flex justify-content-center">—</div>'
-          : `<div class="d-flex justify-content-center" style="gap:5px;"><button type="button" class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${imgUrl}" data-id="${r.id ?? ''}" data-batch="" data-status="${r.status ?? ''}" title="View receipt">View</button></div>`;
-        const dataAttrs = `data-id="${r.id ?? ''}" data-batch="" data-status="${r.status ?? ''}"`;
+          : `<div class="d-flex justify-content-center" style="gap:5px;"><button type="button" class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${imgUrl}" data-id="${r.id ?? ''}" data-batch="${batchForSingle}" data-status="${r.status ?? ''}" title="View receipt">View</button></div>`;
+        const dataAttrs = `data-id="${r.id ?? ''}" data-batch="${batchForSingle}" data-status="${r.status ?? ''}"`;
         const actionsBtns = [];
         if ((r.status || '') === 'Pending') {
           actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-warning action-fs" ${dataAttrs} title="Food Safety Check" aria-label="Food Safety Check"><i class="bi bi-clipboard-check"></i></button>`);
@@ -288,6 +290,18 @@
               if (it) src = it.receipt_full_url || it.image_full_url || '';
             }
             console.debug('Image viewer (after refetch):', { batch, id, resolvedSrc: src });
+          } catch(_e) { /* ignore */ }
+        }
+        // As a final fallback for singles, hit the detail endpoint to fetch the latest receipt URL
+        if ((!src || src === '') && id){
+          try {
+            const res = await fetch(`${API_BASE_URL}/donations/index.php/${encodeURIComponent(id)}`, { credentials: 'include' });
+            if (res.ok){
+              const j = await res.json().catch(() => ({}));
+              const row = j && j.data ? j.data : null;
+              if (row){ src = row.receipt_full_url || row.image_full_url || ''; }
+              console.debug('Image viewer (detail fallback):', { id, resolvedSrc: src });
+            }
           } catch(_e) { /* ignore */ }
         }
         if (!src || src === ''){

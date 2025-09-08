@@ -125,12 +125,12 @@
             dest = 'Donation.html';
           } else if (nType === 'status_updated') {
             // Donors: go to their donations page; Admins: Donation.html
-            if (role === 'donor') dest = 'donorsMyDonation.html';
+            if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
           }
           // Fallbacks by reference_type if not set above
-          if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'donorsMyDonation.html' : null);
-          if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'donorsMyDonation.html' : null);
+          if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
+          if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
 
           if (dest) {
             // Close modal before navigation for better UX

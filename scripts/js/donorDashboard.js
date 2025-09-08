@@ -2,37 +2,81 @@
   "use strict";
 
   $(function () {
-    // Chart init (if canvas exists)
-    try {
-      const canvas = document.getElementById("lineChart");
-      if (canvas && window.Chart) {
+    // Ensure API base URL is defined (fallback to project path)
+    const API_BASE_URL =
+      typeof window.API_BASE_URL === 'string' && window.API_BASE_URL
+        ? window.API_BASE_URL
+        : '/Capstone%20Project/php/api';
+    // Chart helpers
+    let donorChart = null;
+    function ensureChart() {
+      try {
+        const canvas = document.getElementById("lineChart");
+        if (!canvas || !window.Chart) return null;
+        if (donorChart) return donorChart;
         const ctx = canvas.getContext("2d");
-        new Chart(ctx, {
+        donorChart = new Chart(ctx, {
           type: "line",
-          data: {
-            labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-            datasets: [
-              {
-                label: "Pickups",
-                data: [2, 5, 1, 4, 7, 6, 4],
-                borderColor: "#ed3f34",
-                backgroundColor: "rgba(237, 63, 52, 0.7)",
-                tension: 0.4,
-                fill: true,
-                pointRadius: 5,
-                pointHoverRadius: 7,
-              },
-            ],
-          },
+          data: { labels: [], datasets: [] },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true } },
+            interaction: { mode: 'index', intersect: false },
+            stacked: false,
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+            plugins: { legend: { position: 'bottom' } }
           },
         });
+        return donorChart;
+      } catch(_){ return null; }
+    }
+
+    function lastNDatesLabels(n){
+      const labels = [];
+      const fmt = (d) => d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+      for (let i=n-1;i>=0;i--){
+        const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i);
+        labels.push({ key: d.toISOString().slice(0,10), label: fmt(d) });
       }
-    } catch (_e) {
-      /* no-op */
+      return labels;
+    }
+
+    function updateChartWith(items){
+      const chart = ensureChart(); if (!chart) return;
+      const days = lastNDatesLabels(7);
+      // Build sets per day for distinct completed batches only
+      const perDay = new Map(days.map(d => [d.key, new Set()]));
+      if (Array.isArray(items)){
+        for (const it of items){
+          const s = (it.status||'').trim();
+          const b = it.batch_id ? String(it.batch_id) : null;
+          if (!b || s !== 'Completed') continue; // batch-based completed only
+          const dt = it.created_at ? new Date(it.created_at) : null;
+          if (!dt || isNaN(dt)) continue;
+          dt.setHours(0,0,0,0);
+          const key = dt.toISOString().slice(0,10);
+          if (!perDay.has(key)) continue; // outside range
+          perDay.get(key).add(b);
+        }
+      }
+      const labels = days.map(d => d.label);
+      const dataSeries = days.map(d => (perDay.get(d.key)?.size) || 0);
+      const datasets = [
+        {
+          label: 'Donations Made (completed batches)',
+          data: dataSeries,
+          borderColor: '#00a0b0',
+          backgroundColor: 'rgba(0,160,176,0.18)',
+          pointBackgroundColor: '#00a0b0',
+          pointBorderColor: '#00a0b0',
+          tension: 0.35,
+          fill: true,
+          pointRadius: 3
+        }
+      ];
+      chart.data.labels = labels;
+      chart.data.datasets = datasets;
+      chart.update();
     }
 
     // Donation modal + history logic
@@ -74,6 +118,20 @@
       });
     }
 
+    function initCategorySelect2() {
+      const $cat = $("#donationType");
+      if (!$cat.length || !$.fn.select2) return;
+      // Initialize once
+      if ($cat.hasClass('select2-hidden-accessible')) return;
+      $cat.select2({
+        width: '100%',
+        placeholder: 'Select category',
+        dropdownParent: $modal,
+        tags: false,
+        minimumResultsForSearch: 5 // show search when many
+      });
+    }
+
     function setSubmitting(isLoading) {
       if (isLoading) {
         $submitBtn
@@ -91,24 +149,30 @@
     // Dynamic items UI
     function itemRowTemplate(id) {
       return `
-      <div class="card p-3 border position-relative item-row" data-id="${id}">
+      <div class="card p-3 border item-row" data-id="${id}">
         <div class="row g-2 align-items-end">
-          <div class="col-md-7">
+          <div class="col-12 col-md-6">
             <label class="form-label mb-1">Item Name</label>
             <select class="form-select item-name-select" data-placeholder="Search or type new" required></select>
             <div class="invalid-feedback">Item name is required.</div>
           </div>
-          <div class="col-md-3">
+          <div class="col-6 col-md-2">
             <label class="form-label mb-1">Quantity</label>
             <input type="number" class="form-control item-qty" min="1" required>
             <div class="invalid-feedback">Min 1</div>
           </div>
-          <div class="col-md-2">
+          <div class="col-6 col-md-3">
             <label class="form-label mb-1">Expiry Date</label>
             <input type="date" class="form-control item-expiry">
           </div>
+          <div class="col-12 col-md-1 text-end">
+            <label class="form-label mb-1 d-none d-md-block">&nbsp;</label>
+            <button type="button" class="btn btn-sm btn-outline-danger d-flex align-items-center justify-content-center w-100 w-md-auto" aria-label="Remove item">
+              <i class="bi bi-trash"></i>
+              <span class="ms-1 d-inline d-md-none">Remove</span>
+            </button>
+          </div>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-danger position-absolute" style="top:8px; right:8px" aria-label="Remove item">Remove</button>
       </div>`;
     }
 
@@ -255,97 +319,41 @@
       return `<a href="${safe}" target="_blank" rel="noopener" class="d-inline-flex align-items-center flex-shrink-0"><img src="${safe}" class="img-thumbnail" style="max-height:40px; width:auto"></a>`;
     }
 
-    function renderPage() {
-      const groups = new Map();
-      // __items already filtered to only selected batches
-      __items.forEach((r) => {
-        if (!r.batch_id) return; // only batches
-        const key = `b-${r.batch_id}`;
-        if (!groups.has(key))
-          groups.set(key, { batch_id: r.batch_id, items: [] });
-        groups.get(key).items.push(r);
-      });
+    // (removed unused donation-history helpers)
 
-      let htmlRows = "";
-      groups.forEach((group) => {
-        const isBatch = !!group.batch_id;
-        if (isBatch) {
-          const count = group.items.length;
-          const first = group.items[0] || {};
-          if (count <= 1) {
-            const r = first;
-            htmlRows += `
-            <tr>
-              <td>${r.name || ""}</td>
-              <td>${r.type || ""}</td>
-              <td>${r.quantity ?? ""}</td>
-              <td>${fmtDate(r.expiry_date)}</td>
-              <td>${badge(r.status)}</td>
-              <td>${imageCell(r.image_full_url)}</td>
-            </tr>
-          `;
-          } else {
-            const title = `Donation • ${count} item${count > 1 ? "s" : ""}`;
-            htmlRows += `
-            <tr class="table-active group-row" data-batch-id="${
-              group.batch_id
-            }">
-              <td colspan="4" class="py-2">
-                <div class="fw-semibold"><button class="btn btn-sm btn-outline-secondary me-2 batch-toggle" type="button" aria-label="Toggle">Show</button>${title}</div>
-              </td>
-              <td class="py-2 align-middle">${badge(
-                first.status || "Pending"
-              )}</td>
-              <td class="py-2 align-middle">${imageCell(
-                first.image_full_url
-              )}</td>
-            </tr>
-            <tr class="child-container d-none" data-batch-id="${
-              group.batch_id
-            }">
-              <td colspan="6" class="p-0">
-                <table class="table table-sm mb-0">
-                  <tbody>
-                    ${group.items
-                      .map(
-                        (r) => `
-                      <tr>
-                        <td>${r.name || ""}</td>
-                        <td style="width:10%">${r.type || ""}</td>
-                        <td style="width:8%">${r.quantity ?? ""}</td>
-                        <td style="width:14%">${fmtDate(r.expiry_date)}</td>
-                        <td style="width:14%">${badge(r.status)}</td>
-                        <td style="width:14%">${imageCell(
-                          r.image_full_url
-                        )}</td>
-                      </tr>
-                    `
-                      )
-                      .join("")}
-                  </tbody>
-                </table>
-              </td>
-            </tr>
-          `;
+    function renderMetricsFrom(items){
+      try{
+        // Total Donations Made: count DISTINCT completed batches only
+        let total = 0;
+        if (Array.isArray(items)){
+          const set = new Set();
+          for (const it of items){
+            const s = (it.status||'').trim();
+            if (it.batch_id && s === 'Completed') set.add(String(it.batch_id));
           }
+          total = set.size;
         }
-      });
-      document.getElementById("donationHistoryBody").innerHTML =
-        htmlRows ||
-        '<tr><td colspan="6" class="text-center text-muted">No donations yet</td></tr>';
-
-      // Hide pagination on dashboard when only showing last 3
-      const $pg = $("#historyPagination");
-      $pg.empty().hide();
+        const byStatus = items.reduce((acc, it) => { const s=(it.status||'').trim(); acc[s]=(acc[s]||0)+1; return acc; }, {});
+        const pending = byStatus['Pending']||0;
+        const allocated = byStatus['Allocated']||0; // treat as scheduled pickups
+        const cancelled = byStatus['Cancelled']||0;
+        const elTotal = document.getElementById('totalDonations');
+        const elUpcoming = document.getElementById('upcomingDonations');
+        const elPending = document.getElementById('activeDonors');
+        const elCancelled = document.getElementById('activeRecipients');
+        if (elTotal) elTotal.textContent = String(total);
+        if (elUpcoming) elUpcoming.textContent = String(allocated);
+        if (elPending) elPending.textContent = String(pending);
+        if (elCancelled) elCancelled.textContent = String(cancelled);
+      }catch(_e){}
     }
 
-    function setHistoryLoading(on) {
-      $("#historySpinner").toggleClass("d-none", !on);
-    }
+    // (removed unused donation-history rendering)
+
+    // (removed unused spinner toggling)
 
     function fetchHistory(reset) {
       if (reset) __page = 1;
-      setHistoryLoading(true);
       $.ajax({
         url: `${API_BASE_URL}/donations/index.php/list`,
         method: "GET",
@@ -353,26 +361,10 @@
         xhrFields: { withCredentials: true },
         success: function (resp) {
           const items = resp?.data?.items || [];
-          // Determine last 3 distinct batches by first appearance order (assumes items are sorted newest first)
-          const seen = new Set();
-          const batchOrder = [];
-          for (const it of items) {
-            if (it.batch_id && !seen.has(it.batch_id)) {
-              seen.add(it.batch_id);
-              batchOrder.push(it.batch_id);
-              if (batchOrder.length >= 3) break;
-            }
-          }
-          // Keep only items belonging to those batches
-          __items = items.filter((it) => it.batch_id && seen.has(it.batch_id));
-          // Populate datalist from unique item names (legacy fallback, kept harmless)
-          const names = Array.from(
-            new Set(items.map((x) => (x.name || "").trim()).filter(Boolean))
-          ).sort();
-          $datalist.html(
-            names.map((n) => `<option value="${n}"></option>`).join("")
-          );
-          renderPage();
+          // Update metrics for this donor
+          renderMetricsFrom(items);
+          // Update chart to reflect live metrics
+          updateChartWith(items);
         },
         error: function (err) {
           showToast(
@@ -380,34 +372,13 @@
             "danger"
           );
         },
-        complete: function () {
-          setHistoryLoading(false);
-        },
+        complete: function () {},
       });
     }
 
-    // Events delegated on document
-    $(document).on("click", "#historyPagination a.page-link", function (e) {
-      e.preventDefault();
-      const p = parseInt(this.dataset.page, 10);
-      if (!isNaN(p)) {
-        __page = p;
-        renderPage();
-      }
-    });
+    // (removed unused donation-history events)
 
-    $(document).on("click", ".batch-toggle", function () {
-      const $groupRow = $(this).closest("tr.group-row");
-      const batchId = $groupRow.data("batch-id");
-      const $child = $(`tr.child-container[data-batch-id="${batchId}"]`);
-      const showing = !$child.hasClass("d-none");
-      $child.toggleClass("d-none", showing);
-      $(this).text(showing ? "Show" : "Hide");
-    });
-
-    $("#refreshHistoryBtn").on("click", function () {
-      fetchHistory(true);
-    });
+    // (removed modal-specific donation-history rendering)
 
     // When modal becomes visible, ensure at least one item row exists and init Select2
     $modal.on("shown.bs.modal", function () {
@@ -417,6 +388,7 @@
           initSelect2($(this));
         }
       });
+      initCategorySelect2();
     });
 
     // History listing remains defined above; no duplicates below
@@ -431,5 +403,8 @@
 
     // Initial load
     fetchHistory(true);
+
+    // If the modal content is already present before opening, prep the category select for better UX
+    initCategorySelect2();
   });
 })();
