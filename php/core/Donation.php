@@ -9,6 +9,7 @@ class Donation
     {
         $this->db = Database::getInstance();
     }
+    // Create a donation record, returns new id
 
     // Create a donation record, returns new id
     public function create(array $payload): int
@@ -201,6 +202,221 @@ class Donation
             $rows = $this->db->query($sql)->fetchAll();
         }
         return array_values(array_filter(array_map(function($r){ return $r['name'] ?? null; }, $rows), function($v){ return $v !== null && $v !== ''; }));
+    }
+
+    
+}
+
+// Donor-side editing/cancellation helper
+class DonationEditor
+{
+    private Database $db;
+
+    public function __construct()
+    {
+        $this->db = Database::getInstance();
+    }
+
+    // Ensure the donation exists, is owned by the given donor (unless admin), and is Pending
+    public function assertEditable(int $donationId, int $donorId, bool $isAdmin = false): array
+    {
+        $row = $this->db->query(
+            "SELECT id, donor_id, status FROM donations WHERE id = ? AND deleted_at IS NULL",
+            [$donationId]
+        )->fetch();
+        if (!$row) { throw new Exception('Not found'); }
+        if (!$isAdmin && (int)$row['donor_id'] !== $donorId) { throw new Exception('Forbidden'); }
+        if (($row['status'] ?? '') !== 'Pending') { throw new Exception('Only pending donations can be modified'); }
+        return $row;
+    }
+
+    // Update name/type/quantity/expiry_date for a Pending donation
+    public function updateFields(int $donationId, array $fields): void
+    {
+        $allowed = ['type','name','quantity','expiry_date'];
+        $set = [];
+        $params = [];
+        foreach ($allowed as $k) {
+            if (array_key_exists($k, $fields)) {
+                if ($k === 'quantity') {
+                    $val = (int)$fields[$k];
+                    if ($val < 1) { throw new Exception('Quantity must be at least 1'); }
+                    $set[] = "quantity = ?";
+                    $params[] = $val;
+                } elseif ($k === 'expiry_date') {
+                    $v = $fields[$k];
+                    $v = ($v === '' || $v === null) ? null : $v;
+                    $set[] = "expiry_date = ?";
+                    $params[] = $v;
+                } else {
+                    $v = sanitize((string)$fields[$k]);
+                    $set[] = "$k = ?";
+                    $params[] = $v;
+                }
+            }
+        }
+        if (!$set) { return; }
+        $params[] = $donationId;
+        $sql = "UPDATE donations SET " . implode(', ', $set) . " WHERE id = ?";
+        $this->db->query($sql, $params);
+    }
+
+    // Create the cancellations table if not exists
+    private function ensureCancellationTable(): void
+    {
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS donation_cancellations (
+                id INT(11) NOT NULL AUTO_INCREMENT,
+                donation_id INT(11) DEFAULT NULL,
+                batch_id VARCHAR(36) DEFAULT NULL,
+                user_id INT(11) NOT NULL,
+                reason TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+                PRIMARY KEY (id),
+                KEY donation_id (donation_id),
+                KEY batch_id (batch_id),
+                KEY user_id (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+        );
+    }
+
+    // Cancel a single donation with a reason
+    public function cancel(int $donationId, int $userId, string $reason): void
+    {
+        $reason = trim($reason);
+        if ($reason === '') { throw new Exception('Reason is required'); }
+        $this->ensureCancellationTable();
+        $this->db->beginTransaction();
+        try {
+            $this->db->query("UPDATE donations SET status = 'Cancelled' WHERE id = ?", [$donationId]);
+            $this->db->query(
+                "INSERT INTO donation_cancellations (donation_id, batch_id, user_id, reason) VALUES (?, NULL, ?, ?)",
+                [$donationId, $userId, $reason]
+            );
+            $this->db->commit();
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    // Cancel an entire batch (set all to Cancelled) with a reason
+    public function cancelByBatch(string $batchId, int $userId, string $reason): void
+    {
+        $reason = trim($reason);
+        if ($reason === '') { throw new Exception('Reason is required'); }
+        $this->ensureCancellationTable();
+        $this->db->beginTransaction();
+        try {
+            $this->db->query("UPDATE donations SET status = 'Cancelled' WHERE deleted_at IS NULL AND batch_id = ?", [$batchId]);
+            $this->db->query(
+                "INSERT INTO donation_cancellations (donation_id, batch_id, user_id, reason) VALUES (NULL, ?, ?, ?)",
+                [$batchId, $userId, $reason]
+            );
+            $this->db->commit();
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    // Ensure all items in batch belong to donor (unless admin) and are Pending
+    public function assertBatchEditable(string $batchId, int $donorId, bool $isAdmin = false): array
+    {
+        $rows = $this->db->query(
+            "SELECT id, donor_id, status FROM donations WHERE deleted_at IS NULL AND batch_id = ?",
+            [$batchId]
+        )->fetchAll();
+        if (!$rows) { throw new Exception('Not found'); }
+        if (!$isAdmin) {
+            foreach ($rows as $r) {
+                if ((int)$r['donor_id'] !== $donorId) { throw new Exception('Forbidden'); }
+            }
+        }
+        foreach ($rows as $r) {
+            if (($r['status'] ?? '') !== 'Pending') { throw new Exception('Only pending batches can be modified'); }
+        }
+        return $rows;
+    }
+
+    // Update batch category (type) and individual items fields
+    // Supports: update existing items, create new items (id=0), soft-delete removed items
+    public function updateBatchFields(string $batchId, ?string $type, array $items): void
+    {
+        $this->db->beginTransaction();
+        try {
+            // Fetch existing items in the batch to determine donor_id, current type, and detect removals
+            $existing = $this->db->query(
+                "SELECT id, donor_id, type FROM donations WHERE deleted_at IS NULL AND batch_id = ?",
+                [$batchId]
+            )->fetchAll();
+            if (!$existing) { throw new Exception('Not found'); }
+            $donorId = (int)$existing[0]['donor_id'];
+            $currentType = $existing[0]['type'] ?? null;
+
+            // If a new type is specified, apply to all items in the batch
+            $effectiveType = $type !== null ? sanitize($type) : ($currentType !== null ? sanitize((string)$currentType) : null);
+            if ($type !== null) {
+                $this->db->query(
+                    "UPDATE donations SET type = ? WHERE deleted_at IS NULL AND batch_id = ?",
+                    [$effectiveType, $batchId]
+                );
+            }
+
+            // Build sets of existing IDs and submitted IDs
+            $existingIds = array_map(fn($r) => (int)$r['id'], $existing);
+            $submittedIds = [];
+
+            // Validate and upsert
+            foreach ($items as $it) {
+                $id = (int)($it['id'] ?? 0);
+                $name = isset($it['name']) ? sanitize((string)$it['name']) : '';
+                $qty = isset($it['quantity']) ? (int)$it['quantity'] : 0;
+                $expiry = isset($it['expiry_date']) ? (string)$it['expiry_date'] : '';
+                if ($name === '' || $qty < 1 || $expiry === '') { throw new Exception('Invalid item fields'); }
+
+                if ($id > 0) {
+                    // Update existing
+                    $submittedIds[] = $id;
+                    $this->db->query(
+                        "UPDATE donations SET name = ?, quantity = ?, expiry_date = ? WHERE id = ? AND deleted_at IS NULL AND batch_id = ?",
+                        [$name, $qty, $expiry, $id, $batchId]
+                    );
+                } else {
+                    // Insert new item into the batch; use effective type (new or current)
+                    $this->db->query(
+                        "INSERT INTO donations (donor_id, batch_id, type, name, quantity, expiry_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'Pending', NOW())",
+                        [
+                            $donorId,
+                            $batchId,
+                            $effectiveType,
+                            $name,
+                            $qty,
+                            $expiry === '' ? null : $expiry,
+                        ]
+                    );
+                    $submittedIds[] = (int)$this->db->lastInsertId();
+                }
+            }
+
+            // Soft-delete items that were removed (present before but not in submitted list)
+            $toDelete = array_values(array_diff($existingIds, $submittedIds));
+            if (!empty($toDelete)) {
+                // Build placeholders
+                $placeholders = implode(',', array_fill(0, count($toDelete), '?'));
+                $params = $toDelete;
+                $params[] = $batchId;
+                $this->db->query(
+                    "UPDATE donations SET deleted_at = NOW() WHERE id IN ($placeholders) AND batch_id = ?",
+                    $params
+                );
+            }
+
+            $this->db->commit();
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
 }
 

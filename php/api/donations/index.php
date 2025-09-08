@@ -30,6 +30,12 @@ setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
+// Support method override (e.g., POST with ?_method=PUT or header) for servers blocking PUT
+$override = $_GET['_method'] ?? $_POST['_method'] ?? ($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? '');
+if ($override) {
+    $ov = strtoupper(trim($override));
+    if (in_array($ov, ['PUT','PATCH','DELETE'])) { $method = $ov; }
+}
 $uri = $_SERVER['REQUEST_URI'] ?? '';
 
 // Extract path after '/api/donations' and normalize optional '/index.php'
@@ -58,8 +64,8 @@ try {
             ? (int)$payload['donor_id']
             : (int)currentUserId();
 
-        // Validate required fields
-        $required = ['type','name','quantity'];
+        // Validate required fields (expiry_date required)
+        $required = ['type','name','quantity','expiry_date'];
         foreach ($required as $f) {
             if (!isset($payload[$f]) || $payload[$f] === '') {
                 sendJson(['success' => false, 'error' => $f . ' is required'], 400);
@@ -72,7 +78,7 @@ try {
         // Sanitize basic strings (not base64)
         $payload['type'] = sanitize($payload['type']);
         $payload['name'] = sanitize($payload['name']);
-        $payload['expiry_date'] = !empty($payload['expiry_date']) ? sanitize($payload['expiry_date']) : null;
+        $payload['expiry_date'] = sanitize($payload['expiry_date']);
 
         $newId = $service->create($payload);
 
@@ -135,9 +141,10 @@ try {
         for ($i = 0; $i < $count; $i++) {
             $name = isset($names[$i]) ? sanitize($names[$i]) : null;
             $qty = isset($quantities[$i]) ? (int)$quantities[$i] : null;
-            $expiry = isset($expiries[$i]) && $expiries[$i] !== '' ? sanitize($expiries[$i]) : null;
-            if (!$name || !$qty || $qty < 1) {
-                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i], 400);
+            $expiryRaw = isset($expiries[$i]) ? $expiries[$i] : '';
+            $expiry = ($expiryRaw === null || $expiryRaw === '') ? null : sanitize($expiryRaw);
+            if (!$name || !$qty || $qty < 1 || !$expiry) {
+                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, quantity (>=1), and expiry_date are required'], 400);
             }
 
             $payload = [
@@ -243,8 +250,47 @@ try {
             }
             if ($result !== null) { $it['safety_result'] = $result; }
             if ($reason !== null && $reason !== '') { $it['fail_reason'] = $reason; }
+
+            // Attach cancellation reason if Cancelled
+            if (($it['status'] ?? '') === 'Cancelled') {
+                $row = $db->query(
+                    "SELECT reason FROM donation_cancellations WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                    [(int)$it['id']]
+                )->fetch();
+                if ($row && !empty($row['reason'])) { $it['cancel_reason'] = $row['reason']; }
+            }
         }
         sendJson(['success' => true, 'data' => ['items' => $items]]);
+    }
+
+    // PUT /api/donations/batch/{batch_id}/edit (method override via POST supported)
+    if ($method === 'PUT' && preg_match('#^/batch/([0-9a-fA-F-]{36})/edit/?\z#', $sub, $m)) {
+        requireRole(['admin','donor']);
+        $batchId = $m[1];
+        $input = getJsonInput();
+        $type = isset($input['type']) && $input['type'] !== '' ? sanitize($input['type']) : null; // nullable (keep if null)
+        $items = isset($input['items']) && is_array($input['items']) ? $input['items'] : [];
+        if (!$items) { sendJson(['success'=>false,'error'=>'items are required'],400); }
+        // Validate each item fields (id is optional to allow new rows; backend will insert when id is 0/absent)
+        foreach ($items as $idx => $it) {
+            if (!isset($it['name']) || !isset($it['quantity']) || !isset($it['expiry_date']) || $it['name']==='' || (int)$it['quantity']<1 || $it['expiry_date']===''){
+                sendJson(['success'=>false,'error'=>'Invalid item at index '.$idx],400);
+            }
+            // Normalize missing id to 0
+            if (!isset($it['id'])) { $input['items'][$idx]['id'] = 0; }
+        }
+        $editor = new DonationEditor();
+        $role = currentUserRole();
+        $uid = (int)currentUserId();
+        try {
+            $editor->assertBatchEditable($batchId, $uid, $role === 'admin');
+            $editor->updateBatchFields($batchId, $type, $input['items']);
+        } catch (Exception $e) {
+            $msg = $e->getMessage();
+            $code = ($msg === 'Not found') ? 404 : (($msg === 'Forbidden') ? 403 : 400);
+            sendJson(['success'=>false,'error'=>$msg], $code);
+        }
+        sendJson(['success'=>true,'message'=>'Batch updated']);
     }
 
     // GET /api/donations/items?q=apple&limit=20
@@ -363,6 +409,54 @@ try {
         sendJson(['success' => true, 'message' => 'Status updated']);
     }
 
+    // PUT /api/donations/{id} - donor/admin can edit fields of a Pending donation
+    if ($method === 'PUT' && preg_match('#^/(\d+)\/?\z#', $sub, $m)) {
+        requireRole(['donor','admin']);
+        $id = (int)$m[1];
+        $input = getJsonInput();
+        $editor = new DonationEditor();
+        $role = currentUserRole();
+        $userId = (int)currentUserId();
+        try {
+            $editor->assertEditable($id, $userId, $role === 'admin');
+            $fields = [];
+            foreach (['type','name','quantity','expiry_date'] as $k) {
+                if (array_key_exists($k, $input)) { $fields[$k] = $input[$k]; }
+            }
+            // Require expiry_date
+            if (!isset($fields['expiry_date']) || $fields['expiry_date'] === '' || $fields['expiry_date'] === null) {
+                sendJson(['success' => false, 'error' => 'expiry_date is required'], 400);
+            }
+            $editor->updateFields($id, $fields);
+        } catch (Exception $e) {
+            $msg = $e->getMessage();
+            $code = ($msg === 'Not found') ? 404 : (($msg === 'Forbidden') ? 403 : 400);
+            sendJson(['success' => false, 'error' => $msg], $code);
+        }
+        sendJson(['success' => true, 'message' => 'Donation updated']);
+    }
+
+    // POST /api/donations/{id}/cancel - donor/admin cancel a Pending donation with reason
+    if ($method === 'POST' && preg_match('#^/(\d+)/cancel/?\z#', $sub, $m)) {
+        requireRole(['donor','admin']);
+        $id = (int)$m[1];
+        $input = getJsonInput();
+        $reason = isset($input['reason']) ? trim((string)$input['reason']) : '';
+        if ($reason === '') { sendJson(['success' => false, 'error' => 'Reason is required'], 400); }
+        $editor = new DonationEditor();
+        $role = currentUserRole();
+        $userId = (int)currentUserId();
+        try {
+            $editor->assertEditable($id, $userId, $role === 'admin');
+            $editor->cancel($id, $userId, $reason);
+        } catch (Exception $e) {
+            $msg = $e->getMessage();
+            $code = ($msg === 'Not found') ? 404 : (($msg === 'Forbidden') ? 403 : 400);
+            sendJson(['success' => false, 'error' => $msg], $code);
+        }
+        sendJson(['success' => true, 'message' => 'Donation cancelled']);
+    }
+
     // DELETE /api/donations/{id}
     if ($method === 'DELETE' && preg_match('#^/(\d+)\/?\z#', $sub, $m)) {
         requireRole(['admin']);
@@ -373,9 +467,16 @@ try {
 
     // GET /api/donations/batch/{batch_id}
     if ($method === 'GET' && preg_match('#^/batch/([0-9a-fA-F-]{36})/?\z#', $sub, $m)) {
-        requireRole(['admin']);
+        requireRole(['admin','donor']);
         $batchId = $m[1];
         $items = $service->listByBatch($batchId);
+        // If donor, ensure they own this batch
+        if (currentUserRole() === 'donor') {
+            $uid = (int)currentUserId();
+            foreach ($items as $it) {
+                if ((int)$it['donor_id'] !== $uid) { sendJson(['success'=>false,'error'=>'Forbidden'],403); }
+            }
+        }
         // Attach latest receipt URL for the batch (same for each item for convenience)
         try {
             $db = Database::getInstance();
@@ -387,6 +488,19 @@ try {
             if ($r && !empty($r['receipt_image'])) { $full = buildImageFullUrl($r['receipt_image']); }
             if ($full !== '') {
                 foreach ($items as &$it) { $it['image_full_url'] = $full; $it['receipt_full_url'] = $full; }
+            }
+        } catch (Exception $e) { /* ignore */ }
+        // Attach cancellation reason for each Cancelled item
+        try {
+            $db = Database::getInstance();
+            foreach ($items as &$it) {
+                if (($it['status'] ?? '') === 'Cancelled') {
+                    $row = $db->query(
+                        "SELECT reason FROM donation_cancellations WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                        [(int)$it['id']]
+                    )->fetch();
+                    if ($row && !empty($row['reason'])) { $it['cancel_reason'] = $row['reason']; }
+                }
             }
         } catch (Exception $e) { /* ignore */ }
         sendJson(['success' => true, 'data' => ['items' => $items]]);

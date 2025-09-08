@@ -17,6 +17,149 @@
     }
   }
 
+  function batchItemRowTemplate(it){
+    const id = it.id || 0;
+    const name = escapeHtml(it.name||'');
+    const qty = (it.quantity ?? (id ? '' : 1));
+    const expiry = escapeHtml(it.expiry_date||'');
+    return `
+      <div class="card p-3 border batch-item-row position-relative" data-id="${id>0?id:''}">
+        <button type="button" class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-2 remove-batch-item z-1" style="z-index: 1;" data-bs-toggle="tooltip" title="Remove Item" aria-label="Remove Item">
+          <i class="bi bi-trash"></i>
+        </button>
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-6">
+            <label class="form-label mb-1">Item Name</label>
+            <select class="form-select batch-item-name" data-initial="${name}" data-placeholder="Search or type new" required></select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label mb-1">Quantity</label>
+            <input type="number" class="form-control batch-item-qty" min="1" value="${qty}" required>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label mb-1">Expiry Date</label>
+            <input type="date" class="form-control batch-item-expiry" value="${expiry}" required>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function initBatchItemSelect2($scope){
+    if (!window.jQuery || !window.jQuery.fn.select2) return;
+    const $parent = window.jQuery('#editBatchModal');
+    $scope.find('select.batch-item-name').each(function(){
+      const $sel = window.jQuery(this);
+      if ($sel.hasClass('select2-hidden-accessible')) return;
+      $sel.select2({
+        tags: true,
+        width: '100%',
+        placeholder: $sel.data('placeholder') || 'Search or type new',
+        dropdownParent: $parent,
+        minimumInputLength: 1,
+        ajax: {
+          delay: 250,
+          url: `${API_BASE_URL}/donations/index.php/items`,
+          dataType: 'json',
+          data: (params) => ({ q: params.term || '', limit: 20 }),
+          processResults: (data) => {
+            const items = (data && data.items) ? data.items : [];
+            return { results: items.map(n => ({ id: n, text: n })) };
+          },
+          cache: true
+        },
+        createTag: function (params) {
+          const term = (params.term || '').trim();
+          if (term === '') return null;
+          return { id: term, text: term, newTag: true };
+        }
+      });
+      const initial = $sel.data('initial') || '';
+      if (initial){
+        if (!$sel.find(`option[value="${initial.replace(/"/g,'&quot;')}"]`).length){
+          $sel.append(new Option(initial, initial, true, true));
+        }
+        $sel.val(initial).trigger('change');
+      }
+    });
+  }
+
+  async function openBatchEditModal(batchId, category){
+    try {
+      const res = await fetch(`${API_BASE_URL}/donations/index.php/batch/${batchId}`, {
+        method: 'GET', credentials: 'include'
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success){ throw new Error(data?.error||('HTTP '+res.status)); }
+      const items = data?.data?.items || [];
+      const cont = document.getElementById('batchItemsContainer');
+      cont.innerHTML = items.map(it => batchItemRowTemplate(it)).join('');
+      if (window.jQuery){ initBatchItemSelect2(window.jQuery(cont)); }
+      // Initialize tooltips for remove buttons
+      try {
+        const tooltipTriggerList = Array.prototype.slice.call(cont.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (el) {
+          const existing = bootstrap.Tooltip.getInstance(el);
+          if (existing) existing.dispose();
+          new bootstrap.Tooltip(el);
+        });
+      } catch(_) { /* ignore */ }
+      document.getElementById('editBatchId').value = batchId;
+      if (category){ document.getElementById('editBatchCategory').value = category; }
+      const m = new bootstrap.Modal(document.getElementById('editBatchModal'));
+      m.show();
+    } catch (e){
+      console.error('Failed to open batch edit', e);
+      alert('Failed to open batch editor: ' + (e?.message||'Unknown error'));
+    }
+  }
+
+  // Submit batch edit
+  (function(){
+    const btn = document.getElementById('submitBatchEditBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async function(){
+      const batchId = document.getElementById('editBatchId').value;
+      const type = document.getElementById('editBatchCategory').value;
+      const rows = document.querySelectorAll('#batchItemsContainer .batch-item-row');
+      const items = [];
+      for (const row of rows){
+        const idAttr = row.getAttribute('data-id');
+        const id = idAttr ? parseInt(idAttr, 10) : 0;
+        const name = window.jQuery ? String(window.jQuery(row).find('.batch-item-name').val()||'') : '';
+        const qty = parseInt(row.querySelector('.batch-item-qty').value, 10);
+        const expiry = row.querySelector('.batch-item-expiry').value;
+        if (!name || !qty || qty<1 || !expiry){
+          alert('Please ensure all items have name, quantity (>=1), and expiry.');
+          return;
+        }
+        items.push({ id: (id>0?id:0), name, quantity: qty, expiry_date: expiry });
+      }
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE_URL}/donations/index.php/batch/${batchId}/edit?_method=PUT`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-HTTP-Method-Override': 'PUT' },
+          credentials: 'include',
+          body: JSON.stringify({ type, items })
+        });
+        const text = await res.text();
+        let j; try { j = JSON.parse(text); } catch(_){ j = { success:false, error:'Invalid response', _raw:text }; }
+        if (!res.ok || !j.success){
+          const msg = j.error || (`HTTP ${res.status}`);
+          throw new Error(msg + (j._raw ? `\nServer said: ${j._raw.slice(0,200)}` : ''));
+        }
+        bootstrap.Modal.getInstance(document.getElementById('editBatchModal')).hide();
+        await reloadList();
+        showSuccess('Batch updated');
+      } catch (err){
+        console.error(err);
+        alert('Failed to save batch: ' + (err?.message||'Unknown error'));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  })();
+
   function fmtDateTime(s){
     if (!s) return '';
     const d = new Date(s);
@@ -31,6 +174,20 @@
     if (!str) return '';
     try { str = String(str); } catch(_) { return ''; }
     return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  function showSuccess(message){
+    try {
+      const msgEl = document.getElementById('successModalMessage');
+      if (msgEl && typeof message === 'string' && message.trim() !== ''){
+        msgEl.textContent = message;
+      }
+      const modalEl = document.getElementById('successModal');
+      if (modalEl && window.bootstrap){
+        const m = new bootstrap.Modal(modalEl);
+        m.show();
+      }
+    } catch(_) { /* no-op */ }
   }
 
   async function fetchAll() {
@@ -62,7 +219,7 @@
     const tbody = document.querySelector('.table tbody');
     if (!tbody) return;
     if (!groups.length){
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center">No donations logged yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center">No donations logged yet.</td></tr>';
       return;
     }
 
@@ -73,39 +230,50 @@
         const count = group.items.length;
         const first = group.items[0] || {};
         const title = `Batch • ${count} item${count>1?'s':''}`;
+        const anyPending = group.items.some(it => String(it.status||'').toLowerCase() === 'pending');
         html += `
           <tr class="table-active group-row" data-batch-id="${group.batch_id}">
-            <td class="py-2 align-middle">${fmtDateTime(group.created_at)}</td>
+            <td class="py-2 align-middle">${escapeHtml(first.type || '')}</td>
             <td class="py-2">
-              <div class="fw-semibold"><button class="btn btn-sm btn-outline-secondary me-2 batch-toggle" type="button" aria-label="Toggle">Show</button>${title}</div>
+              <div class="fw-semibold"><button class="btn btn-sm btn-outline-secondary me-2 batch-toggle" type="button" aria-label="Toggle" data-bs-toggle="tooltip" title="Expand to view items">Show</button>${title}</div>
             </td>
-            <td class="py-2 align-middle">${badge(first.status || 'Pending')}</td>
-            <td class="py-2 align-middle">${fmtDateTime(group.created_at)}</td>
+            <td class="py-2 align-middle text-center status-col">${badge(first.status || 'Pending')}</td>
+            <td class="py-2 align-middle">${['pending','cancelled'].includes(String(first.status||'').toLowerCase()) ? '—' : fmtDateTime(group.created_at)}</td>
+            <td class="py-2 align-middle">
+              ${anyPending ? `
+                <button class="btn btn-sm btn-outline-primary me-1 edit-batch" data-batch-id="${group.batch_id}" data-category="${escapeHtml(first.type||'')}" data-bs-toggle="tooltip" title="Edit Batch" aria-label="Edit Batch">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger cancel-batch" data-batch-id="${group.batch_id}" data-bs-toggle="tooltip" title="Cancel Batch" aria-label="Cancel Batch">
+                  <i class="bi bi-x-octagon"></i>
+                </button>
+              ` : ''}
+            </td>
           </tr>
           <tr class="child-container d-none" data-batch-id="${group.batch_id}">
-            <td colspan="4" class="p-0">
+            <td colspan="5" class="p-0">
               <table class="table table-sm mb-0">
                 <thead>
                   <tr class="table-light">
                     <th>Item</th>
-                    <th>Type</th>
                     <th>Qty</th>
                     <th>Expiry</th>
-                    <th>Status</th>
+                    <th class="text-center">Status</th>
                     <th>Reason</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${group.items.map(r => `
+                  ${group.items.map(r => {
+                    const isPending = String(r.status||'').toLowerCase() === 'pending';
+                    return `
                     <tr>
                       <td>${escapeHtml(r.name || '')}</td>
-                      <td>${escapeHtml(capFirst(r.type || ''))}</td>
                       <td>${r.quantity ?? ''}</td>
                       <td>${escapeHtml(r.expiry_date || '')}</td>
-                      <td>${badge(r.status)}</td>
-                      <td>${r.fail_reason ? escapeHtml(r.fail_reason) : ((r.status||'') === 'Failed Safety' ? 'Failed safety check' : '—')}</td>
+                      <td class="text-center status-col">${badge(r.status)}</td>
+                      <td>${r.cancel_reason ? escapeHtml(r.cancel_reason) : (r.fail_reason ? escapeHtml(r.fail_reason) : ((r.status||'') === 'Failed Safety' ? 'Failed safety check' : '—'))}</td>
                     </tr>
-                  `).join('')}
+                  `; }).join('')}
                 </tbody>
               </table>
             </td>
@@ -113,33 +281,303 @@
         `;
       } else {
         const r = group.items[0];
+        const isPending = String(r.status||'').toLowerCase() === 'pending';
         html += `
           <tr>
-            <td>${fmtDateTime(group.created_at)}</td>
+            <td>${escapeHtml(r.type || '')}</td>
             <td>${escapeHtml(r.name || '')}</td>
-            <td>${badge(r.status)}</td>
-            <td>${fmtDateTime(r.created_at)}</td>
+            <td class="text-center status-col">${badge(r.status)}</td>
+            <td>${['pending','cancelled'].includes(String(r.status||'').toLowerCase()) ? '—' : fmtDateTime(r.created_at)}</td>
+            <td>
+              ${isPending ? `
+                <button class="btn btn-sm btn-outline-primary me-1 edit-donation" data-id="${r.id}" data-type="${escapeHtml(r.type||'')}" data-name="${escapeHtml(r.name||'')}" data-qty="${r.quantity??''}" data-expiry="${escapeHtml(r.expiry_date||'')}" data-bs-toggle="tooltip" title="Edit" aria-label="Edit">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+              ` : ''}
+            </td>
           </tr>
         `;
       }
     });
 
     tbody.innerHTML = html;
+    // Initialize Bootstrap tooltips for dynamically added icon buttons
+    try {
+      const tooltipTriggerList = Array.prototype.slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.forEach(function (el) {
+        // If a tooltip instance already exists, dispose before re-initializing
+        const existing = bootstrap.Tooltip.getInstance(el);
+        if (existing) existing.dispose();
+        new bootstrap.Tooltip(el);
+      });
+    } catch (_) { /* no-op if bootstrap tooltip not available */ }
   }
 
+  let eventsBound = false;
   function bindEvents(){
+    if (eventsBound) return;
+    eventsBound = true;
+
+    function initEditNameSelect2(){
+      const $sel = window.jQuery && window.jQuery('#editNameSelect');
+      if (!$sel || !$sel.length || !window.jQuery.fn.select2) return;
+      if ($sel.hasClass('select2-hidden-accessible')) return; // already
+      $sel.select2({
+        tags: true,
+        width: '100%',
+        placeholder: $sel.data('placeholder') || 'Search or type new',
+        dropdownParent: window.jQuery('#editDonationModal'),
+        minimumInputLength: 1,
+        ajax: {
+          delay: 250,
+          url: `${API_BASE_URL}/donations/index.php/items`,
+          dataType: 'json',
+          data: (params) => ({ q: params.term || '', limit: 20 }),
+          processResults: (data) => {
+            const items = (data && data.items) ? data.items : [];
+            return { results: items.map(n => ({ id: n, text: n })) };
+          },
+          cache: true
+        },
+        createTag: function (params) {
+          const term = (params.term || '').trim();
+          if (term === '') return null;
+          return { id: term, text: term, newTag: true };
+        }
+      });
+    }
     document.addEventListener('click', function(e){
-      const btn = e.target.closest('.batch-toggle');
-      if (!btn) return;
-      const row = btn.closest('tr.group-row');
-      const batchId = row?.getAttribute('data-batch-id');
-      if (!batchId) return;
-      const child = document.querySelector(`tr.child-container[data-batch-id="${batchId}"]`);
-      if (!child) return;
-      const showing = !child.classList.contains('d-none');
-      child.classList.toggle('d-none', showing);
-      btn.textContent = showing ? 'Show' : 'Hide';
+      const t = e.target;
+      // Toggle batch children
+      const batchBtn = t.closest('.batch-toggle');
+      if (batchBtn){
+        const row = batchBtn.closest('tr.group-row');
+        const batchId = row?.getAttribute('data-batch-id');
+        if (!batchId) return;
+        const child = document.querySelector(`tr.child-container[data-batch-id="${batchId}"]`);
+        if (!child) return;
+        const showing = !child.classList.contains('d-none');
+        child.classList.toggle('d-none', showing);
+        // Update button label
+        const isNowHidden = child.classList.contains('d-none');
+        batchBtn.textContent = isNowHidden ? 'Show' : 'Hide';
+        // Update tooltip to reflect action
+        const newTitle = isNowHidden ? 'Expand to view items' : 'Collapse items';
+        batchBtn.setAttribute('title', newTitle);
+        batchBtn.setAttribute('aria-label', isNowHidden ? 'Show' : 'Hide');
+        // Refresh Bootstrap tooltip content
+        try {
+          const tip = bootstrap.Tooltip.getInstance(batchBtn);
+          if (tip && typeof tip.setContent === 'function') {
+            tip.setContent({ '.tooltip-inner': newTitle });
+          } else if (tip) {
+            tip.dispose();
+            new bootstrap.Tooltip(batchBtn);
+          } else {
+            new bootstrap.Tooltip(batchBtn);
+          }
+        } catch(_) { /* ignore if tooltip not available */ }
+        return;
+      }
+
+      // Open Edit modal
+      const editBtn = t.closest('.edit-donation');
+      if (editBtn){
+        const id = editBtn.getAttribute('data-id');
+        const type = editBtn.getAttribute('data-type') || '';
+        const name = editBtn.getAttribute('data-name') || '';
+        const qty = editBtn.getAttribute('data-qty') || '';
+        const expiry = editBtn.getAttribute('data-expiry') || '';
+        const m = new bootstrap.Modal(document.getElementById('editDonationModal'));
+        document.getElementById('editDonationId').value = id;
+        document.getElementById('editType').value = type;
+        // Initialize select2 and set current value
+        initEditNameSelect2();
+        if (window.jQuery){
+          const $sel = window.jQuery('#editNameSelect');
+          // Ensure option exists for current name so it can be selected
+          const escaped = name.replace(/"/g,'&quot;');
+          if (!$sel.find(`option[value="${escaped}"]`).length){
+            $sel.append(new Option(name, name, true, true));
+          }
+          $sel.val(name).trigger('change');
+        }
+        document.getElementById('editQuantity').value = qty;
+        document.getElementById('editExpiry').value = expiry || '';
+        m.show();
+        return;
+      }
+
+      // Open Cancel modal
+      const cancelBtn = t.closest('.cancel-donation');
+      if (cancelBtn){
+        const id = cancelBtn.getAttribute('data-id');
+        const m = new bootstrap.Modal(document.getElementById('cancelDonationModal'));
+        document.getElementById('cancelDonationId').value = id;
+        const b = document.getElementById('cancelBatchId'); if (b) b.value = '';
+        document.getElementById('cancelReason').value = '';
+        m.show();
+        return;
+      }
+
+      // Open Cancel Batch modal
+      const cancelBatchBtn = t.closest('.cancel-batch');
+      if (cancelBatchBtn){
+        const batchId = cancelBatchBtn.getAttribute('data-batch-id');
+        const m = new bootstrap.Modal(document.getElementById('cancelDonationModal'));
+        const d = document.getElementById('cancelDonationId'); if (d) d.value = '';
+        const b = document.getElementById('cancelBatchId'); if (b) b.value = batchId || '';
+        document.getElementById('cancelReason').value = '';
+        m.show();
+        return;
+      }
+
+      // Open Edit Batch modal
+      const editBatchBtn = t.closest('.edit-batch');
+      if (editBatchBtn){
+        const batchId = editBatchBtn.getAttribute('data-batch-id');
+        const category = editBatchBtn.getAttribute('data-category') || '';
+        openBatchEditModal(batchId, category);
+        return;
+      }
+
+      // Remove batch item row
+      const removeItemBtn = t.closest('.remove-batch-item');
+      if (removeItemBtn){
+        const row = removeItemBtn.closest('.batch-item-row');
+        if (row){ row.remove(); }
+        return;
+      }
+
+      // Add new batch item (delegated handler ensures it works even if button is rendered after bind)
+      const addItemBtn = t.closest('#addBatchItemBtn');
+      if (addItemBtn){
+        const cont = document.getElementById('batchItemsContainer');
+        if (!cont) return;
+        cont.insertAdjacentHTML('beforeend', batchItemRowTemplate({ id: 0, name: '', quantity: 1, expiry_date: '' }));
+        if (window.jQuery){ initBatchItemSelect2(window.jQuery(cont)); }
+        // Initialize tooltip for the newly added remove button
+        try {
+          const lastCard = cont.lastElementChild;
+          if (lastCard){
+            const btn = lastCard.querySelector('[data-bs-toggle="tooltip"]');
+            if (btn){
+              const existing = bootstrap.Tooltip.getInstance(btn);
+              if (existing) existing.dispose();
+              new bootstrap.Tooltip(btn);
+            }
+          }
+        } catch(_) { /* ignore */ }
+        return;
+      }
     });
+
+    // Save edit
+    const saveBtn = document.getElementById('saveEditDonationBtn');
+    if (saveBtn){
+      saveBtn.addEventListener('click', async function(){
+        const id = document.getElementById('editDonationId').value;
+        const expiryVal = document.getElementById('editExpiry').value;
+        const payload = {
+          type: document.getElementById('editType').value,
+          name: (window.jQuery ? String(window.jQuery('#editNameSelect').val()||'') : '').trim(),
+          quantity: parseInt(document.getElementById('editQuantity').value, 10),
+          expiry_date: expiryVal,
+        };
+        if (!payload.name || !payload.quantity || payload.quantity < 1 || !expiryVal){
+          alert('Please provide a valid name, quantity, and expiry date.');
+          return;
+        }
+        saveBtn.disabled = true;
+        try {
+          const res = await fetch(`${API_BASE_URL}/donations/index.php/${id}?_method=PUT`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-HTTP-Method-Override': 'PUT' },
+            credentials: 'include',
+            body: JSON.stringify(payload)
+          });
+          const text = await res.text();
+          let j;
+          try { j = JSON.parse(text); } catch(_){ j = { success:false, error: 'Invalid response', _raw: text }; }
+          if (!res.ok || !j.success){
+            const msg = j.error || (`HTTP ${res.status}`);
+            throw new Error(msg + (j._raw ? `\nServer said: ${j._raw.slice(0,200)}` : ''));
+          }
+          bootstrap.Modal.getInstance(document.getElementById('editDonationModal')).hide();
+          await reloadList();
+          showSuccess('Donation updated');
+        } catch (err){
+          console.error(err);
+          alert('Failed to update donation: ' + (err?.message||'Unknown error'));
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+    }
+
+    // Confirm cancel
+    const confirmCancel = document.getElementById('confirmCancelDonationBtn');
+    if (confirmCancel){
+      confirmCancel.addEventListener('click', async function(){
+        const id = (document.getElementById('cancelDonationId')?.value || '').trim();
+        const batchId = (document.getElementById('cancelBatchId')?.value || '').trim();
+        const reason = (document.getElementById('cancelReason').value||'').trim();
+        if (!reason){ alert('Please provide a reason for cancellation.'); return; }
+        confirmCancel.disabled = true;
+        try {
+          if (batchId){
+            // Fetch batch items, then cancel pending ones
+            const res = await fetch(`${API_BASE_URL}/donations/index.php/batch/${batchId}`, {
+              method: 'GET', credentials: 'include'
+            });
+            const data = await res.json();
+            if (!res.ok || !data?.success){ throw new Error(data?.error||('HTTP '+res.status)); }
+            const items = data?.data?.items || [];
+            const pendingIds = items.filter(it => String(it.status||'').toLowerCase()==='pending').map(it => it.id);
+            for (const did of pendingIds){
+              const r = await fetch(`${API_BASE_URL}/donations/index.php/${did}/cancel`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({reason})
+              });
+              if (!r.ok){
+                const t = await r.text(); let j; try{ j = JSON.parse(t);}catch(_){ j = {error:t}; }
+                throw new Error(j?.error || (`HTTP ${r.status}`));
+              }
+            }
+          } else if (id){
+            const res = await fetch(`${API_BASE_URL}/donations/index.php/${id}/cancel`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({reason})
+            });
+            const text = await res.text();
+            let j; try { j = JSON.parse(text); } catch(_){ j = { success:false, error: 'Invalid response', _raw: text }; }
+            if (!res.ok || !j.success){
+              const msg = j.error || (`HTTP ${res.status}`);
+              throw new Error(msg + (j._raw ? `\nServer said: ${j._raw.slice(0,200)}` : ''));
+            }
+          } else {
+            alert('Nothing to cancel.');
+            return;
+          }
+          bootstrap.Modal.getInstance(document.getElementById('cancelDonationModal')).hide();
+          await reloadList();
+          showSuccess(batchId ? 'Batch cancelled' : 'Donation cancelled');
+        } catch (err){
+          console.error(err);
+          alert('Failed to cancel donation(s): ' + (err?.message||'Unknown error'));
+        } finally {
+          confirmCancel.disabled = false;
+        }
+      });
+    }
+  }
+
+  async function reloadList(){
+    try {
+      const items = await fetchAll();
+      const groups = groupByBatch(items);
+      render(groups);
+    } catch (e){
+      console.error('Reload failed', e);
+    }
   }
 
   async function init(){

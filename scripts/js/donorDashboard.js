@@ -163,7 +163,8 @@
           </div>
           <div class="col-6 col-md-3">
             <label class="form-label mb-1">Expiry Date</label>
-            <input type="date" class="form-control item-expiry">
+            <input type="date" class="form-control item-expiry" required>
+            <div class="invalid-feedback">Expiry date is required.</div>
           </div>
           <div class="col-12 col-md-1 text-end">
             <label class="form-label mb-1 d-none d-md-block">&nbsp;</label>
@@ -226,12 +227,17 @@
         const $row = $(this);
         const name = String($row.find(".item-name-select").val() || "").trim();
         const qty = parseInt($row.find(".item-qty").val(), 10);
+        const expiry = String($row.find('.item-expiry').val() || '').trim();
         if (!name) {
           $row.find(".item-name-select").addClass("is-invalid");
           ok = false;
         }
         if (!qty || qty < 1) {
           $row.find(".item-qty").addClass("is-invalid");
+          ok = false;
+        }
+        if (!expiry) {
+          $row.find('.item-expiry').addClass('is-invalid');
           ok = false;
         }
       });
@@ -253,7 +259,7 @@
         );
         fd.append("quantity[]", $row.find(".item-qty").val());
         const expiry = $row.find(".item-expiry").val();
-        fd.append("expiry_date[]", expiry || "");
+        fd.append("expiry_date[]", expiry);
       });
       // No image field appended
 

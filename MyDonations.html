@@ -6,8 +6,15 @@
     <title>My Donations</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      /* Standardize status badge width for alignment */
+      td.status-col .badge { display: inline-block; min-width: 110px; }
+      /* Keep a smooth transition on edit buttons; rely on Bootstrap's outline->solid hover */
+      .btn.edit-donation, .btn.edit-batch { transition: background-color .15s ease-in-out, color .15s ease-in-out, box-shadow .15s ease-in-out; }
+    </style>
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -48,8 +55,6 @@
     <aside class="collapsed">
       <a href="DonorDashboard.html" class="nav-link"><i class="bi bi-house-door-fill me-2"></i> <span>Dashboard</span></a>
       <a href="MyDonations.html" class="nav-link active"><i class="bi bi-box-seam me-2"></i> <span>My Donations</span></a>
-      <a href="schedulePickups.html" class="nav-link"><i class="bi bi-building-add me-2"></i> <span>Schedule Pickups</span></a>
-      <a href="donationHistory.html" class="nav-link"><i class="bi bi-people me-2"></i> <span>Donation History</span></a>
     </aside>
 
     <!-- Main Content -->
@@ -63,15 +68,16 @@
           <table class="table table-bordered mb-0">
             <thead class="table-light">
               <tr>
-                <th>Date</th>
+                <th>Category</th>
                 <th>Items Donated</th>
-                <th>Status</th>
+                <th class="text-center">Status</th>
                 <th>Pickup Dates</th>
+                <th style="width: 160px">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="6" class="text-center">No donations logged yet.</td>
+                <td colspan="5" class="text-center">No donations logged yet.</td>
               </tr>
             </tbody>
           </table>
@@ -134,8 +140,139 @@
       </div>
     </div>
 
+    <!-- Edit Donation Modal -->
+    <div class="modal fade" id="editDonationModal" tabindex="-1" aria-labelledby="editDonationModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="editDonationModalLabel">Edit Donation</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="editDonationForm">
+              <input type="hidden" id="editDonationId" />
+              <div class="mb-3">
+                <label class="form-label">Category</label>
+                <select class="form-select" id="editType">
+                  <option value="Rice">Rice</option>
+                  <option value="Canned Goods">Canned Goods</option>
+                  <option value="Frozen Meat">Frozen Meat</option>
+                  <option value="Bread &amp; Pastries">Bread &amp; Pastries</option>
+                  <option value="Beverages">Beverages</option>
+                  <option value="Snacks">Snacks</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Name</label>
+                <select class="form-select" id="editNameSelect" data-placeholder="Search or type new" required></select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Quantity</label>
+                <input type="number" min="1" class="form-control" id="editQuantity" required />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Expiry Date</label>
+                <input type="date" class="form-control" id="editExpiry" required />
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" id="saveEditDonationBtn">Save changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cancel Donation Modal -->
+    <div class="modal fade" id="cancelDonationModal" tabindex="-1" aria-labelledby="cancelDonationModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="cancelDonationModalLabel">Cancel Donation</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="cancelDonationId" />
+            <input type="hidden" id="cancelBatchId" />
+            <div class="mb-3">
+              <label class="form-label">Reason for cancellation</label>
+              <textarea id="cancelReason" class="form-control" rows="4" placeholder="Please provide a reason" required></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-danger" id="confirmCancelDonationBtn">Confirm Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success Confirmation Modal -->
+    <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="successModalLabel">Success</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="successModalMessage">Action completed successfully.</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Batch Modal -->
+    <div class="modal fade" id="editBatchModal" tabindex="-1" aria-labelledby="editBatchModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content rounded-3 shadow">
+          <div class="modal-header border-0 pb-0">
+            <div>
+              <h5 class="modal-title" id="editBatchModalLabel">Edit Batch</h5>
+              <div class="text-muted small">Update the category and items in this batch. Expiry date is required for all.</div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body pt-3">
+            <input type="hidden" id="editBatchId" />
+            <div class="row g-3 mb-3">
+              <div class="col-12 col-md-6">
+                <label for="editBatchCategory" class="form-label">Category</label>
+                <select id="editBatchCategory" class="form-select" required>
+                  <option value="Rice">Rice</option>
+                  <option value="Canned Goods">Canned Goods</option>
+                  <option value="Frozen Meat">Frozen Meat</option>
+                  <option value="Bread &amp; Pastries">Bread &amp; Pastries</option>
+                  <option value="Beverages">Beverages</option>
+                  <option value="Snacks">Snacks</option>
+                </select>
+              </div>
+            </div>
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label mb-0">Batch Items</label>
+              <button type="button" id="addBatchItemBtn" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-plus-circle me-1"></i> Add Item
+              </button>
+            </div>
+            <div class="text-muted small mb-2">Edit each item's name, quantity, and expiry date. Use the search box for names.</div>
+            <div id="batchItemsContainer" class="d-flex flex-column gap-3"></div>
+          </div>
+          <div class="modal-footer border-0 pt-0">
+            <div class="me-auto text-muted small">Changes apply to the entire batch.</div>
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" id="submitBatchEditBtn" class="btn btn-warning">Save Batch</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="scripts/js/auth.js"></script>
     <script src="scripts/js/notifications.js"></script>
     <script src="scripts/js/donorsMyDonation.js"></script>
