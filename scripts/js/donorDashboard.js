@@ -339,9 +339,28 @@
           }
           total = set.size;
         }
+        // Pending Donations: count DISTINCT batches that have at least one 'Pending' item
+        let pending = 0;
+        if (Array.isArray(items)){
+          const pendingBatches = new Set();
+          for (const it of items){
+            const s = (it.status||'').trim();
+            if (s === 'Pending' && it.batch_id){ pendingBatches.add(String(it.batch_id)); }
+          }
+          pending = pendingBatches.size;
+        }
+        // Scheduled Pickups: count DISTINCT batches in 'Acknowledged' (pickup to be scheduled/ongoing)
+        let allocated = 0;
+        if (Array.isArray(items)){
+          const ackBatches = new Set();
+          for (const it of items){
+            const s = (it.status||'').trim();
+            if (s === 'Acknowledged' && it.batch_id){ ackBatches.add(String(it.batch_id)); }
+          }
+          allocated = ackBatches.size;
+        }
+        // For cancelled, keep simple item counts (unchanged)
         const byStatus = items.reduce((acc, it) => { const s=(it.status||'').trim(); acc[s]=(acc[s]||0)+1; return acc; }, {});
-        const pending = byStatus['Pending']||0;
-        const allocated = byStatus['Allocated']||0; // treat as scheduled pickups
         const cancelled = byStatus['Cancelled']||0;
         const elTotal = document.getElementById('totalDonations');
         const elUpcoming = document.getElementById('upcomingDonations');

@@ -16,6 +16,75 @@
       case 'Cancelled': return '<span class="badge bg-dark">Cancelled</span>';
       default: return `<span class="badge bg-light text-dark">${status||'Unknown'}</span>`;
     }
+
+// === Auto-refresh donations list (10s) ===
+let __donationPollingTimer = 0;
+let __lastRenderSig = '';
+
+function anyModalOpen(){
+  try { return !!document.querySelector('.modal.show'); } catch(_) { return false; }
+}
+
+function getExpandedBatchIds(){
+  const ids = [];
+  try {
+    document.querySelectorAll('tr.child-container').forEach(tr => {
+      const bid = tr.getAttribute('data-batch-id');
+      if (bid && !tr.classList.contains('d-none')) ids.push(bid);
+    });
+  } catch(_) {}
+  return ids;
+}
+
+function restoreExpandedBatchIds(ids){
+  try {
+    ids.forEach(bid => {
+      const child = document.querySelector(`tr.child-container[data-batch-id="${bid}"]`);
+      const header = document.querySelector(`tr.group-row[data-batch-id="${bid}"] .batch-toggle`);
+      if (child && child.classList.contains('d-none')) {
+        child.classList.remove('d-none');
+      }
+      if (header) { header.textContent = 'Hide'; }
+    });
+  } catch(_) {}
+}
+
+function computeSig(items){
+  try {
+    if (!Array.isArray(items)) return '';
+    // Build a compact signature of id/batch + status + fail_reason + created_at length
+    const parts = items.map(it => [it.id||'', it.batch_id||'', it.status||'', (it.fail_reason||'')].join(':'));
+    return parts.sort().join('|');
+  } catch(_) { return ''; }
+}
+
+async function refreshDonationsOnce(){
+  try {
+    const items = await fetchAdminList();
+    window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
+    const filtered = applyFilters(window.__adminDonationRaw);
+    const sig = computeSig(filtered);
+    if (sig === __lastRenderSig) return; // no visible change
+    if (anyModalOpen()) return; // avoid disrupting active modal interactions
+    // Preserve expanded batches, re-render, then restore
+    const expanded = getExpandedBatchIds();
+    renderTable(filtered);
+    restoreExpandedBatchIds(expanded);
+    __lastRenderSig = sig;
+  } catch(e){ /* ignore transient errors */ }
+}
+
+function startDonationAutoRefresh(){
+  if (__donationPollingTimer) return;
+  // Initialize signature from current render
+  try {
+    const base = window.__adminDonationRaw || [];
+    __lastRenderSig = computeSig(applyFilters(base));
+  } catch(_) { __lastRenderSig = ''; }
+  __donationPollingTimer = window.setInterval(refreshDonationsOnce, 10000);
+  // Also do an initial background refresh
+  refreshDonationsOnce();
+}
   }
   // Helper: show Next Steps modal after acknowledge
   function showAckNextStepsModal(){
@@ -59,8 +128,8 @@
   }
   // Initialize page: load items, populate filters, bind events
   async function init(){
-    try {
-      const items = await fetchAdminList();
+  try {
+    const items = await fetchAdminList();
       // keep a copy of raw items for client-side filtering without refetch
       window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
       // Ensure filters start at defaults
@@ -91,7 +160,9 @@
           });
         }
       } catch(_e) {}
-    } catch(err){
+      // Start background auto-refresh matching notifications polling interval (10s)
+      try { startDonationAutoRefresh(); } catch(_) {}
+  } catch(err){
       console.error('Failed to load donations list:', err);
       const tbody = document.querySelector('main .table tbody');
       if (tbody){
@@ -281,8 +352,9 @@
         const failReasonSingle = (r.fail_reason || '').trim();
         const showReceipt = ((r.status || '') === 'Picked Up' || (r.status || '') === 'Completed');
         const cancelReason = (r.cancel_reason || '').trim();
+        const needFetchReason = isFailedSingle && !failReasonSingle;
         const imgThumb = isFailedSingle
-          ? `<div class="small text-danger text-center">${escapeHtml(failReasonSingle || 'Failed safety check')}</div>`
+          ? `<div class="small text-danger text-center" ${needFetchReason ? `data-need-fail-reason="1" data-id="${r.id ?? ''}"` : ''}>${escapeHtml(failReasonSingle || 'Failed safety check')}</div>`
           : (showReceipt
               ? `<div class="d-flex justify-content-center" style="gap:5px;"><button type="button" class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${imgUrl}" data-id="${r.id ?? ''}" data-batch="${batchForSingle}" data-status="${r.status ?? ''}" title="View receipt">View</button></div>`
               : (isCancelled && cancelReason
@@ -317,6 +389,25 @@
     });
 
     tbody.innerHTML = rows.join('');
+
+    // Post-process: fetch fail_reason for single items marked as Failed Safety but missing reason
+    try {
+      const nodes = tbody.querySelectorAll('[data-need-fail-reason="1"][data-id]');
+      nodes.forEach(async (el) => {
+        const id = el.getAttribute('data-id');
+        if (!id) return;
+        try {
+          const res = await fetch(`${API_BASE_URL}/donations/index.php/${encodeURIComponent(id)}`, { credentials: 'include' });
+          if (!res.ok) return;
+          const j = await res.json().catch(() => ({}));
+          const row = j && j.data ? j.data : null;
+          const reason = (row && row.fail_reason) ? String(row.fail_reason).trim() : '';
+          if (reason) {
+            el.textContent = reason;
+          }
+        } catch (_) { /* ignore */ }
+      });
+    } catch(_) { /* no-op */ }
   }
 
   function bindImageViewer(){
@@ -566,7 +657,8 @@
         } catch(_) {}
         // Optimistic UI update without full refetch
         const newStatus = (result === 'passed') ? 'Picked Up' : 'Failed Safety';
-        const failReasonVal = (result === 'failed') ? (document.getElementById('fsFailReason')?.value || '') : '';
+        // Read the failure reason from the hidden input we populated from the modal
+        const failReasonVal = (result === 'failed') ? ((document.getElementById('fsFailReasonHidden')?.value || '').trim()) : '';
         const batchId = document.getElementById('fsBatchId')?.value || '';
         const donationId = document.getElementById('fsDonationId')?.value || '';
 
@@ -593,6 +685,11 @@
           if (row){
             const statusCell = row.querySelector('td:nth-child(5)');
             if (statusCell) statusCell.innerHTML = badge(newStatus);
+            // Update receipt/failure display cell for batch group row
+            const receiptCell = row.querySelector('td:nth-child(6)');
+            if (receiptCell && result === 'failed'){
+              receiptCell.innerHTML = `<div class="small text-danger text-center">${escapeHtml(failReasonVal || 'Failed safety check')}</div>`;
+            }
             const actionsCell = row.querySelector('td:nth-child(7)');
             const ds = `data-batch="${batchId}" data-status="${newStatus}"`;
             if (actionsCell) actionsCell.innerHTML = buildActionsHtml(ds);
@@ -618,6 +715,11 @@
             if (tr){
               const statusCell = tr.querySelector('td:nth-child(5)');
               if (statusCell) statusCell.innerHTML = badge(newStatus);
+              // Update receipt/failure display cell for single item row
+              const receiptCell = tr.querySelector('td:nth-child(6)');
+              if (receiptCell && result === 'failed'){
+                receiptCell.innerHTML = `<div class="small text-danger text-center">${escapeHtml(failReasonVal || 'Failed safety check')}</div>`;
+              }
               const actionsCell = tr.querySelector('td:nth-child(7)');
               const ds = `data-id="${donationId}" data-batch="" data-status="${newStatus}"`;
               if (actionsCell) actionsCell.innerHTML = buildActionsHtml(ds);

@@ -410,6 +410,17 @@ try {
                 $row['image_full_url'] = buildImageFullUrl($r['receipt_image']);
                 $row['receipt_full_url'] = $row['image_full_url'];
             }
+            // Also attach latest food safety result and fail reason for this donation id
+            $fs = $db->query(
+                "SELECT result, fail_reason FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                [$id]
+            )->fetch();
+            if ($fs && isset($fs['result']) && $fs['result'] !== null) {
+                $row['safety_result'] = $fs['result'];
+            }
+            if ($fs && isset($fs['fail_reason']) && $fs['fail_reason'] !== null && $fs['fail_reason'] !== '') {
+                $row['fail_reason'] = $fs['fail_reason'];
+            }
         } catch (Exception $e) { /* ignore */ }
         sendJson(['success' => true, 'data' => $row]);
     }
