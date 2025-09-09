@@ -69,4 +69,12 @@ class Notification {
         $this->db->query("UPDATE notifications SET read_status = 1 WHERE id = ?", [$id]);
         return $this->db->rowCount() > 0;
     }
+
+    /**
+     * Mark all notifications as read for a specific user
+     */
+    public function markAllReadByUser(int $userId): int {
+        $this->db->query("UPDATE notifications SET read_status = 1 WHERE user_id = ? AND read_status = 0", [$userId]);
+        return $this->db->rowCount();
+    }
 }

@@ -8,7 +8,7 @@
   function badge(status){
     switch(status){
       case 'Pending': return '<span class="badge bg-warning text-dark">Pending</span>';
-      case 'Allocated': return '<span class="badge bg-info text-dark">Allocated</span>';
+      case 'Acknowledged': return '<span class="badge bg-info text-dark">Acknowledged</span>';
       case 'Picked Up': return '<span class="badge bg-primary">Picked Up</span>';
       case 'Failed Safety': return '<span class="badge bg-danger">Failed Safety</span>';
       case 'Completed': return '<span class="badge bg-success">Completed</span>';
@@ -590,7 +590,7 @@
       bindEvents();
 
       // KPI counters (batch-based)
-      const pendingStatuses = new Set(['Pending','Allocated','Picked Up']);
+      const pendingStatuses = new Set(['Pending','Acknowledged','Picked Up']);
       const batchGroups = groups.filter(g => !!g.batch_id);
       const total = batchGroups.length;
       const pending = batchGroups.filter(g => g.items.some(it => pendingStatuses.has(it.status || ''))).length;

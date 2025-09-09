@@ -9,13 +9,53 @@
   function badge(status){
     switch(status){
       case 'Pending': return '<span class="badge bg-warning text-dark">Pending</span>';
-      case 'Allocated': return '<span class="badge bg-info text-dark">Allocated</span>';
+      case 'Acknowledged': return '<span class="badge bg-info text-dark">Acknowledged</span>';
       case 'Picked Up': return '<span class="badge bg-primary">Picked Up</span>';
       case 'Failed Safety': return '<span class="badge bg-danger">Failed Safety</span>';
       case 'Completed': return '<span class="badge bg-success">Completed</span>';
       case 'Cancelled': return '<span class="badge bg-dark">Cancelled</span>';
       default: return `<span class="badge bg-light text-dark">${status||'Unknown'}</span>`;
     }
+  }
+  // Helper: show Next Steps modal after acknowledge
+  function showAckNextStepsModal(){
+    try {
+      // Respect user preference to not show again
+      try {
+        if (localStorage.getItem('ackNextStepsDontShow') === '1') return;
+      } catch(_p) {}
+      const modalEl = document.getElementById('ackNextStepsModal');
+      if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+      // Defensive cleanup: remove any stray backdrops and modal-open state
+      try {
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+      } catch(_c) {}
+      const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+      const openBtn = document.getElementById('ackOpenMessagesBtn');
+      const closeBtn = document.getElementById('ackCloseBtn');
+      const dontShow = document.getElementById('ackDontShowAgain');
+      if (dontShow) { dontShow.checked = false; }
+      if (openBtn){
+        openBtn.onclick = function(){
+          try { if (dontShow && dontShow.checked) { localStorage.setItem('ackNextStepsDontShow', '1'); } } catch(_s) {}
+          const messagesEl = document.getElementById('messagesModal');
+          if (messagesEl){
+            const mm = bootstrap.Modal.getOrCreateInstance(messagesEl);
+            mm.show();
+          }
+          m.hide();
+        };
+      }
+      if (closeBtn){
+        closeBtn.onclick = function(){
+          try { if (dontShow && dontShow.checked) { localStorage.setItem('ackNextStepsDontShow', '1'); } } catch(_s) {}
+        };
+      }
+      m.show();
+    } catch(_e) { /* ignore */ }
   }
   // Initialize page: load items, populate filters, bind events
   async function init(){
@@ -41,6 +81,16 @@
       bindActions();
       bindFoodSafetySubmit();
       bindFilters();
+      // Bind temporary restore toggle
+      try {
+        const restore = document.getElementById('restoreAckPromptBtn');
+        if (restore){
+          restore.addEventListener('click', function(e){
+            e.preventDefault();
+            try { localStorage.removeItem('ackNextStepsDontShow'); alert('Acknowledge prompt will show again next time.'); } catch(_e) {}
+          });
+        }
+      } catch(_e) {}
     } catch(err){
       console.error('Failed to load donations list:', err);
       const tbody = document.querySelector('main .table tbody');
@@ -150,12 +200,25 @@
         const firstWithImg = group.items.find(it => (it.receipt_full_url || it.image_full_url)) || first;
         const imgUrl = (firstWithImg.receipt_full_url || firstWithImg.image_full_url || '');
         const isPending = (first.status || '') === 'Pending';
-        const imgThumb = isPending
-          ? '<div class="d-flex justify-content-center">—</div>'
-          : `<div class="d-flex justify-content-center" style="gap:5px;"><button type="button" class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${imgUrl}" ${dataAttrs} title="View receipt">View</button></div>`;
+        const isCancelled = (first.status || '') === 'Cancelled';
+        // Receipt/failure display
+        const isFailed = (first.status || '') === 'Failed Safety';
+        const failReason = (first.fail_reason || '').trim();
+        const showReceipt = ((first.status || '') === 'Picked Up' || (first.status || '') === 'Completed');
+        const cancelReason = (first.cancel_reason || '').trim();
+        const imgThumb = isFailed
+          ? `<div class="small text-danger text-center">${escapeHtml(failReason || 'Failed safety check')}</div>`
+          : (showReceipt
+              ? `<div class="d-flex justify-content-center" style="gap:5px;"><button type="button" class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${imgUrl}" ${dataAttrs} title="View receipt">View</button></div>`
+              : (isCancelled && cancelReason
+                  ? `<div class="small text-muted text-center">${escapeHtml(cancelReason)}</div>`
+                  : '<div class="d-flex justify-content-center">—</div>'));
 
         const actionsBtns = [];
         if ((first.status || '') === 'Pending') {
+          actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-primary action-ack" ${dataAttrs} title="Acknowledge" aria-label="Acknowledge"><i class="bi bi-hand-thumbs-up"></i></button>`);
+        }
+        if ((first.status || '') === 'Acknowledged') {
           actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-warning action-fs" ${dataAttrs} title="Food Safety Check" aria-label="Food Safety Check"><i class="bi bi-clipboard-check"></i></button>`);
         }
         if ((first.status || '') === 'Picked Up') {
@@ -184,7 +247,6 @@
                     <th>Qty</th>
                     <th>Expiry</th>
                     <th>Status</th>
-                    <th>Reason</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -195,7 +257,6 @@
                       <td>${r.quantity ?? ''}</td>
                       <td>${escapeHtml(r.expiry_date || '')}</td>
                       <td>${badge(r.status)}</td>
-                      <td>${r.fail_reason ? escapeHtml(r.fail_reason) : ((r.status||'') === 'Failed Safety' ? 'Failed safety check' : '—')}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -212,14 +273,27 @@
         const statusHtml = badge(r.status || '');
         const imgUrl = r.receipt_full_url || r.image_full_url || '';
         const isPending = (r.status || '') === 'Pending';
+        const isCancelled = (r.status || '') === 'Cancelled';
         // If this donation belongs to a batch (even if it's a singleton batch), keep the batch id
         const batchForSingle = r.batch_id ? String(r.batch_id) : '';
-        const imgThumb = isPending
-          ? '<div class="d-flex justify-content-center">—</div>'
-          : `<div class="d-flex justify-content-center" style="gap:5px;"><button type="button" class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${imgUrl}" data-id="${r.id ?? ''}" data-batch="${batchForSingle}" data-status="${r.status ?? ''}" title="View receipt">View</button></div>`;
+        // Receipt/failure display
+        const isFailedSingle = (r.status || '') === 'Failed Safety';
+        const failReasonSingle = (r.fail_reason || '').trim();
+        const showReceipt = ((r.status || '') === 'Picked Up' || (r.status || '') === 'Completed');
+        const cancelReason = (r.cancel_reason || '').trim();
+        const imgThumb = isFailedSingle
+          ? `<div class="small text-danger text-center">${escapeHtml(failReasonSingle || 'Failed safety check')}</div>`
+          : (showReceipt
+              ? `<div class="d-flex justify-content-center" style="gap:5px;"><button type="button" class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${imgUrl}" data-id="${r.id ?? ''}" data-batch="${batchForSingle}" data-status="${r.status ?? ''}" title="View receipt">View</button></div>`
+              : (isCancelled && cancelReason
+                  ? `<div class="small text-muted text-center">${escapeHtml(cancelReason)}</div>`
+                  : '<div class="d-flex justify-content-center">—</div>'));
         const dataAttrs = `data-id="${r.id ?? ''}" data-batch="${batchForSingle}" data-status="${r.status ?? ''}"`;
         const actionsBtns = [];
         if ((r.status || '') === 'Pending') {
+          actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-primary action-ack" ${dataAttrs} title="Acknowledge" aria-label="Acknowledge"><i class="bi bi-hand-thumbs-up"></i></button>`);
+        }
+        if ((r.status || '') === 'Acknowledged') {
           actionsBtns.push(`<button type="button" class="btn btn-sm btn-outline-warning action-fs" ${dataAttrs} title="Food Safety Check" aria-label="Food Safety Check"><i class="bi bi-clipboard-check"></i></button>`);
         }
         if ((r.status || '') === 'Picked Up') {
@@ -425,18 +499,22 @@
       const fd = new FormData(form);
       fd.set('result', result);
 
-      // Validate required fields
+      // Validate required fields based on result
       const receipt = document.getElementById('fsReceipt');
-      if (!receipt || !receipt.files || receipt.files.length === 0){
-        alert('Receipt image is required.');
-        return;
-      }
-      if (result === 'failed'){
-        const failReason = document.getElementById('fsFailReason');
-        if (!failReason || !failReason.value.trim()){
-          alert('Please provide a failure reason.');
+      if (result === 'passed'){
+        if (!receipt || !receipt.files || receipt.files.length === 0){
+          alert('Receipt image is required for a Passed check.');
           return;
         }
+      } else if (result === 'failed') {
+        // Read failure reason from hidden input set by the Fail Reason modal
+        const hiddenReasonEl = document.getElementById('fsFailReasonHidden');
+        const reason = (hiddenReasonEl?.value || '').trim();
+        if (!reason){
+          alert('Failure reason is required when marking as Failed.');
+          return;
+        }
+        fd.set('fail_reason', reason);
       }
 
       // Map UI fields to API expected names
@@ -457,16 +535,35 @@
           body: fd,
           credentials: 'include'
         });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok || !json.success){
-          const msg = json?.error || `HTTP ${res.status}`;
+        let json = null;
+        try { json = await res.json(); } catch(_) { json = null; }
+        if (!res.ok){
+          let msg = `HTTP ${res.status}`;
+          try { if (json && json.error) msg = json.error; } catch(_) {}
           throw new Error(msg);
         }
-        // Success: close modal and refresh list
+        // Success: close modal(s) and refresh list
         if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal){
           const m = bootstrap.Modal.getOrCreateInstance(modalEl);
           m.hide();
         }
+        try {
+          const failModal = document.getElementById('fsFailReasonModal');
+          if (failModal && typeof bootstrap !== 'undefined' && bootstrap.Modal){
+            bootstrap.Modal.getOrCreateInstance(failModal).hide();
+          }
+        } catch(_) {}
+        // Show small success confirmation
+        try {
+          const fsMsgEl = document.getElementById('fsSuccessMessage');
+          if (fsMsgEl){
+            fsMsgEl.textContent = (result === 'passed') ? 'Items updated. Status set to Picked Up.' : 'Food safety recorded as Failed.';
+          }
+          const fsSuccessEl = document.getElementById('fsSuccessModal');
+          if (fsSuccessEl && typeof bootstrap !== 'undefined' && bootstrap.Modal){
+            bootstrap.Modal.getOrCreateInstance(fsSuccessEl).show();
+          }
+        } catch(_) {}
         // Optimistic UI update without full refetch
         const newStatus = (result === 'passed') ? 'Picked Up' : 'Failed Safety';
         const failReasonVal = (result === 'failed') ? (document.getElementById('fsFailReason')?.value || '') : '';
@@ -547,6 +644,8 @@
       } finally {
         if (btnSubmit) btnSubmit.disabled = false;
         if (btnFail) btnFail.disabled = false;
+        // Clear hidden fail reason after any attempt
+        try { const hiddenReasonEl = document.getElementById('fsFailReasonHidden'); if (hiddenReasonEl) hiddenReasonEl.value = ''; } catch(_) {}
       }
     }
 
@@ -556,12 +655,117 @@
     }
     const btnFail = document.getElementById('foodSafetyFailBtn');
     if (btnFail){
-      btnFail.addEventListener('click', () => handleSubmit('failed'));
+      btnFail.addEventListener('click', () => {
+        const failModal = document.getElementById('fsFailReasonModal');
+        const failInput = document.getElementById('fsFailReasonInput');
+        const confirmBtn = document.getElementById('fsFailReasonConfirmBtn');
+        const hidden = document.getElementById('fsFailReasonHidden');
+        const fsModalEl = document.getElementById('foodSafetyModal');
+        if (!failModal || !confirmBtn) { return; }
+        try {
+          // Hide the Food Safety modal so the Fail Reason modal is on top
+          let fsModal = null;
+          if (fsModalEl) { try { fsModal = bootstrap.Modal.getOrCreateInstance(fsModalEl); fsModal.hide(); } catch(_) {} }
+          const m = bootstrap.Modal.getOrCreateInstance(failModal);
+          if (failInput) { failInput.value = ''; setTimeout(()=>failInput.focus(), 200); }
+          // Remove previous handler to avoid stacking
+          confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+          const newConfirm = document.getElementById('fsFailReasonConfirmBtn');
+          // Also wire cancel to restore FS modal visibility
+          const cancelBtn = failModal.querySelector('[data-bs-dismiss="modal"]');
+          if (cancelBtn){
+            cancelBtn.addEventListener('click', () => {
+              try { if (fsModal) fsModal.show(); } catch(_) {}
+            }, { once: true });
+          }
+          newConfirm.addEventListener('click', async function(){
+            const reason = (failInput?.value || '').trim();
+            if (!reason){ alert('Failure reason is required.'); return; }
+            if (hidden) hidden.value = reason;
+            try { m.hide(); } catch(_) {}
+            // Keep FS modal hidden while submitting; it will refresh after
+            await handleSubmit('failed');
+          });
+          m.show();
+        } catch(_) { /* no bootstrap */ }
+      });
     }
   }
 
   function bindActions(){
     document.addEventListener('click', async function(e){
+      const ackBtn = e.target.closest('.action-ack');
+      if (ackBtn){
+        const id = ackBtn.getAttribute('data-id') || '';
+        const batch = ackBtn.getAttribute('data-batch') || '';
+        try{
+          if (batch && !id){
+            const res = await fetch(`${API_BASE_URL}/donations/index.php/batch/${encodeURIComponent(batch)}/status`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ status: 'Acknowledged' })
+            });
+            if (!res.ok){
+              let msg = `HTTP ${res.status}`;
+              try { const j = await res.json(); if (j && j.error) msg = j.error; } catch(_e){ try { msg = await res.text(); } catch(__e){} }
+              throw new Error(msg);
+            }
+            // Update cache
+            const arr = donationCache.byBatch.get(batch) || [];
+            arr.forEach(it => { it.status = 'Acknowledged'; });
+            donationCache.byBatch.set(batch, arr);
+            // Update main group row
+            const row = document.querySelector(`tr.group-row[data-batch-id="${batch}"]`);
+            if (row){
+              const statusCell = row.querySelector('td:nth-child(5)');
+              if (statusCell) statusCell.innerHTML = badge('Acknowledged');
+              const actionsCell = row.querySelector('td:nth-child(7)');
+              const ds = `data-batch="${batch}" data-status="Acknowledged"`;
+              const parts = [];
+              parts.push(`<button type="button" class="btn btn-sm btn-outline-warning action-fs" ${ds} title="Food Safety Check" aria-label="Food Safety Check"><i class="bi bi-clipboard-check"></i></button>`);
+              parts.push(`<button type="button" class="btn btn-sm btn-outline-danger action-delete" ${ds} title="Delete donation" aria-label="Delete"><i class="bi bi-trash"></i></button>`);
+              if (actionsCell) actionsCell.innerHTML = `<div class="d-flex justify-content-center" style="gap:5px;">${parts.join('')}</div>`;
+            }
+            // Show next steps modal
+            showAckNextStepsModal();
+          } else if (id){
+            const res = await fetch(`${API_BASE_URL}/donations/index.php/${encodeURIComponent(id)}/status`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ status: 'Acknowledged' })
+            });
+            if (!res.ok){
+              let msg = `HTTP ${res.status}`;
+              try { const j = await res.json(); if (j && j.error) msg = j.error; } catch(_e){ try { msg = await res.text(); } catch(__e){} }
+              throw new Error(msg);
+            }
+            // Update cache
+            const it = donationCache.byId.get(String(id));
+            if (it){ it.status = 'Acknowledged'; donationCache.byId.set(String(id), it); }
+            // Update row
+            const btn = document.querySelector(`.action-ack[data-id="${id}"]`) || document.querySelector(`.action-delete[data-id="${id}"]`);
+            const tr = btn ? btn.closest('tr') : null;
+            if (tr){
+              const statusCell = tr.querySelector('td:nth-child(5)');
+              if (statusCell) statusCell.innerHTML = badge('Acknowledged');
+              const actionsCell = tr.querySelector('td:nth-child(7)');
+              const ds = `data-id="${id}" data-batch="" data-status="Acknowledged"`;
+              const parts = [];
+              parts.push(`<button type="button" class="btn btn-sm btn-outline-warning action-fs" ${ds} title="Food Safety Check" aria-label="Food Safety Check"><i class="bi bi-clipboard-check"></i></button>`);
+              parts.push(`<button type="button" class="btn btn-sm btn-outline-danger action-delete" ${ds} title="Delete donation" aria-label="Delete"><i class="bi bi-trash"></i></button>`);
+              if (actionsCell) actionsCell.innerHTML = `<div class="d-flex justify-content-center" style="gap:5px;">${parts.join('')}</div>`;
+            }
+            // Show next steps modal
+            showAckNextStepsModal();
+          }
+        } catch(err){
+          console.error('Acknowledge failed:', err);
+          alert('Failed to acknowledge donation: ' + (err?.message||'Unknown error'));
+        }
+        return;
+      }
       const delBtn = e.target.closest('.action-delete');
       const fsBtn = e.target.closest('.action-fs');
       const recvBtn = e.target.closest('.action-receive');
@@ -636,91 +840,121 @@
         return;
       }
 
-      // Receive (mark as Completed)
+      // Receive (mark as Completed): open confirmation first
       if (recvBtn){
         const id = recvBtn.getAttribute('data-id') || '';
         const batch = recvBtn.getAttribute('data-batch') || '';
-        try{
-          if (batch){
-            const res = await fetch(`${API_BASE_URL}/donations/index.php/batch/${encodeURIComponent(batch)}/status`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ status: 'Completed' })
-            });
-            if (!res.ok) {
-              let msg = `HTTP ${res.status}`;
-              try { const j = await res.json(); if (j && j.error) msg = j.error; } catch(_e){ try { msg = await res.text(); } catch(__e){} }
-              throw new Error(msg || `HTTP ${res.status}`);
-            }
-          } else if (id){
-            const res = await fetch(`${API_BASE_URL}/donations/index.php/${encodeURIComponent(id)}/status`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ status: 'Completed' })
-            });
-            if (!res.ok) {
-              let msg = `HTTP ${res.status}`;
-              try { const j = await res.json(); if (j && j.error) msg = j.error; } catch(_e){ try { msg = await res.text(); } catch(__e){} }
-              throw new Error(msg || `HTTP ${res.status}`);
-            }
-          }
-          // Optimistic UI update without full refetch
-          const newStatus = 'Completed';
-          function buildActionsHtml(ds){
-            const parts = [];
-            // No FS or Receive for Arrived; only Delete remains
-            parts.push(`<button type=\"button\" class=\"btn btn-sm btn-outline-danger action-delete\" ${ds} title=\"Delete donation\" aria-label=\"Delete\"><i class=\"bi bi-trash\"></i></button>`);
-            return `<div class=\"btn-group btn-group-sm\" role=\"group\">${parts.join('')}</div>`;
-          }
-          if (batch){
-            // Update cache
-            const arr = donationCache.byBatch.get(batch) || [];
-            arr.forEach(it => { it.status = newStatus; });
-            donationCache.byBatch.set(batch, arr);
-            // Update main group row
-            const row = document.querySelector(`tr.group-row[data-batch-id=\"${batch}\"]`);
-            if (row){
-              const statusCell = row.querySelector('td:nth-child(5)');
-              if (statusCell) statusCell.innerHTML = badge(newStatus);
-              const actionsCell = row.querySelector('td:nth-child(7)');
-              const ds = `data-batch=\"${batch}\" data-status=\"${newStatus}\"`;
-              if (actionsCell) actionsCell.innerHTML = buildActionsHtml(ds);
-            }
-            // Update child rows if visible
-            const child = document.querySelector(`tr.child-container[data-batch-id=\"${batch}\"]`);
-            if (child){
-              child.querySelectorAll('tbody tr').forEach(tr => {
-                const statusTd = tr.querySelector('td:nth-child(5)');
-                if (statusTd) statusTd.innerHTML = badge(newStatus);
-              });
-            }
-          } else if (id){
-            // Update cache single item
-            const it = donationCache.byId.get(String(id));
-            if (it){ it.status = newStatus; donationCache.byId.set(String(id), it); }
-            // Update row
-            const btn = document.querySelector(`.action-delete[data-id=\"${id}\"]`) || document.querySelector(`.action-fs[data-id=\"${id}\"]`) || document.querySelector(`.action-receive[data-id=\"${id}\"]`);
-            if (btn){
-              const tr = btn.closest('tr');
-              if (tr){
-                const statusCell = tr.querySelector('td:nth-child(5)');
-                if (statusCell) statusCell.innerHTML = badge(newStatus);
-                const actionsCell = tr.querySelector('td:nth-child(7)');
-                const ds = `data-id=\"${id}\" data-batch=\"\" data-status=\"${newStatus}\"`;
-                if (actionsCell) actionsCell.innerHTML = buildActionsHtml(ds);
-              }
-            }
-          }
-        } catch(err){
-          console.error('Failed to mark as received:', err);
-          alert('Failed to update status: ' + (err?.message || 'Unknown error'));
+        const modalEl = document.getElementById('receiveConfirmModal');
+        const confirmBtn = document.getElementById('receiveConfirmBtn');
+        if (modalEl && confirmBtn && typeof bootstrap !== 'undefined' && bootstrap.Modal){
+          confirmBtn.setAttribute('data-id', id);
+          confirmBtn.setAttribute('data-batch', batch);
+          const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+          m.show();
+        } else {
+          // Fallback: proceed directly if modal not present
+          await completeDonation({ id, batch });
         }
         return;
       }
     });
   }
+
+  // Helper to actually complete donation after confirm
+  async function completeDonation({ id, batch }){
+    const newStatus = 'Completed';
+    try{
+      if (batch){
+        const res = await fetch(`${API_BASE_URL}/donations/index.php/batch/${encodeURIComponent(batch)}/status`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (!res.ok){
+          let msg = `HTTP ${res.status}`;
+          try { const j = await res.json(); if (j && j.error) msg = j.error; } catch(_e){ try { msg = await res.text(); } catch(__e){} }
+          throw new Error(msg);
+        }
+      } else if (id){
+        const res = await fetch(`${API_BASE_URL}/donations/index.php/${encodeURIComponent(id)}/status`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (!res.ok){
+          let msg = `HTTP ${res.status}`;
+          try { const j = await res.json(); if (j && j.error) msg = j.error; } catch(_e){ try { msg = await res.text(); } catch(__e){} }
+          throw new Error(msg);
+        }
+      }
+      // Update UI
+      function buildActionsHtml(ds){
+        const parts = [];
+        parts.push(`<button type="button" class="btn btn-sm btn-outline-danger action-delete" ${ds} title="Delete donation" aria-label="Delete"><i class="bi bi-trash"></i></button>`);
+        return `<div class="btn-group btn-group-sm" role="group">${parts.join('')}</div>`;
+      }
+      if (batch){
+        const arr = donationCache.byBatch.get(batch) || [];
+        arr.forEach(it => { it.status = newStatus; });
+        donationCache.byBatch.set(batch, arr);
+        const row = document.querySelector(`tr.group-row[data-batch-id="${batch}"]`);
+        if (row){
+          const statusCell = row.querySelector('td:nth-child(5)');
+          if (statusCell) statusCell.innerHTML = badge(newStatus);
+          const actionsCell = row.querySelector('td:nth-child(7)');
+          const ds = `data-batch="${batch}" data-status="${newStatus}"`;
+          if (actionsCell) actionsCell.innerHTML = buildActionsHtml(ds);
+        }
+        const child = document.querySelector(`tr.child-container[data-batch-id="${batch}"]`);
+        if (child){
+          child.querySelectorAll('tbody tr').forEach(tr => {
+            const statusTd = tr.querySelector('td:nth-child(5)');
+            if (statusTd) statusTd.innerHTML = badge(newStatus);
+          });
+        }
+      } else if (id){
+        const it = donationCache.byId.get(String(id));
+        if (it){ it.status = newStatus; donationCache.byId.set(String(id), it); }
+        const btn = document.querySelector(`.action-delete[data-id="${id}"]`) || document.querySelector(`.action-fs[data-id="${id}"]`) || document.querySelector(`.action-receive[data-id="${id}"]`);
+        if (btn){
+          const tr = btn.closest('tr');
+          if (tr){
+            const statusCell = tr.querySelector('td:nth-child(5)');
+            if (statusCell) statusCell.innerHTML = badge(newStatus);
+            const actionsCell = tr.querySelector('td:nth-child(7)');
+            const ds = `data-id="${id}" data-batch="" data-status="${newStatus}"`;
+            if (actionsCell) actionsCell.innerHTML = buildActionsHtml(ds);
+          }
+        }
+      }
+      // Optionally refetch to stay in sync
+      try {
+        const items = await fetchAdminList();
+        window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
+        renderTable(applyFilters(window.__adminDonationRaw));
+      } catch(_) {}
+    } catch(err){
+      console.error('Failed to mark as completed:', err);
+      alert('Failed to update status: ' + (err?.message || 'Unknown error'));
+    }
+  }
+
+  // Bind confirm button for completion
+  (function bindReceiveConfirm(){
+    const modalEl = document.getElementById('receiveConfirmModal');
+    const confirmBtn = document.getElementById('receiveConfirmBtn');
+    if (!modalEl || !confirmBtn) return;
+    confirmBtn.addEventListener('click', async function(){
+      const id = this.getAttribute('data-id') || '';
+      const batch = this.getAttribute('data-batch') || '';
+      const origText = this.textContent;
+      this.disabled = true; this.textContent = 'Completing...';
+      try {
+        await completeDonation({ id, batch });
+        try { bootstrap.Modal.getOrCreateInstance(modalEl).hide(); } catch(_) {}
+      } finally {
+        this.disabled = false; this.textContent = origText;
+      }
+    });
+  })();
 
   function getEl(id){ return document.getElementById(id); }
 

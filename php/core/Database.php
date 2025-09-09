@@ -96,5 +96,12 @@ class Database {
     public function rollBack() {
         return $this->pdo->rollBack();
     }
+
+    /**
+     * Check if a transaction is currently active
+     */
+    public function inTransaction() {
+        return $this->pdo->inTransaction();
+    }
 }
 ?>

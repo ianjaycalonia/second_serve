@@ -10,25 +10,74 @@ class Inventory
         $this->db = Database::getInstance();
     }
 
+    private function ensureTables(): void
+    {
+        // Create core tables if they don't exist
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS inventory (
+                id INT(11) NOT NULL AUTO_INCREMENT,
+                item_name VARCHAR(255) DEFAULT NULL,
+                category VARCHAR(50) DEFAULT NULL,
+                quantity INT(11) NOT NULL DEFAULT 0,
+                expiry_date DATE DEFAULT NULL,
+                donor_id INT(11) DEFAULT NULL,
+                source_donation_id INT(11) DEFAULT NULL,
+                source_batch_id VARCHAR(36) DEFAULT NULL,
+                added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+                PRIMARY KEY (id),
+                KEY item_cat (item_name, category),
+                KEY donor_id (donor_id),
+                KEY src_donation (source_donation_id),
+                KEY src_batch (source_batch_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+        );
+
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS inventory_movements (
+                id INT(11) NOT NULL AUTO_INCREMENT,
+                inventory_id INT(11) NOT NULL,
+                direction ENUM('in','out') NOT NULL,
+                quantity INT(11) NOT NULL,
+                mode ENUM('recipient','onsite') DEFAULT NULL,
+                recipient_id INT(11) DEFAULT NULL,
+                note TEXT DEFAULT NULL,
+                performed_by INT(11) DEFAULT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+                PRIMARY KEY (id),
+                KEY inventory_id (inventory_id),
+                KEY created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+        );
+    }
+
     public function addFromDonationRow(array $donation): void
     {
         if (!$donation || empty($donation['id'])) { return; }
         $id = (int)$donation['id'];
+        $this->ensureTables();
         // Idempotency: skip if already added
         $exists = $this->db->query("SELECT id FROM inventory WHERE source_donation_id = ? LIMIT 1", [$id])->fetch();
         if ($exists) { return; }
+        // Prepare safe values (item_name is NOT NULL in schema)
+        $itemName = isset($donation['name']) ? trim((string)$donation['name']) : '';
+        if ($itemName === '') { $itemName = 'Unknown Item'; }
+        $category = isset($donation['type']) ? trim((string)$donation['type']) : null; // nullable
+        $qty = isset($donation['quantity']) ? (int)$donation['quantity'] : 0;
+        $expiry = (!empty($donation['expiry_date']) ? (string)$donation['expiry_date'] : null);
+        $donorId = isset($donation['donor_id']) ? (int)$donation['donor_id'] : null;
+        $batchId = $donation['batch_id'] ?? null;
 
         $this->db->query(
             "INSERT INTO inventory (item_name, category, quantity, expiry_date, donor_id, source_donation_id, source_batch_id, added_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
             [
-                $donation['name'] ?? null,
-                $donation['type'] ?? null,
-                (int)($donation['quantity'] ?? 0),
-                (!empty($donation['expiry_date']) ? $donation['expiry_date'] : null),
-                (int)($donation['donor_id'] ?? 0),
+                $itemName,
+                ($category === '' ? null : $category),
+                $qty,
+                $expiry,
+                $donorId,
                 (int)$id,
-                $donation['batch_id'] ?? null,
+                $batchId,
             ]
         );
     }
@@ -74,6 +123,7 @@ class Inventory
         if (!in_array($mode, ['recipient','onsite'], true)) { throw new Exception('Invalid mode'); }
         if ($mode === 'recipient' && empty($recipientId)) { throw new Exception('recipient_id is required for recipient mode'); }
 
+        $this->ensureTables();
         $this->db->beginTransaction();
         try {
             $row = $this->db->query("SELECT id, quantity FROM inventory WHERE id = ? FOR UPDATE", [$inventoryId])->fetch();
@@ -105,6 +155,7 @@ class Inventory
         if (!in_array($mode, ['recipient','onsite'], true)) { throw new Exception('Invalid mode'); }
         if ($mode === 'recipient' && empty($recipientId)) { throw new Exception('recipient_id is required for recipient mode'); }
 
+        $this->ensureTables();
         $this->db->beginTransaction();
         try {
             // Lock matching lots ordered by soonest expiry, then by added_at

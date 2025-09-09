@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/Donation.php';
+require_once __DIR__ . '/../../core/Inventory.php';
 require_once __DIR__ . '/../../core/Notification.php';
+require_once __DIR__ . '/../../core/DonationNotifier.php';
 
 // Handle CORS / preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -265,7 +267,8 @@ try {
 
     // PUT /api/donations/batch/{batch_id}/edit (method override via POST supported)
     if ($method === 'PUT' && preg_match('#^/batch/([0-9a-fA-F-]{36})/edit/?\z#', $sub, $m)) {
-        requireRole(['admin','donor']);
+        // Only donors can edit donation content; admins cannot edit items
+        requireRole(['donor']);
         $batchId = $m[1];
         $input = getJsonInput();
         $type = isset($input['type']) && $input['type'] !== '' ? sanitize($input['type']) : null; // nullable (keep if null)
@@ -282,13 +285,47 @@ try {
         $editor = new DonationEditor();
         $role = currentUserRole();
         $uid = (int)currentUserId();
+        // Prepare diff details before update
+        $diffSummary = '';
         try {
-            $editor->assertBatchEditable($batchId, $uid, $role === 'admin');
+            $db = Database::getInstance();
+            $before = $db->query(
+                "SELECT id, name, quantity, expiry_date FROM donations WHERE batch_id = ?",
+                [$batchId]
+            )->fetchAll();
+            $byId = [];
+            foreach ($before as $b) { $byId[(int)$b['id']] = $b; }
+            // Admin override disabled for content edits
+            $editor->assertBatchEditable($batchId, $uid, false);
             $editor->updateBatchFields($batchId, $type, $input['items']);
+            // Build diff summary (names/quantities changes and new items)
+            $changes = [];
+            foreach ($input['items'] as $it) {
+                $iid = isset($it['id']) ? (int)$it['id'] : 0;
+                $nm = isset($it['name']) ? trim((string)$it['name']) : '';
+                $qt = isset($it['quantity']) ? (int)$it['quantity'] : null;
+                if ($iid > 0 && isset($byId[$iid])) {
+                    $prev = $byId[$iid];
+                    if (isset($prev['name']) && $nm !== '' && $nm !== (string)$prev['name']) {
+                        $changes[] = 'Name: ' . ($prev['name'] ?? '') . ' -> ' . $nm;
+                    }
+                    if ($qt !== null && $qt !== (int)$prev['quantity']) {
+                        $changes[] = 'Quantity: ' . ((int)$prev['quantity']) . ' -> ' . $qt;
+                    }
+                } else if ($iid === 0) {
+                    $label = $nm !== '' ? ($nm . ($qt ? (' x' . $qt) : '')) : 'New item';
+                    $changes[] = 'New item added: ' . $label;
+                }
+            }
+            if (!empty($changes)) { $diffSummary = implode('; ', array_slice($changes, 0, 5)); }
         } catch (Exception $e) {
             $msg = $e->getMessage();
             $code = ($msg === 'Not found') ? 404 : (($msg === 'Forbidden') ? 403 : 400);
             sendJson(['success'=>false,'error'=>$msg], $code);
+        }
+        // Notify admins if donor edited the batch
+        if ($role === 'donor') {
+            try { (new DonationNotifier())->notifyBatchEdited($batchId, $uid, count($items), $diffSummary); } catch (Exception $e) { error_log('Notify batch edited failed: '.$e->getMessage()); }
         }
         sendJson(['success'=>true,'message'=>'Batch updated']);
     }
@@ -378,47 +415,45 @@ try {
     }
 
     // PUT /api/donations/{id}/status
-    if ($method === 'PUT' && preg_match('#^/(\d+)/status\/?\z#', $sub, $m)) {
+    if ($method === 'PUT' && preg_match('#^/(\d+)/(status|status/)\z#', $sub, $m)) {
         requireRole(['admin']);
         $id = (int)$m[1];
-        $data = getJsonInput();
-        $status = $data['status'] ?? '';
-        if ($status === '') {
-            sendJson(['success' => false, 'error' => 'status is required'], 400);
-        }
-        $service->updateStatus($id, $status);
-
-        // Notify donor about status update
+        $input = getJsonInput();
+        $status = isset($input['status']) ? sanitize($input['status']) : '';
+        if ($status === '') { sendJson(['success' => false, 'error' => 'Status is required'], 400); }
+        $service = new Donation();
         try {
-            $db = Database::getInstance();
-            $row = $db->query("SELECT d.id, d.name, d.donor_id, u.name AS donor_name FROM donations d JOIN users u ON u.user_id = d.donor_id WHERE d.id = ?", [$id])->fetch();
-            if ($row && !empty($row['donor_id'])) {
-                $notif = new Notification();
-                $notif->create([
-                    'user_id' => (int)$row['donor_id'],
-                    'type' => 'status_updated',
-                    'reference_type' => 'donation',
-                    'reference_id' => (int)$id,
-                    'message' => 'Donation "' . ($row['name'] ?? ('#'.$id)) . '" status updated to ' . $status,
-                ]);
-            }
+            $service->updateStatus($id, $status);
         } catch (Exception $e) {
-            error_log('Failed to create donor status notification: ' . $e->getMessage());
+            $msg = $e->getMessage();
+            $code = ($msg === 'Not found') ? 404 : 400;
+            sendJson(['success' => false, 'error' => $msg], $code);
         }
+        // If moved to Picked Up or Completed, ensure inventory contains it
+        if ($status === 'Picked Up' || $status === 'Completed') {
+            try { (new Inventory())->addFromDonationId($id); } catch (Exception $e) { error_log('Inventory add on status (single) failed: '.$e->getMessage()); }
+        }
+        // Centralized notification
+        try { (new DonationNotifier())->notifyDonationStatus($id, $status); } catch (Exception $e) { error_log('Notify failed: '.$e->getMessage()); }
 
         sendJson(['success' => true, 'message' => 'Status updated']);
     }
 
     // PUT /api/donations/{id} - donor/admin can edit fields of a Pending donation
     if ($method === 'PUT' && preg_match('#^/(\d+)\/?\z#', $sub, $m)) {
-        requireRole(['donor','admin']);
+        // Only donors can edit donation content; admins cannot edit items
+        requireRole(['donor']);
         $id = (int)$m[1];
         $input = getJsonInput();
         $editor = new DonationEditor();
         $role = currentUserRole();
         $userId = (int)currentUserId();
         try {
-            $editor->assertEditable($id, $userId, $role === 'admin');
+            // Fetch before snapshot for diff
+            $db = Database::getInstance();
+            $prev = $db->query("SELECT name, quantity, expiry_date FROM donations WHERE id = ?", [$id])->fetch();
+            // Admin override disabled for content edits
+            $editor->assertEditable($id, $userId, false);
             $fields = [];
             foreach (['type','name','quantity','expiry_date'] as $k) {
                 if (array_key_exists($k, $input)) { $fields[$k] = $input[$k]; }
@@ -428,10 +463,29 @@ try {
                 sendJson(['success' => false, 'error' => 'expiry_date is required'], 400);
             }
             $editor->updateFields($id, $fields);
+            // Build change details
+            $detailsParts = [];
+            if ($prev) {
+                if (isset($fields['name']) && trim((string)$fields['name']) !== (string)$prev['name']) {
+                    $detailsParts[] = 'Name: ' . ($prev['name'] ?? '') . ' -> ' . trim((string)$fields['name']);
+                }
+                if (isset($fields['quantity'])) {
+                    $newQ = (int)$fields['quantity'];
+                    $oldQ = (int)$prev['quantity'];
+                    if ($newQ !== $oldQ) { $detailsParts[] = 'Quantity: ' . $oldQ . ' -> ' . $newQ; }
+                }
+                // We typically don't notify on expiry date changes in detail, but could be added:
+                // if (isset($fields['expiry_date']) && $fields['expiry_date'] !== $prev['expiry_date']) { ... }
+            }
+            $details = implode('; ', array_slice($detailsParts, 0, 5));
         } catch (Exception $e) {
             $msg = $e->getMessage();
             $code = ($msg === 'Not found') ? 404 : (($msg === 'Forbidden') ? 403 : 400);
             sendJson(['success' => false, 'error' => $msg], $code);
+        }
+        // Notify admins if donor edited a donation
+        if ($role === 'donor') {
+            try { (new DonationNotifier())->notifyDonationEdited($id, $userId, $details ?? ''); } catch (Exception $e) { error_log('Notify donation edited failed: '.$e->getMessage()); }
         }
         sendJson(['success' => true, 'message' => 'Donation updated']);
     }
@@ -454,6 +508,8 @@ try {
             $code = ($msg === 'Not found') ? 404 : (($msg === 'Forbidden') ? 403 : 400);
             sendJson(['success' => false, 'error' => $msg], $code);
         }
+        // Centralized notification on cancellation
+        try { (new DonationNotifier())->notifyDonationStatus($id, 'Cancelled', ['actor_role' => $role, 'reason' => $reason]); } catch (Exception $e) { error_log('Cancellation notify failed: '.$e->getMessage()); }
         sendJson(['success' => true, 'message' => 'Donation cancelled']);
     }
 
@@ -513,31 +569,8 @@ try {
         $input = getJsonInput();
         $status = $input['status'] ?? '';
         $service->updateStatusByBatch($batchId, $status);
-        // Notify all donors in the batch about status change
-        try {
-            $db = Database::getInstance();
-            $rows = $db->query(
-                "SELECT DISTINCT d.donor_id, u.name AS donor_name
-                 FROM donations d
-                 JOIN users u ON u.user_id = d.donor_id
-                 WHERE d.batch_id = ?",
-                [$batchId]
-            )->fetchAll();
-            if ($rows) {
-                $notif = new Notification();
-                foreach ($rows as $r) {
-                    if (empty($r['donor_id'])) continue;
-                    $msg = 'Your batch donation status updated to ' . $status;
-                    $notif->create([
-                        'user_id' => (int)$r['donor_id'],
-                        'type' => 'status_updated',
-                        'reference_type' => 'batch',
-                        'reference_id' => null,
-                        'message' => $msg,
-                    ]);
-                }
-            }
-        } catch (Exception $e) { error_log('Batch donor notify fail: ' . $e->getMessage()); }
+        // Centralized notification
+        try { (new DonationNotifier())->notifyBatchStatus($batchId, $status); } catch (Exception $e) { error_log('Batch notify failed: '.$e->getMessage()); }
 
         sendJson(['success' => true]);
     }

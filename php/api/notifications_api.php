@@ -56,6 +56,19 @@ try {
                 if (!$ok) sendJson(['success' => false, 'error' => 'Not found'], 404);
                 sendJson(['success' => true, 'message' => 'Notification marked as read']);
             }
+            if ($action === 'read_all') {
+                $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+                if ($userId <= 0) sendJson(['success' => false, 'error' => 'user_id is required'], 400);
+                // Permission: user themselves or admin only
+                $currentId = (int)(currentUserId() ?? 0);
+                $role = (string)(currentUserRole() ?? '');
+                if ($currentId !== $userId && $role !== 'admin') {
+                    sendJson(['success' => false, 'error' => 'Forbidden'], 403);
+                }
+                $svc = new Notification();
+                $count = $svc->markAllReadByUser($userId);
+                sendJson(['success' => true, 'message' => 'All notifications marked as read', 'data' => ['updated' => $count]]);
+            }
             sendJson(['success' => false, 'error' => 'Invalid action'], 400);
 
         default:

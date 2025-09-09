@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/Donation.php';
+require_once __DIR__ . '/../../core/Inventory.php';
 require_once __DIR__ . '/../../core/Notification.php';
+require_once __DIR__ . '/../../core/DonationNotifier.php';
 
 // CORS / preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -19,6 +21,7 @@ try {
     }
 
     $db = Database::getInstance();
+    $txStarted = false; // disable overarching TX to avoid conflicts
 
     // Helpers
     $saveImage = function(array $file, string $subdir = 'food_safety') : string {
@@ -33,13 +36,30 @@ try {
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime = finfo_file($finfo, $file['tmp_name']);
         finfo_close($finfo);
+        // Allow common mobile formats; we'll fall back to saving originals when GD can't process
         $allowed = [
             'image/png' => 'png',
             'image/jpeg' => 'jpg',
             'image/gif' => 'gif',
+            'image/heic' => 'heic',
+            'image/heif' => 'heif',
+            'image/webp' => 'webp',
         ];
         if (!isset($allowed[$mime])) {
-            throw new Exception('Unsupported image type');
+            // Try inferring from file extension as some mobiles provide generic MIME
+            $extGuess = strtolower(pathinfo($file['name'] ?? '', PATHINFO_EXTENSION));
+            $mapByExt = [
+                'png' => 'image/png',
+                'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
+                'gif' => 'image/gif',
+                'heic' => 'image/heic', 'heif' => 'image/heif',
+                'webp' => 'image/webp',
+            ];
+            if (isset($mapByExt[$extGuess]) && isset($allowed[$mapByExt[$extGuess]])) {
+                $mime = $mapByExt[$extGuess];
+            } else {
+                throw new Exception('Unsupported image type');
+            }
         }
         $dir = __DIR__ . '/../../../images/uploads/' . $subdir;
         if (!is_dir($dir)) {
@@ -51,6 +71,10 @@ try {
             && function_exists('imagecreatetruecolor')
             && function_exists('imagecopyresampled')
             && function_exists('imagejpeg');
+        // Force fallback for formats GD typically can't decode (heic/heif/webp) to avoid internal errors
+        if (in_array($mime, ['image/heic','image/heif','image/webp'], true)) {
+            $gdAvailable = false;
+        }
         if (!$gdAvailable) {
             $ext = $allowed[$mime];
             $filename = $subdir . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
@@ -130,20 +154,29 @@ try {
         sendJson(['success' => false, 'error' => 'Invalid result'], 400);
     }
 
-    // Receipt image required
-    if (empty($_FILES['receipt_image']) || !is_uploaded_file($_FILES['receipt_image']['tmp_name'])) {
-        sendJson(['success' => false, 'error' => 'Receipt image is required'], 400);
+    // Validate required fields conditional to result
+    if ($result === 'passed') {
+        if (empty($_FILES['receipt_image']) || !is_uploaded_file($_FILES['receipt_image']['tmp_name'])) {
+            sendJson(['success' => false, 'error' => 'Receipt image is required for Passed checks'], 400);
+        }
+    } else if ($result === 'failed') {
+        if ($failReason === null || trim((string)$failReason) === '') {
+            sendJson(['success' => false, 'error' => 'Failure reason is required for Failed checks'], 400);
+        }
     }
 
-    // Save receipt
-    try {
-        $receiptUrl = $saveImage($_FILES['receipt_image'], 'food_safety');
-    } catch (Exception $ex) {
-        $msg = $ex->getMessage();
-        if (preg_match('/exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD/i', $msg)) {
-            sendJson(['success' => false, 'error' => $msg], 400);
+    // Save receipt only if provided (always for passed, optional for failed)
+    $receiptUrl = null;
+    if (!empty($_FILES['receipt_image']) && is_uploaded_file($_FILES['receipt_image']['tmp_name'])) {
+        try {
+            $receiptUrl = $saveImage($_FILES['receipt_image'], 'food_safety');
+        } catch (Exception $ex) {
+            $msg = $ex->getMessage();
+            if (preg_match('/(Upload error|exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD)/i', $msg)) {
+                sendJson(['success' => false, 'error' => $msg], 400);
+            }
+            throw $ex;
         }
-        throw $ex;
     }
 
     // Optional: expiry_date_image (single file)
@@ -159,7 +192,11 @@ try {
         }
     }
 
-    $db->beginTransaction();
+    // Do not start a transaction here; Donation service may manage its own
+    $txStarted = false;
+
+    // Ensure receipt_image is never NULL to satisfy NOT NULL schema
+    if ($receiptUrl === null) { $receiptUrl = ''; }
 
     // Always create a batch-level check row (receipt only) when batch context is present
     // If only a single donation is provided (no batch), this row is also valid for that donation
@@ -205,7 +242,7 @@ try {
                 $perItemUrl = $saveImage($fileArr, 'food_safety');
             } catch (Exception $ex) {
                 $msg = $ex->getMessage();
-                if (preg_match('/exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD/i', $msg)) {
+                if (preg_match('/(Upload error|exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD)/i', $msg)) {
                     sendJson(['success' => false, 'error' => $msg], 400);
                 }
                 throw $ex;
@@ -240,67 +277,33 @@ try {
 
     if ($batchId) {
         $service->updateStatusByBatch($batchId, $newStatus);
-        // Notify all donors in the batch about status change
-        try {
-            $rows = $db->query(
-                "SELECT DISTINCT d.donor_id, u.name AS donor_name
-                 FROM donations d
-                 JOIN users u ON u.user_id = d.donor_id
-                 WHERE d.batch_id = ?",
-                [$batchId]
-            )->fetchAll();
-            if ($rows) {
-                $notif = new Notification();
-                foreach ($rows as $r) {
-                    if (empty($r['donor_id'])) continue;
-                    $msg = 'Your batch donation status updated to ' . $newStatus;
-                    if ($result === 'failed' && !empty($failReason)) {
-                        $msg .= '. Reason: ' . $failReason;
-                    }
-                    $notif->create([
-                        'user_id' => (int)$r['donor_id'],
-                        'type' => 'status_updated',
-                        'reference_type' => 'batch',
-                        'reference_id' => null,
-                        'message' => $msg,
-                    ]);
-                }
-            }
-        } catch (Exception $e) { error_log('Batch donor notify fail: '.$e->getMessage()); }
+        // If passed, add all batch items to inventory
+        if ($newStatus === 'Picked Up') {
+            try { (new Inventory())->addFromBatchId($batchId); } catch (Exception $e) { error_log('Inventory add (batch) failed: '.$e->getMessage()); }
+        }
+        // Centralized notification for batch
+        try { (new DonationNotifier())->notifyBatchStatus($batchId, $newStatus, ['reason' => ($result === 'failed' ? ($failReason ?? '') : '')]); } catch (Exception $e) { error_log('Batch donor notify fail: '.$e->getMessage()); }
     } elseif ($donationId) {
         $service->updateStatus($donationId, $newStatus);
-        // Notify the donor of this donation
-        try {
-            $row = $db->query(
-                "SELECT d.id, d.name, d.donor_id, u.name AS donor_name
-                 FROM donations d JOIN users u ON u.user_id = d.donor_id
-                 WHERE d.id = ?",
-                [$donationId]
-            )->fetch();
-            if ($row && !empty($row['donor_id'])) {
-                $notif = new Notification();
-                $msg = 'Donation "' . ($row['name'] ?? ('#'.$donationId)) . '" status updated to ' . $newStatus;
-                if ($result === 'failed' && !empty($failReason)) {
-                    $msg .= '. Reason: ' . $failReason;
-                }
-                $notif->create([
-                    'user_id' => (int)$row['donor_id'],
-                    'type' => 'status_updated',
-                    'reference_type' => 'donation',
-                    'reference_id' => (int)$donationId,
-                    'message' => $msg,
-                ]);
-            }
-        } catch (Exception $e) { error_log('Single donor notify fail: '.$e->getMessage()); }
+        // If passed, add single item to inventory
+        if ($newStatus === 'Picked Up') {
+            try { (new Inventory())->addFromDonationId((int)$donationId); } catch (Exception $e) { error_log('Inventory add (single) failed: '.$e->getMessage()); }
+        }
+        // Centralized notification for single donation
+        try { (new DonationNotifier())->notifyDonationStatus((int)$donationId, $newStatus, ['reason' => ($result === 'failed' ? ($failReason ?? '') : '')]); } catch (Exception $e) { error_log('Single donor notify fail: '.$e->getMessage()); }
     }
 
-    $db->commit();
+    // No outer transaction to commit
 
     sendJson(['success' => true, 'check_id' => $checkId]);
 } catch (Exception $e) {
-    if (class_exists('Database')) {
-        try { Database::getInstance()->rollBack(); } catch (Exception $e2) {}
+    // No outer transaction to roll back
+    $msg = $e->getMessage();
+    error_log('Food safety create error: ' . $msg);
+    // Surface known validation/upload messages as 400 to the client instead of generic 500
+    if (preg_match('/(Upload error|Receipt image is required|Invalid result|exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD|Method not allowed|Only admins)/i', $msg)) {
+        sendJson(['success' => false, 'error' => $msg], 400);
     }
-    error_log('Food safety create error: ' . $e->getMessage());
-    sendJson(['success' => false, 'error' => 'Internal server error'], 500);
+    // Dev: include actual message to debug quickly
+    sendJson(['success' => false, 'error' => 'Internal server error: ' . $msg], 500);
 }

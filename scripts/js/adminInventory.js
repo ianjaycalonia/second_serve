@@ -77,6 +77,8 @@
     qp.set('group', 'merge');
     if (params.page) qp.set('page', params.page);
     if (params.limit) qp.set('limit', params.limit);
+    // Cache-buster to ensure freshest data
+    qp.set('t', String(Date.now()));
     url.search = qp.toString();
     const res = await fetch(url.toString(), { method: 'GET', credentials: 'include', cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -283,6 +285,27 @@
     bindActions();
     loadAndRender(1);
     bindImportModal();
+    // Auto-refresh when tab becomes visible again
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        const p = (window.__inventoryLast?.pagination?.page) || 1;
+        loadAndRender(p);
+      }
+    });
+    // Add a manual Refresh button next to Import if not present
+    try {
+      const filtersBar = document.querySelector('main .d-flex.flex-wrap');
+      if (filtersBar && !document.getElementById('invRefreshBtn')){
+        const btnWrap = document.createElement('div');
+        btnWrap.className = 'ms-0';
+        btnWrap.innerHTML = '<button id="invRefreshBtn" type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Refresh</button>';
+        filtersBar.appendChild(btnWrap);
+        btnWrap.querySelector('#invRefreshBtn').addEventListener('click', () => {
+          const p = (window.__inventoryLast?.pagination?.page) || 1;
+          loadAndRender(p);
+        });
+      }
+    } catch(_) {}
   }
 
   document.addEventListener('DOMContentLoaded', init);

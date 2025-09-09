@@ -48,6 +48,29 @@ try {
             $params[] = '%' . $q . '%';
             $params[] = '%' . $q . '%';
         }
+
+    // POST /api/inventory/backfill - scan donations with status 'Picked Up' and add missing inventory lots
+    if ($method === 'POST' && preg_match('#^/(backfill|backfill/)\z#', $sub)) {
+        // Admin only (already enforced above)
+        $db = Database::getInstance();
+        $inv = new Inventory();
+        $added = 0; $skipped = 0;
+        // Fetch donations that are Picked Up or Completed and not deleted
+        $rows = $db->query(
+            "SELECT id FROM donations WHERE deleted_at IS NULL AND status IN ('Picked Up','Completed') ORDER BY id ASC"
+        )->fetchAll();
+        foreach ($rows as $r) {
+            try {
+                // Inventory::addFromDonationRow is idempotent via source_donation_id unique check
+                $inv->addFromDonationId((int)$r['id']);
+                $added++;
+            } catch (Exception $e) {
+                // If already exists, skip
+                $skipped++;
+            }
+        }
+        sendJson(['success' => true, 'data' => ['processed' => count($rows), 'added' => $added, 'skipped' => $skipped]]);
+    }
         if ($category !== '' && strtolower($category) !== 'all') {
             $where[] = 'i.category = ?';
             $params[] = $category;

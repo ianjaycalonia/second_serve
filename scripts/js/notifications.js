@@ -42,7 +42,14 @@
 
   function buildItemHtml(n) {
     const unreadClass = n.read_status ? '' : 'unread';
-    const iconHtml = n.type === 'donation_created' ? '📦' : (n.type === 'status_updated' ? '🚚' : '🔔');
+    const iconHtml = (function(t){
+      switch(t){
+        case 'donation_created': return '📦';
+        case 'status_updated': return '🚚';
+        case 'donation_cancelled': return '🛑';
+        default: return '🔔';
+      }
+    })((n.type || '').toLowerCase());
     return `
       <li class="list-group-item d-flex align-items-start ${unreadClass} clickable" data-id="${n.id}" data-type="${n.type || ''}" data-ref-type="${n.reference_type || ''}" data-ref-id="${n.reference_id || ''}">
         <div class="me-2" aria-hidden="true">${iconHtml}</div>
@@ -127,6 +134,9 @@
             // Donors: go to their donations page; Admins: Donation.html
             if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
+          } else if (nType === 'donation_cancelled') {
+            if (role === 'donor') dest = 'MyDonations.html';
+            else if (role === 'admin') dest = 'Donation.html';
           }
           // Fallbacks by reference_type if not set above
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
@@ -174,12 +184,42 @@
 
   function startPolling() {
     if (pollingTimer) return;
-    // First load ASAP when modal opens
-    modalEl.addEventListener('show.bs.modal', fetchNotifications);
+    // When modal opens, mark all as read then refresh list
+    modalEl.addEventListener('show.bs.modal', async () => {
+      try {
+        await markAllRead();
+      } catch (_) {}
+      await fetchNotifications();
+    });
+    // Also wire the explicit "Mark all as read" button if present
+    const markAllBtn = document.getElementById('markAllReadBtn');
+    if (markAllBtn) {
+      markAllBtn.addEventListener('click', async () => {
+        try {
+          await markAllRead();
+        } catch (_) {}
+        await fetchNotifications();
+      });
+    }
     // Regular polling in background (10 seconds)
     pollingTimer = window.setInterval(fetchNotifications, 10000);
     // Initial background fetch too
     fetchNotifications();
+  }
+
+  async function markAllRead() {
+    const user = getStoredUser();
+    const userId = user?.user_id || user?.userId || user?.id;
+    if (!userId) return;
+    try {
+      await fetch(`${API_BASE_URL}/notifications_api.php?action=read_all&user_id=${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+    } catch (e) {
+      console.error('markAllRead failed', e);
+    }
   }
 
   // Start when DOM ready
