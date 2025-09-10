@@ -16,6 +16,51 @@
       case 'Cancelled': return '<span class="badge bg-dark">Cancelled</span>';
       default: return `<span class="badge bg-light text-dark">${status||'Unknown'}</span>`;
     }
+}
+
+// Populate category dropdowns from fixed list + current items' types
+async function populateCategorySelects(currentItems){
+  try {
+    const desktop = getEl('categorySelectDesktop');
+    const mobile = getEl('categorySelectMobile');
+    const FIXED = ['Rice','Canned Goods','Frozen Meat','Bread and Pastries','Beverages','Snacks'];
+    // Collect types from current items
+    const dynamic = Array.from(new Set((Array.isArray(currentItems) ? currentItems : [])
+      .map(it => (it && typeof it.type === 'string') ? it.type.trim() : '')
+      .filter(v => v && v.toLowerCase() !== 'all')));
+    // Merge fixed + dynamic (case-insensitive uniqueness, keep display as-is for fixed, others as found)
+    const lowerSeen = new Set();
+    const merged = [];
+    const pushUniq = (label) => {
+      const key = String(label).toLowerCase();
+      if (!lowerSeen.has(key)) { lowerSeen.add(key); merged.push(label); }
+    };
+    FIXED.forEach(pushUniq);
+    dynamic.forEach(pushUniq);
+
+    [desktop, mobile].forEach(sel => {
+      if (!sel) return;
+      const prev = (sel.value || 'All');
+      const frag = document.createDocumentFragment();
+      const optAll = document.createElement('option');
+      optAll.textContent = 'All';
+      optAll.value = 'All';
+      frag.appendChild(optAll);
+      merged.forEach(label => {
+        const o = document.createElement('option');
+        o.textContent = label;
+        o.value = label;
+        frag.appendChild(o);
+      });
+      sel.innerHTML = '';
+      sel.appendChild(frag);
+      // Restore previous selection if available
+      sel.value = Array.from(sel.options).some(o => o.value === prev) ? prev : 'All';
+    });
+  } catch (e) {
+    console.warn('populateCategorySelects failed:', e);
+  }
+}
 
 // === Auto-refresh donations list (10s) ===
 let __donationPollingTimer = 0;
@@ -62,6 +107,8 @@ async function refreshDonationsOnce(){
   try {
     const items = await fetchAdminList();
     window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
+    // Keep categories up-to-date if new types appear
+    try { await populateCategorySelects(window.__adminDonationRaw); } catch(_c) {}
     const filtered = applyFilters(window.__adminDonationRaw);
     const sig = computeSig(filtered);
     if (sig === __lastRenderSig) return; // no visible change
@@ -85,7 +132,7 @@ function startDonationAutoRefresh(){
   // Also do an initial background refresh
   refreshDonationsOnce();
 }
-  }
+
   // Helper: show Next Steps modal after acknowledge
   function showAckNextStepsModal(){
     try {
@@ -142,8 +189,9 @@ function startDonationAutoRefresh(){
         ];
         ids.forEach(id => { const el = document.getElementById(id); if (el && el.options && el.options.length) el.selectedIndex = 0; });
       } catch(_) {}
-      // Populate donors immediately from loaded items, then augment from backend
+      // Populate donors and categories from loaded items
       await populateDonorSelects(window.__adminDonationRaw);
+      await populateCategorySelects(window.__adminDonationRaw);
       renderTable(applyFilters(window.__adminDonationRaw));
       bindImageViewer();
       bindGroupToggle();
