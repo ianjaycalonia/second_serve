@@ -171,8 +171,8 @@ INSERT INTO `notifications` (`id`, `user_id`, `type`, `reference_type`, `referen
 (3, 2, 'status_updated', 'batch', NULL, 'Your batch donation status updated to Picked Up', 1, '2025-09-09 15:36:15'),
 (4, 2, 'status_updated', 'batch', NULL, 'Your batch donation status updated to Completed', 1, '2025-09-09 15:36:23'),
 (5, 1, 'donation_created', 'batch', NULL, 'No1Donor.org submitted a new donation batch (1 items)', 1, '2025-09-09 15:37:22'),
-(6, 2, 'status_updated', 'donation', 3, 'Donation "Lumpia" status updated to Acknowledged', 0, '2025-09-09 15:37:34'),
-(7, 2, 'status_updated', 'donation', 3, 'Donation "Lumpia" status updated to Failed Safety. Reason: Signs of Spoilage', 0, '2025-09-09 15:37:47'),
+(6, 2, 'status_updated', 'donation', 3, 'Donation \"Lumpia\" status updated to Acknowledged', 0, '2025-09-09 15:37:34'),
+(7, 2, 'status_updated', 'donation', 3, 'Donation \"Lumpia\" status updated to Failed Safety. Reason: Signs of Spoilage', 0, '2025-09-09 15:37:47'),
 (8, 1, 'donation_created', 'batch', NULL, 'No1Donor.org submitted a new donation batch (2 items)', 1, '2025-09-09 15:53:18'),
 (9, 2, 'status_updated', 'batch', NULL, 'Your batch donation status updated to Acknowledged', 0, '2025-09-09 15:53:29'),
 (10, 2, 'status_updated', 'batch', NULL, 'Your batch donation status updated to Failed Safety. Reason: Thawed', 0, '2025-09-09 15:53:41'),
@@ -358,127 +358,6 @@ ALTER TABLE `inventory_movements`
 --
 ALTER TABLE `notifications`
   ADD CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
-/* -------------------------------------------- */
-/* Messaging system tables                      */
-/* -------------------------------------------- */
-
--- Conversations
-CREATE TABLE `conversations` (
-  `id` int(11) NOT NULL,
-  `type` enum('direct','group') NOT NULL,
-  `created_by` int(11) NOT NULL,
-  `title` varchar(255) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- Conversation participants
-CREATE TABLE `conversation_participants` (
-  `id` int(11) NOT NULL,
-  `conversation_id` int(11) NOT NULL,
-  `user_id` int(11) NOT NULL,
-  `last_read_at` timestamp NULL DEFAULT NULL,
-  `joined_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- Messages
-CREATE TABLE `messages` (
-  `id` int(11) NOT NULL,
-  `conversation_id` int(11) NOT NULL,
-  `sender_id` int(11) NOT NULL,
-  `body` text NOT NULL,
-  `attachment_url` varchar(255) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `deleted_at` timestamp NULL DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- Optional: message read receipts
-CREATE TABLE `message_reads` (
-  `id` int(11) NOT NULL,
-  `message_id` int(11) NOT NULL,
-  `user_id` int(11) NOT NULL,
-  `read_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- Enforce single direct conversation per user pair
-CREATE TABLE `direct_conversation_pairs` (
-  `conversation_id` int(11) NOT NULL,
-  `user_a` int(11) NOT NULL,
-  `user_b` int(11) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- Indexes
-ALTER TABLE `conversations`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `type` (`type`),
-  ADD KEY `created_by` (`created_by`),
-  ADD KEY `created_at` (`created_at`);
-
-ALTER TABLE `conversation_participants`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uniq_conversation_user` (`conversation_id`,`user_id`),
-  ADD KEY `user_id` (`user_id`),
-  ADD KEY `last_read_at` (`last_read_at`);
-
-ALTER TABLE `messages`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `conversation_id_created_at` (`conversation_id`,`created_at`),
-  ADD KEY `sender_id` (`sender_id`);
-
-ALTER TABLE `message_reads`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uniq_message_user` (`message_id`,`user_id`),
-  ADD KEY `user_id` (`user_id`);
-
-ALTER TABLE `direct_conversation_pairs`
-  ADD PRIMARY KEY (`conversation_id`),
-  ADD UNIQUE KEY `uniq_user_pair` (`user_a`,`user_b`),
-  ADD KEY `user_b` (`user_b`);
-
--- AUTO_INCREMENT
-ALTER TABLE `conversations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
-ALTER TABLE `conversation_participants`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
-ALTER TABLE `messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
-ALTER TABLE `message_reads`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
--- FKs
-ALTER TABLE `conversations`
-  ADD CONSTRAINT `conversations_created_by_fk`
-    FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
-
-ALTER TABLE `conversation_participants`
-  ADD CONSTRAINT `cp_conversation_fk`
-    FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `cp_user_fk`
-    FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
-ALTER TABLE `messages`
-  ADD CONSTRAINT `messages_conversation_fk`
-    FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `messages_sender_fk`
-    FOREIGN KEY (`sender_id`) REFERENCES `users` (`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
-
-ALTER TABLE `message_reads`
-  ADD CONSTRAINT `message_reads_message_fk`
-    FOREIGN KEY (`message_id`) REFERENCES `messages` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `message_reads_user_fk`
-    FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
-ALTER TABLE `direct_conversation_pairs`
-  ADD CONSTRAINT `dcp_conversation_fk`
-    FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `dcp_user_a_fk`
-    FOREIGN KEY (`user_a`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `dcp_user_b_fk`
-    FOREIGN KEY (`user_b`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

@@ -343,6 +343,15 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     populateGreeting();
+    // Expose current user globals for modules like the messages modal
+    try {
+        const u = (function(){ try { return JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user')); } catch(_) { return null; } })();
+        window.CURRENT_USER_ID = u && u.user_id ? Number(u.user_id) : null;
+        window.CURRENT_USER_ROLE = u && u.role ? String(u.role).toLowerCase() : null;
+    } catch(_) {
+        window.CURRENT_USER_ID = null;
+        window.CURRENT_USER_ROLE = null;
+    }
 
     // Wire up logout buttons (reuse across all pages)
     const wireLogout = () => {
@@ -409,6 +418,35 @@ document.addEventListener('DOMContentLoaded', function() {
             const href = (anchor.getAttribute('href') || '').trim();
             if (href === '#' || href === '') e.preventDefault();
 
+            // Special-case: messages icon
+            if (targetSel === '#messagesModal') {
+                // If the modal does not exist, inject it dynamically
+                let modalEl = document.querySelector('#messagesModal');
+                if (!modalEl) {
+                    modalEl = document.createElement('div');
+                    modalEl.id = 'messagesModal';
+                    modalEl.className = 'modal fade';
+                    modalEl.tabIndex = -1;
+                    modalEl.setAttribute('aria-hidden', 'true');
+                    modalEl.innerHTML = `
+                      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+                        <div class="modal-content">
+                          <div class="modal-header">
+                            <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                          </div>
+                          <div class="modal-body"></div>
+                        </div>
+                      </div>`;
+                    document.body.appendChild(modalEl);
+                    // Initialize controller if available
+                    if (window.__initMessagesModal) {
+                        try { window.__initMessagesModal(modalEl); } catch(_) {}
+                    }
+                }
+                // fall through to default modal handling
+            }
+
             const modalEl = document.querySelector(targetSel);
             if (!modalEl) {
                 console.warn('Modal target not found:', targetSel);
@@ -424,4 +462,365 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
         }
     }, true);
+
+    // Messages unread badge (like notifications) with 10s polling
+    (function(){
+        let badgeTimer = 0;
+        const BADGE_MS_VISIBLE = 10000;
+        const BADGE_MS_HIDDEN = 30000;
+        function ensureBadges(){
+            document.querySelectorAll('a[data-bs-target="#messagesModal"]').forEach(anchor => {
+                if (anchor.querySelector('.messages-badge')) return;
+                const span = document.createElement('span');
+                span.className = 'messages-badge position-absolute translate-middle badge rounded-pill bg-danger';
+                span.style.top = '6px';
+                span.style.right = '2px';
+                span.style.display = 'none';
+                span.style.fontSize = '0.6rem';
+                anchor.style.position = 'relative';
+                anchor.appendChild(span);
+            });
+        }
+        async function fetchUnreadTotal(){
+            try {
+                const res = await fetch('php/api/messages_api.php?action=list_conversations', { credentials: 'include' });
+                const json = await res.json();
+                if (!json || !json.success) return 0;
+                const items = (json.data && Array.isArray(json.data.items)) ? json.data.items : [];
+                return items.reduce((sum, c) => sum + (Number(c.unread_count)||0), 0);
+            } catch(_) { return 0; }
+        }
+        async function refreshBadge(){
+            ensureBadges();
+            // If messages modal is open, suppress the badge display (user can see messages)
+            const modalOpen = !!window.__messagesModalOpen;
+            const total = modalOpen ? 0 : await fetchUnreadTotal();
+            document.querySelectorAll('.messages-badge').forEach(span => {
+                if (total > 0) {
+                    span.textContent = total > 99 ? '99+' : String(total);
+                    span.style.display = '';
+                } else {
+                    span.style.display = 'none';
+                }
+            });
+        }
+        // Expose manual refresh for modal actions
+        window.__refreshMessagesBadge = refreshBadge;
+        // Initialize now and start polling (visibility-aware)
+        ensureBadges();
+        refreshBadge();
+        function startBadgeTimer(ms){ if (badgeTimer) clearInterval(badgeTimer); badgeTimer = setInterval(refreshBadge, ms); }
+        startBadgeTimer(document.hidden ? BADGE_MS_HIDDEN : BADGE_MS_VISIBLE);
+        document.addEventListener('visibilitychange', ()=>{
+            if (document.hidden) {
+                startBadgeTimer(BADGE_MS_HIDDEN);
+            } else {
+                // immediate refresh on return and speed back up
+                refreshBadge();
+                startBadgeTimer(BADGE_MS_VISIBLE);
+            }
+        });
+        // Keep badges present if nav changes
+        const mo = new MutationObserver(() => ensureBadges());
+        mo.observe(document.body, { childList: true, subtree: true });
+    })();
+
+    // Messages Modal Controller (lightweight). Can be initialized for an existing or newly injected modal.
+    (function(){
+        function initFor(modalEl){
+            if (!modalEl || modalEl.__messagesBound) return; // prevent double-binding
+            modalEl.__messagesBound = true;
+
+        const apiBase = 'php/api/messages_api.php';
+        const POLL_MS = 10000; // global cadence
+        const MODAL_POLL_MS = 5000; // faster updates while the chat modal is open
+        let convs = [];
+        let activeId = null;
+        let messages = [];
+        let lastId = null;
+        let pollTimer = 0;
+        let isTickRunning = false;
+        let uiInitialized = false;
+
+        const qs = (sel, root=document) => root.querySelector(sel);
+
+        async function apiGet(params){
+            const url = apiBase + '?' + new URLSearchParams(params).toString();
+            const res = await fetch(url, { credentials: 'include' });
+            return res.json();
+        }
+        async function apiPost(action, body){
+            const res = await fetch(apiBase + '?action=' + encodeURIComponent(action), {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body||{})
+            });
+            return res.json();
+        }
+        async function apiPatch(action, params){
+            const url = apiBase + '?' + new URLSearchParams(Object.assign({ action }, params||{})).toString();
+            const res = await fetch(url, { method: 'PATCH', credentials: 'include' });
+            return res.json();
+        }
+
+        function getCurrentRole(){
+            try {
+                const s = sessionStorage.getItem('user') || localStorage.getItem('user');
+                const u = s ? JSON.parse(s) : null;
+                return (u && u.role) ? String(u.role).toLowerCase() : null;
+            } catch(_) { return null; }
+        }
+
+        function ensureMessageTheme(){
+            // Inject a one-time style tag for modal theming
+            if (document.getElementById('messages-theme-override')) return;
+            const style = document.createElement('style');
+            style.id = 'messages-theme-override';
+            style.textContent = `
+                /* Active channel highlight in modal */
+                #messagesModal .list-group-item.active,
+                #messagesModal .list-group-item.active:focus,
+                #messagesModal .list-group-item.active:hover {
+                    background-color: #35b4c1 !important;
+                    border-color: #35b4c1 !important;
+                    color: #fff !important;
+                }
+                #messagesModal .list-group-item.active .fw-semibold { color: #fff !important; }
+                /* Primary buttons inside modal */
+                #messagesModal .btn-primary { background-color: #35b4c1 !important; border-color: #35b4c1 !important; }
+                #messagesModal .btn-primary:hover, #messagesModal .btn-primary:focus { background-color: #2aa4b0 !important; border-color: #2aa4b0 !important; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function buildUI(){
+            const body = qs('.modal-body', modalEl);
+            if (!body) return;
+            ensureMessageTheme();
+            const role = getCurrentRole();
+            const leftPanel = (role && role !== 'admin')
+              ? `
+                  <div class="mb-2 fw-semibold">Conversations</div>
+                  <div id="mm-pinned" class="list-group small mb-2">
+                    <a href="#" id="mm-foodbank" class="list-group-item list-group-item-action active">
+                      <i class="bi bi-shield-lock me-1"></i> Food Bank
+                    </a>
+                  </div>
+                  <div id="mm-conversations" class="list-group small"></div>
+                `
+              : `
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <input id="mm-search" class="form-control form-control-sm" placeholder="Search conversations"/>
+                    <button id="mm-new" class="btn btn-sm btn-outline-primary ms-2" title="New direct"><i class="bi bi-chat"></i></button>
+                  </div>
+                  <div id="mm-search-results" class="list-group small mb-2" style="display:none;"></div>
+                  <div id="mm-conversations" class="list-group small"></div>
+                `;
+
+            body.innerHTML = `
+              <div class="d-flex" style="min-height:320px; max-height:60vh;">
+                <div class="border-end pe-3 me-3" style="width: 260px; overflow:auto;">
+                  ${leftPanel}
+                </div>
+                <div class="flex-grow-1 d-flex flex-column">
+                  <div id="mm-messages" class="flex-grow-1 overflow-auto mb-2"></div>
+                  <div class="input-group">
+                    <input id="mm-input" type="text" class="form-control" placeholder="Type a message..."/>
+                    <button id="mm-send" class="btn btn-primary" type="button"><i class="bi bi-send"></i></button>
+                  </div>
+                </div>
+              </div>`;
+            bindUI();
+        }
+
+        function renderConversations(){
+            const wrap = qs('#mm-conversations', modalEl);
+            if (!wrap) return;
+            wrap.innerHTML = '';
+            const role = getCurrentRole();
+            // For non-admin users, avoid rendering any additional channels to prevent duplicates with the pinned Food Bank
+            if (role && role !== 'admin') return;
+            convs.forEach(c => {
+                const last = c.last_message ? JSON.parse(c.last_message) : null;
+                const a = document.createElement('a');
+                a.href = '#';
+                a.className = 'list-group-item list-group-item-action' + (activeId===c.id?' active':'');
+                const title = c.display_title || c.title || ('Conversation #'+c.id);
+                a.innerHTML = `
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="fw-semibold" style="color: var(--body-text-color);">${title}</div>
+                    ${Number(c.unread_count)>0?`<span class="badge rounded-pill bg-primary">${c.unread_count}</span>`:''}
+                  </div>
+                  <div class="text-muted small">${last? (last.body||'[attachment]') : 'No messages yet'}</div>`;
+                a.addEventListener('click', (e)=>{ e.preventDefault(); selectConversation(c.id); });
+                wrap.appendChild(a);
+            });
+        }
+
+        function renderMessages(){
+            const wrap = qs('#mm-messages', modalEl);
+            if (!wrap) return;
+            wrap.innerHTML = '';
+            messages.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'd-flex mb-2 ' + ((window.CURRENT_USER_ID && Number(m.sender_id)===Number(window.CURRENT_USER_ID))?'justify-content-end':'');
+                const isMine = (window.CURRENT_USER_ID && Number(m.sender_id)===Number(window.CURRENT_USER_ID));
+                const style = isMine
+                  ? 'background: var(--hover-color); border:1px solid var(--secondary-color);'
+                  : 'background: #fff; border:1px solid #edf2f7;';
+                div.innerHTML = `<div class="p-2 rounded" style="max-width:80%; white-space:pre-wrap; ${style}">${escapeHtml(m.body||'')}
+                  <div class="text-muted small mt-1">${fmtTime(m.created_at)}</div></div>`;
+                wrap.appendChild(div);
+            });
+            wrap.scrollTop = wrap.scrollHeight;
+        }
+
+        function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+        function fmtTime(ts){ try { return new Date(ts.replace(' ','T')).toLocaleString(); } catch(e){ return ts; } }
+
+        async function loadConversations(){
+            const res = await apiGet({ action:'list_conversations' });
+            if (res.success){ convs = res.data.items || []; renderConversations(); }
+            // update global badge after loading
+            if (window.__refreshMessagesBadge) { try { window.__refreshMessagesBadge(); } catch(_){} }
+        }
+        async function selectConversation(id){ activeId = id; await markRead(); await loadMessages(true); renderConversations(); }
+        async function loadMessages(reset){
+            if (!activeId) return;
+            const res = await apiGet({ action:'list_messages', conversation_id: activeId, limit: 100, after_id: reset? '' : (lastId||'') });
+            if (!res.success) return;
+            const items = res.data.items || [];
+            if (reset) messages = items; else messages = messages.concat(items);
+            if (messages.length) lastId = messages[messages.length-1].id;
+            renderMessages();
+        }
+        async function markRead(){ if (!activeId) return; await apiPatch('mark_read', { conversation_id: activeId }); await loadConversations(); }
+        async function send(){
+            if (!activeId) return;
+            const input = qs('#mm-input', modalEl);
+            const text = (input.value||'').trim();
+            if (!text) return;
+            const res = await apiPost('send_message', { conversation_id: activeId, body: text });
+            if (res.success){ input.value=''; await loadMessages(); await loadConversations(); }
+        }
+
+        function bindUI(){
+            const sendBtn = qs('#mm-send', modalEl);
+            const input = qs('#mm-input', modalEl);
+            const newBtn = qs('#mm-new', modalEl);
+            if (sendBtn) sendBtn.addEventListener('click', send);
+            if (input) input.addEventListener('keydown', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+            if (newBtn) newBtn.addEventListener('click', async ()=>{
+                const other = Number(prompt('Enter user ID to chat with:'));
+                if (!other) return;
+                const res = await apiPost('get_or_create_direct', { other_user_id: other });
+                if (res.success){ await loadConversations(); await selectConversation(res.data.conversation.id); }
+            });
+            const fb = qs('#mm-foodbank', modalEl);
+            if (fb) fb.addEventListener('click', async (e)=>{
+                e.preventDefault();
+                const res = await apiPost('get_or_create_direct', {}); // backend defaults to admin
+                if (res.success){ await loadConversations(); await selectConversation(res.data.conversation.id); }
+            });
+
+            // Admin donor search: debounce input and render results list
+            const searchInput = qs('#mm-search', modalEl);
+            const resultsBox = qs('#mm-search-results', modalEl);
+            let searchTimer = 0;
+            async function runSearch(q){
+                if (!q || q.trim().length < 2) { if (resultsBox){ resultsBox.style.display='none'; resultsBox.innerHTML=''; } return; }
+                try {
+                    const url = 'php/api/user_api.php?action=list&role=donor&q=' + encodeURIComponent(q.trim());
+                    const res = await fetch(url, { credentials: 'include' });
+                    const json = await res.json();
+                    const items = (json && json.success && json.data && Array.isArray(json.data.items)) ? json.data.items : [];
+                    if (!resultsBox) return;
+                    resultsBox.innerHTML = '';
+                    items.slice(0, 10).forEach(u => {
+                        const a = document.createElement('a');
+                        a.href = '#';
+                        a.className = 'list-group-item list-group-item-action';
+                        const label = (u.organization_name && u.organization_name.trim()) ? u.organization_name : (u.name || ('User #' + u.user_id));
+                        a.textContent = label;
+                        a.addEventListener('click', async (e)=>{
+                            e.preventDefault();
+                            const r = await apiPost('get_or_create_direct', { other_user_id: Number(u.user_id) });
+                            if (r.success){
+                                resultsBox.style.display='none';
+                                resultsBox.innerHTML='';
+                                searchInput.value = '';
+                                await loadConversations();
+                                await selectConversation(r.data.conversation.id);
+                            }
+                        });
+                        resultsBox.appendChild(a);
+                    });
+                    resultsBox.style.display = items.length ? 'block' : 'none';
+                } catch(_) {
+                    if (resultsBox){ resultsBox.style.display='none'; resultsBox.innerHTML=''; }
+                }
+            }
+            if (searchInput) {
+                searchInput.addEventListener('input', ()=>{
+                    if (searchTimer) clearTimeout(searchTimer);
+                    searchTimer = setTimeout(()=> runSearch(searchInput.value), 300);
+                });
+            }
+        }
+
+        function startPolling(){
+            stopPolling();
+            pollTimer = window.setInterval(async ()=>{
+                if (isTickRunning) return;
+                isTickRunning = true;
+                try {
+                    await Promise.all([
+                        loadConversations(),
+                        loadMessages()
+                    ]);
+                    if (activeId && window.__messagesModalOpen) {
+                        try { await markRead(); } catch(_){}
+                    }
+                } catch(_){}
+                finally { isTickRunning = false; }
+            }
+            , MODAL_POLL_MS);
+        }
+        function stopPolling(){ if (pollTimer){ clearInterval(pollTimer); pollTimer=0; } }
+
+        async function initOnceUI(){
+            if (uiInitialized) return; uiInitialized = true;
+            buildUI();
+            await loadConversations();
+            const role = getCurrentRole();
+            if (role && role !== 'admin') {
+                // ensure admin chat exists and is opened
+                try {
+                    const res = await apiPost('get_or_create_direct', {});
+                    if (res.success) { await selectConversation(res.data.conversation.id); }
+                } catch(_){}
+            }
+        }
+
+        modalEl.addEventListener('shown.bs.modal', async ()=>{
+            window.__messagesModalOpen = true;
+            await initOnceUI();
+            // Immediate refresh so donors see updates without any manual action
+            try {
+                await Promise.all([
+                    loadConversations(),
+                    (async ()=>{ await loadMessages(true); })()
+                ]);
+            } catch(_){}
+            startPolling();
+            if (window.__refreshMessagesBadge) window.__refreshMessagesBadge();
+        });
+        modalEl.addEventListener('hidden.bs.modal', ()=>{ window.__messagesModalOpen = false; stopPolling(); if (window.__refreshMessagesBadge) window.__refreshMessagesBadge(); });
+        }
+
+        // Expose global initializer for dynamically injected modal
+        window.__initMessagesModal = initFor;
+
+        // Auto-initialize if modal already exists in DOM
+        const existing = document.getElementById('messagesModal');
+        if (existing) initFor(existing);
+    })();
 });
