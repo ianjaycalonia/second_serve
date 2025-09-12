@@ -23,7 +23,29 @@ async function populateCategorySelects(currentItems){
   try {
     const desktop = getEl('categorySelectDesktop');
     const mobile = getEl('categorySelectMobile');
-    const FIXED = ['Rice','Canned Goods','Frozen Meat','Bread and Pastries','Beverages','Snacks'];
+    const FIXED = [
+      'Bakery',
+      'Beverage - Juices/Coffee/Tea',
+      'Beverage - Sweetened Beverages',
+      'Beverage - Water',
+      'Confectionary',
+      'Dairy',
+      'Fats & Oils',
+      'Fruits & Vegetables',
+      'Grains/Grain Products',
+      'Non-Food - Baby Products',
+      'Non-Food - Cleaning Products',
+      'Non-Food - Others',
+      'Non-Food - Personal Hygiene',
+      'Non-Food - Pet Food',
+      'Prepared Foods',
+      'Processed Cereals/ Cereal Products',
+      'Protein-Animal Based',
+      'Ready-To-Eat Savories',
+      'Sauces/Condiments/Seasonings',
+      'Special Nutritional Uses',
+      'Sweeteners'
+    ];
     // Collect types from current items
     const dynamic = Array.from(new Set((Array.isArray(currentItems) ? currentItems : [])
       .map(it => (it && typeof it.type === 'string') ? it.type.trim() : '')

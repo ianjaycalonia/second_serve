@@ -5,7 +5,7 @@ define('APP_URL', 'http://' . $_SERVER['HTTP_HOST'] . '/Capstone%20Project');
 
 // Database configuration
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'foodbank_platform');
+define('DB_NAME', 'simply_share');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 

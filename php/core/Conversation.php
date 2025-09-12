@@ -100,6 +100,8 @@ class Conversation {
 
             // If direct, set up pair uniqueness
             if ($type === 'direct' && count($participantIds) === 2) {
+                // Ensure pair table exists to avoid runtime errors
+                $this->ensureDirectPairsTable();
                 sort($participantIds);
                 [$a, $b] = $participantIds;
                 $this->db->query(
@@ -132,6 +134,8 @@ class Conversation {
                 throw new Exception('Non-admin users can only chat with the food bank');
             }
         }
+        // Ensure pair table exists before query
+        $this->ensureDirectPairsTable();
         // Try find existing direct pair
         $row = $this->db->query(
             "SELECT c.id, c.type, c.created_by, c.title, c.created_at
@@ -143,6 +147,32 @@ class Conversation {
         if ($row) return $row;
         // Create a new one
         return $this->create('direct', $createdBy, [$userA, $userB], null);
+    }
+
+    /**
+     * Ensure the direct_conversation_pairs helper table exists.
+     * This avoids 500 errors if the DB schema missed this table.
+     */
+    private function ensureDirectPairsTable(): void {
+        // Attempt a lightweight existence check; if it fails, create the table.
+        try {
+            $this->db->query("SELECT 1 FROM direct_conversation_pairs LIMIT 1");
+            return; // exists
+        } catch (Throwable $e) {
+            // Create table with required constraints
+            $sql = "CREATE TABLE IF NOT EXISTS direct_conversation_pairs (
+                        id INT(11) NOT NULL AUTO_INCREMENT,
+                        conversation_id INT(11) NOT NULL,
+                        user_a INT(11) NOT NULL,
+                        user_b INT(11) NOT NULL,
+                        PRIMARY KEY (id),
+                        UNIQUE KEY uniq_pair (user_a, user_b),
+                        KEY dcp_conversation_idx (conversation_id),
+                        CONSTRAINT dcp_conversation_fk FOREIGN KEY (conversation_id) REFERENCES conversations (id)
+                            ON DELETE CASCADE ON UPDATE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
+            $this->db->query($sql);
+        }
     }
 
     /**

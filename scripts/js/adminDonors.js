@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function fetchDonors() {
     const res = await fetch(
-      `${API_BASE_URL}/user_api.php?action=list&role=donor&status=approved&t=${Date.now()}`,
+      `${API_BASE_URL}/user_api.php?action=list&role=donor&status=active&t=${Date.now()}`,
       {
         method: "GET",
         credentials: "include",
@@ -79,7 +79,9 @@ document.addEventListener("DOMContentLoaded", () => {
           : badge("Inactive", "secondary");
       return `
         <tr>
-          <td>${escapeHtml(name)}</td>
+          <td>
+            <a href="#" class="mm-open-chat" data-user-id="${u.user_id}">${escapeHtml(name)}</a>
+          </td>
           <td>${escapeHtml(contact)}</td>
           <td>${escapeHtml(location)}</td>
           <td>${total}</td>
@@ -90,6 +92,55 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     });
     tbody.innerHTML = rows.join("");
+
+    // Delegate click: open chat when donor name is clicked
+    tbody.addEventListener('click', async (e) => {
+      const a = e.target.closest('a.mm-open-chat[data-user-id]');
+      if (!a) return;
+      e.preventDefault();
+      const userId = Number(a.getAttribute('data-user-id')) || 0;
+      if (!userId) return;
+      try {
+        // Ensure messages modal exists and is initialized by auth.js
+        let modalEl = document.getElementById('messagesModal');
+        if (!modalEl) {
+          modalEl = document.createElement('div');
+          modalEl.id = 'messagesModal';
+          modalEl.className = 'modal fade';
+          modalEl.tabIndex = -1;
+          modalEl.setAttribute('aria-hidden', 'true');
+          modalEl.innerHTML = '<div class="modal-dialog modal-dialog-scrollable modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="messagesModalLabel">Messages</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"></div></div></div>';
+          document.body.appendChild(modalEl);
+          if (window.__initMessagesModal) { try { window.__initMessagesModal(modalEl); } catch(_){} }
+        }
+        // Create or get direct conversation
+        const res = await fetch(`${API_BASE_URL}/messages_api.php?action=get_or_create_direct`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ other_user_id: userId })
+        });
+        const json = await res.json();
+        const convId = json && json.success && json.data && json.data.conversation ? json.data.conversation.id : null;
+        // Set pending selection early as a safety net and enable single-channel focus
+        if (convId) {
+          window.__pendingConversationId = convId;
+          window.__limitToSingleChannel = true;
+        }
+        // Show the modal
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+        // If controller exposes opener, select immediately and also retry once shortly after show
+        if (convId) {
+          if (window.__openConversation) {
+            try { await window.__openConversation(convId); } catch(_){}
+            setTimeout(async ()=>{ try { await window.__openConversation(convId); } catch(_){} }, 300);
+          }
+        }
+      } catch(err) {
+        console.error('Failed to open chat:', err);
+      }
+    });
   }
 
   function escapeHtml(str) {

@@ -10,55 +10,14 @@ class Inventory
         $this->db = Database::getInstance();
     }
 
-    private function ensureTables(): void
-    {
-        // Create core tables if they don't exist
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS inventory (
-                id INT(11) NOT NULL AUTO_INCREMENT,
-                item_name VARCHAR(255) DEFAULT NULL,
-                category VARCHAR(50) DEFAULT NULL,
-                quantity INT(11) NOT NULL DEFAULT 0,
-                expiry_date DATE DEFAULT NULL,
-                donor_id INT(11) DEFAULT NULL,
-                source_donation_id INT(11) DEFAULT NULL,
-                source_batch_id VARCHAR(36) DEFAULT NULL,
-                added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-                PRIMARY KEY (id),
-                KEY item_cat (item_name, category),
-                KEY donor_id (donor_id),
-                KEY src_donation (source_donation_id),
-                KEY src_batch (source_batch_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
-        );
-
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS inventory_movements (
-                id INT(11) NOT NULL AUTO_INCREMENT,
-                inventory_id INT(11) NOT NULL,
-                direction ENUM('in','out') NOT NULL,
-                quantity INT(11) NOT NULL,
-                mode ENUM('recipient','onsite') DEFAULT NULL,
-                recipient_id INT(11) DEFAULT NULL,
-                note TEXT DEFAULT NULL,
-                performed_by INT(11) DEFAULT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-                PRIMARY KEY (id),
-                KEY inventory_id (inventory_id),
-                KEY created_at (created_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
-        );
-    }
-
     public function addFromDonationRow(array $donation): void
     {
         if (!$donation || empty($donation['id'])) { return; }
         $id = (int)$donation['id'];
-        $this->ensureTables();
-        // Idempotency: skip if already added
-        $exists = $this->db->query("SELECT id FROM inventory WHERE source_donation_id = ? LIMIT 1", [$id])->fetch();
+        // Idempotency: skip if already added (new schema)
+        $exists = $this->db->query("SELECT inventory_id FROM inventory WHERE donation_id = ? LIMIT 1", [$id])->fetch();
         if ($exists) { return; }
-        // Prepare safe values (item_name is NOT NULL in schema)
+        // Prepare safe values for new schema
         $itemName = isset($donation['name']) ? trim((string)$donation['name']) : '';
         if ($itemName === '') { $itemName = 'Unknown Item'; }
         $category = isset($donation['type']) ? trim((string)$donation['type']) : null; // nullable
@@ -67,16 +26,19 @@ class Inventory
         $donorId = isset($donation['donor_id']) ? (int)$donation['donor_id'] : null;
         $batchId = $donation['batch_id'] ?? null;
 
+        // Insert to new inventory schema
         $this->db->query(
-            "INSERT INTO inventory (item_name, category, quantity, expiry_date, donor_id, source_donation_id, source_batch_id, added_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+            "INSERT INTO inventory (
+                donation_id, product_id, product_name, product_category, quantity, unit, total_weight, total_cost, expiry_date,
+                donor_id, source_batch_id, admin_in_charge, pack_by, added_at
+            ) VALUES (?, NULL, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, NOW())",
             [
+                (int)$id,
                 $itemName,
                 ($category === '' ? null : $category),
                 $qty,
                 $expiry,
                 $donorId,
-                (int)$id,
                 $batchId,
             ]
         );
@@ -85,7 +47,8 @@ class Inventory
     public function addFromDonationId(int $donationId): void
     {
         $row = $this->db->query(
-            "SELECT id, donor_id, batch_id, type, name, quantity, expiry_date FROM donations WHERE id = ?",
+            "SELECT donation_id AS id, donor_id, batch_id, product_category AS type, product_name AS name, quantity, expiry_date
+             FROM donations WHERE donation_id = ?",
             [$donationId]
         )->fetch();
         if ($row) { $this->addFromDonationRow($row); }
@@ -94,7 +57,7 @@ class Inventory
     public function addFromBatchId(string $batchId): int
     {
         $rows = $this->db->query(
-            "SELECT id, donor_id, batch_id, type, name, quantity, expiry_date
+            "SELECT donation_id AS id, donor_id, batch_id, product_category AS type, product_name AS name, quantity, expiry_date
              FROM donations
              WHERE batch_id = ? AND deleted_at IS NULL",
             [$batchId]

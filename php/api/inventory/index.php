@@ -44,7 +44,7 @@ try {
         $where = [];
         $params = [];
         if ($q !== '') {
-            $where[] = '(i.item_name LIKE ? OR i.category LIKE ?)';
+            $where[] = '(i.product_name LIKE ? OR i.product_category LIKE ?)';
             $params[] = '%' . $q . '%';
             $params[] = '%' . $q . '%';
         }
@@ -57,12 +57,12 @@ try {
         $added = 0; $skipped = 0;
         // Fetch donations that are Picked Up or Completed and not deleted
         $rows = $db->query(
-            "SELECT id FROM donations WHERE deleted_at IS NULL AND status IN ('Picked Up','Completed') ORDER BY id ASC"
+            "SELECT donation_id FROM donations WHERE deleted_at IS NULL AND status IN ('Picked Up','Completed') ORDER BY donation_id ASC"
         )->fetchAll();
         foreach ($rows as $r) {
             try {
                 // Inventory::addFromDonationRow is idempotent via source_donation_id unique check
-                $inv->addFromDonationId((int)$r['id']);
+                $inv->addFromDonationId((int)$r['donation_id']);
                 $added++;
             } catch (Exception $e) {
                 // If already exists, skip
@@ -72,7 +72,7 @@ try {
         sendJson(['success' => true, 'data' => ['processed' => count($rows), 'added' => $added, 'skipped' => $skipped]]);
     }
         if ($category !== '' && strtolower($category) !== 'all') {
-            $where[] = 'i.category = ?';
+            $where[] = 'i.product_category = ?';
             $params[] = $category;
         }
         if ($donorId) {
@@ -94,13 +94,13 @@ try {
         if ($groupMode === 'merge') {
             // Group by item_name + category
             $countSql = "SELECT COUNT(*) AS n FROM (
-                SELECT 1 FROM inventory i $whereSql GROUP BY i.item_name, i.category
+                SELECT 1 FROM inventory i $whereSql GROUP BY i.product_name, i.product_category
             ) x";
             $total = (int)($db->query($countSql, $params)->fetch()['n'] ?? 0);
 
             $sql = "SELECT 
-                        i.item_name,
-                        i.category,
+                        i.product_name AS item_name,
+                        i.product_category AS category,
                         SUM(i.quantity) AS total_quantity,
                         MIN(i.expiry_date) AS earliest_expiry,
                         MIN(i.added_at) AS first_added_at,
@@ -108,8 +108,8 @@ try {
                         COUNT(*) AS lots
                     FROM inventory i
                     $whereSql
-                    GROUP BY i.item_name, i.category
-                    ORDER BY COALESCE(MIN(i.expiry_date), '9999-12-31') ASC, i.item_name ASC
+                    GROUP BY i.product_name, i.product_category
+                    ORDER BY COALESCE(MIN(i.expiry_date), '9999-12-31') ASC, i.product_name ASC
                     LIMIT $limit OFFSET $offset";
             $rows = $db->query($sql, $params)->fetchAll();
             // Derive status using earliest_expiry
@@ -134,13 +134,13 @@ try {
             $total = (int)($db->query($countSql, $params)->fetch()['n'] ?? 0);
 
             $sql = "SELECT 
-                        i.id,
-                        i.item_name,
-                        i.category,
+                        i.inventory_id AS id,
+                        i.product_name AS item_name,
+                        i.product_category AS category,
                         i.quantity,
                         i.expiry_date,
                         i.added_at,
-                        i.source_donation_id,
+                        i.donation_id AS source_donation_id,
                         i.source_batch_id,
                         i.donor_id,
                         u.organization_name AS donor_org,

@@ -375,38 +375,73 @@
             ></button>
           </div>
           <div class="modal-body pt-3">
-            <form id="donationForm" enctype="multipart/form-data" novalidate>
-              <div class="row g-3">
-                <div class="col-12 col-md-6">
-                  <label for="donationType" class="form-label">Category</label>
-                  <select id="donationType" class="form-select" required>
-                    <option value="">Select category</option>
-                    <option value="Rice">Rice</option>
-                    <option value="Canned Goods">Canned Goods</option>
-                    <option value="Frozen Meat">Frozen Meat</option>
-                    <option value="Bread &amp; Pastries">Bread &amp; Pastries</option>
-                    <option value="Beverages">Beverages</option>
-                    <option value="Snacks">Snacks</option>
-                  </select>
-                  <div class="form-text">Choose the category that best fits your donation.</div>
-                  <div class="invalid-feedback">Please select a donation type.</div>
+            <!-- Tabs -->
+            <ul class="nav nav-tabs" id="donationTabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-entry-tab" data-bs-toggle="tab" data-bs-target="#tab-entry" type="button" role="tab" aria-controls="tab-entry" aria-selected="true">Normal Entry</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-ocr-tab" data-bs-toggle="tab" data-bs-target="#tab-ocr" type="button" role="tab" aria-controls="tab-ocr" aria-selected="false">Upload & OCR</button>
+              </li>
+            </ul>
+            <div class="tab-content pt-3" id="donationTabsContent">
+              <!-- Normal Entry Tab -->
+              <div class="tab-pane fade show active" id="tab-entry" role="tabpanel" aria-labelledby="tab-entry-tab">
+                <form id="donationForm" enctype="multipart/form-data" novalidate>
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <label class="form-label mb-0">Donation Items</label>
+                    <button type="button" id="addItemBtn" class="btn btn-sm btn-outline-secondary">
+                      <i class="bi bi-plus-lg"></i> Add Donation Item
+                    </button>
+                  </div>
+                  <div class="text-muted small mb-2">Add each item with its name and quantity. Expiry is required.</div>
+                  <datalist id="itemsDatalist"></datalist>
+                  <div id="itemsContainer" class="d-flex flex-column gap-3">
+                    <!-- Dynamic rows inserted here -->
+                  </div>
+                </form>
+              </div>
+
+              <!-- OCR Tab -->
+              <div class="tab-pane fade" id="tab-ocr" role="tabpanel" aria-labelledby="tab-ocr-tab">
+                <div class="border rounded p-3">
+                  <p class="mb-2">Upload a receipt, donation list, or image to auto-fill items. You can review and edit before submitting.</p>
+                  <div class="mb-3">
+                    <label for="ocrFile" class="form-label">Select file</label>
+                    <input type="file" class="form-control" id="ocrFile" accept=".txt,image/*,.pdf">
+                    <div class="form-text">Supported: Images (JPG/PNG), PDF, or TXT. Large clear photos work best.</div>
+                  </div>
+                  <div class="d-flex gap-2 align-items-center mb-3">
+                    <button type="button" id="ocrUploadBtn" class="btn btn-outline-primary">
+                      <i class="bi bi-cloud-arrow-up"></i> Choose File & Parse
+                    </button>
+                    <div id="ocrStatus" class="text-muted small" style="display:none"></div>
+                  </div>
+
+                  <div id="ocrPreview" class="mb-2" style="display:none">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <div class="fw-semibold">Parsed Items (editable)</div>
+                      <button type="button" class="btn btn-sm btn-success" id="ocrApplyBtn" disabled>
+                        <i class="bi bi-check2-circle"></i> Apply to Form
+                      </button>
+                    </div>
+                    <div class="table-responsive border rounded">
+                      <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th style="width:70%">Item name</th>
+                            <th style="width:20%">Qty</th>
+                            <th style="width:10%"></th>
+                          </tr>
+                        </thead>
+                        <tbody id="ocrPreviewBody"></tbody>
+                      </table>
+                    </div>
+                    <div class="form-text mt-2">Edit item names or quantities, then click "Apply to Form" to populate the Normal Entry tab.</div>
+                  </div>
                 </div>
               </div>
-
-              <hr class="my-4" />
-
-              <div class="d-flex align-items-center justify-content-between mb-2">
-                <label class="form-label mb-0">Donation Items</label>
-                <button type="button" id="addItemBtn" class="btn btn-sm btn-outline-secondary">
-                  <i class="bi bi-plus-lg"></i> Add Donation Item
-                </button>
-              </div>
-              <div class="text-muted small mb-2">Add each item with its name and quantity. Expiry is optional.</div>
-              <datalist id="itemsDatalist"></datalist>
-              <div id="itemsContainer" class="d-flex flex-column gap-3">
-                <!-- Dynamic rows inserted here -->
-              </div>
-            </form>
+            </div>
           </div>
           <div class="modal-footer border-0 pt-0">
             <div class="me-auto text-muted small">You can review your items before submitting.</div>

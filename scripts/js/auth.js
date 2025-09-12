@@ -527,18 +527,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Messages Modal Controller (lightweight). Can be initialized for an existing or newly injected modal.
     (function(){
+        let __modalElRef = null;
         function initFor(modalEl){
             if (!modalEl || modalEl.__messagesBound) return; // prevent double-binding
             modalEl.__messagesBound = true;
+            __modalElRef = modalEl;
 
         const apiBase = 'php/api/messages_api.php';
         const POLL_MS = 10000; // global cadence
         const MODAL_POLL_MS = 5000; // faster updates while the chat modal is open
+        const SINGLE_CHANNEL_MSG_MS = 2000; // even faster message refresh in single-channel mode
         let convs = [];
         let activeId = null;
         let messages = [];
         let lastId = null;
+        let loadingMessages = false; // prevent concurrent loads that can cause duplicates
+        let messageIds = new Set(); // de-duplicate by message id
         let pollTimer = 0;
+        let msgTimer = 0;
         let isTickRunning = false;
         let uiInitialized = false;
 
@@ -611,8 +617,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input id="mm-search" class="form-control form-control-sm" placeholder="Search conversations"/>
                     <button id="mm-new" class="btn btn-sm btn-outline-primary ms-2" title="New direct"><i class="bi bi-chat"></i></button>
                   </div>
+                  <div class="mb-2">
+                    <div class="fw-semibold small mb-1">Active Donors</div>
+                    <div id="mm-donors" class="list-group small" style="max-height: 200px; overflow:auto;"></div>
+                  </div>
                   <div id="mm-search-results" class="list-group small mb-2" style="display:none;"></div>
-                  <div id="mm-conversations" class="list-group small"></div>
                 `;
 
             body.innerHTML = `
@@ -634,6 +643,8 @@ document.addEventListener('DOMContentLoaded', function() {
         function renderConversations(){
             const wrap = qs('#mm-conversations', modalEl);
             if (!wrap) return;
+            // In single-channel mode, suppress rendering the conversations list
+            if (window.__limitToSingleChannel) { wrap.innerHTML = ''; return; }
             wrap.innerHTML = '';
             const role = getCurrentRole();
             // For non-admin users, avoid rendering any additional channels to prevent duplicates with the pinned Food Bank
@@ -673,6 +684,38 @@ document.addEventListener('DOMContentLoaded', function() {
             wrap.scrollTop = wrap.scrollHeight;
         }
 
+        function focusSingleChannel(){
+            // Only activate if caller requested single-channel focus
+            if (!window.__limitToSingleChannel) return;
+            // Hide search/results/conversations lists
+            ['#mm-search', '#mm-new', '#mm-search-results', '#mm-conversations']
+                .forEach(sel => { const el = qs(sel, modalEl); if (el) el.style.display = 'none'; });
+            // Keep only the clicked donor in the donors list
+            const donorsWrap = qs('#mm-donors', modalEl);
+            if (!donorsWrap) return;
+            const conv = (convs || []).find(c => Number(c.id) === Number(activeId));
+            const otherId = conv && conv.other_user_id ? Number(conv.other_user_id) : null;
+            donorsWrap.querySelectorAll('a.list-group-item').forEach(a => {
+                const uid = Number(a.getAttribute('data-user-id') || '0');
+                if (otherId && uid !== otherId) {
+                    a.style.display = 'none';
+                } else {
+                    a.style.display = '';
+                    a.classList.add('active');
+                }
+            });
+        }
+
+        function setComposerEnabled(enabled){
+            const input = qs('#mm-input', modalEl);
+            const sendBtn = qs('#mm-send', modalEl);
+            if (input) {
+                input.disabled = !enabled;
+                input.placeholder = enabled ? 'Type a message...' : 'Select a conversation to start chatting';
+            }
+            if (sendBtn) sendBtn.disabled = !enabled;
+        }
+
         function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
         function fmtTime(ts){ try { return new Date(ts.replace(' ','T')).toLocaleString(); } catch(e){ return ts; } }
 
@@ -682,15 +725,92 @@ document.addEventListener('DOMContentLoaded', function() {
             // update global badge after loading
             if (window.__refreshMessagesBadge) { try { window.__refreshMessagesBadge(); } catch(_){} }
         }
-        async function selectConversation(id){ activeId = id; await markRead(); await loadMessages(true); renderConversations(); }
+        async function loadDonors(){
+            const wrap = qs('#mm-donors', modalEl);
+            if (!wrap) return;
+            try {
+                const url = 'php/api/user_api.php?action=list&role=donor&status=active';
+                const res = await fetch(url, { credentials: 'include' });
+                const json = await res.json();
+                const items = (json && json.success && json.data && Array.isArray(json.data.items)) ? json.data.items : [];
+                wrap.innerHTML = '';
+                if (!items.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'text-muted small px-2 py-1';
+                    empty.textContent = 'No active donors';
+                    wrap.appendChild(empty);
+                    return;
+                }
+                items.forEach(u => {
+                    const a = document.createElement('a');
+                    a.href = '#';
+                    a.className = 'list-group-item list-group-item-action';
+                    const label = (u.organization_name && u.organization_name.trim()) ? u.organization_name : (u.name || ('User #'+u.user_id));
+                    a.setAttribute('data-user-id', String(u.user_id));
+                    a.innerHTML = `<i class=\"bi bi-person-badge me-1\"></i> ${label}`;
+                    a.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        try {
+                            // When selecting via donors list, focus on a single channel
+                            window.__limitToSingleChannel = true;
+                            const r = await apiPost('get_or_create_direct', { other_user_id: Number(u.user_id) });
+                            if (r && r.success) {
+                                // Highlight the selected donor
+                                try { wrap.querySelectorAll('.list-group-item').forEach(el => el.classList.remove('active')); a.classList.add('active'); } catch(_){}
+                                await loadConversations();
+                                await selectConversation(r.data.conversation.id);
+                                setComposerEnabled(true);
+                                focusSingleChannel();
+                            }
+                        } catch(_){ }
+                    });
+                    wrap.appendChild(a);
+                });
+            } catch(_) {
+                try { wrap.innerHTML = '<div class="text-muted small px-2 py-1">Failed to load donors</div>'; } catch(__){}
+            }
+        }
+        async function selectConversation(id){
+            activeId = id;
+            // reset message caches when switching conversations
+            messages = [];
+            messageIds = new Set();
+            lastId = null;
+            await markRead();
+            await loadMessages(true);
+            renderConversations();
+            setComposerEnabled(true);
+            focusSingleChannel();
+        }
         async function loadMessages(reset){
             if (!activeId) return;
-            const res = await apiGet({ action:'list_messages', conversation_id: activeId, limit: 100, after_id: reset? '' : (lastId||'') });
-            if (!res.success) return;
-            const items = res.data.items || [];
-            if (reset) messages = items; else messages = messages.concat(items);
-            if (messages.length) lastId = messages[messages.length-1].id;
-            renderMessages();
+            if (loadingMessages) return; // avoid overlapping fetches that can duplicate
+            loadingMessages = true;
+            try {
+                // Default to reset on first load when we have no cached messages
+                const doReset = (typeof reset === 'boolean') ? reset : (messages.length === 0);
+                const res = await apiGet({ action:'list_messages', conversation_id: activeId, limit: 100, after_id: doReset? '' : (lastId||'') });
+                if (!res.success) return;
+                const items = Array.isArray(res.data?.items) ? res.data.items : [];
+                if (doReset) {
+                    messages = [];
+                    messageIds = new Set();
+                    lastId = null;
+                }
+                for (const m of items) {
+                    const mid = Number(m.id);
+                    if (!messageIds.has(mid)) {
+                        messageIds.add(mid);
+                        messages.push(m);
+                        if (!lastId || mid > Number(lastId)) lastId = mid;
+                    }
+                }
+                // Ensure chronological order
+                messages.sort((a,b)=> Number(a.id) - Number(b.id));
+                renderMessages();
+            } finally {
+                loadingMessages = false;
+            }
         }
         async function markRead(){ if (!activeId) return; await apiPatch('mark_read', { conversation_id: activeId }); await loadConversations(); }
         async function send(){
@@ -728,7 +848,7 @@ document.addEventListener('DOMContentLoaded', function() {
             async function runSearch(q){
                 if (!q || q.trim().length < 2) { if (resultsBox){ resultsBox.style.display='none'; resultsBox.innerHTML=''; } return; }
                 try {
-                    const url = 'php/api/user_api.php?action=list&role=donor&q=' + encodeURIComponent(q.trim());
+                    const url = 'php/api/user_api.php?action=list&role=donor&status=active&q=' + encodeURIComponent(q.trim());
                     const res = await fetch(url, { credentials: 'include' });
                     const json = await res.json();
                     const items = (json && json.success && json.data && Array.isArray(json.data.items)) ? json.data.items : [];
@@ -764,6 +884,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     searchTimer = setTimeout(()=> runSearch(searchInput.value), 300);
                 });
             }
+            // Populate donors list for admin users
+            try { if ((getCurrentRole()||'') === 'admin') { loadDonors(); } } catch(_){}
+            // Initially disable composer until a conversation is selected
+            setComposerEnabled(!!activeId);
         }
 
         function startPolling(){
@@ -777,19 +901,28 @@ document.addEventListener('DOMContentLoaded', function() {
                         loadMessages()
                     ]);
                     if (activeId && window.__messagesModalOpen) {
-                        try { await markRead(); } catch(_){}
+                        try { await markRead(); } catch(_){ }
                     }
-                } catch(_){}
+                } catch(_){ }
                 finally { isTickRunning = false; }
-            }
-            , MODAL_POLL_MS);
+            }, MODAL_POLL_MS);
+
+            // Extra fast messages-only poller whenever a conversation is selected
+            msgTimer = window.setInterval(async ()=>{
+                if (!activeId || !window.__messagesModalOpen) return;
+                try { await loadMessages(); } catch(_){ }
+            }, SINGLE_CHANNEL_MSG_MS);
         }
-        function stopPolling(){ if (pollTimer){ clearInterval(pollTimer); pollTimer=0; } }
+        function stopPolling(){
+            if (pollTimer){ clearInterval(pollTimer); pollTimer=0; }
+            if (msgTimer){ clearInterval(msgTimer); msgTimer=0; }
+        }
 
         async function initOnceUI(){
             if (uiInitialized) return; uiInitialized = true;
             buildUI();
             await loadConversations();
+            try { if ((getCurrentRole()||'') === 'admin') { await loadDonors(); } } catch(_){ }
             const role = getCurrentRole();
             if (role && role !== 'admin') {
                 // ensure admin chat exists and is opened
@@ -798,6 +931,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (res.success) { await selectConversation(res.data.conversation.id); }
                 } catch(_){}
             }
+            // After initial load, enable composer only if a conversation is active
+            setComposerEnabled(!!activeId);
         }
 
         modalEl.addEventListener('shown.bs.modal', async ()=>{
@@ -807,9 +942,18 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 await Promise.all([
                     loadConversations(),
-                    (async ()=>{ await loadMessages(true); })()
+                    (async ()=>{ await loadMessages(true); })(),
+                    (async ()=>{ try { if ((getCurrentRole()||'') === 'admin') { await loadDonors(); } } catch(_){ } })()
                 ]);
-            } catch(_){}
+                // If some external code set a pending conversation, select it now
+                if (window.__pendingConversationId) {
+                    const pid = Number(window.__pendingConversationId);
+                    window.__pendingConversationId = null;
+                    if (pid) { try { await selectConversation(pid); } catch(_){} }
+                }
+                // If in single-channel mode, ensure left panel shows only the selected one
+                focusSingleChannel();
+            } catch(_){ }
             startPolling();
             if (window.__refreshMessagesBadge) window.__refreshMessagesBadge();
         });
@@ -818,6 +962,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Expose global initializer for dynamically injected modal
         window.__initMessagesModal = initFor;
+        // Expose helper to programmatically open/select a conversation
+        window.__openConversation = async function(convId){
+            try {
+                const m = __modalElRef || document.getElementById('messagesModal');
+                if (!m) return;
+                await initOnceUI();
+                await selectConversation(Number(convId));
+            } catch(_){}
+        };
 
         // Auto-initialize if modal already exists in DOM
         const existing = document.getElementById('messagesModal');

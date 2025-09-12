@@ -123,12 +123,17 @@ try {
             ? (int)$_POST['donor_id']
             : (int)currentUserId();
 
-        $type = isset($_POST['type']) ? sanitize($_POST['type']) : null;
-        if (!$type) { sendJson(['success' => false, 'error' => 'type is required'], 400); }
+        // Accept per-item arrays; fallback to single value if provided
+        $typeSingle = isset($_POST['type']) && !is_array($_POST['type']) ? sanitize($_POST['type']) : null;
+        $typeArr = isset($_POST['type']) && is_array($_POST['type']) ? array_map('sanitize', $_POST['type']) : [];
 
         $names = isset($_POST['name']) ? (array)$_POST['name'] : [];
         $quantities = isset($_POST['quantity']) ? (array)$_POST['quantity'] : [];
         $expiries = isset($_POST['expiry_date']) ? (array)$_POST['expiry_date'] : [];
+        $weights = isset($_POST['total_weight']) ? (array)$_POST['total_weight'] : [];
+        $costs = isset($_POST['total_cost']) ? (array)$_POST['total_cost'] : [];
+        $remarksItems = isset($_POST['remarks']) && is_array($_POST['remarks']) ? (array)$_POST['remarks'] : [];
+        $remarks = isset($_POST['remarks']) && !is_array($_POST['remarks']) ? sanitize((string)$_POST['remarks']) : null; // batch-level notes
         $count = max(count($names), count($quantities), count($expiries));
         if ($count === 0) { sendJson(['success' => false, 'error' => 'items are required'], 400); }
 
@@ -137,6 +142,17 @@ try {
 
         // Create a single batch id for this submission
         $batchId = generateUuidV4();
+        // Ensure a batches row exists to satisfy FK and track batch status/notes
+        try {
+            $db = Database::getInstance();
+            $db->query(
+                "INSERT INTO batches (batch_id, donor_id, status, notes, created_at) VALUES (?, ?, 'Pending', ?, NOW())",
+                [$batchId, $donorId, ($remarks !== null && $remarks !== '') ? $remarks : null]
+            );
+        } catch (Exception $e) {
+            // If batch already exists, ignore; otherwise bubble up
+            if (stripos($e->getMessage(), 'Duplicate') === false) { throw $e; }
+        }
 
         // Insert items sequentially
         $ids = [];
@@ -145,17 +161,24 @@ try {
             $qty = isset($quantities[$i]) ? (int)$quantities[$i] : null;
             $expiryRaw = isset($expiries[$i]) ? $expiries[$i] : '';
             $expiry = ($expiryRaw === null || $expiryRaw === '') ? null : sanitize($expiryRaw);
-            if (!$name || !$qty || $qty < 1 || !$expiry) {
-                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, quantity (>=1), and expiry_date are required'], 400);
+            $typeVal = isset($typeArr[$i]) ? sanitize((string)$typeArr[$i]) : ($typeSingle ?? '');
+            $wVal = isset($weights[$i]) && $weights[$i] !== '' ? (float)$weights[$i] : null;
+            $cVal = isset($costs[$i]) && $costs[$i] !== '' ? (float)$costs[$i] : null;
+            $remarksVal = isset($remarksItems[$i]) ? sanitize((string)$remarksItems[$i]) : null;
+            if (!$name || !$qty || $qty < 1 || !$expiry || $typeVal === '') {
+                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, category, quantity (>=1), and expiry_date are required'], 400);
             }
 
             $payload = [
                 'donor_id' => $donorId,
                 'batch_id' => $batchId,
-                'type' => $type,
+                'type' => $typeVal,
                 'name' => $name,
                 'quantity' => $qty,
                 'expiry_date' => $expiry,
+                'remarks' => $remarksVal,
+                'total_weight' => $wVal,
+                'total_cost' => $cVal,
             ];
             $ids[] = $service->create($payload);
         }
@@ -290,7 +313,7 @@ try {
         try {
             $db = Database::getInstance();
             $before = $db->query(
-                "SELECT id, name, quantity, expiry_date FROM donations WHERE batch_id = ?",
+                "SELECT donation_id AS id, product_name AS name, quantity, expiry_date FROM donations WHERE batch_id = ?",
                 [$batchId]
             )->fetchAll();
             $byId = [];
@@ -336,7 +359,8 @@ try {
         requireRole(['donor','admin']);
         $q = isset($_GET['q']) ? sanitize($_GET['q']) : '';
         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
-        $names = $service->searchItemNames($q, $limit);
+        $category = isset($_GET['category']) ? sanitize((string)$_GET['category']) : null;
+        $names = $service->searchItemNames($q, $limit, $category);
         // Simple list response; front-end maps to Select2 results
         sendJson(['success' => true, 'items' => $names]);
     }
@@ -444,6 +468,12 @@ try {
         if ($status === 'Picked Up' || $status === 'Completed') {
             try { (new Inventory())->addFromDonationId($id); } catch (Exception $e) { error_log('Inventory add on status (single) failed: '.$e->getMessage()); }
         }
+        // Stamp admin_in_charge on first admin action if not already set
+        try {
+            $db = Database::getInstance();
+            $adminId = (int)currentUserId();
+            $db->query("UPDATE donations SET admin_in_charge = COALESCE(admin_in_charge, ?) WHERE donation_id = ?", [$adminId, $id]);
+        } catch (Exception $e) { /* ignore */ }
         // Centralized notification
         try { (new DonationNotifier())->notifyDonationStatus($id, $status); } catch (Exception $e) { error_log('Notify failed: '.$e->getMessage()); }
 
@@ -462,7 +492,7 @@ try {
         try {
             // Fetch before snapshot for diff
             $db = Database::getInstance();
-            $prev = $db->query("SELECT name, quantity, expiry_date FROM donations WHERE id = ?", [$id])->fetch();
+            $prev = $db->query("SELECT product_name AS name, quantity, expiry_date FROM donations WHERE donation_id = ?", [$id])->fetch();
             // Admin override disabled for content edits
             $editor->assertEditable($id, $userId, false);
             $fields = [];
@@ -580,6 +610,17 @@ try {
         $input = getJsonInput();
         $status = $input['status'] ?? '';
         $service->updateStatusByBatch($batchId, $status);
+        // Also reflect status in batches table
+        try {
+            $db = Database::getInstance();
+            $db->query("UPDATE batches SET status = ? WHERE batch_id = ?", [$status, $batchId]);
+        } catch (Exception $e) { /* ignore */ }
+        // Stamp admin_in_charge for all items in this batch if not already set
+        try {
+            $db = Database::getInstance();
+            $adminId = (int)currentUserId();
+            $db->query("UPDATE donations SET admin_in_charge = COALESCE(admin_in_charge, ?) WHERE batch_id = ?", [$adminId, $batchId]);
+        } catch (Exception $e) { /* ignore */ }
         // Centralized notification
         try { (new DonationNotifier())->notifyBatchStatus($batchId, $status); } catch (Exception $e) { error_log('Batch notify failed: '.$e->getMessage()); }
 
@@ -594,19 +635,51 @@ try {
         sendJson(['success' => true, 'message' => 'Batch archived']);
     }
 
+    // POST /api/donations/ocr
+    if ($method === 'POST' && preg_match('#^/ocr/?\z#', $sub, $m)) {
+        requireRole(['admin', 'donor']);
+        $input = getJsonInput();
+        $file = $_FILES['file'] ?? null;
+        if (!$file) {
+            sendJson(['success' => false, 'error' => 'File is required'], 400);
+        }
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            sendJson(['success' => false, 'error' => 'Upload error'], 400);
+        }
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+        if ($mime !== 'text/plain') {
+            sendJson(['success' => false, 'error' => 'Only text files are supported for now'], 400);
+        }
+        $content = file_get_contents($file['tmp_name']);
+        $items = [];
+        $lines = explode("\n", $content);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line) {
+                $items[] = $line;
+            }
+        }
+        sendJson(['success' => true, 'data' => $items]);
+    }
+
     // Fallback
     sendJson(['success' => false, 'error' => 'Endpoint not found'], 404);
-} catch (Exception $e) {
+}
+ catch (Exception $e) {
     // Log detailed error server-side only
     error_log('Donations API error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
     // Return a generic error message to clients
     sendJson(['success' => false, 'error' => 'Internal server error'], 500);
 }
-
 function readCreatePayload(): array {
     $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
     if (stripos($contentType, 'application/json') !== false) {
-        return getJsonInput();
+        $in = getJsonInput();
+        // Normalize optional remarks
+        if (isset($in['remarks'])) { $in['remarks'] = sanitize((string)$in['remarks']); }
+        return $in;
     }
     // multipart/form-data support
     $payload = [
@@ -615,6 +688,7 @@ function readCreatePayload(): array {
         'name' => $_POST['name'] ?? null,
         'quantity' => $_POST['quantity'] ?? null,
         'expiry_date' => $_POST['expiry_date'] ?? null,
+        'remarks' => isset($_POST['remarks']) ? sanitize((string)$_POST['remarks']) : null,
     ];
     return $payload;
 }

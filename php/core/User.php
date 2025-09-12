@@ -49,7 +49,13 @@ class User
     {
         $where = [];
         $params = [];
-        if (!empty($filters['status'])) { $where[] = 'status = ?'; $params[] = $filters['status']; }
+        // Normalize status: treat 'active' as 'approved' to align with DB enum
+        if (!empty($filters['status'])) {
+            $status = $filters['status'];
+            if ($status === 'active') { $status = 'approved'; }
+            $where[] = 'status = ?';
+            $params[] = $status;
+        }
         if (!empty($filters['role'])) { $where[] = 'role = ?'; $params[] = $filters['role']; }
         if (!empty($filters['q'])) {
             $where[] = '(name LIKE ? OR email LIKE ? OR organization_name LIKE ?)';

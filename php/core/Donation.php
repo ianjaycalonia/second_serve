@@ -17,9 +17,15 @@ class Donation
         // First try the new schema with batch_id
         $this->db->beginTransaction();
         try {
+            // Snapshot donor name/org at time of creation
+            $donorName = null;
+            try {
+                $row = $this->db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [(int)$payload['donor_id']])->fetch();
+                if ($row) { $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : null); }
+            } catch (Exception $e) { /* ignore */ }
             $this->db->query(
-                "INSERT INTO donations (donor_id, batch_id, type, name, quantity, expiry_date, status, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, 'Pending', NOW())",
+                "INSERT INTO donations (donor_id, batch_id, product_category, product_name, quantity, expiry_date, remarks, total_weight, total_cost, donor_name, entry_date, status, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'Pending', NOW())",
                 [
                     (int)$payload['donor_id'],
                     $payload['batch_id'] ?? null,
@@ -27,6 +33,10 @@ class Donation
                     $payload['name'],
                     (int)$payload['quantity'],
                     !empty($payload['expiry_date']) ? $payload['expiry_date'] : null,
+                    isset($payload['remarks']) && $payload['remarks'] !== '' ? sanitize((string)$payload['remarks']) : null,
+                    isset($payload['total_weight']) && $payload['total_weight'] !== '' ? (float)$payload['total_weight'] : null,
+                    isset($payload['total_cost']) && $payload['total_cost'] !== '' ? (float)$payload['total_cost'] : null,
+                    $donorName,
                 ]
             );
             $id = (int)$this->db->lastInsertId();
@@ -38,15 +48,25 @@ class Donation
             if (stripos($e->getMessage(), "Unknown column 'batch_id'") !== false) {
                 $this->db->beginTransaction();
                 try {
+                    // Fallback path (old schema without batch_id) still snapshots donor_name and sets entry_date
+                    $donorName = null;
+                    try {
+                        $row = $this->db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [(int)$payload['donor_id']])->fetch();
+                        if ($row) { $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : null); }
+                    } catch (Exception $e3) { /* ignore */ }
                     $this->db->query(
-                        "INSERT INTO donations (donor_id, type, name, quantity, expiry_date, status, created_at)
-                         VALUES (?, ?, ?, ?, ?, 'Pending', NOW())",
+                        "INSERT INTO donations (donor_id, product_category, product_name, quantity, expiry_date, remarks, total_weight, total_cost, donor_name, entry_date, status, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'Pending', NOW())",
                         [
                             (int)$payload['donor_id'],
                             $payload['type'],
                             $payload['name'],
                             (int)$payload['quantity'],
                             !empty($payload['expiry_date']) ? $payload['expiry_date'] : null,
+                            isset($payload['remarks']) && $payload['remarks'] !== '' ? sanitize((string)$payload['remarks']) : null,
+                            isset($payload['total_weight']) && $payload['total_weight'] !== '' ? (float)$payload['total_weight'] : null,
+                            isset($payload['total_cost']) && $payload['total_cost'] !== '' ? (float)$payload['total_cost'] : null,
+                            $donorName,
                         ]
                     );
                     $id = (int)$this->db->lastInsertId();
@@ -79,7 +99,7 @@ class Donation
             $whereSqlSingles = ' WHERE ' . ($baseWhere ? ($baseWhere . ' AND ') : '') . 'd.batch_id IS NULL';
             // Grouped batches: only rows with batch_id NOT NULL are aggregated
             $sqlGrouped = "SELECT 
-                            MIN(d.id) AS id,
+                            MIN(d.donation_id) AS id,
                             d.donor_id,
                             u.name AS donor_name,
                             u.organization_name AS donor_org,
@@ -97,12 +117,12 @@ class Donation
 
             // Ungrouped singles: rows with batch_id NULL are returned as-is
             $sqlSingles = "SELECT 
-                            d.id,
+                            d.donation_id AS id,
                             d.donor_id,
                             u.name AS donor_name,
                             u.organization_name AS donor_org,
-                            d.name,
-                            d.type,
+                            d.product_name AS name,
+                            d.product_category AS type,
                             d.quantity,
                             d.expiry_date,
                             d.status,
@@ -119,8 +139,8 @@ class Donation
                     LIMIT 500";
             return $this->db->query($sql, $params)->fetchAll();
         } else {
-            $sql = "SELECT d.id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
-                           d.type, d.name, d.quantity, d.expiry_date, d.status, d.created_at,
+            $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
+                           d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at,
                            d.batch_id AS batch_id,
                            0 AS is_group
                     FROM donations d
@@ -135,11 +155,11 @@ class Donation
     public function getById(int $id): ?array
     {
         $row = $this->db->query(
-            "SELECT d.id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
-                    d.type, d.name, d.quantity, d.expiry_date, d.status, d.created_at
+            "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
+                    d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at
              FROM donations d
              LEFT JOIN users u ON u.user_id = d.donor_id
-             WHERE d.id = ? AND d.deleted_at IS NULL",
+             WHERE d.donation_id = ? AND d.deleted_at IS NULL",
             [$id]
         )->fetch();
         return $row ?: null;
@@ -152,20 +172,20 @@ class Donation
         if (!in_array($status, $allowed, true)) {
             throw new Exception('Invalid status value');
         }
-        $this->db->query("UPDATE donations SET status = ? WHERE id = ?", [$status, $id]);
+        $this->db->query("UPDATE donations SET status = ? WHERE donation_id = ?", [$status, $id]);
     }
 
     // Delete donation
     public function delete(int $id): void
     {
-        $this->db->query("UPDATE donations SET deleted_at = NOW() WHERE id = ?", [$id]);
+        $this->db->query("UPDATE donations SET deleted_at = NOW() WHERE donation_id = ?", [$id]);
     }
 
     // List items by batch id (non-archived)
     public function listByBatch(string $batchId): array
     {
-        $sql = "SELECT d.id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
-                       d.type, d.name, d.quantity, d.expiry_date, d.status, d.created_at
+        $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
+                       d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at
                 FROM donations d
                 LEFT JOIN users u ON u.user_id = d.donor_id
                 WHERE d.deleted_at IS NULL AND d.batch_id = ?
@@ -188,23 +208,28 @@ class Donation
         $this->db->query("UPDATE donations SET deleted_at = NOW() WHERE deleted_at IS NULL AND batch_id = ?", [$batchId]);
     }
 
-    // Search distinct item names for suggestions
-    public function searchItemNames(string $q = '', int $limit = 20): array
+    // Search distinct item names for suggestions (optionally filter by category)
+    public function searchItemNames(string $q = '', int $limit = 20, ?string $category = null): array
     {
         $limit = max(1, min(100, (int)$limit));
+        $params = [];
+        $where = ['deleted_at IS NULL'];
+        if ($category !== null && $category !== '') { $where[] = 'product_category = ?'; $params[] = $category; }
         if ($q !== '') {
             $like = '%' . $q . '%';
-            $sql = "SELECT DISTINCT name FROM donations WHERE deleted_at IS NULL AND name LIKE ? ORDER BY name ASC LIMIT $limit";
-            $rows = $this->db->query($sql, [$like])->fetchAll();
+            $where[] = 'product_name LIKE ?';
+            $params[] = $like;
+            $sql = "SELECT DISTINCT product_name AS name FROM donations WHERE " . implode(' AND ', $where) . " ORDER BY product_name ASC LIMIT $limit";
+            $rows = $this->db->query($sql, $params)->fetchAll();
         } else {
             // Return most frequent names when no query provided
-            $sql = "SELECT name FROM donations WHERE deleted_at IS NULL AND name IS NOT NULL AND name<>'' GROUP BY name ORDER BY COUNT(*) DESC, name ASC LIMIT $limit";
-            $rows = $this->db->query($sql)->fetchAll();
+            $sql = "SELECT product_name AS name FROM donations WHERE " . implode(' AND ', $where) . " AND product_name IS NOT NULL AND product_name<>'' GROUP BY product_name ORDER BY COUNT(*) DESC, product_name ASC LIMIT $limit";
+            $rows = $this->db->query($sql, $params)->fetchAll();
         }
         return array_values(array_filter(array_map(function($r){ return $r['name'] ?? null; }, $rows), function($v){ return $v !== null && $v !== ''; }));
     }
 
-    
+
 }
 
 // Donor-side editing/cancellation helper
@@ -221,7 +246,7 @@ class DonationEditor
     public function assertEditable(int $donationId, int $donorId, bool $isAdmin = false): array
     {
         $row = $this->db->query(
-            "SELECT id, donor_id, status FROM donations WHERE id = ? AND deleted_at IS NULL",
+            "SELECT donation_id AS id, donor_id, status FROM donations WHERE donation_id = ? AND deleted_at IS NULL",
             [$donationId]
         )->fetch();
         if (!$row) { throw new Exception('Not found'); }
@@ -248,6 +273,14 @@ class DonationEditor
                     $v = ($v === '' || $v === null) ? null : $v;
                     $set[] = "expiry_date = ?";
                     $params[] = $v;
+                } elseif ($k === 'type') {
+                    $v = sanitize((string)$fields[$k]);
+                    $set[] = "product_category = ?";
+                    $params[] = $v;
+                } elseif ($k === 'name') {
+                    $v = sanitize((string)$fields[$k]);
+                    $set[] = "product_name = ?";
+                    $params[] = $v;
                 } else {
                     $v = sanitize((string)$fields[$k]);
                     $set[] = "$k = ?";
@@ -257,7 +290,7 @@ class DonationEditor
         }
         if (!$set) { return; }
         $params[] = $donationId;
-        $sql = "UPDATE donations SET " . implode(', ', $set) . " WHERE id = ?";
+        $sql = "UPDATE donations SET " . implode(', ', $set) . " WHERE donation_id = ?";
         $this->db->query($sql, $params);
     }
 
@@ -288,7 +321,7 @@ class DonationEditor
         $this->ensureCancellationTable();
         $this->db->beginTransaction();
         try {
-            $this->db->query("UPDATE donations SET status = 'Cancelled' WHERE id = ?", [$donationId]);
+            $this->db->query("UPDATE donations SET status = 'Cancelled' WHERE donation_id = ?", [$donationId]);
             $this->db->query(
                 "INSERT INTO donation_cancellations (donation_id, batch_id, user_id, reason) VALUES (?, NULL, ?, ?)",
                 [$donationId, $userId, $reason]
@@ -324,7 +357,7 @@ class DonationEditor
     public function assertBatchEditable(string $batchId, int $donorId, bool $isAdmin = false): array
     {
         $rows = $this->db->query(
-            "SELECT id, donor_id, status FROM donations WHERE deleted_at IS NULL AND batch_id = ?",
+            "SELECT donation_id AS id, donor_id, status FROM donations WHERE deleted_at IS NULL AND batch_id = ?",
             [$batchId]
         )->fetchAll();
         if (!$rows) { throw new Exception('Not found'); }
@@ -347,7 +380,7 @@ class DonationEditor
         try {
             // Fetch existing items in the batch to determine donor_id, current type, and detect removals
             $existing = $this->db->query(
-                "SELECT id, donor_id, type FROM donations WHERE deleted_at IS NULL AND batch_id = ?",
+                "SELECT donation_id AS id, donor_id, product_category AS type FROM donations WHERE deleted_at IS NULL AND batch_id = ?",
                 [$batchId]
             )->fetchAll();
             if (!$existing) { throw new Exception('Not found'); }
@@ -358,7 +391,7 @@ class DonationEditor
             $effectiveType = $type !== null ? sanitize($type) : ($currentType !== null ? sanitize((string)$currentType) : null);
             if ($type !== null) {
                 $this->db->query(
-                    "UPDATE donations SET type = ? WHERE deleted_at IS NULL AND batch_id = ?",
+                    "UPDATE donations SET product_category = ? WHERE deleted_at IS NULL AND batch_id = ?",
                     [$effectiveType, $batchId]
                 );
             }
@@ -379,13 +412,19 @@ class DonationEditor
                     // Update existing
                     $submittedIds[] = $id;
                     $this->db->query(
-                        "UPDATE donations SET name = ?, quantity = ?, expiry_date = ? WHERE id = ? AND deleted_at IS NULL AND batch_id = ?",
+                        "UPDATE donations SET product_name = ?, quantity = ?, expiry_date = ? WHERE donation_id = ? AND deleted_at IS NULL AND batch_id = ?",
                         [$name, $qty, $expiry, $id, $batchId]
                     );
                 } else {
                     // Insert new item into the batch; use effective type (new or current)
+                    // Snapshot donor name/org and set entry_date
+                    $donorName = null;
+                    try {
+                        $row = $this->db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [$donorId])->fetch();
+                        if ($row) { $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : null); }
+                    } catch (Exception $e) { /* ignore */ }
                     $this->db->query(
-                        "INSERT INTO donations (donor_id, batch_id, type, name, quantity, expiry_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'Pending', NOW())",
+                        "INSERT INTO donations (donor_id, batch_id, product_category, product_name, quantity, expiry_date, donor_name, entry_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), 'Pending', NOW())",
                         [
                             $donorId,
                             $batchId,
@@ -393,6 +432,7 @@ class DonationEditor
                             $name,
                             $qty,
                             $expiry === '' ? null : $expiry,
+                            $donorName,
                         ]
                     );
                     $submittedIds[] = (int)$this->db->lastInsertId();
@@ -407,7 +447,7 @@ class DonationEditor
                 $params = $toDelete;
                 $params[] = $batchId;
                 $this->db->query(
-                    "UPDATE donations SET deleted_at = NOW() WHERE id IN ($placeholders) AND batch_id = ?",
+                    "UPDATE donations SET deleted_at = NOW() WHERE donation_id IN ($placeholders) AND batch_id = ?",
                     $params
                 );
             }

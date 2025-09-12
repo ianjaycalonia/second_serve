@@ -27,6 +27,113 @@
             plugins: { legend: { position: 'bottom' } }
           },
         });
+
+    // OCR tab handlers
+    function parseLineToNameQty(raw){
+      const s = String(raw||'').trim();
+      if (!s) return null;
+      let name = s, qty = 1;
+      const rx = /(.*?)[xX*\-:\s]+(\d{1,4})$/;
+      const m = s.match(rx);
+      if (m && m[1]) { name = m[1].trim(); qty = parseInt(m[2], 10) || 1; }
+      return { name, qty };
+    }
+
+    function buildPreviewRow(id, name, qty){
+      return `
+        <tr data-id="${id}">
+          <td><input type="text" class="form-control form-control-sm ocr-name" value="${name.replace(/"/g,'&quot;')}"></td>
+          <td style="max-width:110px"><input type="number" class="form-control form-control-sm ocr-qty" min="1" value="${qty}"></td>
+          <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger ocr-del" aria-label="Remove"><i class="bi bi-trash"></i></button></td>
+        </tr>`;
+    }
+
+    function runOcrUpload(file){
+      const $status = $('#ocrStatus');
+      const $preview = $('#ocrPreview');
+      const $tbody = $('#ocrPreviewBody');
+      const $apply = $('#ocrApplyBtn');
+      const fd = new FormData();
+      fd.append('file', file);
+      $status.text('Uploading and parsing...').show();
+      $.ajax({
+        url: `${API_BASE_URL}/donations/index.php/ocr`,
+        method: 'POST',
+        data: fd,
+        processData: false,
+        contentType: false,
+        dataType: 'json',
+        xhrFields: { withCredentials: true },
+        success: function(resp){
+          const lines = Array.isArray(resp?.data) ? resp.data : [];
+          const parsed = [];
+          for (const line of lines){
+            const p = parseLineToNameQty(line);
+            if (p && p.name) parsed.push(p);
+          }
+          if (!parsed.length){
+            $status.text('No items detected. Ensure each line contains one item name.').fadeOut(4000);
+            $preview.hide();
+            return;
+          }
+          // Populate preview table
+          $tbody.empty();
+          let counter = 1;
+          const MAX = 50;
+          for (const it of parsed.slice(0, MAX)){
+            $tbody.append(buildPreviewRow(counter++, it.name, it.qty));
+          }
+          $apply.prop('disabled', false);
+          $preview.show();
+          $status.text(`Parsed ${Math.min(parsed.length, MAX)} item(s). Review and click Apply.`).fadeOut(4000);
+        },
+        error: function(err){
+          const msg = err?.responseJSON?.error || 'OCR failed';
+          $status.text(msg).fadeOut(4000);
+        }
+      });
+    }
+
+    // Click upload -> open file picker
+    $(document).on('click', '#ocrUploadBtn', function(){
+      const $file = $('#ocrFile');
+      if ($file.length) { $file.trigger('click'); }
+    });
+
+    // Auto-start upload when a file is selected
+    $(document).on('change', '#ocrFile', function(){
+      const file = this.files && this.files[0];
+      if (file) { runOcrUpload(file); }
+    });
+
+    // Remove row in preview
+    $(document).on('click', '.ocr-del', function(){
+      $(this).closest('tr').remove();
+    });
+
+    // Apply preview to Normal Entry tab
+    $(document).on('click', '#ocrApplyBtn', function(){
+      const $rows = $('#ocrPreviewBody tr');
+      if (!$rows.length){ showToast('No items to apply.', 'warning'); return; }
+      // Switch to Normal Entry
+      const tabTrigger = document.querySelector('#tab-entry-tab');
+      if (tabTrigger) new bootstrap.Tab(tabTrigger).show();
+      // Clear and add items
+      $itemsContainer.empty();
+      $rows.each(function(){
+        const name = String($(this).find('.ocr-name').val()||'').trim();
+        const qty = Math.max(1, parseInt($(this).find('.ocr-qty').val(), 10) || 1);
+        if (!name) return;
+        addItemRow();
+        const $row = $itemsContainer.find('.item-row').last();
+        const $select = $row.find('.item-name-select');
+        const opt = new Option(name, name, true, true);
+        $select.append(opt).trigger('change');
+        $row.find('.item-qty').val(qty);
+        // Expiry left empty for donor to fill (required)
+      });
+      showToast('OCR items applied. Please set expiry dates then submit.', 'info');
+    });
         return donorChart;
       } catch(_){ return null; }
     }
@@ -102,7 +209,9 @@
           url: `${API_BASE_URL}/donations/index.php/items`,
           dataType: "json",
           data: function (params) {
-            return { q: params.term || "", limit: 20 };
+            const $row = $el.closest('.item-row');
+            const cat = String($row.find('.item-cat').val() || '').trim();
+            return { q: params.term || "", limit: 20, category: cat };
           },
           processResults: function (data) {
             const items = data && data.items ? data.items : [];
@@ -117,6 +226,13 @@
         },
       });
     }
+
+    // When category changes, clear the item name so results are scoped
+    $itemsContainer.on('change', '.item-cat', function(){
+      const $row = $(this).closest('.item-row');
+      const $name = $row.find('.item-name-select');
+      $name.val(null).trigger('change');
+    });
 
     function initCategorySelect2() {
       const $cat = $("#donationType");
@@ -151,27 +267,68 @@
       return `
       <div class="card p-3 border item-row" data-id="${id}">
         <div class="row g-2 align-items-end">
-          <div class="col-12 col-md-6">
+          <div class="col-12 col-lg-3">
+            <label class="form-label mb-1">Category</label>
+            <select class="form-select item-cat" required>
+              <option value="">Select category</option>
+              <option value="Bakery">Bakery</option>
+              <option value="Beverage - Juices/Coffee/Tea">Beverage - Juices/Coffee/Tea</option>
+              <option value="Beverage - Sweetened Beverages">Beverage - Sweetened Beverages</option>
+              <option value="Beverage - Water">Beverage - Water</option>
+              <option value="Confectionary">Confectionary</option>
+              <option value="Dairy">Dairy</option>
+              <option value="Fats &amp; Oils">Fats &amp; Oils</option>
+              <option value="Fruits &amp; Vegetables">Fruits &amp; Vegetables</option>
+              <option value="Grains/Grain Products">Grains/Grain Products</option>
+              <option value="Non-Food - Baby Products">Non-Food - Baby Products</option>
+              <option value="Non-Food - Cleaning Products">Non-Food - Cleaning Products</option>
+              <option value="Non-Food - Others">Non-Food - Others</option>
+              <option value="Non-Food - Personal Hygiene">Non-Food - Personal Hygiene</option>
+              <option value="Non-Food - Pet Food">Non-Food - Pet Food</option>
+              <option value="Prepared Foods">Prepared Foods</option>
+              <option value="Processed Cereals/ Cereal Products">Processed Cereals/ Cereal Products</option>
+              <option value="Protein-Animal Based">Protein-Animal Based</option>
+              <option value="Ready-To-Eat Savories">Ready-To-Eat Savories</option>
+              <option value="Sauces/Condiments/Seasonings">Sauces/Condiments/Seasonings</option>
+              <option value="Special Nutritional Uses">Special Nutritional Uses</option>
+              <option value="Sweeteners">Sweeteners</option>
+            </select>
+            <div class="invalid-feedback">Category is required.</div>
+          </div>
+          <div class="col-12 col-lg-4">
             <label class="form-label mb-1">Item Name</label>
             <select class="form-select item-name-select" data-placeholder="Search or type new" required></select>
             <div class="invalid-feedback">Item name is required.</div>
           </div>
-          <div class="col-6 col-md-2">
+          <div class="col-6 col-lg-2">
             <label class="form-label mb-1">Quantity</label>
             <input type="number" class="form-control item-qty" min="1" required>
             <div class="invalid-feedback">Min 1</div>
           </div>
-          <div class="col-6 col-md-3">
+          <div class="col-6 col-lg-2">
             <label class="form-label mb-1">Expiry Date</label>
             <input type="date" class="form-control item-expiry" required>
             <div class="invalid-feedback">Expiry date is required.</div>
           </div>
-          <div class="col-12 col-md-1 text-end">
-            <label class="form-label mb-1 d-none d-md-block">&nbsp;</label>
+          <div class="col-12 col-lg-1 text-end">
+            <label class="form-label mb-1 d-none d-lg-block">&nbsp;</label>
             <button type="button" class="btn btn-sm btn-outline-danger d-flex align-items-center justify-content-center w-100 w-md-auto" aria-label="Remove item">
               <i class="bi bi-trash"></i>
-              <span class="ms-1 d-inline d-md-none">Remove</span>
             </button>
+          </div>
+        </div>
+        <div class="row g-2 mt-2">
+          <div class="col-6 col-lg-2">
+            <label class="form-label mb-1">Weight (kg)</label>
+            <input type="number" step="0.001" min="0" class="form-control item-weight" placeholder="e.g., 2.5">
+          </div>
+          <div class="col-6 col-lg-2">
+            <label class="form-label mb-1">Cost (₱)</label>
+            <input type="number" step="0.01" min="0" class="form-control item-cost" placeholder="e.g., 150.00">
+          </div>
+          <div class="col-12 col-lg-8">
+            <label class="form-label mb-1">Remarks</label>
+            <input type="text" class="form-control item-remarks" maxlength="500" placeholder="Optional notes for this item">
           </div>
         </div>
       </div>`;
@@ -212,11 +369,8 @@
     function validateForm() {
       let ok = true;
       $form.find(".is-invalid").removeClass("is-invalid");
-      const type = $("#donationType").val();
-      if (!type) {
-        $("#donationType").addClass("is-invalid");
-        ok = false;
-      }
+      // Top-level category is optional; per-item categories are required instead
+      $("#donationType").removeClass("is-invalid");
       // At least one item row
       const rows = $itemsContainer.find(".item-row");
       if (rows.length === 0) {
@@ -228,6 +382,7 @@
         const name = String($row.find(".item-name-select").val() || "").trim();
         const qty = parseInt($row.find(".item-qty").val(), 10);
         const expiry = String($row.find('.item-expiry').val() || '').trim();
+        const cat = String($row.find('.item-cat').val() || '').trim();
         if (!name) {
           $row.find(".item-name-select").addClass("is-invalid");
           ok = false;
@@ -240,6 +395,10 @@
           $row.find('.item-expiry').addClass('is-invalid');
           ok = false;
         }
+        if (!cat) {
+          $row.find('.item-cat').addClass('is-invalid');
+          ok = false;
+        }
       });
       return ok;
     }
@@ -250,7 +409,6 @@
       const rows = $itemsContainer.find(".item-row");
       setSubmitting(true);
       const fd = new FormData();
-      fd.append("type", $("#donationType").val());
       rows.each(function () {
         const $row = $(this);
         fd.append(
@@ -260,8 +418,17 @@
         fd.append("quantity[]", $row.find(".item-qty").val());
         const expiry = $row.find(".item-expiry").val();
         fd.append("expiry_date[]", expiry);
+        // per-item fields
+        fd.append("type[]", String($row.find('.item-cat').val() || '').trim());
+        const w = $row.find('.item-weight').val();
+        if (w !== null && w !== undefined && String(w) !== '') fd.append('total_weight[]', w);
+        else fd.append('total_weight[]', '');
+        const c = $row.find('.item-cost').val();
+        if (c !== null && c !== undefined && String(c) !== '') fd.append('total_cost[]', c);
+        else fd.append('total_cost[]', '');
+        fd.append('remarks[]', String($row.find('.item-remarks').val() || '').trim());
       });
-      // No image field appended
+      // No image field appended; no batch-level category/remarks
 
       $.ajax({
         url: `${API_BASE_URL}/donations/index.php/batch`,

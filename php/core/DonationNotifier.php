@@ -17,8 +17,8 @@ class DonationNotifier {
      */
     public function notifyDonationStatus(int $donationId, string $newStatus, array $context = []): void {
         $row = $this->db->query(
-            "SELECT d.id, d.name, d.donor_id, d.batch_id, u.name AS donor_name, u.organization_name
-             FROM donations d JOIN users u ON u.user_id = d.donor_id WHERE d.id = ?",
+            "SELECT d.donation_id AS id, d.product_name AS name, d.donor_id, d.batch_id, u.name AS donor_name, u.organization_name
+             FROM donations d JOIN users u ON u.user_id = d.donor_id WHERE d.donation_id = ?",
             [$donationId]
         )->fetch();
         if (!$row) return;
@@ -117,8 +117,8 @@ class DonationNotifier {
         $role = (string)(currentUserRole() ?? '');
         if (strtolower($role) !== 'donor') return;
         $row = $this->db->query(
-            "SELECT d.id, d.name, d.donor_id, u.name AS donor_name, u.organization_name
-             FROM donations d JOIN users u ON u.user_id = d.donor_id WHERE d.id = ?",
+            "SELECT d.donation_id AS id, d.product_name AS name, d.donor_id, u.name AS donor_name, u.organization_name
+             FROM donations d JOIN users u ON u.user_id = d.donor_id WHERE d.donation_id = ?",
             [$donationId]
         )->fetch();
         if (!$row) return;
