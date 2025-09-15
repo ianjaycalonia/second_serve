@@ -15,9 +15,8 @@ SET time_zone = "+00:00";
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8mb4 */;
 
--- Drop existing DB if present and recreate
-DROP DATABASE IF EXISTS `simply_share`;
-CREATE DATABASE `simply_share` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+-- Create DB if not exists (do NOT drop to preserve existing data)
+CREATE DATABASE IF NOT EXISTS `simply_share` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `simply_share`;
 
 -- =======================================================
@@ -39,7 +38,7 @@ CREATE TABLE `users` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- Insert existing users (preserved exactly from your original dump)
+-- Seed initial users (admin, donor, recipient)
 INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `organization_name`, `contact_number`, `address`, `status`, `created_at`, `last_login`) VALUES
 (1, 'Ian Jay Calonia', 'icarusjay.lee@gmail.com', '$2y$10$nf2hc4LDryXah.oqAgjPBu49t2HII0Dex.0q3ZKxqSL/jfDRjy0hO', 'admin', 'Cebu Food Bank', NULL, 'Subangdaku, Mandaue City', 'approved', '2025-08-30 03:04:15', '2025-09-09 12:48:15'),
 (2, 'Jay Piañar', 'babidi@gmail.com', '$2y$10$nl3jGWzN/BK5FmzVK0j3z.q4UMc7mY2NvQMiUieBPBaoDsFFOz.4a', 'donor', 'No1Donor.org', NULL, 'Tabok, Mandaue City', 'approved', '2025-08-30 05:09:37', '2025-09-09 10:23:23'),
@@ -51,8 +50,6 @@ INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `organ
 CREATE TABLE `donor_profiles` (
   `user_id` int(11) NOT NULL,
   `donor_category` varchar(100) DEFAULT NULL, -- e.g., individual, corporate, org
-  `contact_person` varchar(150) DEFAULT NULL,
-  `contact_number` varchar(30) DEFAULT NULL,
   `notes` text,
   PRIMARY KEY (`user_id`),
   CONSTRAINT `dp_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
@@ -63,13 +60,32 @@ CREATE TABLE `donor_profiles` (
 -- =======================================================
 CREATE TABLE `recipient_profiles` (
   `user_id` int(11) NOT NULL,
-  `agency_name` varchar(150) DEFAULT NULL,
   `agency_type` varchar(100) DEFAULT NULL, -- e.g., school, NGO, barangay
-  `contact_person` varchar(150) DEFAULT NULL,
-  `contact_number` varchar(30) DEFAULT NULL,
-  `address` text,
+  `position_designation` varchar(150) DEFAULT NULL,
+  `total_residents` int(11) DEFAULT NULL,
+  `age_group` varchar(100) DEFAULT NULL,
+  `male_count` int(11) DEFAULT NULL,
+  `female_count` int(11) DEFAULT NULL,
+  `external_id` varchar(100) DEFAULT NULL,
   PRIMARY KEY (`user_id`),
   CONSTRAINT `rp_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- =======================================================
+-- 4) products (master list to avoid repeating names/categories)
+-- =======================================================
+-- Recipient contacts (multiple contacts per recipient org)
+CREATE TABLE `recipient_contacts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `contact_name` varchar(150) DEFAULT NULL,
+  `position_designation` varchar(150) DEFAULT NULL,
+  `contact_number` varchar(30) DEFAULT NULL,
+  `email` varchar(150) DEFAULT NULL,
+  `is_primary` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `rc_user_idx` (`user_id`),
+  CONSTRAINT `rc_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- =======================================================

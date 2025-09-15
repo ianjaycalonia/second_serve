@@ -112,3 +112,4 @@ try {
     error_log('Messages API error: ' . $e->getMessage());
     sendJson(['success' => false, 'error' => 'Server error'], 500);
 }
+

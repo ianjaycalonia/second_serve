@@ -45,6 +45,14 @@ try {
             requireRole(['admin']);
             handleReject($payload);
             break;
+        case 'importRecipients':
+            requireRole(['admin']);
+            handleImportRecipients($payload);
+            break;
+        case 'importDonors':
+            requireRole(['admin']);
+            handleImportDonors($payload);
+            break;
         default:
             sendJson(['success' => false, 'error' => 'Invalid action'], 400);
     }
@@ -92,4 +100,24 @@ function handleReject(array $payload) {
     $svc = new User();
     $svc->rejectUser((int)$payload['user_id'], $payload['reason'] ?? null);
     sendJson(['success' => true, 'message' => 'User rejected']);
+}
+
+function handleImportRecipients(array $payload) {
+    $rows = $payload['rows'] ?? [];
+    if (!is_array($rows)) {
+        sendJson(['success' => false, 'error' => 'rows must be an array'], 400);
+    }
+    $svc = new User();
+    $summary = $svc->importRecipients($rows);
+    sendJson(['success' => true, 'data' => $summary]);
+}
+
+function handleImportDonors(array $payload) {
+    $rows = $payload['rows'] ?? [];
+    if (!is_array($rows)) {
+        sendJson(['success' => false, 'error' => 'rows must be an array'], 400);
+    }
+    $svc = new User();
+    $summary = $svc->importDonors($rows);
+    sendJson(['success' => true, 'data' => $summary]);
 }

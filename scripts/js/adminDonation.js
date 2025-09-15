@@ -691,7 +691,7 @@ function startDonationAutoRefresh(){
       if (btnSubmit) btnSubmit.disabled = true;
       if (btnFail) btnFail.disabled = true;
       try {
-        const res = await fetch(`${API_BASE_URL}/food_safety_checks/create.php`, {
+        const res = await fetch(`${API_BASE_URL}/food_safety_checks.php`, {
           method: 'POST',
           body: fd,
           credentials: 'include'
@@ -1227,7 +1227,7 @@ function startDonationAutoRefresh(){
       buildFromLabels(labelsFromItems);
 
       // 2) Try to augment with backend donors list (optional)
-      const url = `${API_BASE_URL}/user_api.php?action=list&role=donor&status=approved&t=${Date.now()}`;
+      const url = `${API_BASE_URL}/users.php?action=list&role=donor&status=approved&t=${Date.now()}`;
       const res = await fetch(url, {
         method: 'GET',
         credentials: 'include',

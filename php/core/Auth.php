@@ -35,19 +35,44 @@ class Auth {
     }
 
     public function login(string $email, string $password, string $role): array {
-        // Fetch user by email + role, require approved status
-        $user = $this->db->query(
-            "SELECT user_id, name, email, password_hash, role, organization_name, contact_number, address, status, created_at
-             FROM users WHERE email = ? AND role = ?",
-            [$email, $role]
-        )->fetch();
+        // Provide granular feedback: check email first, then role, then password
+        // Try to include optional must_change_password; if column is missing, fall back
+        try {
+            $userAnyRole = $this->db->query(
+                "SELECT user_id, name, email, password_hash, role, organization_name, contact_number, address, status, created_at, must_change_password
+                 FROM users WHERE email = ?",
+                [$email]
+            )->fetch();
+        } catch (Exception $e) {
+            $userAnyRole = $this->db->query(
+                "SELECT user_id, name, email, password_hash, role, organization_name, contact_number, address, status, created_at
+                 FROM users WHERE email = ?",
+                [$email]
+            )->fetch();
+            if ($userAnyRole) { $userAnyRole['must_change_password'] = 0; }
+        }
 
-        if (!$user || !password_verify($password, (string)$user['password_hash'])) {
-            throw new Exception('Invalid email or password');
+        if (!$userAnyRole) {
+            throw new Exception('Email not found');
+        }
+
+        if (strtolower((string)$userAnyRole['role']) !== strtolower($role)) {
+            throw new Exception('Selected role does not match this account');
+        }
+
+        $user = $userAnyRole; // role matches; no need to re-query
+
+        if (!password_verify($password, (string)$user['password_hash'])) {
+            throw new Exception('Incorrect password');
         }
 
         if ($user['status'] !== 'approved') {
             throw new Exception('Account not approved');
+        }
+
+        // If the user is required to change password, block normal login
+        if (!empty($user['must_change_password'])) {
+            throw new Exception('Password change required');
         }
 
         // Update last_login if column exists; ignore if not present

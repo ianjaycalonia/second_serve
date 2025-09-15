@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function fetchDonors() {
     const res = await fetch(
-      `${API_BASE_URL}/user_api.php?action=list&role=donor&status=active&t=${Date.now()}`,
+      `${API_BASE_URL}/users.php?action=list&role=donor&status=active&t=${Date.now()}`,
       {
         method: "GET",
         credentials: "include",
@@ -114,7 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (window.__initMessagesModal) { try { window.__initMessagesModal(modalEl); } catch(_){} }
         }
         // Create or get direct conversation
-        const res = await fetch(`${API_BASE_URL}/messages_api.php?action=get_or_create_direct`, {
+        const res = await fetch(`${API_BASE_URL}/messages.php?action=get_or_create_direct`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -164,11 +164,54 @@ document.addEventListener("DOMContentLoaded", () => {
       if (tbody)
         tbody.innerHTML = `<tr><td colspan="7" class="text-center py-3">Loading donors...</td></tr>`;
 
-      const [donors, donations] = await Promise.all([
-        fetchDonors(),
-        fetchDonations(),
-      ]);
+      const [donors, donations] = await Promise.all([ fetchDonors(), fetchDonations() ]);
       renderDonors(donors, donations);
+
+      // Import from Excel wiring
+      const fileInput = document.getElementById('importDonorsInput');
+      const btnDesktop = document.getElementById('importDonorsBtn');
+      const btnMobile = document.getElementById('importDonorsBtnMobile');
+      function openPicker(){ if (fileInput) fileInput.click(); }
+      if (btnDesktop) btnDesktop.addEventListener('click', openPicker);
+      if (btnMobile) btnMobile.addEventListener('click', openPicker);
+
+      if (fileInput){
+        fileInput.addEventListener('change', async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          try{
+            if (typeof XLSX === 'undefined'){
+              alert('XLSX library not loaded.');
+              return;
+            }
+            const data = await file.arrayBuffer();
+            const wb = XLSX.read(data, { type: 'array' });
+            const sheetName = wb.SheetNames[0];
+            const ws = wb.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+            const res = await fetch(`${API_BASE_URL}/users.php?action=importDonors`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ rows })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const j = await res.json();
+            if (!j?.success) throw new Error(j?.error || 'Import failed');
+            const summary = j.data || {};
+            alert(`Import completed. Inserted: ${summary.inserted || 0}${(summary.errors && summary.errors.length) ? `, Errors: ${summary.errors.length}` : ''}`);
+
+            const [freshDonors, freshDonations] = await Promise.all([ fetchDonors(), fetchDonations() ]);
+            renderDonors(freshDonors, freshDonations);
+          } catch(err){
+            console.error('Import failed:', err);
+            alert(`Import failed: ${err.message}`);
+          } finally {
+            e.target.value = '';
+          }
+        });
+      }
     } catch (err) {
       console.error("Failed to load donors:", err);
       const tbody = document.querySelector("main .table tbody");

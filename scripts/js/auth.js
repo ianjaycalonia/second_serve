@@ -49,7 +49,68 @@ function handleApiResponse(response, successCallback) {
 // Handle API error
 function handleApiError(error) {
     console.error('API Error:', error);
-    alert(error.responseJSON?.error || 'An error occurred. Please try again.');
+    const message = (error && (error.responseJSON?.error || error.responseText)) || 'An error occurred. Please try again.';
+    // Prefer a Bootstrap modal instead of alert for better UX
+    showBootstrapError(message, inferErrorTitle(error));
+}
+
+// Show a Bootstrap modal for errors (created on-demand and reused)
+function showBootstrapError(message, title) {
+    try {
+        const t = title || 'Error';
+        let modalEl = document.getElementById('globalErrorModal');
+        if (!modalEl) {
+            modalEl = document.createElement('div');
+            modalEl.id = 'globalErrorModal';
+            modalEl.className = 'modal fade';
+            modalEl.tabIndex = -1;
+            modalEl.setAttribute('aria-hidden', 'true');
+            modalEl.innerHTML = `
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="alert alert-danger mb-0" role="alert"></div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                  </div>
+                </div>
+              </div>`;
+            document.body.appendChild(modalEl);
+        }
+        const titleEl = modalEl.querySelector('.modal-title');
+        const bodyAlert = modalEl.querySelector('.modal-body .alert');
+        if (titleEl) titleEl.textContent = t;
+        if (bodyAlert) bodyAlert.textContent = String(message || '');
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    } catch (e) {
+        // Fallback to alert if Bootstrap is not available for some reason
+        try { alert(title ? (title + ': ' + message) : (message || 'Error')); } catch(_) {}
+    }
+}
+
+// Infer a reasonable error title based on HTTP status or known error strings
+function inferErrorTitle(xhrLike) {
+    try {
+        const status = xhrLike && (xhrLike.status || xhrLike.responseJSON?.status);
+        const txt = (xhrLike && (xhrLike.responseJSON?.error || xhrLike.responseText || '')) || '';
+        const s = typeof status === 'number' ? status : 0;
+        const lower = String(txt).toLowerCase();
+        if (s === 401 || lower.includes('invalid credentials') || lower.includes('wrong password') || lower.includes('unauthorized')) return 'Login Failed';
+        if (s === 400) return 'Bad Request';
+        if (s === 403) return 'Forbidden';
+        if (s === 404) return 'Not Found';
+        if (s >= 500) return 'Server Error';
+        return 'Error';
+    } catch (_) {
+        return 'Error';
+    }
 }
 
 // Handle modal tab switching when clicking login/signup buttons
@@ -175,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Call login API
             $.ajax({
-                url: `${API_BASE_URL}/auth_api.php?action=login`,
+                url: `${API_BASE_URL}/auth.php?action=login`,
                 type: 'POST',
                 data: JSON.stringify({ email, password, role }),
                 contentType: 'application/json',
@@ -192,7 +253,30 @@ document.addEventListener('DOMContentLoaded', function() {
                         window.location.href = dest;
                     }
                 },
-                error: handleApiError,
+                error: function(xhr) {
+                    const msg = (xhr && (xhr.responseJSON?.error || xhr.responseText)) ? String(xhr.responseJSON?.error || xhr.responseText) : 'Login failed';
+                    const lower = msg.toLowerCase();
+                    let title = 'Login Failed';
+                    let body = msg;
+                    // Map backend granular messages to field-level errors
+                    if (lower.includes('email not found')) {
+                        showError('loginEmail', 'Email not found');
+                        title = 'Email not found';
+                        body = 'We could not find an account with that email address.';
+                    } else if (lower.includes('selected role does not match')) {
+                        showError('loginRole', 'Selected role does not match this account');
+                        title = 'Role mismatch';
+                        body = 'The selected role does not match your account. Please choose the correct role.';
+                    } else if (lower.includes('incorrect password')) {
+                        showError('loginPassword', 'Incorrect password');
+                        title = 'Incorrect password';
+                        body = 'The password you entered is incorrect. Please try again.';
+                    } else if (lower.includes('account not approved')) {
+                        title = 'Account not approved';
+                        body = 'Your account is not yet approved. Please wait for approval or contact support.';
+                    }
+                    showBootstrapError(body, title);
+                },
                 complete: function() {
                     setLoading(submitBtn, false);
                 }
@@ -249,7 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Call register API
             $.ajax({
-                url: `${API_BASE_URL}/auth_api.php?action=register`,
+                url: `${API_BASE_URL}/auth.php?action=register`,
                 type: 'POST',
                 data: JSON.stringify({
                     name,
@@ -363,7 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 try {
-                    await fetch(`${API_BASE_URL}/auth_api.php?action=logout`, {
+                    await fetch(`${API_BASE_URL}/auth.php?action=logout`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include'
@@ -483,7 +567,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         async function fetchUnreadTotal(){
             try {
-                const res = await fetch('php/api/messages_api.php?action=list_conversations', { credentials: 'include' });
+                const res = await fetch('php/api/messages.php?action=list_conversations', { credentials: 'include' });
                 const json = await res.json();
                 if (!json || !json.success) return 0;
                 const items = (json.data && Array.isArray(json.data.items)) ? json.data.items : [];
@@ -533,7 +617,7 @@ document.addEventListener('DOMContentLoaded', function() {
             modalEl.__messagesBound = true;
             __modalElRef = modalEl;
 
-        const apiBase = 'php/api/messages_api.php';
+        const apiBase = 'php/api/messages.php';
         const POLL_MS = 10000; // global cadence
         const MODAL_POLL_MS = 5000; // faster updates while the chat modal is open
         const SINGLE_CHANNEL_MSG_MS = 2000; // even faster message refresh in single-channel mode
@@ -729,7 +813,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const wrap = qs('#mm-donors', modalEl);
             if (!wrap) return;
             try {
-                const url = 'php/api/user_api.php?action=list&role=donor&status=active';
+                const url = 'php/api/users.php?action=list&role=donor&status=active';
                 const res = await fetch(url, { credentials: 'include' });
                 const json = await res.json();
                 const items = (json && json.success && json.data && Array.isArray(json.data.items)) ? json.data.items : [];
@@ -848,7 +932,7 @@ document.addEventListener('DOMContentLoaded', function() {
             async function runSearch(q){
                 if (!q || q.trim().length < 2) { if (resultsBox){ resultsBox.style.display='none'; resultsBox.innerHTML=''; } return; }
                 try {
-                    const url = 'php/api/user_api.php?action=list&role=donor&status=active&q=' + encodeURIComponent(q.trim());
+                    const url = 'php/api/users.php?action=list&role=donor&status=active&q=' + encodeURIComponent(q.trim());
                     const res = await fetch(url, { credentials: 'include' });
                     const json = await res.json();
                     const items = (json && json.success && json.data && Array.isArray(json.data.items)) ? json.data.items : [];

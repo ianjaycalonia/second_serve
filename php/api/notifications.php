@@ -78,3 +78,4 @@ try {
     error_log('Notifications API error: ' . $e->getMessage());
     sendJson(['success' => false, 'error' => 'Server error'], 500);
 }
+

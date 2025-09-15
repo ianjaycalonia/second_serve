@@ -114,7 +114,7 @@
         const refIdRaw = li.getAttribute('data-ref-id');
         const refId = refIdRaw && /^\d+$/.test(refIdRaw) ? parseInt(refIdRaw, 10) : null;
         try {
-          await fetch(`${API_BASE_URL}/notifications_api.php?action=read&id=${id}`, {
+          await fetch(`${API_BASE_URL}/notifications.php?action=read&id=${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include'
@@ -163,7 +163,7 @@
     if (!userId) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/notifications_api.php?user_id=${encodeURIComponent(userId)}`, {
+      const res = await fetch(`${API_BASE_URL}/notifications.php?user_id=${encodeURIComponent(userId)}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
@@ -212,7 +212,7 @@
     const userId = user?.user_id || user?.userId || user?.id;
     if (!userId) return;
     try {
-      await fetch(`${API_BASE_URL}/notifications_api.php?action=read_all&user_id=${encodeURIComponent(userId)}`, {
+      await fetch(`${API_BASE_URL}/notifications.php?action=read_all&user_id=${encodeURIComponent(userId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'

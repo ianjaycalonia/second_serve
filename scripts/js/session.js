@@ -41,7 +41,7 @@
         logoutBtn.addEventListener('click', async function(e){
           e.preventDefault();
           try {
-            await fetch('php/api/auth_api.php?action=logout', {
+            await fetch('php/api/auth.php?action=logout', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include'

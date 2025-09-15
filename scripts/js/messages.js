@@ -1,5 +1,5 @@
 (function(){
-  const apiBase = 'php/api/messages_api.php';
+  const apiBase = 'php/api/messages.php';
 
   const state = {
     conversations: [],
