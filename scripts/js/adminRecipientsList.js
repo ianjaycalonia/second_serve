@@ -124,31 +124,60 @@
   }
 
   // TEMP persistence: localStorage until backend API/table is finalized
+  // Local fallback storage
   function lsGet(){ try{ return JSON.parse(localStorage.getItem('recipients_week_assignments')||'{}'); } catch{ return {}; } }
   function lsSet(data){ localStorage.setItem('recipients_week_assignments', JSON.stringify(data)); }
   function collectWeekIds(dropId){ return qsa(`#${dropId} .rcard[data-user-id]`).map(el => parseInt(el.getAttribute('data-user-id')||'0',10)).filter(Boolean); }
-  function saveWeekKey(weekKey, dropId){
-    const data = lsGet();
-    data[weekKey] = collectWeekIds(dropId);
-    lsSet(data);
-    toast(`Saved ${weekKey} (${data[weekKey].length})`, 'success');
+  function currentMonth(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+  async function apiGetPlan(month){
+    const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=get_plan&month=${encodeURIComponent(month||currentMonth())}`, { credentials:'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    if (!j?.success) throw new Error(j?.error || 'Failed to load plan');
+    return j.data;
+  }
+  async function apiSavePlan(weeksObj, month){
+    const body = { month: month||currentMonth(), weeks: weeksObj||{} };
+    const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=save_plan`, { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, credentials:'include', body: JSON.stringify(body) });
+    const j = await res.json().catch(()=>({success:false,error:`HTTP ${res.status}`}));
+    if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+    return true;
   }
 
-  function restoreFromLocal(){
-    const data = lsGet();
+  async function restoreFromServer(){
     const map = window.__rl_usersById || new Map();
     const pool = qs('#pool');
     // Show pool cards initially
     qsa('#pool .rcard').forEach(c => c.style.display='');
-    [['W1','w1'],['W2','w2'],['W3','w3'],['W4','w4']].forEach(([key,drop])=>{
-      const dz = qs('#'+drop); if (!dz) return; dz.innerHTML='';
-      const ids = Array.isArray(data[key]) ? data[key] : [];
-      ids.forEach(id => {
-        const user = map.get(id); if (!user) return;
-        dz.appendChild(createCard(user));
-        const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`); if (poolCard) poolCard.style.display='none';
+    try {
+      const data = await apiGetPlan(currentMonth());
+      const weeks = data?.weeks || {};
+      [['W1','w1'],['W2','w2'],['W3','w3'],['W4','w4']].forEach(([key,drop])=>{
+        const dz = qs('#'+drop); if (!dz) return; dz.innerHTML='';
+        const ids = Array.isArray(weeks[key]) ? weeks[key] : [];
+        ids.forEach(id => {
+          const user = map.get(id); if (!user) return;
+          dz.appendChild(createCard(user));
+          const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`); if (poolCard) poolCard.style.display='none';
+        });
       });
-    });
+    } catch (e) {
+      // Fallback to local storage
+      restoreFromLocal();
+      toast('Loaded local plan (server unavailable)', 'warning');
+    }
+  }
+
+  async function saveWeekKey(weekKey, dropId){
+    const ids = collectWeekIds(dropId);
+    try {
+      await apiSavePlan({ [weekKey]: ids }, currentMonth());
+      toast(`Saved ${weekKey} (${ids.length})`, 'success');
+    } catch (e) {
+      // Fallback to local storage
+      const data = lsGet(); data[weekKey] = ids; lsSet(data);
+      toast(`Saved locally ${weekKey} (${ids.length})`, 'warning');
+    }
   }
 
   function autoFill(dropId, count){
@@ -208,8 +237,8 @@
       pool.innerHTML = '';
       items.forEach(u => { window.__rl_usersById.set(Number(u.user_id), u); pool.appendChild(createCard(u)); });
 
-      // Restore from local storage if present
-      restoreFromLocal();
+      // Load plan from server (fallback to local if needed)
+      await restoreFromServer();
 
       // wire search, clear and auto buttons
       qs('#poolSearch')?.addEventListener('input', (e)=> filterPool(e.target.value));
@@ -228,15 +257,10 @@
       qs('#saveW3')?.addEventListener('click', ()=> saveWeekKey('W3','w3'));
       qs('#saveW4')?.addEventListener('click', ()=> saveWeekKey('W4','w4'));
       // save all
-      qs('#saveAllBtn')?.addEventListener('click', ()=>{
-        const data = {
-          W1: collectWeekIds('w1'),
-          W2: collectWeekIds('w2'),
-          W3: collectWeekIds('w3'),
-          W4: collectWeekIds('w4')
-        };
-        lsSet(data);
-        toast('All weeks saved', 'success');
+      qs('#saveAllBtn')?.addEventListener('click', async ()=>{
+        const weeks = { W1: collectWeekIds('w1'), W2: collectWeekIds('w2'), W3: collectWeekIds('w3'), W4: collectWeekIds('w4') };
+        try { await apiSavePlan(weeks, currentMonth()); toast('All weeks saved', 'success'); }
+        catch(e){ lsSet(weeks); toast('All weeks saved locally (server unavailable)', 'warning'); }
       });
 
       // Enable Bootstrap tooltips for icon-only buttons

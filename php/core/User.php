@@ -10,6 +10,68 @@ class User
         $this->db = Database::getInstance();
     }
 
+    // Normalize a free-form tags string/array into a canonical, unique, comma-separated string
+    private function normalizeTags($tags): string
+    {
+        $arr = [];
+        if (is_string($tags)) {
+            $arr = preg_split('/[,;]+/', strtolower($tags));
+        } elseif (is_array($tags)) {
+            $arr = array_map(function($t){ return strtolower((string)$t); }, $tags);
+        }
+        $norm = [];
+        foreach ($arr as $t) {
+            $t = trim($t);
+            if ($t === '') continue;
+            // replace spaces and slashes with hyphens, collapse repeats
+            $t = preg_replace('/[\s\/]+/', '-', $t);
+            $t = preg_replace('/-+/', '-', $t);
+            $norm[$t] = true;
+        }
+        return implode(',', array_keys($norm));
+    }
+
+    // Derive simple tags from recipient data as a safety net (not authoritative)
+    private function deriveRecipientTags(array $data): string
+    {
+        $tags = [];
+        // 1) First tag: organization type (if present)
+        $ot = $data['organization_type'] ?? null;
+        if (is_string($ot) && trim($ot) !== '') {
+            $tags[] = $ot; // keep original type as first tag
+            if (strcasecmp(trim($ot), 'mixed') === 0) {
+                // Special rule: mixed implies both infant and elderly coverage
+                $tags[] = 'infant';
+                $tags[] = 'elderly';
+            }
+        }
+
+        // 2) Age group: compute the lowest age found and tag accordingly
+        $ag = $data['age_group'] ?? null;
+        if (is_string($ag) && trim($ag) !== '') {
+            // Extract all integers from the string (handles formats like "0-3", "3 to 7", "5, 12", etc.)
+            if (preg_match_all('/\d+/', $ag, $mNums) && !empty($mNums[0])) {
+                $nums = array_map('intval', $mNums[0]);
+                $minAge = min($nums);
+                if ($minAge <= 3) { $tags[] = 'infant'; }
+                if ($minAge >= 40) { $tags[] = 'elderly'; }
+            }
+        }
+
+        // 3) Gender composition rules
+        $m = isset($data['male_count']) ? (int)$data['male_count'] : null;
+        $f = isset($data['female_count']) ? (int)$data['female_count'] : null;
+        if ($m !== null && $m === 0) { $tags[] = 'all girls'; }
+        if ($f !== null && $f === 0) { $tags[] = 'all boys'; }
+
+        // 4) Merge any user-supplied tags (optional), then normalize
+        if (!empty($data['tags'])) {
+            if (is_string($data['tags'])) { $tags = array_merge($tags, preg_split('/[,;]+/', $data['tags'])); }
+            elseif (is_array($data['tags'])) { $tags = array_merge($tags, $data['tags']); }
+        }
+        return $this->normalizeTags($tags);
+    }
+
     // Fetch a single user profile by user_id, merging role-specific profile fields
     public function getProfile(int $userId): array
     {
@@ -227,9 +289,17 @@ class User
         $maleCount = isset($data['male_count']) && $data['male_count'] !== '' ? (int)$data['male_count'] : null;
         $femaleCount = isset($data['female_count']) && $data['female_count'] !== '' ? (int)$data['female_count'] : null;
         $externalId = $data['external_id'] ?? null;
+        // Derive tags automatically (behind-the-scenes; editable later by admin)
+        $derivedTags = $this->deriveRecipientTags([
+            'organization_type' => $organizationType,
+            'age_group' => $ageGroup,
+            'male_count' => $maleCount,
+            'female_count' => $femaleCount,
+            'tags' => $data['tags'] ?? null,
+        ]);
         $this->db->query(
-            "INSERT INTO recipient_profiles (user_id, organization_name, organization_type, address, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?,?)",
-            [$userId, $organization, $organizationType, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
+            "INSERT INTO recipient_profiles (user_id, organization_name, organization_type, tags, address, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            [$userId, $organization, $organizationType, $derivedTags, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
         );
 
         // Create a primary contact if contact info is provided and set as primary
