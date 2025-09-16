@@ -310,8 +310,19 @@ function showImportModal(title, html){
     const pos = escapeHtml(decodeHtml(String(r['position/designation'] ?? r['position'] ?? '')));
     const cno = escapeHtml(decodeHtml(String(r['contact#'] ?? r['contact_number'] ?? r['contact no'] ?? r['phone'] ?? '')));
     const email = escapeHtml(decodeHtml(String(r['email address'] ?? r['email'] ?? '')));
+    // Extra fields passed via dataset so they are preserved during import even if not editable in UI
+    const totalResidents = escapeHtml(decodeHtml(String(r['total residents'] ?? r['total_residents'] ?? '')));
+    const ageGroup = escapeHtml(decodeHtml(String(r['age group'] ?? r['age_group'] ?? '')));
+    const maleCount = escapeHtml(decodeHtml(String(r['no of male'] ?? r['male_count'] ?? r['male'] ?? '')));
+    const femaleCount = escapeHtml(decodeHtml(String(r['no of female'] ?? r['female_count'] ?? r['female'] ?? '')));
+    const externalId = escapeHtml(decodeHtml(String(r['external id'] ?? r['external_id'] ?? r['id'] ?? '')));
     return `
-      <tr data-index="${idx}">
+      <tr data-index="${idx}"
+          data-total-residents="${totalResidents}"
+          data-age-group="${ageGroup}"
+          data-male-count="${maleCount}"
+          data-female-count="${femaleCount}"
+          data-external-id="${externalId}">
         <td><input type="checkbox" class="form-check-input row-check" checked></td>
         <td><input type="text" class="form-control form-control-sm" name="beneficiary" value="${b}"></td>
         <td><input type="text" class="form-control form-control-sm" name="advocacy" value="${adv}"></td>
@@ -338,6 +349,13 @@ function showImportModal(title, html){
     obj['position'] = obj['position/designation'];
     obj['contact_number'] = obj['contact#'];
     obj['contact no'] = obj['contact#'];
+    // Include extra fields from dataset so backend can populate recipient_profiles
+    const ds = tr.dataset || {};
+    if (ds.totalResidents) obj['total residents'] = ds.totalResidents;
+    if (ds.ageGroup) obj['age group'] = ds.ageGroup;
+    if (ds.maleCount) obj['no of male'] = ds.maleCount;
+    if (ds.femaleCount) obj['no of female'] = ds.femaleCount;
+    if (ds.externalId) obj['external id'] = ds.externalId;
     return obj;
   }
 
@@ -372,6 +390,12 @@ function showImportModal(title, html){
       'position/designation': r['position/designation'] ?? r['position/ designation'] ?? r['position / designation'] ?? r['position designation'] ?? r['position'] ?? decodeHtml(row['position/designation']) ?? '',
       'contact#': r['contact#'] ?? r['contact_number'] ?? r['contact no'] ?? r['contact no.'] ?? r['phone'] ?? decodeHtml(row['contact#']) ?? '',
       'email address': r['email address'] ?? r['email'] ?? decodeHtml(row['email address']) ?? '',
+      // Extra fields (optional)
+      'total residents': r['total residents'] ?? r['totalresidents'] ?? decodeHtml(row['total residents']) ?? '',
+      'age group': r['age group'] ?? r['agegroup'] ?? decodeHtml(row['age group']) ?? '',
+      'no of male': r['no of male'] ?? r['male'] ?? r['male_count'] ?? decodeHtml(row['no of male']) ?? '',
+      'no of female': r['no of female'] ?? r['female'] ?? r['female_count'] ?? decodeHtml(row['no of female']) ?? '',
+      'external id': r['external id'] ?? r['externalid'] ?? r['id'] ?? decodeHtml(row['external id']) ?? '',
     };
   }
 

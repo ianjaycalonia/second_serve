@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recipients List</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+  <link rel="stylesheet" href="scripts/css/monthlyRecipients.css" />
+  <style>
+    /* Constrain brand logo */
+    .brand img { max-height: 36px; width: auto; }
+  </style>
+</head>
+<body class="sidebar-collapsed">
+  <nav>
+    <div class="nav-items">
+      <div class="toggle">
+        <button id="sidebarToggle" class="btn"><i class="bi bi-list fs-4"></i></button>
+      </div>
+      <div class="brand">
+        <img src="images/simply_share.png" alt="Simply Share" />
+        <span class="brand-name">Simply Share</span>
+      </div>
+      <div class="nav-icons">
+        <button class="btn" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Notifications"><i class="bi bi-bell-fill"></i></button>
+        <button class="btn" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Help"><i class="bi bi-question-circle-fill"></i></button>
+      </div>
+    </div>
+  </nav>
+  <div class="sidebar-backdrop" style="display: none"></div>
+  <aside class="collapsed">
+    <a href="AdminDashboard.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Dashboard"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
+    <a href="Donation.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Donations"><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a>
+    <a href="Donors.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Donors"><i class="bi bi-person-fill me-2"></i><span>Donors</span></a>
+    <a href="Recipient.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Recipients"><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a>
+    <a href="ReportAndAnalytics.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Reports & Analytics"><i class="bi bi-bar-chart-fill me-2"></i><span>Reports & Analytics</span></a>
+    <a href="Inventory.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Inventory"><i class="bi bi-box2-fill me-2"></i><span>Inventory</span></a>
+    <!-- Intentionally not listed in sidebar to avoid clutter -->
+  </aside>
+
+  <main>
+    <div aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="AdminDashboard.html">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Recipients List</li>
+      </ol>
+    </div>
+
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <h5 class="mb-0">Recipients List (Weekly)</h5>
+      <div class="d-flex align-items-center gap-2">
+        <button id="reloadBtn" class="btn btn-outline-secondary btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Reload recipients">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <button id="saveAllBtn" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Save all weeks">
+          <i class="bi bi-save"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="card card-accent p-3 mb-3">
+      <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+        <div class="fw-semibold">Pool of Approved Recipients</div>
+        <div class="d-flex align-items-center gap-2">
+          <input id="poolSearch" class="form-control form-control-sm" style="width:220px" placeholder="Search recipients..." />
+          <div class="small text-muted">Drag to weeks below</div>
+        </div>
+      </div>
+      <div class="rpool-scroll">
+        <div id="pool" class="rpool list d-flex flex-wrap gap-2" aria-label="Pool of recipients">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-3">
+        <div class="card card-accent h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-semibold">Week 1</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="clearW1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Clear Week 1">
+                  <i class="bi bi-eraser"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-primary" id="autoW1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Auto-pick 10 for Week 1">
+                  <i class="bi bi-magic"></i>
+                </button>
+                <button class="btn btn-sm btn-success" id="saveW1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Save Week 1">
+                  <i class="bi bi-save"></i>
+                </button>
+              </div>
+            </div>
+            <div id="w1" class="dropzone flex-grow-1 border rounded p-2" aria-label="Week 1 assignments"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-3">
+        <div class="card card-accent h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-semibold">Week 2</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="clearW2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Clear Week 2">
+                  <i class="bi bi-eraser"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-primary" id="autoW2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Auto-pick 10 for Week 2">
+                  <i class="bi bi-magic"></i>
+                </button>
+                <button class="btn btn-sm btn-success" id="saveW2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Save Week 2">
+                  <i class="bi bi-save"></i>
+                </button>
+              </div>
+            </div>
+            <div id="w2" class="dropzone flex-grow-1 border rounded p-2" aria-label="Week 2 assignments"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-3">
+        <div class="card card-accent h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-semibold">Week 3</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="clearW3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Clear Week 3">
+                  <i class="bi bi-eraser"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-primary" id="autoW3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Auto-pick 10 for Week 3">
+                  <i class="bi bi-magic"></i>
+                </button>
+                <button class="btn btn-sm btn-success" id="saveW3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Save Week 3">
+                  <i class="bi bi-save"></i>
+                </button>
+              </div>
+            </div>
+            <div id="w3" class="dropzone flex-grow-1 border rounded p-2" aria-label="Week 3 assignments"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-3">
+        <div class="card card-accent h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-semibold">Week 4</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="clearW4" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Clear Week 4">
+                  <i class="bi bi-eraser"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-primary" id="autoW4" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Auto-pick 10 for Week 4">
+                  <i class="bi bi-magic"></i>
+                </button>
+                <button class="btn btn-sm btn-success" id="saveW4" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Save Week 4">
+                  <i class="bi bi-save"></i>
+                </button>
+              </div>
+            </div>
+            <div id="w4" class="dropzone flex-grow-1 border rounded p-2" aria-label="Week 4 assignments"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="lib/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+  <script src="scripts/js/adminRecipientsList.js"></script>
+</body>
+</html>

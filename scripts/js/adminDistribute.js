@@ -66,6 +66,35 @@
     return Array.isArray(j?.data?.items) ? j.data.items : [];
   }
 
+  // Period-based distribution helpers (suggest/mark_result)
+  function getPeriodType(){
+    const sel = document.getElementById('diPeriodType');
+    const v = sel ? sel.value : 'monthly';
+    return (v === 'weekly' || v === 'monthly' || v === 'quarterly') ? v : 'monthly';
+  }
+  async function suggestPeriod(roundSize){
+    const payload = { period_type: getPeriodType(), round_size: Math.max(1, parseInt(roundSize || '5', 10) || 5) };
+    const res = await fetch(`${API_BASE_URL}/distribution.php?action=suggest`, {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const j = await res.json();
+    if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+    const ids = Array.isArray(j?.data?.recipient_ids) ? j.data.recipient_ids.map(n=>parseInt(n,10)).filter(Number.isFinite) : [];
+    window.__diPeriodKey = j?.data?.period_key || null;
+    window.__diPeriodType = payload.period_type;
+    return ids;
+  }
+  async function markPeriodResult(servedIds, skippedIds){
+    const res = await fetch(`${API_BASE_URL}/distribution.php?action=mark_result`, {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ period_type: window.__diPeriodType || getPeriodType(), period_key: window.__diPeriodKey || undefined, served_ids: servedIds, skipped_ids: skippedIds })
+    });
+    const j = await res.json();
+    if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+    return true;
+  }
+
   function renderRecipientPools(items, selectedIds = []){
     const pool = qs('#diPool');
     const selected = qs('#diSelected');
@@ -134,6 +163,7 @@
   }
 
   function buildOptions(){
+    // Keep manual carryovers as an advanced option; quarterly flow controls main order
     return {
       carryover_ids: parseIds(qs('#diCarryoverIds')?.value),
       carryover_boost: 1,
@@ -247,8 +277,47 @@
     if (!items.length){ showMsg(fb, 'Please add at least one item with quantity > 0', 'danger'); return; }
 
     const allRecipients = await fetchRecipients();
+    // Decide pool type and specialty based on items (simple keyword rules)
+    function detectPoolFromItems(items){
+      const text = (s)=> String(s||'').toLowerCase();
+      const keys = new Set();
+      for (const it of items){
+        const name = text(it.name);
+        const cat = text(it.category);
+        const blob = name + ' ' + cat;
+        if (/infant|baby|children|kid|child|milk/gi.test(blob)) keys.add('children');
+        if (/elderly|senior|aged/gi.test(blob)) keys.add('elderly');
+        if (/medical|kit|medicine/gi.test(blob)) keys.add('medical');
+      }
+      if (keys.size === 1){ return { pool_type: 'specialty', specialty_key: Array.from(keys)[0] }; }
+      return { pool_type: 'general', specialty_key: null };
+    }
+    const periodType = getPeriodType();
+    const roundSize = parseInt(qs('#diRoundSize')?.value || '5', 10) || 5;
+    const { pool_type, specialty_key } = detectPoolFromItems(items);
+    // Ask server to suggest ordered recipients for this period/pool
+    let suggestedIds = [];
+    let leftoverSlots = 0;
+    try{
+      const res = await fetch(`${API_BASE_URL}/distribution.php?action=suggest`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ period_type: periodType, round_size: roundSize, pool_type, specialty_key })
+      });
+      const j = await res.json();
+      if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+      suggestedIds = Array.isArray(j?.data?.recipient_ids) ? j.data.recipient_ids.map(n=>parseInt(n,10)).filter(Number.isFinite) : [];
+      leftoverSlots = parseInt(j?.data?.leftover_slots ?? '0', 10) || 0;
+      window.__diPeriodKey = j?.data?.period_key || null;
+      window.__diPeriodType = periodType;
+    } catch(err){ console.warn('distribution suggest failed; falling back to manual selection', err); }
+
     const recipients = buildRecipientsPayload(allRecipients);
-    if (!recipients.length){ showMsg(fb, 'Please select recipients or paste their IDs', 'danger'); return; }
+    // If suggest returned ids, preselect them in UI before allocation
+    if (suggestedIds.length){
+      renderRecipientPools(allRecipients, suggestedIds);
+    }
+    const payload = buildRecipientsPayload(allRecipients);
+    if (!payload.length){ showMsg(fb, 'Please select recipients or paste their IDs', 'danger'); return; }
 
     const options = buildOptions();
 
@@ -262,13 +331,16 @@
       if (!res.ok || !j?.success){ throw new Error(j?.error || `HTTP ${res.status}`); }
       const data = j.data || {};
       window.__diItems = items; // store for totals enforcement
-      const usedRecipients = data.prioritized || recipients;
+      const usedRecipients = data.prioritized || payload;
       buildAllocationColumns(usedRecipients, data.allocations || {});
       attachSuggestTableEvents([], usedRecipients);
       const meta = qs('#diAllocMeta');
       if (meta){
         const sampled = j.meta?.sampled_count;
-        meta.textContent = typeof sampled === 'number' ? `Sampled recipients: ${sampled}` : '';
+        const parts = [];
+        if (typeof sampled === 'number') parts.push(`Sampled recipients: ${sampled}`);
+        if (pool_type === 'specialty' && leftoverSlots > 0) parts.push(`Specialty leftover slots: ${leftoverSlots} (review to redistribute or hold)`);
+        meta.textContent = parts.join(' · ');
       }
       showMsg(fb, '', '');
     } catch(err){
@@ -283,7 +355,10 @@
       showMsg(fb, 'Loading recipients...', 'secondary');
       const all = await fetchRecipients();
       window.__diAllRecipients = all;
-      renderRecipientPools(all, getSelectedIds());
+      // Ask server for quarterly suggestion based on round size
+      const roundSize = parseInt(qs('#diRoundSize')?.value || '5', 10) || 5;
+      const ids = await suggestPeriod(roundSize);
+      renderRecipientPools(all, ids);
       // Build recipients payload from ALL approved recipients and call allocate-items with dummy item to sample 5
       const recPayload = all.map(u => ({
         id: u.user_id || u.id,
@@ -300,9 +375,9 @@
         qsa('#diSelected .di-card').forEach(card => poolEl.appendChild(card));
         pinned = []; // do not pin when regenerating
       }
-      // Choose options: deterministic on open; random sample of 5 on regenerate
+      // Choose options: deterministic on open; random sample on regenerate (optional)
       const options = randomize
-        ? { include_rationale: 0, carryover_ids: [], random_count: 5, random_seed: Date.now() }
+        ? { include_rationale: 0, carryover_ids: [], random_count: roundSize, random_seed: Date.now() }
         : { include_rationale: 0, carryover_ids: pinned };
       const res = await fetch(`${API_BASE_URL}/allocate-items.php`, {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
@@ -415,8 +490,7 @@
       if (!recObjs.length){
         const all = window.__diAllRecipients || [];
         const map = new Map(all.map(u => [u.user_id || u.id, u]));
-        const hl = getHighlightedIdsFromPool();
-        const ids = (hl.length ? hl : getFirstIdsFromPool(5)).slice(0,5);
+        const ids = getSelectedIds();
         recObjs = ids.map(id => ({ id, ...(map.get(id)||{}) }));
       }
       buildAllocationColumns(recObjs, {});
@@ -486,6 +560,30 @@
         // qs('#diGlobalName').value = '';
         // qs('#diGlobalQty').value = '0';
       });
+      // Confirm Round: mark served vs skipped for quarterly flow
+      qs('#diConfirmRound')?.addEventListener('click', async () => {
+        try{
+          const selectedIds = getSelectedIds();
+          if (!selectedIds.length) { showMsg(qs('#diFeedback'), 'No recipients selected to confirm.', 'warning'); return; }
+          // Compute per-recipient allocated sum from Allocation tab
+          const served = [];
+          const skipped = [];
+          selectedIds.forEach(id => {
+            const tbody = qs(`.di-rec-tbody[data-rec="${id}"]`);
+            let sum = 0;
+            if (tbody){
+              qsa('input.di-alloc', tbody).forEach(inp => { sum += Math.max(0, parseInt(inp.value || '0', 10) || 0); });
+            }
+            if (sum > 0) served.push(id); else skipped.push(id);
+          });
+          await markPeriodResult(served, skipped);
+          showMsg(qs('#diFeedback'), 'Round results saved. Skipped will be prioritized next round.', 'success');
+        } catch(err){
+          console.error('Confirm round failed:', err);
+          showMsg(qs('#diFeedback'), err.message || 'Failed to save round results', 'danger');
+        }
+      });
+
       // Clean highlights on hide
       modalEl.addEventListener('hide.bs.modal', () => {
         showMsg(qs('#diFeedback'), '', '');

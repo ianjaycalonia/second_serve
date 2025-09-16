@@ -274,7 +274,72 @@ CREATE TABLE `notifications` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- =======================================================
--- 12) messaging tables (optional - created for compatibility)
+-- 12) recipient_month_assignments (monthly recipients)
+-- =======================================================
+CREATE TABLE `recipient_month_assignments` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `month` date NOT NULL,                             -- use first day of month (YYYY-MM-01)
+  `recipient_id` int(11) NOT NULL,                   -- FK to users (recipient)
+  `assigned_by` int(11) DEFAULT NULL,                -- FK to users (admin)
+  `assigned_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_month_recipient` (`month`,`recipient_id`),
+  KEY `rma_recipient_idx` (`recipient_id`),
+  KEY `rma_assigned_by_idx` (`assigned_by`),
+  CONSTRAINT `rma_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `rma_assigned_by_fk` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- =======================================================
+-- 13) distribution_period_status (served/skipped per period: weekly/monthly/quarterly)
+-- =======================================================
+CREATE TABLE `distribution_period_status` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `period_key` varchar(12) NOT NULL,          -- e.g., 2025-W38, 2025-09, 2025-Q3
+  `recipient_id` int(11) NOT NULL,            -- FK to users (recipient)
+  `served_count` int(11) NOT NULL DEFAULT 0,
+  `last_served_at` timestamp NULL DEFAULT NULL,
+  `skipped_pending` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_period_recipient` (`period_key`,`recipient_id`),
+  KEY `dps_recipient_idx` (`recipient_id`),
+  CONSTRAINT `dps_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- =======================================================
+-- 14) recipient_specialties (tags for specialty item eligibility)
+-- =======================================================
+CREATE TABLE `recipient_specialties` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `recipient_id` int(11) NOT NULL,
+  `specialty_key` varchar(64) NOT NULL, -- e.g., children, elderly, medical
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_recipient_specialty` (`recipient_id`,`specialty_key`),
+  KEY `rs_recipient_idx` (`recipient_id`),
+  CONSTRAINT `rs_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- =======================================================
+-- 15) distribution_selection_logs (transparency logs per selection run)
+-- =======================================================
+CREATE TABLE `distribution_selection_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `period_key` varchar(12) NOT NULL,
+  `period_type` enum('weekly','monthly','quarterly') NOT NULL,
+  `pool_type` enum('general','specialty') NOT NULL,
+  `specialty_key` varchar(64) DEFAULT NULL,
+  `round_size` int(11) NOT NULL,
+  `selected_ids_json` text NOT NULL,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `dsl_period_idx` (`period_key`,`period_type`),
+  KEY `dsl_created_by_idx` (`created_by`),
+  CONSTRAINT `dsl_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- =======================================================
+-- 16) messaging tables (optional - created for compatibility)
 -- =======================================================
 CREATE TABLE `conversations` (
   `id` int(11) NOT NULL AUTO_INCREMENT,

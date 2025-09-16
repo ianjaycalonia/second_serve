@@ -422,6 +422,24 @@
     <style>
       /* Stacked table layout for very small screens */
       @media (max-width: 575.98px) {
+        /* Hide sidebar and free content width on mobile */
+        aside { display: none !important; }
+        main { margin-left: 0 !important; padding: .75rem !important; }
+
+        /* Nav compaction */
+        nav .nav-items { flex-wrap: wrap; gap: .25rem .5rem; }
+        nav .nav-icons { gap: .25rem; }
+        nav .nav-icons .nav-link { padding: .25rem; }
+        nav .toggle .logo { height: 28px; }
+        nav .toggle .btn { padding: .25rem .4rem; }
+
+        /* Header bar readability */
+        .fw-bold.align-self-center { color: #fff; }
+        #filtersDropdownBtn { color: #fff; border-color: rgba(255,255,255,.6); }
+
+        /* Mobile import button spans full width */
+        #importRecipientsBtnMobile { width: 100%; }
+
         table.stacked-table thead {
           display: none;
         }
@@ -433,13 +451,15 @@
           padding: .5rem;
         }
         table.stacked-table tbody tr td {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
+          /* Use grid so label and value align cleanly */
+          display: grid;
+          grid-template-columns: 140px 1fr; /* label fixed, value flexible */
+          column-gap: .5rem;
+          align-items: start;
           border: 0 !important;
-          padding: .25rem 0 !important;
-          word-break: break-word;
+          padding: .375rem 0 !important;
           overflow-wrap: anywhere;
+          word-break: break-word;
         }
         /* Override Bootstrap's d-none on mobile to show all fields in stacked layout */
         table.stacked-table tbody tr td.d-none,
@@ -451,10 +471,24 @@
         table.stacked-table tbody tr td::before {
           content: attr(data-label);
           font-weight: 600;
-          margin-right: .5rem;
+          margin-right: 0;
           color: #6c757d;
+          white-space: nowrap; /* prevent label from breaking into multiple lines */
+        }
+        /* Keep actions link on a new line if too long */
+        table.stacked-table tbody tr td[data-label="Actions"] {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: .25rem;
+        }
+        table.stacked-table tbody tr td[data-label="Actions"] a {
+          word-break: break-word;
         }
       }
+
+      /* Better wrapping for table cells on all sizes */
+      table.stacked-table td, table.stacked-table th { word-wrap: anywhere; }
+      .table-responsive { overflow-x: auto; }
     </style>
     
     <!-- Import Result Modal -->

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recipients List</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+  <link rel="stylesheet" href="scripts/css/monthlyRecipients.css" />
+</head>
+<body class="sidebar-collapsed">
+  <nav>
+    <div class="nav-items">
+      <div class="toggle">
+        <button id="sidebarToggle" class="btn"><i class="bi bi-list fs-4"></i></button>
+        <img src="images/simply_share.png" alt="Simply Share Logo" class="logo"/>
+        <div class="brand d-none d-md-block">Second Serve by <span>Simply</span><span>Share</span></div>
+      </div>
+      <div class="nav-icons">
+        <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
+          <i class="bi bi-bell-fill fs-5"></i>
+          <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: 0.6rem"></span>
+        </a>
+        <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
+          <i class="bi bi-envelope-fill fs-5"></i>
+        </a>
+        <div class="dropdown">
+          <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-person-circle fs-5"></i>
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Profile</a></li>
+            <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            <li><hr class="dropdown-divider" /></li>
+            <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </nav>
+  <div class="sidebar-backdrop" style="display: none"></div>
+  <aside class="collapsed">
+    <a href="AdminDashboard.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Dashboard"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
+    <a href="Donation.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Donations"><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a>
+    <a href="Donors.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Donors"><i class="bi bi-person-fill me-2"></i><span>Donors</span></a>
+    <a href="Recipient.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Recipients"><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a>
+    <a href="ReportAndAnalytics.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Reports & Analytics"><i class="bi bi-bar-chart-fill me-2"></i><span>Reports & Analytics</span></a>
+    <a href="Inventory.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Inventory"><i class="bi bi-box2-fill me-2"></i><span>Inventory</span></a>
+    <a href="MonthlyRecipients.html" class="nav-link active" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Recipients List"><i class="bi bi-calendar3 me-2"></i><span>Recipients List</span></a>
+  </aside>
+
+  <main>
+    <div aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="AdminDashboard.html">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Recipients List</li>
+      </ol>
+    </div>
+
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <h5 class="mb-0">Recipients List</h5>
+      <div class="d-flex align-items-center gap-2">
+        <button id="reloadBtn" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-clockwise me-1"></i>Reload</button>
+        <button id="saveAllBtn" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i>Save All</button>
+      </div>
+    </div>
+
+    <div class="card card-accent p-3 mb-3">
+      <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+        <div class="fw-semibold">Pool of Approved Recipients</div>
+        <div class="d-flex align-items-center gap-2">
+          <input id="poolSearch" class="form-control form-control-sm" style="width:220px" placeholder="Search recipients..." />
+          <div class="small text-muted">Drag to months below</div>
+        </div>
+      </div>
+      <div class="rpool-scroll">
+        <div id="pool" class="rpool list d-flex flex-wrap gap-2" aria-label="Pool of recipients">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-4">
+        <div class="card card-accent h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-semibold" id="m1Label">Month 1</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="clearM1"><i class="bi bi-eraser me-1"></i>Clear</button>
+                <button class="btn btn-sm btn-outline-primary" id="saveM1"><i class="bi bi-save me-1"></i>Save</button>
+              </div>
+            </div>
+            <div class="small text-muted mb-2" id="m1Date"></div>
+            <div id="m1" class="dropzone flex-grow-1 border rounded p-2" aria-label="Month 1 assignments">
+              <!-- drop items here -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-4">
+        <div class="card card-accent h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-semibold" id="m2Label">Month 2</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="clearM2"><i class="bi bi-eraser me-1"></i>Clear</button>
+                <button class="btn btn-sm btn-outline-primary" id="saveM2"><i class="bi bi-save me-1"></i>Save</button>
+              </div>
+            </div>
+            <div class="small text-muted mb-2" id="m2Date"></div>
+            <div id="m2" class="dropzone flex-grow-1 border rounded p-2" aria-label="Month 2 assignments"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-4">
+        <div class="card card-accent h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-semibold" id="m3Label">Month 3</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="clearM3"><i class="bi bi-eraser me-1"></i>Clear</button>
+                <button class="btn btn-sm btn-outline-primary" id="saveM3"><i class="bi bi-save me-1"></i>Save</button>
+              </div>
+            </div>
+            <div class="small text-muted mb-2" id="m3Date"></div>
+            <div id="m3" class="dropzone flex-grow-1 border rounded p-2" aria-label="Month 3 assignments"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Notifications Modal placeholder to keep header actions working -->
+  <div class="modal fade" id="notificationsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-body">Notifications here</div></div></div>
+  </div>
+  <div class="modal fade" id="messagesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-body">Messages here</div></div></div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+  <script src="scripts/js/auth.js"></script>
+  <script src="scripts/js/notifications.js"></script>
+  <script src="scripts/js/sidebar.js"></script>
+  <script src="scripts/js/adminMonthlyRecipients.js"></script>
+</body>
+</html>

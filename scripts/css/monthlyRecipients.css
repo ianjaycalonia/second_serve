@@ -1,0 +1,48 @@
+/* Monthly Recipients page styles */
+.rpool .rcard,
+.dropzone .rcard {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .6rem;
+  border: 1px solid #dee2e6;
+  border-radius: .375rem;
+  background: #fff;
+  cursor: grab;
+  user-select: none;
+}
+
+.rcard:active { cursor: grabbing; }
+
+.rpool { min-height: 64px; }
+.rpool-scroll {
+  max-height: 220px; /* ~5 rows depending on wrap */
+  overflow: auto;
+  border: 1px solid #dee2e6;
+  border-radius: .375rem;
+  padding: .5rem;
+  background: #fff;
+}
+.rpool.drag-over { outline: 2px dashed #adb5bd; background: #f8f9fa; }
+
+.dropzone {
+  min-height: 220px;
+  background: #f8f9fa;
+}
+.dropzone.drag-over {
+  outline: 2px dashed #00a0b0;
+  background: #eef9fb;
+}
+
+.rmeta {
+  color: #6c757d;
+  font-size: .8rem;
+}
+
+.rchip {
+  background: #f1f3f5;
+  border: 1px solid #e9ecef;
+  padding: .1rem .4rem;
+  border-radius: .25rem;
+  font-size: .75rem;
+}

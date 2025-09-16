@@ -199,6 +199,10 @@ class User
         foreach ($row as $k => $v) {
             $ck = strtolower(trim((string)$k));
             $ck = preg_replace('/[\s._-]+/','', $ck); // remove spaces, dots, underscores, hyphens
+            // Decode HTML entities that may have been introduced by sanitize() upstream
+            if (is_string($v)) {
+                $v = html_entity_decode($v, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            }
             $out[$ck] = $v;
         }
         return $out;
