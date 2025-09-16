@@ -143,10 +143,11 @@ try {
                         i.donation_id AS source_donation_id,
                         i.source_batch_id,
                         i.donor_id,
-                        u.organization_name AS donor_org,
+                        dp.organization_name AS donor_org,
                         u.name AS donor_name
                     FROM inventory i
                     LEFT JOIN users u ON u.user_id = i.donor_id
+                    LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
                     $whereSql
                     ORDER BY i.added_at DESC
                     LIMIT $limit OFFSET $offset";

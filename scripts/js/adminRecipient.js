@@ -1,3 +1,37 @@
+    let importInProgress = false;
+
+    function setImportLoading(loading, refs){
+      importInProgress = !!loading;
+      const btn = refs && refs.importBtn ? refs.importBtn : null;
+      const modal = refs && refs.modalEl ? refs.modalEl : null;
+      if (btn){
+        if (loading){
+          btn.disabled = true;
+          btn.dataset._orig = btn.innerHTML;
+          btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Importing...';
+        } else {
+          btn.disabled = false;
+          if (btn.dataset._orig){ btn.innerHTML = btn.dataset._orig; delete btn.dataset._orig; }
+        }
+      }
+      // Disable inputs inside modal during import to prevent edits/double actions
+      if (modal){
+        const inputs = modal.querySelectorAll('input, button, select, textarea');
+        inputs.forEach(el => {
+          if (el === btn) return; // handled above
+          if (loading){
+            if (!el.dataset._disabled){ el.dataset._disabled = el.disabled ? '1' : ''; }
+            el.disabled = true;
+          } else {
+            if (el.dataset._disabled !== undefined){
+              el.disabled = el.dataset._disabled === '1';
+              delete el.dataset._disabled;
+            }
+          }
+        });
+      }
+    }
+
 'use strict';
 
 // Global helper: show a simple Bootstrap modal with custom title and HTML body
@@ -86,7 +120,7 @@ function showImportModal(title, html){
     const originalNorm = rawRows.map(r => normalizeRowKeys(r));
 
     // Optionally fill-down blank cells for columns typically merged in Excel
-    const fillDownKeys = ['name of beneficiary', 'advocacy', 'address'];
+    const fillDownKeys = ['name of beneficiary', 'advocacy', 'type', 'address'];
     const fillDownCheck = document.getElementById('previewFillDownCheck');
     let norm = (fillDownCheck && fillDownCheck.checked) ? fillDown(originalNorm, fillDownKeys) : originalNorm.slice();
 
@@ -224,6 +258,8 @@ function showImportModal(title, html){
     propagateOrgEmails();
 
     async function doImport(){
+      if (importInProgress) return;
+      setImportLoading(true, { importBtn, modalEl });
       // Collect selected rows into payload with edited values
       const payload = [];
       tableBody.querySelectorAll('tr').forEach(tr => {
@@ -237,13 +273,18 @@ function showImportModal(title, html){
       if (!payload.length){ showImportModal('Import Error', '<div class="text-danger">No rows selected or rows failed validation.</div>'); return; }
 
       // POST to backend
-      const res = await fetch(`${API_BASE_URL}/users.php?action=importRecipients`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ rows: payload })
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const j = await res.json();
-      if (!j?.success) throw new Error(j?.error || 'Import failed');
+      let j;
+      try{
+        const res = await fetch(`${API_BASE_URL}/users.php?action=importRecipients`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ rows: payload })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        j = await res.json();
+        if (!j?.success) throw new Error(j?.error || 'Import failed');
+      } finally {
+        setImportLoading(false, { importBtn, modalEl });
+      }
       const summary = j.data || {};
       // Close preview modal
       bootstrap.Modal.getOrCreateInstance(modalEl).hide();
@@ -304,7 +345,8 @@ function showImportModal(title, html){
 
   function rowHtml(r, idx){
     const b = escapeHtml(decodeHtml(String(r['name of beneficiary'] ?? r['beneficiary name'] ?? r['recipient_name'] ?? r['organization_name'] ?? '')));
-    const adv = escapeHtml(decodeHtml(String(r['advocacy'] ?? r['agency_type'] ?? '')));
+    const advVal = escapeHtml(decodeHtml(String(r['advocacy'] ?? r['agency_type'] ?? '')));
+    const typeVal = escapeHtml(decodeHtml(String(r['type'] ?? r['organization_type'] ?? r['org_type'] ?? r['orgtype'] ?? r['agency_type'] ?? r['advocacy'] ?? '')));
     const addr = escapeHtml(decodeHtml(String(r['address'] ?? r['addresss'] ?? r['location'] ?? '')));
     const cp = escapeHtml(decodeHtml(String(r['contact person'] ?? r['contact_person'] ?? r['contact'] ?? '')));
     const pos = escapeHtml(decodeHtml(String(r['position/designation'] ?? r['position'] ?? '')));
@@ -325,7 +367,8 @@ function showImportModal(title, html){
           data-external-id="${externalId}">
         <td><input type="checkbox" class="form-check-input row-check" checked></td>
         <td><input type="text" class="form-control form-control-sm" name="beneficiary" value="${b}"></td>
-        <td><input type="text" class="form-control form-control-sm" name="advocacy" value="${adv}"></td>
+        <td><input type="text" class="form-control form-control-sm" name="advocacy" value="${advVal}"></td>
+        <td><input type="text" class="form-control form-control-sm" name="type" value="${typeVal}"></td>
         <td><input type="text" class="form-control form-control-sm" name="address" value="${addr}"></td>
         <td><input type="text" class="form-control form-control-sm" name="contact_person" value="${cp}"></td>
         <td><input type="text" class="form-control form-control-sm" name="position" value="${pos}"></td>
@@ -339,12 +382,18 @@ function showImportModal(title, html){
     const obj = {
       'name of beneficiary': get('input[name="beneficiary"]'),
       'advocacy': get('input[name="advocacy"]'),
+      'type': get('input[name="type"]'),
       'address': get('input[name="address"]'),
       'contact person': get('input[name="contact_person"]'),
       'position/designation': get('input[name="position"]'),
       'contact#': get('input[name="contact_no"]'),
       'email address': get('input[name="email"]'),
     };
+    // Ensure backend mapping sees organization_type variants
+    obj['organization_type'] = obj['type'];
+    obj['org_type'] = obj['type'];
+    obj['orgtype'] = obj['type'];
+    obj['agency_type'] = obj['type'];
     // Add synonymous keys to maximize backend match
     obj['position'] = obj['position/designation'];
     obj['contact_number'] = obj['contact#'];
@@ -385,13 +434,14 @@ function showImportModal(title, html){
     return {
       'name of beneficiary': r['name of beneficiary'] ?? r['beneficiary name'] ?? r['recipient_name'] ?? r['organization_name'] ?? decodeHtml(row['name of beneficiary']) ?? decodeHtml(row['organization_name']) ?? '',
       'advocacy': r['advocacy'] ?? r['agency_type'] ?? decodeHtml(row['advocacy']) ?? '',
+      'type': r['type'] ?? r['organization_type'] ?? r['organization type'] ?? r['org_type'] ?? r['orgtype'] ?? r['agency_type'] ?? r['advocacy'] ?? decodeHtml(row['type']) ?? '',
       'address': r['address'] ?? r['addresss'] ?? r['location'] ?? decodeHtml(row['address']) ?? '',
       'contact person': r['contact person'] ?? r['contact_person'] ?? r['contact'] ?? decodeHtml(row['contact person']) ?? '',
       'position/designation': r['position/designation'] ?? r['position/ designation'] ?? r['position / designation'] ?? r['position designation'] ?? r['position'] ?? decodeHtml(row['position/designation']) ?? '',
       'contact#': r['contact#'] ?? r['contact_number'] ?? r['contact no'] ?? r['contact no.'] ?? r['phone'] ?? decodeHtml(row['contact#']) ?? '',
       'email address': r['email address'] ?? r['email'] ?? decodeHtml(row['email address']) ?? '',
       // Extra fields (optional)
-      'total residents': r['total residents'] ?? r['totalresidents'] ?? decodeHtml(row['total residents']) ?? '',
+      'total residents': r['total residents'] ?? r['totalresidents'] ?? r['total no of residents'] ?? r['total no. of residents'] ?? decodeHtml(row['total residents']) ?? '',
       'age group': r['age group'] ?? r['agegroup'] ?? decodeHtml(row['age group']) ?? '',
       'no of male': r['no of male'] ?? r['male'] ?? r['male_count'] ?? decodeHtml(row['no of male']) ?? '',
       'no of female': r['no of female'] ?? r['female'] ?? r['female_count'] ?? decodeHtml(row['no of female']) ?? '',
@@ -412,7 +462,7 @@ function showImportModal(title, html){
     return Array.isArray(j?.data?.items) ? j.data.items : [];
   }
 
-  // Render recipients to match Recipient.html table: Beneficiary, Advocacy, Address, Contact Person, Position, Contact#, Email, Status, Actions
+  // Render recipients to match Recipient.html table: Beneficiary, Type, Address, Contact Person, Position, Contact#, Email, Status, Actions
   function renderRecipients(items){
     const tbody = document.querySelector('main .table tbody');
     if (!tbody) return;
@@ -421,7 +471,7 @@ function showImportModal(title, html){
       const userName = decodeHtml(u.name || '');
       const addr = decodeHtml(u.address || '');
       const recipientName = (orgName && orgName.trim()) ? orgName.trim() : (userName || '').trim();
-      const advocacy = decodeHtml(u.agency_type || '');
+      const orgType = decodeHtml(u.organization_type || '');
       const contact = (userName || '').trim() || '—';
       const position = decodeHtml(u.position_designation || '');
       const contactNo = decodeHtml(u.contact_number || '');
@@ -431,7 +481,7 @@ function showImportModal(title, html){
       return `
         <tr>
           <td data-label="Name of Beneficiary">${escapeHtml(recipientName)}</td>
-          <td class="d-none d-sm-table-cell" data-label="Advocacy">${escapeHtml(advocacy || '—')}</td>
+          <td class="d-none d-sm-table-cell" data-label="Type">${escapeHtml(orgType || '—')}</td>
           <td class="d-none d-sm-table-cell text-break" data-label="Address">${escapeHtml(location)}</td>
           <td data-label="Contact Person">${escapeHtml(contact)}</td>
           <td class="d-none d-md-table-cell" data-label="Position/Designation">${escapeHtml(position || '—')}</td>
@@ -476,10 +526,10 @@ function showImportModal(title, html){
             const wb = XLSX.read(data, { type: 'array' });
             // Pick the best worksheet (recognizable headers or most data)
             const expected = [
-              'organization_name','agency_name','recipient_name','name of beneficiary','beneficiary name',
-              'advocacy','agency_type','contact person','contact_person','contact','contact#','contact no','contact_number',
+              'no','no.','organization_name','agency_name','recipient_name','name of beneficiary','beneficiary name',
+              'type','organization_type','organization type','org_type','orgtype','agency_type','advocacy','contact person','contact_person','contact','contact#','contact no','contact_number',
               'address','addresss','location','email','email address','name','position/designation','position',
-              'total residents','age group','no of male','no of female','id','external id'
+              'total residents','total no of residents','total no. of residents','age group','no of male','no of female','id','external id'
             ];
             let chosen = null;
             let chosenScore = -1;
@@ -532,24 +582,35 @@ function showImportModal(title, html){
               }).filter(o => Object.values(o).some(v => String(v).trim() !== ''));
             } else {
               // Fallback: no recognizable headers found. Treat first non-empty row as data and map by column index.
-              // Expected order by columns (0-based) matching user's sheet:
-              // 0: name of beneficiary (organization)
-              // 1: advocacy (agency_type)
-              // 2: address
-              // 3: contact person
-              // 4: position/designation (Column E)
-              // 5: contact# (Column F)
-              // 6: email address (Column G)
+              // Expected order by columns (0-based) matching user's new sheet:
+              // 0: NO.
+              // 1: NAME OF BENEFICIARY (organization)
+              // 2: ADVOCACY (ignored)
+              // 3: TYPE (organization_type)
+              // 4: ADDRESS
+              // 5: CONTACT PERSON
+              // 6: POSITION/DESIGNATION
+              // 7: CONTACT NO.
+              // 8: EMAIL ADDRESS
+              // 9: TOTAL NO. OF RESIDENTS
+              // 10: AGE GROUP
+              // 11: NO. OF MALE
+              // 12: NO. OF FEMALE
               const dataStart = matrix.findIndex(r => (r||[]).some(v => String(v).trim() !== ''));
               const rawRows = dataStart >= 0 ? matrix.slice(dataStart) : [];
               rows = rawRows.map(r => ({
-                'name of beneficiary': r[0] ?? '',
-                'advocacy': r[1] ?? '',
-                'address': r[2] ?? '',
-                'contact person': r[3] ?? '',
-                'position/designation': r[4] ?? '',
-                'contact#': r[5] ?? '',
-                'email address': r[6] ?? '',
+                'name of beneficiary': r[1] ?? '',
+                'advocacy': r[2] ?? '',
+                'type': r[3] ?? '',
+                'address': r[4] ?? '',
+                'contact person': r[5] ?? '',
+                'position/designation': r[6] ?? '',
+                'contact#': r[7] ?? '',
+                'email address': r[8] ?? '',
+                'total residents': r[9] ?? '',
+                'age group': r[10] ?? '',
+                'no of male': r[11] ?? '',
+                'no of female': r[12] ?? '',
               })).filter(o => Object.values(o).some(v => String(v).trim() !== ''));
             }
 

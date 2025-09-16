@@ -27,18 +27,7 @@ CREATE TABLE IF NOT EXISTS `distribution_period_status` (
   CONSTRAINT `dps_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 SQL);
-        // Auxiliary tables for specialty tags and selection logs
-        $this->db->query(<<<SQL
-CREATE TABLE IF NOT EXISTS `recipient_specialties` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `recipient_id` int(11) NOT NULL,
-  `specialty_key` varchar(64) NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_recipient_specialty` (`recipient_id`,`specialty_key`),
-  KEY `rs_recipient_idx` (`recipient_id`),
-  CONSTRAINT `rs_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-SQL);
+        // Auxiliary table for selection logs (recipient_specialties removed; now using recipient_profiles.specialty)
         $this->db->query(<<<SQL
 CREATE TABLE IF NOT EXISTS `distribution_selection_logs` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -155,14 +144,15 @@ SQL);
         return array_map(fn($r)=> (int)$r['user_id'], $rows);
     }
 
-    // Specialty pool: approved recipients tagged with specialty_key
+    // Specialty/OrgType pool: approved recipients filtered by recipient_profiles.organization_type
+    // For backward compatibility, the parameter name is kept as $specialtyKey but it represents organization_type
     private function loadSpecialtyPool(string $specialtyKey): array
     {
         $rows = $this->db->query(
             "SELECT u.user_id
              FROM users u
-             JOIN recipient_specialties rs ON rs.recipient_id = u.user_id
-             WHERE u.role='recipient' AND u.status='approved' AND rs.specialty_key = ?",
+             JOIN recipient_profiles rp ON rp.user_id = u.user_id
+             WHERE u.role='recipient' AND u.status='approved' AND rp.organization_type = ?",
             [$specialtyKey]
         )->fetchAll();
         return array_map(fn($r)=> (int)$r['user_id'], $rows);

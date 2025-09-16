@@ -10,69 +10,131 @@ class User
         $this->db = Database::getInstance();
     }
 
-    // Fetch a single user profile by user_id
+    // Fetch a single user profile by user_id, merging role-specific profile fields
     public function getProfile(int $userId): array
     {
-        $user = $this->db->query(
-            "SELECT user_id, name, email, role, status, organization_name, contact_number, address, created_at
-             FROM users WHERE user_id = ?",
+        $u = $this->db->query(
+            "SELECT user_id, name, email, role, status, created_at, last_login FROM users WHERE user_id = ?",
             [$userId]
         )->fetch();
-        if (!$user) {
-            throw new Exception('User not found');
+        if (!$u) { throw new Exception('User not found'); }
+        $profile = [];
+        if ($u['role'] === 'recipient') {
+            // Read normalized profile and join primary contact directly
+            $p = $this->db->query(
+                "SELECT rp.organization_name, rp.organization_type, rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count, rp.external_id,
+                        pc.position_designation, pc.contact_number, pc.email
+                 FROM recipient_profiles rp
+                 LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
+                 WHERE rp.user_id = ?",
+                [$userId]
+            )->fetch();
+            $profile = $p ?: [];
+        } elseif ($u['role'] === 'donor') {
+            $p = $this->db->query("SELECT organization_name, donor_category, contact_number, address, notes FROM donor_profiles WHERE user_id = ?", [$userId])->fetch();
+            $profile = $p ?: [];
+        } elseif ($u['role'] === 'admin') {
+            $p = $this->db->query("SELECT organization_name, contact_number, address FROM admin_profiles WHERE user_id = ?", [$userId])->fetch();
+            $profile = $p ?: [];
         }
-        return $user;
+        return array_merge($u, $profile);
     }
 
     // Update editable profile fields for a user (self-service)
     public function updateProfile(int $userId, array $data): void
     {
-        $fields = [];
-        $params = [];
-        $allowed = ['name', 'organization_name', 'contact_number', 'address'];
-        foreach ($allowed as $col) {
-            if (array_key_exists($col, $data)) {
-                $fields[] = "$col = ?";
-                $params[] = $data[$col];
+        $u = $this->db->query('SELECT role FROM users WHERE user_id = ?', [$userId])->fetch();
+        if (!$u) throw new Exception('User not found');
+        // Always allow updating name on users
+        if (array_key_exists('name', $data)) {
+            $this->db->query('UPDATE users SET name = ? WHERE user_id = ?', [$data['name'], $userId]);
+        }
+        $role = $u['role'];
+        if ($role === 'recipient') {
+            // Upsert recipient_profiles (no contact fields here; contacts are normalized into recipient_contacts)
+            $this->db->query('INSERT IGNORE INTO recipient_profiles (user_id) VALUES (?)', [$userId]);
+            $fields = [];$params=[];
+            foreach (['organization_name','organization_type','address','total_residents','age_group','male_count','female_count','external_id'] as $col){
+                if (array_key_exists($col,$data)){ $fields[] = "$col = ?"; $params[] = $data[$col]; }
             }
+            if ($fields){ $params[]=$userId; $this->db->query('UPDATE recipient_profiles SET '.implode(', ',$fields).' WHERE user_id = ?', $params); }
+
+            // Handle primary contact updates if provided
+            $contactUpdates = [];
+            foreach (['contact_person','position_designation','contact_number','email'] as $k) {
+                if (isset($data[$k]) && $data[$k] !== '') { $contactUpdates[$k] = $data[$k]; }
+            }
+            if ($contactUpdates) {
+                $row = $this->db->query('SELECT primary_contact_id FROM recipient_profiles WHERE user_id = ?', [$userId])->fetch();
+                $pcId = $row && !empty($row['primary_contact_id']) ? (int)$row['primary_contact_id'] : null;
+                if ($pcId) {
+                    // Update existing primary contact
+                    $cFields=[];$cParams=[];
+                    if (isset($contactUpdates['contact_person'])){ $cFields[]='contact_name = ?'; $cParams[]=$contactUpdates['contact_person']; }
+                    if (isset($contactUpdates['position_designation'])){ $cFields[]='position_designation = ?'; $cParams[]=$contactUpdates['position_designation']; }
+                    if (isset($contactUpdates['contact_number'])){ $cFields[]='contact_number = ?'; $cParams[]=$contactUpdates['contact_number']; }
+                    if (isset($contactUpdates['email'])){ $cFields[]='email = ?'; $cParams[]=$contactUpdates['email']; }
+                    if ($cFields){ $cParams[]=$pcId; $this->db->query('UPDATE recipient_contacts SET '.implode(', ',$cFields).' WHERE id = ?', $cParams); }
+                } else {
+                    // Create new primary contact and set as primary
+                    $name = $contactUpdates['contact_person'] ?? ($data['name'] ?? null);
+                    $position = $contactUpdates['position_designation'] ?? null;
+                    $number = $contactUpdates['contact_number'] ?? null;
+                    $email = $contactUpdates['email'] ?? null;
+                    $this->db->query(
+                        'INSERT INTO recipient_contacts (user_id, contact_name, position_designation, contact_number, email, is_primary) VALUES (?,?,?,?,?,1)',
+                        [$userId, $name, $position, $number, $email]
+                    );
+                    $newId = (int)$this->db->lastInsertId();
+                    $this->db->query('UPDATE recipient_profiles SET primary_contact_id = ? WHERE user_id = ?', [$newId, $userId]);
+                }
+            }
+        } elseif ($role === 'donor') {
+            $this->db->query('INSERT IGNORE INTO donor_profiles (user_id) VALUES (?)', [$userId]);
+            $fields=[];$params=[];
+            foreach (['organization_name','donor_category','contact_number','address','notes'] as $col){ if(array_key_exists($col,$data)){ $fields[]="$col = ?"; $params[]=$data[$col]; } }
+            if ($fields){ $params[]=$userId; $this->db->query('UPDATE donor_profiles SET '.implode(', ',$fields).' WHERE user_id = ?', $params); }
+        } elseif ($role === 'admin') {
+            $this->db->query('INSERT IGNORE INTO admin_profiles (user_id) VALUES (?)', [$userId]);
+            $fields=[];$params=[];
+            foreach (['organization_name','contact_number','address'] as $col){ if(array_key_exists($col,$data)){ $fields[]="$col = ?"; $params[]=$data[$col]; } }
+            if ($fields){ $params[]=$userId; $this->db->query('UPDATE admin_profiles SET '.implode(', ',$fields).' WHERE user_id = ?', $params); }
         }
-        if (empty($fields)) {
-            return; // nothing to update
-        }
-        $params[] = $userId;
-        $sql = "UPDATE users SET " . implode(', ', $fields) . " WHERE user_id = ?";
-        $this->db->query($sql, $params);
     }
 
     // Admin: list users with optional filters
     public function listUsers(array $filters = []): array
     {
-        $where = [];
-        $params = [];
-        // Normalize status: treat 'active' as 'approved' to align with DB enum
-        if (!empty($filters['status'])) {
-            $status = $filters['status'];
-            if ($status === 'active') { $status = 'approved'; }
-            $where[] = 'u.status = ?';
-            $params[] = $status;
-        }
-        if (!empty($filters['role'])) { $where[] = 'u.role = ?'; $params[] = $filters['role']; }
-        if (!empty($filters['q'])) {
-            $where[] = '(u.name LIKE ? OR u.email LIKE ? OR u.organization_name LIKE ?)';
-            $q = '%' . $filters['q'] . '%';
-            array_push($params, $q, $q, $q);
-        }
-        $joinRecipient = (!empty($filters['role']) && $filters['role'] === 'recipient');
-        if ($joinRecipient) {
-            $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.organization_name, u.contact_number, u.address, u.created_at,
-                           rp.agency_type, rp.position_designation
+        $where = [];$params=[];
+        if (!empty($filters['status'])){ $status = $filters['status']==='active'?'approved':$filters['status']; $where[]='u.status = ?'; $params[]=$status; }
+        if (!empty($filters['role'])){ $where[]='u.role = ?'; $params[]=$filters['role']; }
+        $role = $filters['role'] ?? null;
+        if ($role === 'recipient') {
+            // Join recipient_profiles and primary contact for contact fields
+            $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at,
+                           rp.organization_name, rp.organization_type, rp.address,
+                           pc.position_designation, pc.contact_number
                     FROM users u
-                    LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id";
+                    LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
+                    LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id";
+            if (!empty($filters['q'])){ $where[]='(u.name LIKE ? OR u.email LIKE ? OR rp.organization_name LIKE ?)'; $q='%'.$filters['q'].'%'; array_push($params,$q,$q,$q); }
+        } elseif ($role === 'donor') {
+            $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at,
+                           dp.organization_name, dp.donor_category, dp.contact_number, dp.address
+                    FROM users u
+                    LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id";
+            if (!empty($filters['q'])){ $where[]='(u.name LIKE ? OR u.email LIKE ? OR dp.organization_name LIKE ?)'; $q='%'.$filters['q'].'%'; array_push($params,$q,$q,$q); }
+        } elseif ($role === 'admin') {
+            $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at,
+                           ap.organization_name, ap.contact_number, ap.address
+                    FROM users u
+                    LEFT JOIN admin_profiles ap ON ap.user_id = u.user_id";
+            if (!empty($filters['q'])){ $where[]='(u.name LIKE ? OR u.email LIKE ? OR ap.organization_name LIKE ?)'; $q='%'.$filters['q'].'%'; array_push($params,$q,$q,$q); }
         } else {
-            $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.organization_name, u.contact_number, u.address, u.created_at
-                    FROM users u";
+            $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at FROM users u";
+            if (!empty($filters['q'])){ $where[]='(u.name LIKE ? OR u.email LIKE ?)'; $q='%'.$filters['q'].'%'; array_push($params,$q,$q); }
         }
-        if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
+        if ($where){ $sql .= ' WHERE '.implode(' AND ',$where); }
         $sql .= ' ORDER BY u.created_at DESC LIMIT 200';
         return $this->db->query($sql, $params)->fetchAll();
     }
@@ -132,6 +194,7 @@ class User
         // Prefer explicit name; if missing, fall back to contact_person; else organization_name
         $name = $data['name'] ?? ($data['contact_person'] ?? ($data['organization_name'] ?? 'Recipient'));
         $organization = $data['organization_name'] ?? ($data['agency_name'] ?? null);
+        $organizationType = $data['organization_type'] ?? ($data['agency_type'] ?? null);
         $contactNumber = $data['contact_number'] ?? null;
         $address = $data['address'] ?? null;
 
@@ -142,19 +205,13 @@ class User
         $plain = 'recipient123';
         $hash = password_hash($plain, PASSWORD_DEFAULT);
 
+        // Compute next user_id explicitly (schema may not have AUTO_INCREMENT)
+        $row = $this->db->query('SELECT COALESCE(MAX(user_id),0)+1 AS next_id FROM users')->fetch();
+        $userId = (int)($row['next_id'] ?? 1);
         $this->db->query(
-            "INSERT INTO users (name, email, password_hash, role, organization_name, contact_number, address, status) VALUES (?,?,?,?,?,?,?, 'approved')",
-            [
-                $name,
-                $email,
-                $hash,
-                'recipient',
-                $organization,
-                $contactNumber,
-                $address
-            ]
+            "INSERT INTO users (user_id, name, email, password_hash, role, status) VALUES (?,?,?,?,?, 'approved')",
+            [ $userId, $name, $email, $hash, 'recipient' ]
         );
-        $userId = (int)$this->db->lastInsertId();
 
         // Flag for required password change on first login (if column exists)
         try {
@@ -163,8 +220,7 @@ class User
             // Column may not exist yet; ignore
         }
 
-        // Insert recipient profile (recipient-specific fields only; shared fields live in users)
-        $agencyType = $data['agency_type'] ?? null;
+        // Insert recipient profile (no contact fields here)
         $position = $data['position_designation'] ?? null;
         $totalResidents = isset($data['total_residents']) && $data['total_residents'] !== '' ? (int)$data['total_residents'] : null;
         $ageGroup = $data['age_group'] ?? null;
@@ -172,15 +228,25 @@ class User
         $femaleCount = isset($data['female_count']) && $data['female_count'] !== '' ? (int)$data['female_count'] : null;
         $externalId = $data['external_id'] ?? null;
         $this->db->query(
-            "INSERT INTO recipient_profiles (user_id, agency_type, position_designation, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?)",
-            [$userId, $agencyType, $position, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
+            "INSERT INTO recipient_profiles (user_id, organization_name, organization_type, address, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?,?)",
+            [$userId, $organization, $organizationType, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
         );
+
+        // Create a primary contact if contact info is provided and set as primary
+        if (!empty($data['contact_person']) || !empty($contactNumber) || !empty($data['email']) || !empty($position)) {
+            $this->db->query(
+                'INSERT INTO recipient_contacts (user_id, contact_name, position_designation, contact_number, email, is_primary) VALUES (?,?,?,?,?,1)',
+                [$userId, ($data['contact_person'] ?? ($data['name'] ?? null)), $position, $contactNumber, ($data['email'] ?? null)]
+            );
+            $cid = (int)$this->db->lastInsertId();
+            $this->db->query('UPDATE recipient_profiles SET primary_contact_id = ? WHERE user_id = ?', [$cid, $userId]);
+        }
 
         return $userId;
     }
 
     // Create a recipient contact row
-    private function createRecipientContact(int $userId, array $contact, bool $isPrimary = false): void
+    private function createRecipientContact(int $userId, array $contact, bool $isPrimary = false): int
     {
         $name = $contact['contact_person'] ?? ($contact['name'] ?? null);
         $position = $contact['position_designation'] ?? null;
@@ -190,6 +256,7 @@ class User
             "INSERT INTO recipient_contacts (user_id, contact_name, position_designation, contact_number, email, is_primary) VALUES (?,?,?,?,?,?)",
             [$userId, $name, $position, $number, $email, $isPrimary ? 1 : 0]
         );
+        return (int)$this->db->lastInsertId();
     }
 
     // Canonicalize headers: lowercase and strip spaces, dots, underscores and hyphens
@@ -222,7 +289,9 @@ class User
                 $data = [
                     'organization_name' => $r['organizationname']
                         ?? ($r['agencyname'] ?? ($r['recipientname'] ?? ($r['nameofbeneficiary'] ?? ($r['beneficiaryname'] ?? null)))),
-                    'agency_type' => $r['agencytype'] ?? ($r['advocacy'] ?? null),
+                    // Map incoming org type variants to organization_type
+                    'organization_type' => $r['organizationtype']
+                        ?? ($r['organization_type'] ?? ($r['orgtype'] ?? ($r['org_type'] ?? ($r['agencytype'] ?? ($r['advocacy'] ?? null))))),
                     'contact_person' => $r['contactperson'] ?? ($r['contact'] ?? null),
                     'contact_number' => $r['contactnumber'] ?? ($r['phone'] ?? ($r['contactno'] ?? null)),
                     'address' => $r['address'] ?? ($r['location'] ?? ($r['addresss'] ?? null)),
@@ -254,7 +323,7 @@ class User
                 try {
                     // Try to find existing recipient with same organization
                     $existing = $this->db->query(
-                        "SELECT user_id FROM users WHERE role = 'recipient' AND organization_name = ? LIMIT 1",
+                        "SELECT u.user_id FROM users u JOIN recipient_profiles rp ON rp.user_id = u.user_id WHERE u.role = 'recipient' AND rp.organization_name = ? LIMIT 1",
                         [$orgName]
                     )->fetch();
                     $userId = 0;
@@ -273,12 +342,14 @@ class User
                     }
 
                     // Insert contacts for all items in the group; mark first with email/number as primary
-                    $primarySet = false;
+                    $primarySet = false; $primaryId = null;
                     foreach ($items as $i => $it) {
                         $isPrimary = false;
                         if (!$primarySet && (!empty($it['email']) || !empty($it['contact_number']))) { $isPrimary = true; $primarySet = true; }
-                        $this->createRecipientContact($userId, $it, $isPrimary);
+                        $cid = $this->createRecipientContact($userId, $it, $isPrimary);
+                        if ($isPrimary && !$primaryId) { $primaryId = $cid; }
                     }
+                    if ($primaryId) { $this->db->query('UPDATE recipient_profiles SET primary_contact_id = ? WHERE user_id = ?', [$primaryId, $userId]); }
                 } catch (Exception $e) {
                     $errors[] = ['group' => $orgName, 'error' => $e->getMessage()];
                 }
@@ -304,11 +375,13 @@ class User
         $plain = bin2hex(random_bytes(6));
         $hash = password_hash($plain, PASSWORD_DEFAULT);
 
+        // Compute next user_id explicitly (schema may not have AUTO_INCREMENT)
+        $row = $this->db->query('SELECT COALESCE(MAX(user_id),0)+1 AS next_id FROM users')->fetch();
+        $userId = (int)($row['next_id'] ?? 1);
         $this->db->query(
-            "INSERT INTO users (name, email, password_hash, role, organization_name, contact_number, address, status) VALUES (?,?,?,?,?,?,?, 'approved')",
-            [ $name, $email, $hash, 'donor', $organization, $contactNumber, $address ]
+            "INSERT INTO users (user_id, name, email, password_hash, role, status) VALUES (?,?,?,?,?, 'approved')",
+            [ $userId, $name, $email, $hash, 'donor' ]
         );
-        $userId = (int)$this->db->lastInsertId();
 
         // Flag for required password change on first login (if column exists)
         try {
@@ -317,12 +390,12 @@ class User
             // Column may not exist; ignore
         }
 
-        // donor_profiles: keep only donor_category and notes; shared fields live in users
+        // donor_profiles
         $donorCategory = $data['donor_category'] ?? ($data['type'] ?? null);
         $notes = $data['notes'] ?? null;
         $this->db->query(
-            "INSERT INTO donor_profiles (user_id, donor_category, notes) VALUES (?,?,?)",
-            [$userId, $donorCategory, $notes]
+            "INSERT INTO donor_profiles (user_id, organization_name, donor_category, contact_number, address, notes) VALUES (?,?,?,?,?,?)",
+            [$userId, $organization, $donorCategory, $contactNumber, $address, $notes]
         );
 
         return $userId;

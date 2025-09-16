@@ -53,9 +53,13 @@ SQL);
         $canon = array_values(array_unique(array_map([self::class, 'normalizeMonth'], $months)));
         $placeholders = implode(',', array_fill(0, count($canon), '?'));
         $rows = $this->db->query(
-            "SELECT rma.`month`, u.user_id, u.name, u.email, u.organization_name, u.address, u.contact_number
+            "SELECT rma.`month`, u.user_id, u.name, u.email,
+                    rp.organization_name, rp.address,
+                    pc.contact_number
              FROM recipient_month_assignments rma
              JOIN users u ON u.user_id = rma.recipient_id
+             LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
+             LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
              WHERE rma.`month` IN ($placeholders)",
             $canon
         )->fetchAll();

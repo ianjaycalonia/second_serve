@@ -17,8 +17,12 @@ class DonationNotifier {
      */
     public function notifyDonationStatus(int $donationId, string $newStatus, array $context = []): void {
         $row = $this->db->query(
-            "SELECT d.donation_id AS id, d.product_name AS name, d.donor_id, d.batch_id, u.name AS donor_name, u.organization_name
-             FROM donations d JOIN users u ON u.user_id = d.donor_id WHERE d.donation_id = ?",
+            "SELECT d.donation_id AS id, d.product_name AS name, d.donor_id, d.batch_id,
+                    u.name AS donor_name, dp.organization_name
+             FROM donations d
+             JOIN users u ON u.user_id = d.donor_id
+             LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+             WHERE d.donation_id = ?",
             [$donationId]
         )->fetch();
         if (!$row) return;
@@ -117,8 +121,12 @@ class DonationNotifier {
         $role = (string)(currentUserRole() ?? '');
         if (strtolower($role) !== 'donor') return;
         $row = $this->db->query(
-            "SELECT d.donation_id AS id, d.product_name AS name, d.donor_id, u.name AS donor_name, u.organization_name
-             FROM donations d JOIN users u ON u.user_id = d.donor_id WHERE d.donation_id = ?",
+            "SELECT d.donation_id AS id, d.product_name AS name, d.donor_id,
+                    u.name AS donor_name, dp.organization_name
+             FROM donations d
+             JOIN users u ON u.user_id = d.donor_id
+             LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+             WHERE d.donation_id = ?",
             [$donationId]
         )->fetch();
         if (!$row) return;
@@ -155,7 +163,10 @@ class DonationNotifier {
             [$batchId]
         )->fetch();
         if (!$own || (int)$own['donor_id'] !== (int)$editorUserId) return;
-        $u = $this->db->query("SELECT name, organization_name FROM users WHERE user_id = ?", [$editorUserId])->fetch();
+        $u = $this->db->query(
+            "SELECT u.name, dp.organization_name FROM users u LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id WHERE u.user_id = ?",
+            [$editorUserId]
+        )->fetch();
         $donorDisplay = '';
         if ($u) {
             if (!empty($u['organization_name'])) { $donorDisplay = $u['organization_name']; }

@@ -10,6 +10,26 @@ class QuarterlyDistribution
         $this->db = Database::getInstance();
     }
 
+    // Ensure the quarterly status table exists (idempotent)
+    private function ensureTable(): void
+    {
+        $this->db->query(<<<SQL
+CREATE TABLE IF NOT EXISTS `distribution_quarter_status` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `quarter_key` varchar(8) NOT NULL,
+  `recipient_id` int(11) NOT NULL,
+  `served_count` int(11) NOT NULL DEFAULT 0,
+  `last_served_at` timestamp NULL DEFAULT NULL,
+  `skipped_pending` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_quarter_recipient` (`quarter_key`,`recipient_id`),
+  KEY `dqs_recipient_idx` (`recipient_id`),
+  CONSTRAINT `dqs_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+)
+ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+SQL);
+    }
+
     public static function currentQuarterKey(?DateTime $when = null): string
     {
         $when = $when ?: new DateTime('now');
@@ -36,6 +56,7 @@ class QuarterlyDistribution
 
     private function ensureStatusRows(string $quarterKey, array $poolRecipientIds): void
     {
+        $this->ensureTable();
         if (empty($poolRecipientIds)) return;
         // Insert missing rows
         $values = [];
@@ -75,6 +96,7 @@ class QuarterlyDistribution
 
     public function suggest(string $quarterKey, int $roundSize): array
     {
+        $this->ensureTable();
         $roundSize = max(1, $roundSize);
         // Build pool and ensure status rows exist
         $pool = $this->loadQuarterPool($quarterKey);
@@ -123,6 +145,7 @@ class QuarterlyDistribution
 
     public function markResult(string $quarterKey, array $servedIds, array $skippedIds): void
     {
+        $this->ensureTable();
         $servedIds = array_values(array_unique(array_map('intval', array_filter($servedIds, fn($v)=>$v>0))));
         $skippedIds = array_values(array_unique(array_map('intval', array_filter($skippedIds, fn($v)=>$v>0))));
         if (empty($servedIds) && empty($skippedIds)) return;

@@ -227,8 +227,17 @@ class Conversation {
                   WHEN c.type = 'direct' THEN (
                     SELECT CASE 
                         WHEN u.role = 'admin' AND (SELECT role FROM users WHERE user_id = ?) <> 'admin' 
-                            THEN COALESCE(NULLIF(u.organization_name, ''), 'Food Bank')
-                        ELSE COALESCE(NULLIF(u.organization_name, ''), u.name, CONCAT('User #', u.user_id))
+                            THEN COALESCE(
+                                NULLIF((SELECT ap.organization_name FROM admin_profiles ap WHERE ap.user_id = u.user_id), ''),
+                                'Food Bank'
+                            )
+                        ELSE COALESCE(
+                                NULLIF((SELECT ap.organization_name FROM admin_profiles ap WHERE ap.user_id = u.user_id), ''),
+                                NULLIF((SELECT dp.organization_name FROM donor_profiles dp WHERE dp.user_id = u.user_id), ''),
+                                NULLIF((SELECT rp.organization_name FROM recipient_profiles rp WHERE rp.user_id = u.user_id), ''),
+                                u.name,
+                                CONCAT('User #', u.user_id)
+                            )
                     END 
                     FROM users u 
                     WHERE u.user_id = (

@@ -28,6 +28,13 @@ try {
             if ($currentId !== $userId && $role !== 'admin') {
                 sendJson(['success' => false, 'error' => 'Forbidden'], 403);
             }
+            // Lightweight probe to ensure table exists (avoid generic 500 if missing)
+            try {
+                Database::getInstance()->query('SELECT 1 FROM notifications LIMIT 1');
+            } catch (Exception $e) {
+                error_log('Notifications table probe failed: ' . $e->getMessage());
+                sendJson(['success' => false, 'error' => 'Notifications table missing or inaccessible'], 500);
+            }
             $svc = new Notification();
             $items = $svc->listByUser($userId);
             sendJson(['success' => true, 'data' => ['items' => $items]]);
@@ -76,6 +83,10 @@ try {
     }
 } catch (Exception $e) {
     error_log('Notifications API error: ' . $e->getMessage());
-    sendJson(['success' => false, 'error' => 'Server error'], 500);
+    // Expose message to admins to speed up debugging
+    $role = (string)(currentUserRole() ?? '');
+    $payload = ['success' => false, 'error' => 'Server error'];
+    if ($role === 'admin') { $payload['detail'] = $e->getMessage(); }
+    sendJson($payload, 500);
 }
 

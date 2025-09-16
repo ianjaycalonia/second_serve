@@ -39,13 +39,13 @@ class Auth {
         // Try to include optional must_change_password; if column is missing, fall back
         try {
             $userAnyRole = $this->db->query(
-                "SELECT user_id, name, email, password_hash, role, organization_name, contact_number, address, status, created_at, must_change_password
+                "SELECT user_id, name, email, password_hash, role, status, created_at, last_login, must_change_password
                  FROM users WHERE email = ?",
                 [$email]
             )->fetch();
         } catch (Exception $e) {
             $userAnyRole = $this->db->query(
-                "SELECT user_id, name, email, password_hash, role, organization_name, contact_number, address, status, created_at
+                "SELECT user_id, name, email, password_hash, role, status, created_at, last_login
                  FROM users WHERE email = ?",
                 [$email]
             )->fetch();
@@ -85,8 +85,34 @@ class Auth {
             // last_login optional in schema; ignore failures
         }
 
+        // Merge profile fields according to role for convenience
+        $profile = [];
+        if ($user['role'] === 'recipient') {
+            // Join profile with primary contact directly (no view dependency)
+            $p = $this->db->query(
+                'SELECT rp.organization_name, rp.organization_type, rp.address,
+                        pc.position_designation, pc.contact_number, pc.email
+                 FROM recipient_profiles rp
+                 LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
+                 WHERE rp.user_id = ?',
+                [$user['user_id']]
+            )->fetch();
+            $profile = $p ?: [];
+        } elseif ($user['role'] === 'donor') {
+            $p = $this->db->query(
+                'SELECT organization_name, donor_category, contact_number, address FROM donor_profiles WHERE user_id = ?',
+                [$user['user_id']]
+            )->fetch();
+            $profile = $p ?: [];
+        } elseif ($user['role'] === 'admin') {
+            $p = $this->db->query(
+                'SELECT organization_name, contact_number, address FROM admin_profiles WHERE user_id = ?',
+                [$user['user_id']]
+            )->fetch();
+            $profile = $p ?: [];
+        }
         unset($user['password_hash']);
-        return $user;
+        return array_merge($user, $profile);
     }
 
     /**
@@ -119,6 +145,7 @@ class Auth {
             $data['password'],
             $data['role'],
             $data['organization_name'] ?? null,
+            $data['organization_type'] ?? null,
             $data['contact_number'] ?? null,
             $data['address'] ?? null
         );
@@ -138,7 +165,7 @@ class Auth {
         ];
     }
 
-    public function register(string $name, string $email, string $password, string $role, ?string $organization_name = null, ?string $contact_number = null, ?string $address = null): array {
+    public function register(string $name, string $email, string $password, string $role, ?string $organization_name = null, ?string $organization_type = null, ?string $contact_number = null, ?string $address = null): array {
         // Ensure email not taken
         $existing = $this->db->query(
             'SELECT user_id FROM users WHERE email = ?',
@@ -151,18 +178,62 @@ class Auth {
         $this->db->beginTransaction();
         try {
             $hashed = password_hash($password, PASSWORD_DEFAULT);
+            // Compute next user_id explicitly in case AUTO_INCREMENT is not set
+            $row = $this->db->query('SELECT COALESCE(MAX(user_id),0)+1 AS next_id FROM users')->fetch();
+            $userId = (int)($row['next_id'] ?? 1);
+            // Insert minimal user with explicit user_id
             $this->db->query(
-                "INSERT INTO users (name, email, password_hash, role, organization_name, contact_number, address, status, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', NOW())",
-                [$name, $email, $hashed, $role, $organization_name, $contact_number, $address]
+                "INSERT INTO users (user_id, name, email, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, ?, 'approved', NOW())",
+                [$userId, $name, $email, $hashed, $role]
             );
-            $userId = $this->db->lastInsertId();
-            $user = $this->db->query(
-                'SELECT user_id, name, email, role, status, organization_name, contact_number, address, created_at FROM users WHERE user_id = ?',
+            // Insert profile according to role
+            if ($role === 'recipient') {
+                // Insert base recipient profile (contacts are stored separately)
+                $this->db->query(
+                    'INSERT INTO recipient_profiles (user_id, organization_name, organization_type, address) VALUES (?,?,?,?)',
+                    [$userId, $organization_name, $organization_type, $address]
+                );
+                // If contact info provided, create a primary recipient contact and set primary_contact_id
+                if (!empty($contact_number)) {
+                    $this->db->query(
+                        'INSERT INTO recipient_contacts (user_id, contact_name, position_designation, contact_number, email, is_primary) VALUES (?,?,?,?,?,1)',
+                        [$userId, $name, null, $contact_number, null]
+                    );
+                    $pcId = (int)$this->db->lastInsertId();
+                    $this->db->query('UPDATE recipient_profiles SET primary_contact_id = ? WHERE user_id = ?', [$pcId, $userId]);
+                }
+                $profile = $this->db->query(
+                    'SELECT organization_name, organization_type, address FROM recipient_profiles WHERE user_id = ?',
+                    [$userId]
+                )->fetch() ?: [];
+            } elseif ($role === 'donor') {
+                $this->db->query(
+                    'INSERT INTO donor_profiles (user_id, organization_name, contact_number, address) VALUES (?,?,?,?)',
+                    [$userId, $organization_name, $contact_number, $address]
+                );
+                $profile = $this->db->query(
+                    'SELECT organization_name, donor_category, contact_number, address FROM donor_profiles WHERE user_id = ?',
+                    [$userId]
+                )->fetch() ?: [];
+            } else {
+                // For admin registration paths (if ever used)
+                $this->db->query(
+                    'INSERT INTO admin_profiles (user_id, organization_name, contact_number, address) VALUES (?,?,?,?)',
+                    [$userId, $organization_name, $contact_number, $address]
+                );
+                $profile = $this->db->query(
+                    'SELECT organization_name, contact_number, address FROM admin_profiles WHERE user_id = ?',
+                    [$userId]
+                )->fetch() ?: [];
+            }
+
+            // Base user fields
+            $base = $this->db->query(
+                'SELECT user_id, name, email, role, status, created_at, last_login FROM users WHERE user_id = ?',
                 [$userId]
             )->fetch();
             $this->db->commit();
-            return $user;
+            return array_merge($base ?: [], $profile ?: []);
         } catch (Exception $e) {
             $this->db->rollBack();
             throw $e;

@@ -17,11 +17,16 @@ class Donation
         // First try the new schema with batch_id
         $this->db->beginTransaction();
         try {
-            // Snapshot donor name/org at time of creation
+            // Snapshot donor name/org at time of creation (org from donor_profiles)
             $donorName = null;
             try {
-                $row = $this->db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [(int)$payload['donor_id']])->fetch();
-                if ($row) { $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : null); }
+                $row = $this->db->query(
+                    "SELECT COALESCE(dp.organization_name, '') AS org, u.name
+                     FROM users u LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                     WHERE u.user_id = ?",
+                    [(int)$payload['donor_id']]
+                )->fetch();
+                if ($row) { $donorName = ($row['org'] !== '') ? $row['org'] : (!empty($row['name']) ? $row['name'] : null); }
             } catch (Exception $e) { /* ignore */ }
             $this->db->query(
                 "INSERT INTO donations (donor_id, batch_id, product_category, product_name, quantity, expiry_date, remarks, total_weight, total_cost, donor_name, entry_date, status, created_at)
@@ -51,8 +56,13 @@ class Donation
                     // Fallback path (old schema without batch_id) still snapshots donor_name and sets entry_date
                     $donorName = null;
                     try {
-                        $row = $this->db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [(int)$payload['donor_id']])->fetch();
-                        if ($row) { $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : null); }
+                        $row = $this->db->query(
+                            "SELECT COALESCE(dp.organization_name, '') AS org, u.name
+                             FROM users u LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                             WHERE u.user_id = ?",
+                            [(int)$payload['donor_id']]
+                        )->fetch();
+                        if ($row) { $donorName = ($row['org'] !== '') ? $row['org'] : (!empty($row['name']) ? $row['name'] : null); }
                     } catch (Exception $e3) { /* ignore */ }
                     $this->db->query(
                         "INSERT INTO donations (donor_id, product_category, product_name, quantity, expiry_date, remarks, total_weight, total_cost, donor_name, entry_date, status, created_at)
@@ -102,7 +112,7 @@ class Donation
                             MIN(d.donation_id) AS id,
                             d.donor_id,
                             u.name AS donor_name,
-                            u.organization_name AS donor_org,
+                            dp.organization_name AS donor_org,
                             CONCAT('Batch (', COUNT(*), ' items)') AS name,
                             NULL AS type,
                             SUM(d.quantity) AS quantity,
@@ -112,15 +122,16 @@ class Donation
                             d.batch_id AS batch_id,
                             1 AS is_group
                         FROM donations d
-                        LEFT JOIN users u ON u.user_id = d.donor_id" . $whereSqlGrouped . "
-                        GROUP BY d.donor_id, u.name, u.organization_name, d.batch_id";
+                        LEFT JOIN users u ON u.user_id = d.donor_id
+                        LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id" . $whereSqlGrouped . "
+                        GROUP BY d.donor_id, u.name, dp.organization_name, d.batch_id";
 
             // Ungrouped singles: rows with batch_id NULL are returned as-is
             $sqlSingles = "SELECT 
                             d.donation_id AS id,
                             d.donor_id,
                             u.name AS donor_name,
-                            u.organization_name AS donor_org,
+                            dp.organization_name AS donor_org,
                             d.product_name AS name,
                             d.product_category AS type,
                             d.quantity,
@@ -130,7 +141,8 @@ class Donation
                             NULL AS batch_id,
                             0 AS is_group
                         FROM donations d
-                        LEFT JOIN users u ON u.user_id = d.donor_id" . $whereSqlSingles . "";
+                        LEFT JOIN users u ON u.user_id = d.donor_id
+                        LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id" . $whereSqlSingles . "";
 
             $sql = "SELECT * FROM (" . $sqlGrouped . ") g
                     UNION ALL
@@ -139,12 +151,13 @@ class Donation
                     LIMIT 500";
             return $this->db->query($sql, $params)->fetchAll();
         } else {
-            $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
+            $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
                            d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at,
                            d.batch_id AS batch_id,
                            0 AS is_group
                     FROM donations d
-                    LEFT JOIN users u ON u.user_id = d.donor_id";
+                    LEFT JOIN users u ON u.user_id = d.donor_id
+                    LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id";
             if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
             $sql .= ' ORDER BY d.created_at DESC LIMIT 500';
             return $this->db->query($sql, $params)->fetchAll();
@@ -155,10 +168,11 @@ class Donation
     public function getById(int $id): ?array
     {
         $row = $this->db->query(
-            "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
+            "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
                     d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at
              FROM donations d
              LEFT JOIN users u ON u.user_id = d.donor_id
+             LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
              WHERE d.donation_id = ? AND d.deleted_at IS NULL",
             [$id]
         )->fetch();
@@ -184,10 +198,11 @@ class Donation
     // List items by batch id (non-archived)
     public function listByBatch(string $batchId): array
     {
-        $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, u.organization_name AS donor_org,
+        $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
                        d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at
                 FROM donations d
                 LEFT JOIN users u ON u.user_id = d.donor_id
+                LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
                 WHERE d.deleted_at IS NULL AND d.batch_id = ?
                 ORDER BY d.created_at ASC";
         return $this->db->query($sql, [$batchId])->fetchAll();
@@ -420,8 +435,13 @@ class DonationEditor
                     // Snapshot donor name/org and set entry_date
                     $donorName = null;
                     try {
-                        $row = $this->db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [$donorId])->fetch();
-                        if ($row) { $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : null); }
+                        $row = $this->db->query(
+                            "SELECT COALESCE(dp.organization_name, '') AS org, u.name
+                             FROM users u LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                             WHERE u.user_id = ?",
+                            [$donorId]
+                        )->fetch();
+                        if ($row) { $donorName = ($row['org'] !== '') ? $row['org'] : (!empty($row['name']) ? $row['name'] : null); }
                     } catch (Exception $e) { /* ignore */ }
                     $this->db->query(
                         "INSERT INTO donations (donor_id, batch_id, product_category, product_name, quantity, expiry_date, donor_name, entry_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), 'Pending', NOW())",

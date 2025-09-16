@@ -32,6 +32,16 @@ try {
                 if ($currentId !== $userId && $role !== 'admin') {
                     sendJson(['success' => false, 'error' => 'Forbidden'], 403);
                 }
+                // Probe required tables to surface meaningful errors
+                try {
+                    $db = Database::getInstance();
+                    $db->query('SELECT 1 FROM conversations LIMIT 1');
+                    $db->query('SELECT 1 FROM conversation_participants LIMIT 1');
+                    $db->query('SELECT 1 FROM messages LIMIT 1');
+                } catch (Exception $e) {
+                    error_log('Messages list probe failed: ' . $e->getMessage());
+                    sendJson(['success' => false, 'error' => 'Messaging tables missing or inaccessible', 'detail' => ($role === 'admin' ? $e->getMessage() : null)], 500);
+                }
                 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
                 $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
                 $items = $convSvc->listForUser($userId, $limit, $offset);
@@ -110,6 +120,9 @@ try {
     }
 } catch (Exception $e) {
     error_log('Messages API error: ' . $e->getMessage());
-    sendJson(['success' => false, 'error' => 'Server error'], 500);
+    $role = (string)(currentUserRole() ?? '');
+    $payload = ['success' => false, 'error' => 'Server error'];
+    if ($role === 'admin') { $payload['detail'] = $e->getMessage(); }
+    sendJson($payload, 500);
 }
 

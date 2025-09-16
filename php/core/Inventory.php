@@ -89,12 +89,12 @@ class Inventory
         $this->ensureTables();
         $this->db->beginTransaction();
         try {
-            $row = $this->db->query("SELECT id, quantity FROM inventory WHERE id = ? FOR UPDATE", [$inventoryId])->fetch();
+            $row = $this->db->query("SELECT inventory_id, quantity FROM inventory WHERE inventory_id = ? FOR UPDATE", [$inventoryId])->fetch();
             if (!$row) { throw new Exception('Inventory item not found'); }
             $current = (int)$row['quantity'];
             if ($quantity > $current) { throw new Exception('Insufficient stock'); }
             $newQty = $current - $quantity;
-            $this->db->query("UPDATE inventory SET quantity = ? WHERE id = ?", [$newQty, $inventoryId]);
+            $this->db->query("UPDATE inventory SET quantity = ? WHERE inventory_id = ?", [$newQty, $inventoryId]);
             $this->db->query(
                 "INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
                  VALUES (?, 'out', ?, ?, ?, ?, ?, NOW())",
@@ -123,20 +123,20 @@ class Inventory
         try {
             // Lock matching lots ordered by soonest expiry, then by added_at
             $lots = $this->db->query(
-                "SELECT id, quantity FROM inventory WHERE item_name = ? AND category = ? ORDER BY COALESCE(expiry_date, '9999-12-31') ASC, added_at ASC FOR UPDATE",
+                "SELECT inventory_id, quantity FROM inventory WHERE product_name = ? AND product_category = ? ORDER BY COALESCE(expiry_date, '9999-12-31') ASC, added_at ASC FOR UPDATE",
                 [$itemName, $category]
             )->fetchAll();
             $toGo = $quantity;
             $affected = [];
             foreach ($lots as $lot) {
                 if ($toGo <= 0) break;
-                $invId = (int)$lot['id'];
+                $invId = (int)$lot['inventory_id'];
                 $have = (int)$lot['quantity'];
                 if ($have <= 0) continue;
                 $take = min($have, $toGo);
                 // Update this lot and record movement
                 $newQty = $have - $take;
-                $this->db->query("UPDATE inventory SET quantity = ? WHERE id = ?", [$newQty, $invId]);
+                $this->db->query("UPDATE inventory SET quantity = ? WHERE inventory_id = ?", [$newQty, $invId]);
                 $this->db->query(
                     "INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
                      VALUES (?, 'out', ?, ?, ?, ?, ?, NOW())",
@@ -152,5 +152,31 @@ class Inventory
             $this->db->rollBack();
             throw $e;
         }
+    }
+
+    // Ensure auxiliary tables used by inventory operations exist
+    private function ensureTables(): void
+    {
+        // Movements audit table (not part of base schema, created on demand)
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS `inventory_movements` (
+                `id` int(11) NOT NULL AUTO_INCREMENT,
+                `inventory_id` int(11) NOT NULL,
+                `direction` enum('in','out') NOT NULL,
+                `quantity` int(11) NOT NULL,
+                `mode` enum('recipient','onsite') NOT NULL,
+                `recipient_id` int(11) DEFAULT NULL,
+                `note` text DEFAULT NULL,
+                `performed_by` int(11) NOT NULL,
+                `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+                PRIMARY KEY (`id`),
+                KEY `im_inventory_idx` (`inventory_id`),
+                KEY `im_recipient_idx` (`recipient_id`),
+                KEY `im_performed_by_idx` (`performed_by`),
+                CONSTRAINT `im_inventory_fk` FOREIGN KEY (`inventory_id`) REFERENCES `inventory` (`inventory_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+                CONSTRAINT `im_performed_by_fk` FOREIGN KEY (`performed_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+                CONSTRAINT `im_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+        );
     }
 }
