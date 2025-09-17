@@ -75,35 +75,39 @@ CREATE TABLE `conversation_participants` (
   CONSTRAINT `cp_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- distribution_period_status
-CREATE TABLE `distribution_period_status` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `period_key` varchar(12) NOT NULL,
+-- recipient_plans (weekly planning; normalized order and source)
+CREATE TABLE `recipient_plans` (
+  `period_key` char(10) NOT NULL COMMENT 'YYYY-MM-Wn',
   `recipient_id` int(11) NOT NULL,
-  `served_count` int(11) NOT NULL DEFAULT 0,
-  `last_served_at` timestamp NULL DEFAULT NULL,
-  `skipped_pending` tinyint(1) NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_period_recipient` (`period_key`,`recipient_id`),
-  KEY `dps_recipient_idx` (`recipient_id`),
-  CONSTRAINT `dps_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+  `source` enum('planned','carryover') NOT NULL,
+  `position` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`period_key`, `recipient_id`),
+  KEY `rp_period_position_idx` (`period_key`, `position`),
+  CONSTRAINT `rp_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- distribution_selection_logs
-CREATE TABLE `distribution_selection_logs` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `period_key` varchar(12) NOT NULL,
-  `period_type` enum('weekly','monthly','quarterly') NOT NULL,
-  `pool_type` enum('general','specialty') NOT NULL,
-  `specialty_key` varchar(64) DEFAULT NULL,
-  `round_size` int(11) NOT NULL,
-  `selected_ids_json` text NOT NULL,
+-- recipient_attendance (weekly served vs absent)
+CREATE TABLE `recipient_attendance` (
+  `period_key` char(10) NOT NULL COMMENT 'YYYY-MM-Wn',
+  `recipient_id` int(11) NOT NULL,
+  `status` enum('served','absent') NOT NULL,
+  `served_count` int(11) NOT NULL DEFAULT 0,
+  `last_served_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`period_key`, `recipient_id`),
+  KEY `ra_recipient_idx` (`recipient_id`),
+  CONSTRAINT `ra_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- allocation_runs (idempotency and audit for weekly allocations)
+CREATE TABLE `allocation_runs` (
+  `run_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `period_key` char(10) NOT NULL COMMENT 'YYYY-MM-Wn',
   `created_by` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `dsl_period_idx` (`period_key`,`period_type`),
-  KEY `dsl_created_by_idx` (`created_by`),
-  CONSTRAINT `dsl_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+  PRIMARY KEY (`run_id`),
+  UNIQUE KEY `uniq_ar_period` (`period_key`),
+  KEY `ar_created_by_idx` (`created_by`),
+  CONSTRAINT `ar_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- donations
@@ -197,6 +201,7 @@ CREATE TABLE `products` (
   `product_name` varchar(255) NOT NULL,
   `product_category` varchar(100) DEFAULT NULL,
   `default_unit` varchar(50) DEFAULT NULL,
+  `tags` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`product_id`),
   UNIQUE KEY `uniq_product_name` (`product_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
@@ -208,6 +213,7 @@ CREATE TABLE `inventory` (
   `product_id` int(11) DEFAULT NULL,
   `product_name` varchar(255) NOT NULL,
   `product_category` varchar(100) DEFAULT NULL,
+  `tags` varchar(255) DEFAULT NULL,
   `quantity` int(11) NOT NULL DEFAULT 0,
   `unit` varchar(50) DEFAULT NULL,
   `total_weight` decimal(14,3) DEFAULT NULL,
@@ -320,21 +326,6 @@ CREATE TABLE `recipient_contacts` (
   CONSTRAINT `rc_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- recipient_month_assignments
-CREATE TABLE `recipient_month_assignments` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `month` date NOT NULL,
-  `recipient_id` int(11) NOT NULL,
-  `assigned_by` int(11) DEFAULT NULL,
-  `assigned_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_month_recipient` (`month`,`recipient_id`),
-  KEY `rma_recipient_idx` (`recipient_id`),
-  KEY `rma_assigned_by_idx` (`assigned_by`),
-  CONSTRAINT `rma_assigned_by_fk` FOREIGN KEY (`assigned_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `rma_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
-
 -- recipient_profiles (normalized; no contact fields; FK to primary contact)
 CREATE TABLE `recipient_profiles` (
   `user_id` int(11) NOT NULL,
@@ -355,9 +346,7 @@ CREATE TABLE `recipient_profiles` (
   CONSTRAINT `rp_primary_contact_fk` FOREIGN KEY (`primary_contact_id`) REFERENCES `recipient_contacts`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- Removed recipient_profile_effective view; code joins recipient_profiles and recipient_contacts directly.
 
--- Seed minimal data consistent with code expectations
 INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
 (1, 'Ian Jay Calonia', 'admin@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
 (2, 'Jay Piañar', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW());

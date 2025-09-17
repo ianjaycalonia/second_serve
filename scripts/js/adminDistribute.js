@@ -13,10 +13,54 @@
     el.innerHTML = msg ? `<div class="alert alert-${type} py-2 mb-0">${msg}</div>` : '';
   }
 
+  async function finalizeCurrentWeekIfPossible(){
+    try{
+      const pk = getPeriodKeyFromInputs();
+      if (!pk) return;
+      const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=finalize_week&period_key=${encodeURIComponent(pk)}`, { credentials: 'include' });
+      const j = await res.json().catch(()=>null);
+      if (j && j.success){
+        const prevKey = j.data?.previous_period_key || null;
+        const carry = Array.isArray(j.data?.carry_overs) ? j.data.carry_overs.map(n=>parseInt(n,10)).filter(n=>Number.isFinite(n)&&n>0) : [];
+        window.__diPrevWeekKey = prevKey;
+        window.__diCarryOverSet = new Set(carry);
+      } else {
+        window.__diPrevWeekKey = null;
+        window.__diCarryOverSet = new Set();
+      }
+    } catch(err){ /* non-fatal: UI can still load */ }
+  }
+
+  function updateCurrentWeekBadge(){
+    const badge = qs('#diCurrentWeek');
+    if (!badge) return;
+    const wk = getCurrentWeekBucket();
+    // Map to contextual color same as badges
+    const color = wk==='W1' ? 'primary' : wk==='W2' ? 'danger' : wk==='W3' ? 'warning' : 'info';
+    badge.textContent = wk;
+    badge.className = `badge bg-${color}`;
+  }
+
+  function currentMonth(){
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+
+  function getPeriodKeyFromInputs(){
+    const monthEl = qs('#diMonth');
+    const month = (monthEl?.value || currentMonth());
+    if (!/^\d{4}-\d{2}$/.test(month)) return null;
+    // Derive week bucket from current date: 1-7 W1, 8-14 W2, 15-21 W3, 22+ W4
+    const today = new Date();
+    const day = today.getDate();
+    const w = day <= 7 ? 'W1' : day <= 14 ? 'W2' : day <= 21 ? 'W3' : 'W4';
+    return `${month}-${w}`;
+  }
+
   function updateSelectedCount(){
     const count = (qs('#diSelected')?.children.length) || 0;
     const badge = qs('#diSelectedCount');
-    if (badge){ badge.textContent = `Selected: ${count} (suggested 5)`; }
+    if (badge){ badge.textContent = `Selected: ${count}`; }
   }
 
   function applySearchFilter(){
@@ -106,7 +150,11 @@
       el.className = 'di-card p-2 border rounded bg-light';
       el.draggable = true;
       el.dataset.id = String(id);
-      el.textContent = label;
+      el.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center gap-2">
+          <span class="di-card-label text-truncate">${label}</span>
+          <span class="di-week-badges d-flex gap-1"></span>
+        </div>`;
       el.title = label;
       return el;
     };
@@ -120,6 +168,125 @@
       else { pool.appendChild(card); }
     }
     updateSelectedCount();
+  }
+
+  function earliestWeekIndexForId(id, weeksMap){
+    const toSet = (arr)=> new Set((Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(n=>Number.isFinite(n)&&n>0));
+    const W1 = toSet(weeksMap?.W1); const W2 = toSet(weeksMap?.W2); const W3 = toSet(weeksMap?.W3); const W4 = toSet(weeksMap?.W4);
+    if (W1.has(id)) return 1;
+    if (W2.has(id)) return 2;
+    if (W3.has(id)) return 3;
+    if (W4.has(id)) return 4;
+    return 5; // unscheduled last
+  }
+
+  function sortPoolByWeeks(weeksMap){
+    const pool = qs('#diPool'); if (!pool) return;
+    const cards = qsa('#diPool .di-card');
+    // Build array with sort keys: [weekIndex, label, element]
+    const rows = cards.map(card => {
+      const id = parseInt(card.dataset.id||'0',10) || 0;
+      const lbl = (qs('.di-card-label', card)?.textContent || '').toLowerCase();
+      const wkIdx = earliestWeekIndexForId(id, weeksMap);
+      return { wkIdx, lbl, el: card };
+    });
+    rows.sort((a,b)=> a.wkIdx - b.wkIdx || a.lbl.localeCompare(b.lbl));
+    // Re-append in sorted order
+    rows.forEach(r => pool.appendChild(r.el));
+  }
+
+  function getCurrentWeekBucket(){
+    const d = new Date();
+    const day = d.getDate();
+    return day <= 7 ? 'W1' : day <= 14 ? 'W2' : day <= 21 ? 'W3' : 'W4';
+  }
+
+  async function fetchMonthlyPlan(month){
+    const m = month || currentMonth();
+    const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=get_plan&month=${encodeURIComponent(m)}`, { credentials:'include' });
+    if (!res.ok) return { month: m, weeks: { W1:[], W2:[], W3:[], W4:[] } };
+    const j = await res.json().catch(()=>null);
+    if (!j?.success) return { month: m, weeks: { W1:[], W2:[], W3:[], W4:[] } };
+    return j.data || { month: m, weeks: { W1:[], W2:[], W3:[], W4:[] } };
+  }
+
+  function annotateCardsWithWeeks(weeksMap){
+    const toSet = (arr)=> new Set((Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(n=>Number.isFinite(n)&&n>0));
+    const W1 = toSet(weeksMap?.W1); const W2 = toSet(weeksMap?.W2); const W3 = toSet(weeksMap?.W3); const W4 = toSet(weeksMap?.W4);
+    const currentW = getCurrentWeekBucket();
+    const isInWeek = (id, wk)=> wk==='W1'?W1.has(id):wk==='W2'?W2.has(id):wk==='W3'?W3.has(id):W4.has(id);
+    const colorFor = (wk)=> wk==='W1' ? 'primary' : wk==='W2' ? 'danger' : wk==='W3' ? 'warning' : 'info';
+    const carrySet = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
+    let prevW = null;
+    const prevKey = window.__diPrevWeekKey || '';
+    const m = /^\d{4}-\d{2}-W([1-4])$/.exec(prevKey);
+    if (m) prevW = `W${m[1]}`;
+    qsa('.di-card').forEach(card => {
+      const id = parseInt(card.dataset.id||'0',10) || 0;
+      const host = qs('.di-week-badges', card);
+      if (host) host.innerHTML = '';
+      card.classList.remove('border-primary','border-danger','border-warning','border-info');
+      // If this is a carry-over, show previous-week badge and border using that week's color
+      if (carrySet.has(id) && prevW){
+        const c = colorFor(prevW);
+        if (host){
+          const span = document.createElement('span');
+          span.className = `badge bg-${c} text-uppercase`;
+          span.style.fontSize = '0.65rem';
+          span.textContent = prevW;
+          host.appendChild(span);
+        }
+        card.classList.add(`border-${c}`);
+      } else {
+        // Otherwise, annotate based on scheduled week(s)
+        ['W1','W2','W3','W4'].forEach(wk => {
+          if (isInWeek(id, wk)){
+            if (host){
+              const span = document.createElement('span');
+              span.className = `badge bg-${colorFor(wk)} text-uppercase`;
+              span.style.fontSize = '0.65rem';
+              span.textContent = wk;
+              host.appendChild(span);
+            }
+            if (wk === currentW){
+              card.classList.add(`border-${colorFor(wk)}`);
+            }
+          }
+        });
+      }
+    });
+  }
+
+  function autoMoveCurrentWeekRecipients(weeksMap){
+    const currentW = getCurrentWeekBucket();
+    const ids = new Set((weeksMap?.[currentW]||[]).map(v=>parseInt(v,10)).filter(n=>Number.isFinite(n)&&n>0));
+    if (!ids.size) return;
+    const pool = qs('#diPool');
+    const selected = qs('#diSelected');
+    ids.forEach(id => {
+      const card = qs(`.di-card[data-id="${id}"]`);
+      if (card && card.parentElement && card.parentElement.id === 'diPool'){
+        selected?.appendChild(card);
+      }
+    });
+    updateSelectedCount();
+  }
+
+  function sortSelectedByCarryovers(){
+    const selected = qs('#diSelected'); if (!selected) return;
+    const carrySet = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
+    const rows = qsa('#diSelected .di-card').map(el => ({
+      el,
+      id: parseInt(el.dataset.id||'0',10)||0,
+      label: (qs('.di-card-label', el)?.textContent||'').toLowerCase()
+    }));
+    rows.sort((a,b) => {
+      const ac = carrySet.has(a.id) ? 0 : 1;
+      const bc = carrySet.has(b.id) ? 0 : 1;
+      if (ac !== bc) return ac - bc;
+      return a.label.localeCompare(b.label);
+    });
+    rows.forEach(r => selected.appendChild(r.el));
   }
 
   function parseIds(str){
@@ -349,66 +516,19 @@
     }
   }
 
-  async function preloadFiveRecipients(randomize = false){
+  async function preloadFiveRecipients(){
     const fb = qs('#diFeedback');
     try{
       showMsg(fb, 'Loading recipients...', 'secondary');
       const all = await fetchRecipients();
       window.__diAllRecipients = all;
-      // Ask server for quarterly suggestion based on round size
-      const roundSize = parseInt(qs('#diRoundSize')?.value || '5', 10) || 5;
-      const ids = await suggestPeriod(roundSize);
-      renderRecipientPools(all, ids);
-      // Build recipients payload from ALL approved recipients and call allocate-items with dummy item to sample 5
-      const recPayload = all.map(u => ({
-        id: u.user_id || u.id,
-        age: (u.age !== undefined ? parseInt(u.age,10) : null),
-        gender: (u.gender || 'unknown'),
-        received_count: (u.received_count !== undefined ? parseInt(u.received_count,10) : 0)
-      })).filter(r => Number.isFinite(r.id) && r.id > 0);
-      if (!recPayload.length){ showMsg(fb, 'No recipients available.', 'warning'); return; }
-      const dummyItems = [{ name: '__sample__', quantity: 0 }];
-      // On regenerate, clear Selected first; on open, keep any manually selected (pin)
-      let pinned = getSelectedIds();
-      if (randomize){
-        const poolEl = qs('#diPool');
-        qsa('#diSelected .di-card').forEach(card => poolEl.appendChild(card));
-        pinned = []; // do not pin when regenerating
-      }
-      // Choose options: deterministic on open; random sample on regenerate (optional)
-      const options = randomize
-        ? { include_rationale: 0, carryover_ids: [], random_count: roundSize, random_seed: Date.now() }
-        : { include_rationale: 0, carryover_ids: pinned };
-      const res = await fetch(`${API_BASE_URL}/allocate-items.php`, {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: dummyItems, recipients: recPayload, options })
-      });
-      const j = await res.json();
-      if (!res.ok || !j?.success){ throw new Error(j?.error || `HTTP ${res.status}`); }
-      const prioritized = Array.isArray(j.data?.prioritized) ? j.data.prioritized : [];
-      // If randomize, server may have reduced prioritized to the sampled subset already. Ensure we pick 5.
-      const top = prioritized.slice(0, Math.min(5, prioritized.length));
-      // Highlight suggested and bring them to the top of the Pool
-      const pool = qs('#diPool');
-      // Clear previous highlights in Pool
-      qsa('#diPool .di-card').forEach(card => card.classList.remove('border-warning','bg-warning-subtle'));
-      // Prepend suggested (that are currently in Pool) in order and highlight
-      // Iterate in reverse so first element in 'top' ends up highest when using prepend
-      for (let i = top.length - 1; i >= 0; i--) {
-        const id = top[i].id;
-        if (pinned.includes(id)) continue; // already selected, leave it there
-        const card = qs(`#diPool .di-card[data-id="${id}"]`);
-        if (card){
-          card.classList.add('border-warning','bg-warning-subtle');
-          pool.prepend(card);
-        }
-      }
+      // Render all recipients into Pool (no auto-selection)
+      renderRecipientPools(all, []);
       updateSelectedCount();
-      // Do not show verbose messages; keep UI clean
       showMsg(fb, '', '');
     } catch(err){
-      console.error('Preload 5 recipients failed:', err);
-      showMsg(qs('#diFeedback'), err.message || 'Failed to suggest recipients', 'danger');
+      console.error('Load recipients failed:', err);
+      showMsg(qs('#diFeedback'), err.message || 'Failed to load recipients', 'danger');
     }
   }
 
@@ -503,7 +623,20 @@
     const modalEl = document.getElementById('distributeItemsModal');
     if (modalEl){
       modalEl.addEventListener('shown.bs.modal', () => {
-        preloadFiveRecipients(false);
+        // Default the month control to current if not set
+        const m = qs('#diMonth');
+        if (m && !m.value){ m.value = currentMonth(); }
+        preloadFiveRecipients().then(async () => {
+          try{
+            await finalizeCurrentWeekIfPossible();
+            const month = qs('#diMonth')?.value || currentMonth();
+            const data = await fetchMonthlyPlan(month);
+            annotateCardsWithWeeks(data?.weeks || {});
+            sortPoolByWeeks(data?.weeks || {});
+            autoMoveCurrentWeekRecipients(data?.weeks || {});
+            updateCurrentWeekBadge();
+          } catch(_) { /* ignore */ }
+        });
       });
       // If user switches tabs manually to Allocation, render empty columns based on current selection
       modalEl.addEventListener('shown.bs.tab', (e) => {
@@ -584,10 +717,94 @@
         }
       });
 
+      // Load final weekly list (carry-overs first + planned)
+      qs('#diLoadFinal')?.addEventListener('click', async () => {
+        const fb = qs('#diFeedback');
+        try{
+          const pk = getPeriodKeyFromInputs();
+          if (!pk) { showMsg(fb, 'Please choose a valid Month and Week.', 'warning'); return; }
+          showMsg(fb, 'Loading final weekly list...', 'secondary');
+          const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=finalize_week&period_key=${encodeURIComponent(pk)}`, { credentials:'include' });
+          const j = await res.json();
+          if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+          const ids = Array.isArray(j?.data?.final) ? j.data.final.map(n=>parseInt(n,10)).filter(n=>Number.isFinite(n)&&n>0) : [];
+          if (!window.__diAllRecipients) window.__diAllRecipients = await fetchRecipients();
+          renderRecipientPools(window.__diAllRecipients, ids);
+          showMsg(fb, `Loaded final list for ${pk} (${ids.length} recipients).`, 'success');
+        } catch(err){
+          console.error('Load final list failed:', err);
+          showMsg(qs('#diFeedback'), err.message || 'Failed to load final list', 'danger');
+        }
+      });
+
+      // Preview Allocation (server-side tag matching, no deduction)
+      qs('#diPreviewAlloc')?.addEventListener('click', async () => {
+        const fb = qs('#diFeedback');
+        try{
+          const pk = getPeriodKeyFromInputs();
+          if (!pk) { showMsg(fb, 'Please choose a valid Month and Week.', 'warning'); return; }
+          showMsg(fb, 'Previewing allocation...', 'secondary');
+          // Ensure recipients are loaded for labels
+          if (!window.__diAllRecipients) window.__diAllRecipients = await fetchRecipients();
+          const recMap = new Map(window.__diAllRecipients.map(u => [Number(u.user_id || u.id), u]));
+          // Call preview
+          const res = await fetch(`${API_BASE_URL}/allocations.php?action=preview_allocation&period_key=${encodeURIComponent(pk)}`, { credentials:'include' });
+          const j = await res.json();
+          if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+          const allocations = Array.isArray(j?.data?.allocations) ? j.data.allocations : [];
+          const orderedIds = allocations.map(a => Number(a.recipient_id)).filter(n=>Number.isFinite(n)&&n>0);
+          const recipients = orderedIds.map(id => ({ id, ...(recMap.get(id) || {}) }));
+          buildAllocationColumns(recipients, {});
+          // Populate rows per recipient with preview suggestion
+          allocations.forEach(a => {
+            if (a.inventory_id && a.quantity > 0){
+              addRecipientRowWithValues(Number(a.recipient_id), a.product_category || '', a.product_name || '', a.quantity || 1);
+            }
+          });
+          showMsg(fb, 'Allocation preview loaded (no inventory deducted).', 'success');
+        } catch(err){
+          console.error('Preview allocation failed:', err);
+          showMsg(qs('#diFeedback'), err.message || 'Failed to preview allocation', 'danger');
+        }
+      });
+
+      // Allocate Now (deduct inventory, create movements)
+      qs('#diAllocateWeek')?.addEventListener('click', async () => {
+        const fb = qs('#diFeedback');
+        try{
+          const pk = getPeriodKeyFromInputs();
+          if (!pk) { showMsg(fb, 'Please choose a valid Month and Week.', 'warning'); return; }
+          showMsg(fb, 'Allocating and deducting inventory...', 'secondary');
+          const res = await fetch(`${API_BASE_URL}/allocations.php?action=allocate_week`, {
+            method: 'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
+            body: JSON.stringify({ period_key: pk })
+          });
+          const j = await res.json();
+          if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+          showMsg(fb, `Allocation completed. Allocated to ${j?.data?.allocated ?? 0} recipient(s).`, 'success');
+        } catch(err){
+          console.error('Allocate week failed:', err);
+          showMsg(qs('#diFeedback'), err.message || 'Failed to allocate', 'danger');
+        }
+      });
+
       // Clean highlights on hide
       modalEl.addEventListener('hide.bs.modal', () => {
         showMsg(qs('#diFeedback'), '', '');
         // nothing else to clean for DnD
+      });
+
+      // When month changes, re-annotate cards and auto-move current week recipients for that month
+      qs('#diMonth')?.addEventListener('change', async () => {
+        try{
+          await finalizeCurrentWeekIfPossible();
+          const month = qs('#diMonth')?.value || currentMonth();
+          const data = await fetchMonthlyPlan(month);
+          annotateCardsWithWeeks(data?.weeks || {});
+          sortPoolByWeeks(data?.weeks || {});
+          autoMoveCurrentWeekRecipients(data?.weeks || {});
+          updateCurrentWeekBadge();
+        } catch(err){ console.warn('Month change plan fetch failed', err); }
       });
     }
   }

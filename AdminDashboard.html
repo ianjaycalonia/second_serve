@@ -304,24 +304,15 @@
                     <div class="mb-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
                       <div class="d-flex align-items-center gap-2 flex-wrap">
                         <label class="form-label mb-0">Recipients</label>
-                        <span id="diSelectedCount" class="badge text-bg-secondary">Selected: 0 (suggested 5)</span>
-                        <div class="input-group input-group-sm" style="width: 180px;">
-                          <span class="input-group-text">Round size</span>
-                          <input id="diRoundSize" type="number" min="1" max="100" class="form-control" value="5" />
+                        <span id="diSelectedCount" class="badge text-bg-secondary">Selected: 0</span>
+                        <div class="input-group input-group-sm" style="width: 210px;">
+                          <span class="input-group-text">Month</span>
+                          <input id="diMonth" type="month" class="form-control" />
                         </div>
-                        <div class="input-group input-group-sm" style="width: 200px;">
-                          <span class="input-group-text">Period</span>
-                          <select id="diPeriodType" class="form-select">
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly" selected>Monthly</option>
-                            <option value="quarterly">Quarterly</option>
-                          </select>
-                        </div>
+                        <span id="diCurrentWeek" class="badge bg-secondary">W1</span>
                       </div>
                       <div class="d-flex align-items-center gap-2">
                         <input id="diSearch" class="form-control form-control-sm" placeholder="Search recipients..." style="width: 200px" />
-                        <button type="button" id="diRegenerate" class="btn btn-sm btn-outline-warning">Regenerate</button>
-                        <div class="small text-muted">Quarterly pool</div>
                       </div>
                     </div>
                     <div class="row g-2">
@@ -401,7 +392,8 @@
                     <button type="button" id="diRerun" class="btn btn-outline-secondary btn-sm">Re-run Suggestion</button>
                   </div>
                   <div class="btn-group">
-                    <button type="button" id="diConfirmRound" class="btn btn-primary btn-sm">Confirm Round</button>
+                    <button type="button" id="diPreviewAlloc" class="btn btn-outline-primary btn-sm">Preview Allocation</button>
+                    <button type="button" id="diAllocateWeek" class="btn btn-primary btn-sm">Allocate Now</button>
                     <button type="button" id="diCloseBtn" class="btn btn-success btn-sm" data-bs-dismiss="modal">Close</button>
                   </div>
                 </div>

@@ -218,12 +218,7 @@
 
   async function init(){
     try{
-      // banner notice (local-only save)
-      const cap = document.createElement('div');
-      cap.className = 'alert alert-warning py-2 px-3 mb-2';
-      cap.innerHTML = '<strong>Note:</strong> Save on this page is local-only for now. I can wire it to the DB if you want it persisted server-side.';
-      const bc = qs('main > div[aria-label="breadcrumb"]');
-      if (bc && !qs('.alert', bc.parentElement)) bc.insertAdjacentElement('afterend', cap);
+      // Removed outdated local-only save notice (server persistence enabled)
 
       // setup drag handlers
       setupDragSources(document);
