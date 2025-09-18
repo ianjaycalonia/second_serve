@@ -9,14 +9,85 @@
   const qsa = (s, r=document)=> Array.from(r.querySelectorAll(s));
 
   function toast(msg, type='secondary'){
-    // simple inline feedback near breadcrumb (reuse pool caption area)
-    const host = qs('.card.card-accent .fw-semibold');
-    if (!host) return;
-    const wrap = document.createElement('span');
-    wrap.className = `ms-2 badge text-bg-${type}`;
-    wrap.textContent = msg;
-    host.appendChild(wrap);
-    setTimeout(()=> wrap.remove(), 2500);
+    try{
+      const container = document.getElementById('rlToastContainer');
+      if (!container || !window.bootstrap) throw new Error('no container');
+      const color = ({success:'success', danger:'danger', warning:'warning', info:'info'})[type] || 'secondary';
+      const div = document.createElement('div');
+      div.className = 'toast align-items-center text-bg-'+color;
+      div.setAttribute('role', 'alert');
+      div.setAttribute('aria-live', 'assertive');
+      div.setAttribute('aria-atomic', 'true');
+      div.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${String(msg||'')}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>`;
+      container.appendChild(div);
+      const t = new bootstrap.Toast(div, { autohide: true, delay: 2500 });
+      t.show();
+      div.addEventListener('hidden.bs.toast', ()=> div.remove());
+      return;
+    } catch(_){ }
+    // Fallback
+    try { alert(String(msg||'')); } catch(_){ }
+  }
+
+  async function confirmAction(message, title='Confirm'){
+    // Creates a temporary Bootstrap modal for confirmation; resolves true/false
+    try{
+      const id = 'rlTempConfirmModal_'+Date.now();
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <div class="modal fade" id="${id}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">${title}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">${message}</div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" data-role="confirm">Proceed</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(wrap);
+      const modalEl = wrap.firstElementChild;
+      const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+      return await new Promise(resolve => {
+        modalEl.addEventListener('hidden.bs.modal', ()=>{ wrap.remove(); resolve(false); }, { once:true });
+        const btn = modalEl.querySelector('[data-role="confirm"]');
+        btn.addEventListener('click', ()=>{ resolve(true); m.hide(); }, { once:true });
+        m.show();
+      });
+    } catch(_){
+      return window.confirm(String(message||'Proceed?'));
+    }
+  }
+
+  function currentWeekStamp(){
+    const basis = (window.__WEEK_START === 'monday') ? 'monday' : 'sunday';
+    const starts = upcomingWeekStartDates(basis);
+    const d0 = starts[0] || new Date();
+    const wn = weekNumber(d0, basis);
+    return `${d0.getFullYear()}-W${wn}`;
+  }
+  async function handleWeekRollover(){
+    try{
+      const stamp = currentWeekStamp();
+      const prev = localStorage.getItem('rl_last_week_stamp');
+      if (prev && prev !== stamp){
+        // Clear last week's assignments (W1) on the server so recipients go back to pool
+        try {
+          await apiSavePlan({ W1: [] }, currentMonth());
+          toast('Rolled over: cleared last week\'s assignments', 'info');
+        } catch(_){ /* ignore server error but continue */ }
+      }
+      localStorage.setItem('rl_last_week_stamp', stamp);
+    } catch(_){ }
   }
 
   function createCard(user){
@@ -24,7 +95,9 @@
     el.className = 'rcard';
     el.draggable = true;
     el.setAttribute('data-user-id', String(user.user_id));
-    const label = (user.organization_name && user.organization_name.trim()) ? user.organization_name : (user.name || ('Recipient ' + user.user_id));
+    const org = (user.organization_name && user.organization_name.trim()) ? user.organization_name.trim() : '';
+    const typ = (user.organization_type && String(user.organization_type).trim()) ? String(user.organization_type).trim() : '';
+    const label = org ? (typ ? `${org} - ${typ}` : org) : (user.name || ('Recipient ' + user.user_id));
     el.innerHTML = `<i class="bi bi-person-badge"></i><span>${label}</span>`;
     return el;
   }
@@ -73,6 +146,7 @@
       if (before) el.insertBefore(card, before); else el.appendChild(card);
       const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`);
       if (poolCard) poolCard.style.display='none';
+      updateCounts();
     });
   }
 
@@ -96,6 +170,7 @@
         if (user){ poolCard = createCard(user); pool.appendChild(poolCard); }
       }
       if (poolCard){ poolCard.style.display=''; }
+      updateCounts();
     });
   }
 
@@ -121,6 +196,7 @@
         if (user) pool.appendChild(createCard(user));
       }
     });
+    updateCounts();
   }
 
   function collectWeekIds(dropId){ return qsa(`#${dropId} .rcard[data-user-id]`).map(el => parseInt(el.getAttribute('data-user-id')||'0',10)).filter(Boolean); }
@@ -144,28 +220,137 @@
     const firstWeekStart = new Date(year, mon-1, 1 - offset);
     return [0,1,2,3].map(i => new Date(firstWeekStart.getFullYear(), firstWeekStart.getMonth(), firstWeekStart.getDate() + i*7));
   }
+  function startOfWeek(date, weekStart){
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const targetDow = (weekStart === 'monday') ? 1 : 0; // 0=Sun,1=Mon
+    const dow = d.getDay();
+    const diff = (dow - targetDow + 7) % 7;
+    d.setDate(d.getDate() - diff);
+    d.setHours(0,0,0,0);
+    return d;
+  }
+  function upcomingWeekStartDates(weekStart){
+    const ws = (weekStart === 'monday') ? 'monday' : 'sunday';
+    const now = new Date();
+    const first = startOfWeek(now, ws);
+    return [0,1,2,3].map(i => new Date(first.getFullYear(), first.getMonth(), first.getDate() + i*7));
+  }
+  function isoWeekNumber(date){
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  }
+  function weekNumber(date, basis){
+    const b = (basis === 'monday') ? 'monday' : 'sunday';
+    if (b === 'monday') return isoWeekNumber(date);
+    // Sunday-based week numbering: Week 1 starts on the Sunday of the week containing Jan 1
+    const year = date.getFullYear();
+    const start = startOfWeek(date, 'sunday');
+    const jan1 = new Date(year, 0, 1);
+    const yearWeek0 = startOfWeek(jan1, 'sunday');
+    const diffDays = Math.floor((start - yearWeek0) / 86400000);
+    return Math.floor(diffDays / 7) + 1;
+  }
+  function focusWeekKeyFor(month, weekStart){
+    // In upcoming model, current week is always W1
+    return 'W1';
+  }
+
+  function applyWeekFocusAndButtons(){
+    try{
+      const month = currentMonth();
+      const basis = (window.__WEEK_START === 'monday') ? 'monday' : 'sunday';
+      const starts = upcomingWeekStartDates(basis);
+      const focusKey = 'W1';
+      const idx = 0;
+      const drops = ['w1','w2','w3','w4'];
+      const labels = ['w1Label','w2Label','w3Label','w4Label'];
+      // Highlight
+      drops.forEach((id,i)=>{
+        const dz = qs('#'+id);
+        dz?.classList.toggle('current-week', i===idx);
+        const lab = qs('#'+labels[i]);
+        if (lab){
+          // ensure base text shows week number
+          try { lab.classList.add('week-label'); } catch(_){ }
+          // remove existing badge
+          const ex = lab.querySelector('.badge.badge-current'); if (ex) ex.remove();
+          if (i===idx){
+            const b = document.createElement('span'); b.className = 'badge badge-current text-bg-info'; b.textContent = 'Current';
+            lab.appendChild(b);
+          }
+        }
+      });
+      // Buttons enabled/locked from server (Save, Clear, Auto)
+      const locks = window.__rl_locks || {};
+      const groups = [
+        { key:'W1', save:'saveW1', clear:'clearW1', auto:'autoW1' },
+        { key:'W2', save:'saveW2', clear:'clearW2', auto:'autoW2' },
+        { key:'W3', save:'saveW3', clear:'clearW3', auto:'autoW3' },
+        { key:'W4', save:'saveW4', clear:'clearW4', auto:'autoW4' },
+      ];
+      groups.forEach(g => {
+        const disabled = !!locks[g.key];
+        const s = qs('#'+g.save); if (s) s.disabled = disabled;
+        const c = qs('#'+g.clear); if (c) c.disabled = disabled;
+        const a = qs('#'+g.auto); if (a) a.disabled = disabled;
+      });
+      // No need to reorder columns; W1 is rendered first and is the current week
+      // Scroll focus into view (first time only per load)
+      if (!window.__rl_focus_scrolled){
+        const focusDz = qs('#'+drops[idx]);
+        try { focusDz?.scrollIntoView({ behavior:'smooth', block:'nearest' }); } catch(_){ }
+        window.__rl_focus_scrolled = true;
+      }
+    } catch(_){ }
+  }
+
+  function reorderWeekColumns(focusIdx){
+    try{
+      const row = qs('main .row.g-3');
+      if (!row) return;
+      // Collect the 4 columns and map them to indices 0..3 based on dropzone ids
+      const colNodes = Array.from(row.children).filter(el => el.classList && el.classList.contains('col-12'));
+      if (colNodes.length < 4) return;
+      // Determine current order based on presence of #w1..#w4 inside
+      const colsByIdx = new Array(4);
+      colNodes.forEach(col => {
+        if (col.querySelector('#w1')) colsByIdx[0] = col;
+        else if (col.querySelector('#w2')) colsByIdx[1] = col;
+        else if (col.querySelector('#w3')) colsByIdx[2] = col;
+        else if (col.querySelector('#w4')) colsByIdx[3] = col;
+      });
+      if (colsByIdx.some(c => !c)) return;
+      // Build new order starting from focusIdx
+      // Keep original order (W1..W4)
+    } catch(_){ }
+  }
   function updateWeekLabels(){
     try{
       const month = currentMonth();
       const basis = (window.__WEEK_START === 'monday') ? 'monday' : 'sunday';
-      const starts = monthWeekStartDates(month, basis);
+      const starts = upcomingWeekStartDates(basis);
       const ids = ['w1Label','w2Label','w3Label','w4Label'];
       starts.forEach((dt, i) => {
-        const iso = isoWeekNumber(dt);
+        const wn = weekNumber(dt, basis);
         const el = qs('#'+ids[i]);
-        if (el) el.textContent = `Week W${iso}`;
+        if (el) el.textContent = `Week W${wn}`;
       });
       // Update aria-labels of dropzones and button titles for clarity (optional, non-breaking)
-      const dzMap = [['w1','W'+isoWeekNumber(starts[0]||new Date())],['w2','W'+isoWeekNumber(starts[1]||new Date())],['w3','W'+isoWeekNumber(starts[2]||new Date())],['w4','W'+isoWeekNumber(starts[3]||new Date())]];
+      const dzMap = [['w1','W'+weekNumber(starts[0]||new Date(), basis)],['w2','W'+weekNumber(starts[1]||new Date(), basis)],['w3','W'+weekNumber(starts[2]||new Date(), basis)],['w4','W'+weekNumber(starts[3]||new Date(), basis)]];
       dzMap.forEach(([id,w])=>{ const dz = qs('#'+id); if (dz) dz.setAttribute('aria-label', `Week ${w} assignments`); });
       const btns = [
-        ['saveW1','Save '+('W'+isoWeekNumber(starts[0]||new Date()))],
-        ['saveW2','Save '+('W'+isoWeekNumber(starts[1]||new Date()))],
-        ['saveW3','Save '+('W'+isoWeekNumber(starts[2]||new Date()))],
-        ['saveW4','Save '+('W'+isoWeekNumber(starts[3]||new Date()))],
+        ['saveW1','Save '+('W'+weekNumber(starts[0]||new Date(), basis))],
+        ['saveW2','Save '+('W'+weekNumber(starts[1]||new Date(), basis))],
+        ['saveW3','Save '+('W'+weekNumber(starts[2]||new Date(), basis))],
+        ['saveW4','Save '+('W'+weekNumber(starts[3]||new Date(), basis))],
       ];
       btns.forEach(([id,title])=>{ const b = qs('#'+id); if (b) b.setAttribute('title', title); if (b) b.setAttribute('data-bs-original-title', title); });
-    } catch(_){}
+      // Apply focus/highlight and button states after updating labels
+      applyWeekFocusAndButtons();
+    } catch(_){ }
   }
   async function apiGetPlan(month){
     const ws = (window.__WEEK_START === 'monday') ? 'monday' : 'sunday';
@@ -190,6 +375,7 @@
     qsa('#pool .rcard').forEach(c => c.style.display='');
     try {
       const data = await apiGetPlan(currentMonth());
+      window.__rl_locks = data?.locks || {};
       const weeks = data?.weeks || {};
       [['W1','w1'],['W2','w2'],['W3','w3'],['W4','w4']].forEach(([key,drop])=>{
         const dz = qs('#'+drop); if (!dz) return; dz.innerHTML='';
@@ -200,16 +386,61 @@
           const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`); if (poolCard) poolCard.style.display='none';
         });
       });
+      updateCounts();
     } catch (e) {
       toast('Failed to load plan from server', 'danger');
     }
   }
 
+  function updateCounts(){
+    try{
+      const max = 10;
+      const pairs = [ ['w1','w1Label'], ['w2','w2Label'], ['w3','w3Label'], ['w4','w4Label'] ];
+      pairs.forEach(([dropId, labelId])=>{
+        const dz = qs('#'+dropId);
+        const lbl = qs('#'+labelId);
+        if (!dz || !lbl) return;
+        const count = qsa('.rcard[data-user-id]', dz).length;
+        // remove existing count badge
+        const old = lbl.querySelector('.badge.badge-count'); if (old) old.remove();
+        const b = document.createElement('span');
+        b.className = 'badge badge-count text-bg-secondary ms-2';
+        b.textContent = `${count}/${max}`;
+        lbl.appendChild(b);
+      });
+    } catch(_){ }
+  }
+
+  async function markStatuses(){
+    try{
+      const res = await fetch(`${API_BASE_URL}/inventory/index.php/movements?mode=recipient&days=31&limit=500`, { credentials:'include' });
+      const j = await res.json();
+      if (!res.ok || !j?.success) return;
+      const items = Array.isArray(j?.data?.items) ? j.data.items : [];
+      // Build set of recipient_ids that had allocations in the last 31 days
+      const allocatedSet = new Set(items.filter(r => String(r.direction).toLowerCase()==='out').map(r => Number(r.recipient_id||0)||0));
+      // Apply classes
+      qsa('.dropzone .rcard').forEach(card => {
+        const id = parseInt(card.getAttribute('data-user-id')||'0',10);
+        card.classList.remove('status-allocated','status-completed','status-cancelled');
+        if (allocatedSet.has(id)) card.classList.add('status-allocated');
+      });
+    } catch(_){ /* ignore */ }
+  }
+
   async function saveWeekKey(weekKey, dropId){
     const ids = collectWeekIds(dropId);
+    // If not exactly 10, ask for confirmation instead of blocking
+    if (ids.length !== 10){
+      const ok = await confirmAction(`This week has ${ids.length}/10 recipients. Do you want to proceed?`, 'Not exactly 10');
+      if (!ok) return;
+    }
     try {
       await apiSavePlan({ [weekKey]: ids }, currentMonth());
       toast(`Saved ${weekKey} (${ids.length})`, 'success');
+      // Refresh plan to get updated server locks
+      await restoreFromServer();
+      applyWeekFocusAndButtons();
     } catch (e) {
       toast(`Failed to save ${weekKey}: ${e.message || e}`, 'danger');
     }
@@ -239,6 +470,7 @@
       card.style.display='none';
       added++;
     }
+    updateCounts();
     toast(`Auto added ${added} recipient(s)`, added ? 'success' : 'warning');
   }
 
@@ -285,6 +517,8 @@
                 toast('Week start updated', 'success');
                 updateWeekLabels();
                 await restoreFromServer();
+      applyWeekFocusAndButtons();
+      await markStatuses();
               } else {
                 // TEMP debug logging
                 console.error('Week start update failed', { status: upd.status, ok: upd.ok, response: uj, raw });
@@ -328,8 +562,21 @@
       qs('#saveW4')?.addEventListener('click', ()=> saveWeekKey('W4','w4'));
       // save all
       qs('#saveAllBtn')?.addEventListener('click', async ()=>{
-        const weeks = { W1: collectWeekIds('w1'), W2: collectWeekIds('w2'), W3: collectWeekIds('w3'), W4: collectWeekIds('w4') };
-        try { await apiSavePlan(weeks, currentMonth()); toast('All weeks saved', 'success'); }
+        const raw = { W1: collectWeekIds('w1'), W2: collectWeekIds('w2'), W3: collectWeekIds('w3'), W4: collectWeekIds('w4') };
+        const weeks = {};
+        const skipped = [];
+        Object.entries(raw).forEach(([k, ids])=>{
+          if (Array.isArray(ids) && ids.length === 10){ weeks[k] = ids; }
+          else if (Array.isArray(ids) && ids.length === 0){ /* saving empty will clear locks server-side */ weeks[k] = []; }
+          else { skipped.push(`${k} (${ids.length}/10)`); }
+        });
+        try { 
+          await apiSavePlan(weeks, currentMonth()); 
+          if (skipped.length){ toast(`Saved eligible weeks. Skipped: ${skipped.join(', ')}`, 'warning'); }
+          else { toast('All weeks saved', 'success'); }
+          await restoreFromServer();
+          applyWeekFocusAndButtons();
+        }
         catch(e){ toast('Failed to save all weeks', 'danger'); }
       });
 

@@ -34,6 +34,16 @@
   background: #eef9fb;
 }
 
+/* Current week focus */
+.dropzone.current-week {
+  border: 2px solid #00a0b0;
+  background: #f0fbfd;
+}
+.week-label .badge-current {
+  margin-left: .5rem;
+  background-color: #00a0b0;
+}
+
 .rmeta {
   color: #6c757d;
   font-size: .8rem;
@@ -45,4 +55,19 @@
   padding: .1rem .4rem;
   border-radius: .25rem;
   font-size: .75rem;
+}
+
+/* Status coloring */
+.rcard.status-allocated {
+  border-color: #198754;
+  background: #e9f7ef;
+}
+.rcard.status-completed {
+  border-color: #0d6efd;
+  background: #e7f1ff;
+}
+.rcard.status-cancelled {
+  border-color: #dc3545;
+  background: #fdecee;
+  text-decoration: line-through;
 }

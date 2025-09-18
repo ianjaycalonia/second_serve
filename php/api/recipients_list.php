@@ -7,6 +7,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
+// Helper: compute start of week for a given date and basis
+function rl_start_of_week(DateTime $date, string $basis): DateTime {
+    $basis = ($basis === 'monday') ? 'monday' : 'sunday';
+    $d = clone $date; $d->setTime(0,0,0);
+    $dow = (int)$d->format('w'); // 0=Sun..6=Sat
+    $targetDow = ($basis === 'monday') ? 1 : 0;
+    $diff = ($dow - $targetDow + 7) % 7; // days since start of week
+    if ($diff !== 0) { $d->modify('-'.$diff.' day'); }
+    return $d;
+}
+
+// Helper: upcoming 4 week starts from now per basis
+function rl_upcoming_week_starts(string $basis): array {
+    $basis = ($basis === 'monday') ? 'monday' : 'sunday';
+    $now = new DateTime('now');
+    $first = rl_start_of_week($now, $basis);
+    $arr = [];
+    for ($i=0; $i<4; $i++){
+        $d = clone $first; $d->modify('+'.(7*$i).' day');
+        $arr[] = $d; // DateTime
+    }
+    return $arr;
+}
+
+// ISO week number (Mon-based)
+function rl_iso_week_number(DateTime $date): int {
+    return (int)$date->format('W');
+}
+
+// Basis-aware week number
+function rl_week_number_basis(DateTime $date, string $basis): int {
+    $basis = ($basis === 'monday') ? 'monday' : 'sunday';
+    if ($basis === 'monday') return rl_iso_week_number($date);
+    // Sunday-based week numbering
+    $year = (int)$date->format('Y');
+    $start = rl_start_of_week($date, 'sunday');
+    $jan1 = new DateTime(sprintf('%04d-01-01', $year));
+    $yearWeek0 = rl_start_of_week($jan1, 'sunday');
+    $diffDays = (int)floor(($start->getTimestamp() - $yearWeek0->getTimestamp()) / 86400);
+    return (int)floor($diffDays / 7) + 1;
+}
+
+function rl_get_setting_bool($key, $default=false){
+    $v = rl_get_setting($key, $default ? '1' : '0');
+    $s = strtolower((string)$v);
+    return in_array($s, ['1','true','yes','on'], true);
+}
+
+function rl_set_setting($key, $value){
+    try{
+        $db = Database::getInstance();
+        $row = $db->query('SELECT `key` FROM settings WHERE `key`=? LIMIT 1', [$key])->fetch();
+        if ($row){
+            $db->query('UPDATE settings SET `value`=? WHERE `key`=?', [ (string)$value, $key ]);
+        } else {
+            $db->query('INSERT INTO settings (`key`,`value`) VALUES (?,?)', [ $key, (string)$value ]);
+        }
+    } catch (Throwable $e) { /* ignore */ }
+}
+
 /**
  * Compute the calendar date for the start of the given week within a month.
  * $month: 'YYYY-MM'
@@ -58,10 +118,8 @@ try {
     switch ($action) {
         case 'get_plan':
             requireRole(['admin']);
-            $month = isset($_GET['month']) ? trim((string)$_GET['month']) : '';
-            if ($month === '') {
-                $month = (new DateTime('now'))->format('Y-m');
-            }
+            // Month parameter retained for compatibility but not used for grouping anymore
+            $month = isset($_GET['month']) ? trim((string)$_GET['month']) : (new DateTime('now'))->format('Y-m');
             $weekStart = isset($_GET['week_start']) ? strtolower(trim((string)$_GET['week_start'])) : '';
             if (!in_array($weekStart, ['sunday','monday'], true)) {
                 $weekStart = strtolower((string)rl_get_setting('week_start', 'sunday'));
@@ -73,24 +131,47 @@ try {
                 $includeCarry = in_array($v, ['1','true','yes','on'], true);
             }
             $db = Database::getInstance();
-            $weeks = ['W1','W2','W3','W4'];
+            // Lazy rollover: if week stamp changed since last time, clear previous week's planned rows
+            $nowStarts = rl_upcoming_week_starts($weekStart);
+            $currentStart = $nowStarts[0];
+            $prevStart = (clone $currentStart)->modify('-7 day');
+            $stampKey = sprintf('rl_last_week_stamp');
+            $lastStamp = rl_get_setting($stampKey, '');
+            $currentStamp = sprintf('%04d-W%d', (int)$currentStart->format('Y'), rl_week_number_basis($currentStart, $weekStart));
+            if ($lastStamp !== $currentStamp && $lastStamp !== ''){
+                try {
+                    $db->query("DELETE FROM recipient_plans WHERE source='planned' AND week_start_date = ?", [$prevStart->format('Y-m-d')]);
+                } catch (Throwable $e) { /* ignore */ }
+            }
+            rl_set_setting($stampKey, $currentStamp);
+
+            // Build weeks from upcoming week_start_date values
             $result = [];
-            foreach ($weeks as $wk) {
-                $key = $month . '-' . $wk; // custom period_key for storage
+            $locks = [];
+            for ($i=0; $i<4; $i++){
+                $wStart = $nowStarts[$i];
+                $wn = rl_week_number_basis($wStart, $weekStart);
+                $lockKey = sprintf('rl_lock_%04d-W%d', (int)$wStart->format('Y'), $wn);
+                $locks['W'.($i+1)] = rl_get_setting_bool($lockKey, false);
                 if ($includeCarry) {
                     $rows = $db->query(
-                        "SELECT recipient_id FROM recipient_plans WHERE period_key = ? ORDER BY CASE WHEN source='carryover' THEN 0 ELSE 1 END, position ASC",
-                        [$key]
+                        "SELECT recipient_id FROM recipient_plans WHERE week_start_date = ? ORDER BY CASE WHEN source='carryover' THEN 0 ELSE 1 END, position ASC",
+                        [$wStart->format('Y-m-d')]
                     )->fetchAll();
                 } else {
                     $rows = $db->query(
-                        "SELECT recipient_id FROM recipient_plans WHERE period_key = ? AND source='planned' ORDER BY position ASC",
-                        [$key]
+                        "SELECT recipient_id FROM recipient_plans WHERE week_start_date = ? AND source='planned' ORDER BY position ASC",
+                        [$wStart->format('Y-m-d')]
                     )->fetchAll();
                 }
-                $result[$wk] = array_map(fn($r)=> (int)$r['recipient_id'], $rows ?: []);
+                $result['W'.($i+1)] = array_map(fn($r)=> (int)$r['recipient_id'], $rows ?: []);
             }
-            sendJson(['success' => true, 'data' => ['month' => $month, 'weeks' => $result, 'week_start' => $weekStart]]);
+            sendJson(['success' => true, 'data' => [
+                'month' => $month,
+                'weeks' => $result,
+                'week_start' => $weekStart,
+                'locks' => $locks,
+            ]]);
             break;
 
         case 'save_plan':
@@ -105,25 +186,35 @@ try {
             $weeksData = $payload['weeks'] ?? [];
             if (!is_array($weeksData)) { sendJson(['success' => false, 'error' => 'weeks must be an object'], 400); }
             $db = Database::getInstance();
-            $weeks = ['W1','W2','W3','W4'];
-            foreach ($weeks as $wk) {
-                $ids = isset($weeksData[$wk]) && is_array($weeksData[$wk]) ? array_values(array_filter(array_map('intval', $weeksData[$wk]), fn($v)=>$v>0)) : [];
-                $key = $month . '-' . $wk;
-                // Replace planned rows for this period_key
-                $db->query("DELETE FROM recipient_plans WHERE period_key = ? AND source = 'planned'", [$key]);
-                // Insert with positions 0..n-1
+            // Use upcoming week starts to persist planned rows and set lock flags
+            $starts = rl_upcoming_week_starts($weekBasis);
+            // Map week key to index for quick lookup
+            $wkIndex = ['W1'=>0,'W2'=>1,'W3'=>2,'W4'=>3];
+            foreach ($weeksData as $wk => $list) {
+                if (!isset($wkIndex[$wk])) continue; // ignore unknown keys
+                $i = $wkIndex[$wk];
+                $ids = is_array($list) ? array_values(array_filter(array_map('intval', $list), fn($v)=>$v>0)) : [];
+                $wStart = $starts[$i];
+                $periodKey = $month.'-'.$wk; // kept for compatibility
+                // Replace planned rows for this week_start_date (only for this provided week)
+                $db->query("DELETE FROM recipient_plans WHERE week_start_date = ? AND source = 'planned'", [$wStart->format('Y-m-d')]);
                 $pos = 0;
-                // Compute week_start_date for this key
-                $wIndex = (int)substr($wk, 1);
-                $wkStartDate = rl_week_start_date_from_month($month, $wIndex, $weekBasis);
                 foreach ($ids as $rid) {
                     $db->query(
                         "INSERT INTO recipient_plans (period_key, recipient_id, source, position, week_start_date, week_basis) VALUES (?,?, 'planned', ?, ?, ?)",
-                        [ $key, $rid, $pos++, $wkStartDate, $weekBasis ]
+                        [ $periodKey, $rid, $pos++, $wStart->format('Y-m-d'), $weekBasis ]
                     );
                 }
+                // Set or remove lock flag for this provided week only
+                $wn = rl_week_number_basis($wStart, $weekBasis);
+                $lockKey = sprintf('rl_lock_%04d-W%d', (int)$wStart->format('Y'), $wn);
+                if (count($ids) > 0) {
+                    rl_set_setting($lockKey, '1');
+                } else {
+                    try { $db->query('DELETE FROM settings WHERE `key` = ?', [$lockKey]); } catch (Throwable $e) { /* ignore */ }
+                }
             }
-            sendJson(['success' => true, 'message' => 'Plan saved']);
+            sendJson(['success' => true, 'message' => 'Plan saved and locks updated']);
             break;
 
         case 'finalize_week':

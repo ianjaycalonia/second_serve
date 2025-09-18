@@ -35,22 +35,12 @@
   function updateCurrentWeekBadge(){
     const badge = qs('#diCurrentWeek');
     if (!badge) return;
-    // Display ISO week-of-year (e.g., W38) for clarity, while keeping backend keys as YYYY-MM-Wn
-    const iso = (function isoWeekNumber(d){
-      const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-      // Set to nearest Thursday: current date + 4 - current day number (Sun=7)
-      const dayNum = (date.getUTCDay() || 7);
-      date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-      // Year of the week
-      const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-      // Calculate full weeks to nearest Thursday
-      const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
-      return weekNo;
-    })(new Date());
-    // Cycle colors in the same pattern as W1..W4: 1->primary, 2->danger, 3->warning, 4->info
-    const idx = (iso % 4) + 1; // 1..4, aligns W36->1, W37->2, W38->3, W39->4
+    const basis = getWeekStart();
+    const starts = upcomingWeekStartDates(basis);
+    const wn = weekNumber(starts[0]||new Date(), basis);
+    const idx = 1; // current is W1
     const color = idx===1 ? 'primary' : idx===2 ? 'danger' : idx===3 ? 'warning' : 'info';
-    badge.textContent = `W${iso}`;
+    badge.textContent = `W${wn}`;
     badge.className = `badge bg-${color}`;
   }
 
@@ -67,20 +57,34 @@
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
   }
-  function monthWeekStartDates(month, weekStart){
-    const m = /^(\d{4})-(\d{2})$/.exec(String(month));
-    if (!m) return [];
-    const year = parseInt(m[1],10), mon = parseInt(m[2],10);
-    const wsDow = (weekStart === 'monday') ? 1 : 0; // 0=Sun..6=Sat
-    const first = new Date(year, mon-1, 1);
-    const firstDow = first.getDay();
-    const offset = (firstDow - wsDow + 7) % 7;
-    const firstWeekStart = new Date(year, mon-1, 1 - offset);
-    return [0,1,2,3].map(i => new Date(firstWeekStart.getFullYear(), firstWeekStart.getMonth(), firstWeekStart.getDate() + i*7));
+  function startOfWeek(date, weekStart){
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const targetDow = (weekStart === 'monday') ? 1 : 0;
+    const dow = d.getDay();
+    const diff = (dow - targetDow + 7) % 7;
+    d.setDate(d.getDate() - diff);
+    d.setHours(0,0,0,0);
+    return d;
+  }
+  function upcomingWeekStartDates(weekStart){
+    const ws = (weekStart === 'monday') ? 'monday' : 'sunday';
+    const first = startOfWeek(new Date(), ws);
+    return [0,1,2,3].map(i => new Date(first.getFullYear(), first.getMonth(), first.getDate() + i*7));
   }
   function colorForIsoWeek(iso){
     const idx = (iso % 4) + 1; // 1..4, aligns with W1..W4 colors
     return idx===1 ? 'primary' : idx===2 ? 'danger' : idx===3 ? 'warning' : 'info';
+  }
+  function weekNumber(date, basis){
+    const b = (basis === 'monday') ? 'monday' : 'sunday';
+    if (b === 'monday') return isoWeekNumber(date);
+    // Sunday-based week numbering
+    const year = date.getFullYear();
+    const start = startOfWeek(date, 'sunday');
+    const jan1 = new Date(year, 0, 1);
+    const yearWeek0 = startOfWeek(jan1, 'sunday');
+    const diffDays = Math.floor((start - yearWeek0) / 86400000);
+    return Math.floor(diffDays / 7) + 1;
   }
 
   async function loadWeekStartSetting(){
@@ -409,28 +413,8 @@
   }
 
   function getCurrentWeekBucket(){
-    try{
-      // Prefer matching today's ISO week number to the month's four week starts
-      const basis = getWeekStart(); // 'sunday'|'monday'
-      const monthStr = qs('#diMonth')?.value || currentMonth();
-      const starts = monthWeekStartDates(monthStr, basis);
-      const todayIso = isoWeekNumber(new Date());
-      for (let i=0;i<starts.length;i++){
-        if (isoWeekNumber(starts[i]) === todayIso){
-          return `W${i+1}`; // map to W1..W4
-        }
-      }
-      // Fallback to original period_key logic if no exact ISO match
-      const pk = getPeriodKeyFromInputs();
-      if (!pk) return 'W1';
-      const m = /W([1-4])$/.exec(pk);
-      return m ? `W${m[1]}` : 'W1';
-    } catch(_){
-      const pk = getPeriodKeyFromInputs();
-      if (!pk) return 'W1';
-      const m = /W([1-4])$/.exec(pk);
-      return m ? `W${m[1]}` : 'W1';
-    }
+    // Upcoming model: W1 is always the current week
+    return 'W1';
   }
 
   async function fetchMonthlyPlan(month){
@@ -448,23 +432,31 @@
     const W1 = toSet(weeksMap?.W1); const W2 = toSet(weeksMap?.W2); const W3 = toSet(weeksMap?.W3); const W4 = toSet(weeksMap?.W4);
     const currentW = getCurrentWeekBucket(); // 'W1'..'W4' for border highlighting
     const isInWeek = (id, wk)=> wk==='W1'?W1.has(id):wk==='W2'?W2.has(id):wk==='W3'?W3.has(id):W4.has(id);
-    const weekStartBasis = getWeekStart(); // 'sunday' | 'monday'
-    const monthStr = qs('#diMonth')?.value || currentMonth();
-    const starts = monthWeekStartDates(monthStr, weekStartBasis);
-    const isoLabels = starts.map(dt => `W${isoWeekNumber(dt)}`);
+    const weekStartBasis = getWeekStart();
+    const starts = upcomingWeekStartDates(weekStartBasis);
+    const labels = starts.map(dt => `W${weekNumber(dt, weekStartBasis)}`);
     const isoColors = starts.map(dt => colorForIsoWeek(isoWeekNumber(dt)));
     // Map 'W1'..'W4' to corresponding iso label/color based on index
-    const wkToIso = { W1: { label: isoLabels[0], color: isoColors[0] }, W2: { label: isoLabels[1], color: isoColors[1] }, W3: { label: isoLabels[2], color: isoColors[2] }, W4: { label: isoLabels[3], color: isoColors[3] } };
+    const wkToIso = { W1: { label: labels[0], color: isoColors[0] }, W2: { label: labels[1], color: isoColors[1] }, W3: { label: labels[2], color: isoColors[2] }, W4: { label: labels[3], color: isoColors[3] } };
     // For carryover previous week: compute its iso label/color too
     const prevKey = window.__diPrevWeekKey || '';
     let prevIsoLabel = null, prevIsoColor = null;
-    const m = /^(\d{4})-(\d{2})-W([1-4])$/.exec(prevKey);
-    if (m){
-      const y = parseInt(m[1],10), mon = parseInt(m[2],10), wIdx = parseInt(m[3],10);
-      const prevStarts = monthWeekStartDates(`${y}-${String(mon).padStart(2,'0')}`, weekStartBasis);
-      const dt = prevStarts[wIdx-1];
-      if (dt){ const iso = isoWeekNumber(dt); prevIsoLabel = `W${iso}`; prevIsoColor = colorForIsoWeek(iso); }
-    }
+    try {
+      const m = /^(\d{4})-(\d{2})-W([1-4])$/.exec(prevKey);
+      if (m){
+        const y = parseInt(m[1],10), mon = parseInt(m[2],10), wIdx = parseInt(m[3],10);
+        const firstOfMonth = new Date(y, mon-1, 1);
+        const prevStarts = (function(monthDate, basis){
+          const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+          const wsDow = (basis==='monday')?1:0; const firstDow = first.getDay();
+          const offset = (firstDow - wsDow + 7) % 7;
+          const firstWeekStart = new Date(first.getFullYear(), first.getMonth(), 1 - offset);
+          return [0,1,2,3].map(i => new Date(firstWeekStart.getFullYear(), firstWeekStart.getMonth(), firstWeekStart.getDate() + i*7));
+        })(firstOfMonth, weekStartBasis);
+        const dt = prevStarts[wIdx-1];
+        if (dt){ const iso = isoWeekNumber(dt); prevIsoLabel = `W${iso}`; prevIsoColor = colorForIsoWeek(iso); }
+      }
+    } catch(_){ }
     const carrySet = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
     qsa('.di-card').forEach(card => {
       const id = parseInt(card.dataset.id||'0',10) || 0;
@@ -599,7 +591,7 @@
         <div class="p-2 h-100 d-flex flex-column">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="fw-semibold">${title}</div>
-            <button type="button" class="btn btn-sm btn-outline-secondary di-add-item-rec" data-rec="${r.id}">Add item</button>
+            <button type="button" class="btn btn-sm btn-outline-primary di-auto-rec" data-rec="${r.id}">Auto</button>
           </div>
           <div class="table-responsive flex-grow-1">
             <table class="table table-sm align-middle mb-0">
@@ -671,6 +663,17 @@
     const disable = slides.length < 2;
     const prevBtn = qs('#diAllocPrevBtn'); const nextBtn = qs('#diAllocNextBtn');
     if (prevBtn) prevBtn.disabled = disable; if (nextBtn) nextBtn.disabled = disable;
+
+    // Wire Auto buttons
+    document.addEventListener('click', async (e)=>{
+      const t = e.target;
+      if (!(t instanceof HTMLElement)) return;
+      if (!t.classList.contains('di-auto-rec')) return;
+      e.preventDefault();
+      const recId = parseInt(t.getAttribute('data-rec')||'0', 10) || 0;
+      if (!recId) return;
+      try { await autoPopulateForRecipient(recId); } catch(_){ }
+    });
   }
 
   // With no global items/availability, we skip cross-recipient validation here.
@@ -702,6 +705,202 @@
     attachRowAllocationHandlers(tr);
   }
 
+  // ---------- Auto allocation helpers (per-recipient) ----------
+  const PREFERRED = {
+    dairy_infant: ['infant formula'],
+    dairy_elderly: ['elderly milk'],
+    medicine_exact: ['paracetamol 500mg', 'vitamin c 500mg']
+  };
+  function keywordMatch(s, kws){
+    const t = String(s||'').toLowerCase();
+    return kws.some(k => t.includes(k));
+  }
+
+  function inferItemTag(meta){
+    const n = String(meta.name||'');
+    const c = String(meta.category||'');
+    const nl = n.toLowerCase();
+    if (keywordMatch(n, ['rice']) || keywordMatch(c, ['grain','grains','staple'])) return 'staple';
+    if (keywordMatch(n, ['sardine','tuna','meat','chicken','pork','beef']) || keywordMatch(c, ['protein','canned'])) return 'protein';
+    if (keywordMatch(n, ['noodle','pasta'])) return 'fast_meal';
+    // Dairy subtypes
+    if (PREFERRED.dairy_infant.some(p => nl === p)) return 'dairy_infant';
+    if (PREFERRED.dairy_elderly.some(p => nl === p)) return 'dairy_elderly';
+    if (keywordMatch(n, ['infant','baby','toddler','formula']) || keywordMatch(c, ['infant','baby'])) return 'dairy_infant';
+    if (keywordMatch(n, ['senior','elder','adult','ensure','fortified']) || keywordMatch(c, ['elderly','senior'])) return 'dairy_elderly';
+    if (keywordMatch(n, ['milk']) || keywordMatch(c, ['dairy'])) return 'dairy';
+    if (PREFERRED.medicine_exact.some(p => nl === p)) return 'medicine';
+    if (keywordMatch(c, ['medicine']) || keywordMatch(n, ['vitamin','paracetamol','supplement','med'])) return 'medicine';
+    return 'other';
+  }
+
+  function deriveRecipientNeeds(rec){
+    const needs = new Set();
+    const tags = String(rec.tags||'').toLowerCase();
+    const ageGroup = String(rec.age_group||'').toLowerCase();
+    const orgType = String(rec.organization_type||'').toLowerCase();
+    // Base pack for all
+    needs.add('staple'); needs.add('protein'); needs.add('fast_meal');
+    // Conditional
+    if (tags.includes('infant') || ageGroup.includes('infant') || orgType.includes('daycare') || orgType.includes('orphan')) needs.add('infant');
+    if (tags.includes('elder') || ageGroup.includes('elder') || orgType.includes('home for the aged') || orgType.includes('senior')) needs.add('elderly');
+    if (tags.includes('medicine') || orgType.includes('clinic') || orgType.includes('health')) needs.add('medicine');
+    return needs;
+  }
+
+  function pickInventoryForNeeds(needs){
+    // Configure default pack sizes
+    const PACK = { staple: 5, protein: 4, fast_meal: 3, dairy: 2, medicine: 2 };
+    const byTag = { staple: [], protein: [], fast_meal: [], dairy_infant: [], dairy_elderly: [], dairy: [], medicine: [], other: [] };
+    try {
+      (__invSummary || new Map()).forEach(meta => {
+        const tag = inferItemTag(meta);
+        if (!byTag[tag]) byTag[tag] = [];
+        byTag[tag].push(meta);
+      });
+      Object.values(byTag).forEach(arr => arr.sort((a,b)=> (b.total||0) - (a.total||0)));
+    } catch(_){ /* ignore */ }
+    const picks = [];
+    const take = (tag, qty, opts={ fallbackQty:0, prefer:[] })=>{
+      const arr = byTag[tag]||[];
+      // Prefer items with certain keywords in name
+      let chosen = null;
+      if (opts.prefer && opts.prefer.length){
+        // try exact-name match first
+        chosen = arr.find(m => opts.prefer.some(p => String(m.name||'').toLowerCase() === p));
+        if (!chosen) chosen = arr.find(m => keywordMatch(m.name, opts.prefer));
+      }
+      if (!chosen && arr.length) chosen = arr[0];
+      if (chosen){ picks.push({ name: chosen.name, category: chosen.category, quantity: qty }); }
+      else if (opts.fallbackQty>0 && (byTag.other||[]).length){ const m = byTag.other[0]; picks.push({ name: m.name, category: m.category, quantity: opts.fallbackQty }); }
+    };
+    // Base pack
+    take('staple', PACK.staple, { fallbackQty: Math.max(0, PACK.staple-2) });
+    take('protein', PACK.protein, { fallbackQty: Math.max(0, PACK.protein-2) });
+    take('fast_meal', PACK.fast_meal, { fallbackQty: Math.max(0, PACK.fast_meal-1) });
+    // Conditional
+    if (needs.has('infant')){
+      // Prefer infant/toddler formula items
+      if (byTag.dairy_infant.length){
+        take('dairy_infant', PACK.dairy, { prefer:[...PREFERRED.dairy_infant, 'infant','formula','baby','toddler'] });
+      } else if (byTag.dairy.length){
+        take('dairy', PACK.dairy, { prefer:['milk'] });
+      }
+    }
+    if (needs.has('elderly')){
+      // Prefer elderly/adult fortified milk
+      if (byTag.dairy_elderly.length){
+        take('dairy_elderly', PACK.dairy, { prefer:[...PREFERRED.dairy_elderly, 'senior','adult','ensure','fortified'] });
+      } else if (byTag.dairy.length){
+        take('dairy', PACK.dairy, { prefer:['milk'] });
+      }
+    }
+    if (needs.has('medicine')){
+      take('medicine', PACK.medicine, { prefer:[...PREFERRED.medicine_exact, 'vitamin','paracetamol','supplement','med'] });
+    }
+    return picks.filter(it => (it.quantity||0) > 0);
+  }
+
+  function clearRecipientRows(recId){
+    const tbody = qs(`.di-rec-tbody[data-rec="${recId}"]`);
+    if (!tbody) return;
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  }
+
+  // Weighted quantity distribution helpers
+  function getSelectedRecipientWeights(){
+    const recs = getSelectedRecipientObjects();
+    const weights = new Map();
+    let sumNonZero = 0;
+    let nonZero = 0;
+    const zeroKeys = [];
+    recs.forEach(r => {
+      const traw = parseInt(r.total_residents||0,10);
+      const k = Number(r.id||r.user_id||0)||0;
+      const w = Number.isFinite(traw) && traw > 0 ? traw : 0;
+      if (w > 0){ nonZero++; sumNonZero += w; weights.set(k, w); }
+      else { weights.set(k, 0); zeroKeys.push(k); }
+    });
+    const selCount = recs.length || 1;
+    // If all are zero/missing, fall back to equal weights of 1 each
+    if (sumNonZero === 0){
+      recs.forEach(r => { weights.set(Number(r.id||r.user_id||0)||0, 1); });
+      return { weights, sum: selCount, selCount, avg: 1 };
+    }
+    const avg = sumNonZero / Math.max(1, nonZero);
+    // Replace zeros with average (float) and recompute total sum
+    zeroKeys.forEach(k => { weights.set(k, avg); });
+    const sum = sumNonZero + (avg * zeroKeys.length);
+    return { weights, sum, selCount, avg };
+  }
+  function invTotalFor(name, category){
+    const key = invKey(name, category);
+    return (__invSummary && __invSummary.has(key)) ? (Number(__invSummary.get(key).total||0)||0) : 0;
+  }
+  function getPlannedUsageMap(){
+    if (!window.__diPlannedUsage) window.__diPlannedUsage = new Map();
+    return window.__diPlannedUsage;
+  }
+  function plannedUsedFor(name, category){
+    const key = invKey(name, category);
+    const m = getPlannedUsageMap();
+    return Number(m.get(key)||0) || 0;
+  }
+  function addPlannedUsage(name, category, qty){
+    const key = invKey(name, category);
+    const m = getPlannedUsageMap();
+    const cur = Number(m.get(key)||0) || 0;
+    m.set(key, cur + Math.max(0, Number(qty)||0));
+  }
+
+  async function autoPopulateForRecipient(recId){
+    const all = window.__diAllRecipients || [];
+    const meta = all.find(u => (u.user_id||u.id) === recId) || {};
+    // Ensure inventory summary exists
+    try { if (!__invSummary || typeof __invSummary.size !== 'number' || __invSummary.size === 0) { await loadInventorySummary(); } } catch(_){ }
+    const needs = deriveRecipientNeeds(meta);
+    let items = pickInventoryForNeeds(needs);
+    if (!items || items.length === 0){
+      items = [
+        { category: 'Grains', name: 'Rice', quantity: 5 },
+        { category: 'Canned Goods', name: 'Canned Sardines', quantity: 4 },
+        { category: 'Dry Goods', name: 'Instant Noodles', quantity: 3 },
+      ];
+    }
+    // Compute weighted quantities per item using 90% of inventory across all selected recipients
+    const { weights, sum, selCount, avg } = getSelectedRecipientWeights();
+    let myW = weights.get(recId);
+    if (!Number.isFinite(myW) || myW <= 0){ myW = avg || 1; }
+    const minOne = (x)=> (x>0 ? Math.max(1, x) : 0);
+
+    const computed = items.map(it => {
+      const total = invTotalFor(it.name, it.category);
+      const pool = Math.floor(total * 0.90) - plannedUsedFor(it.name, it.category);
+      const available = Math.max(0, pool);
+      let qty = 0;
+      if (available > 0 && sum > 0){
+        qty = Math.floor(available * (myW / sum));
+        // Ensure at least 1 if we planned this tag for this recipient and stock exists
+        qty = minOne(qty);
+        // Cap to available pool
+        qty = Math.min(qty, available);
+      }
+      return { ...it, quantity: qty };
+    }).filter(it => (it.quantity||0) > 0);
+
+    clearRecipientRows(recId);
+    computed.forEach(it => {
+      addRecipientRowWithValues(recId, it.category, it.name, it.quantity);
+      addPlannedUsage(it.name, it.category, it.quantity);
+    });
+    // Feedback
+    const tbody = qs(`.di-rec-tbody[data-rec="${recId}"]`);
+    const rowCount = tbody ? qsa('tr', tbody).length : 0;
+    const fb = qs('#diAllocMeta') || qs('#diFeedback');
+    if (rowCount > 0) showMsg(fb, `Auto-filled ${rowCount} line(s) using 90% pooled inventory weighted by population.`, 'success');
+    else showMsg(fb, 'No items could be suggested yet. Try loading inventory or add items manually.', 'warning');
+  }
+
   // Collect allocations from Allocation tab grouped by recipient
   function collectAllocationsFromUI(){
     const groups = [];
@@ -729,13 +928,27 @@
   function rebuildInventoryLookups(){
     const cats = new Set();
     const namesByCat = new Map();
+    // Build derived tags for each inventory item for better matching
+    const itemTags = new Map(); // key: invKey(name,category) -> Set(tags)
+    const norm = (s)=> String(s||'').toLowerCase().trim();
     __invSummary.forEach(meta => {
       const cat = String(meta.category||'').trim();
       const name = String(meta.name||'').trim();
       cats.add(cat);
       if (!namesByCat.has(cat)) namesByCat.set(cat, new Set());
       namesByCat.get(cat).add(name);
+      // derive tags from name/category tokens
+      const tokens = new Set([ ...norm(name).split(/[^a-z0-9]+/).filter(Boolean), ...norm(cat).split(/[^a-z0-9]+/).filter(Boolean) ]);
+      // add semantic tags from our inference
+      const tag = inferItemTag(meta);
+      tokens.add(tag);
+      // expand specialty synonyms
+      if (tag==='dairy_infant'){ ['infant','baby','toddler','formula'].forEach(t=>tokens.add(t)); }
+      if (tag==='dairy_elderly'){ ['elder','senior','adult','ensure','fortified'].forEach(t=>tokens.add(t)); }
+      if (tag==='medicine'){ ['medicine','med','vitamin','paracetamol'].forEach(t=>tokens.add(t)); }
+      itemTags.set(invKey(name, cat), tokens);
     });
+    try { window.__invItemTags = itemTags; } catch(_){ }
     return { cats, namesByCat };
   }
 
@@ -750,10 +963,12 @@
       const { cats, namesByCat } = rebuildInventoryLookups();
       const $cat = $('#diGlobalCat');
       const $name = $('#diGlobalName');
-      const ddParent = $('#distributeItemsModal');
+      const $modal = $('#distributeItemsModal');
+      const ddParent = $modal.length ? $modal : $(document.body);
       // Populate Category from inventory (allow free typing; validate after)
       if ($cat && $cat.length){
         const catData = select2DataFromSet(cats);
+        try{ $cat.select2('destroy'); } catch(_){ }
         $cat.empty();
         $cat.select2({ data: catData, tags: true, placeholder: $cat.data('placeholder')||'Category', allowClear: true, width: '100%', dropdownParent: ddParent });
       }
@@ -767,6 +982,7 @@
           namesSet = new Set(Array.from(namesByCat.values()).flatMap(s => Array.from(s)));
         }
         const nameData = select2DataFromSet(namesSet);
+        try{ $name.select2('destroy'); } catch(_){ }
         $name.empty();
         $name.select2({ data: nameData, tags: true, placeholder: $name.data('placeholder')||'Item name', allowClear: true, width: '100%', dropdownParent: ddParent });
       }

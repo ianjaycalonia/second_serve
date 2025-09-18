@@ -23,6 +23,22 @@
         <img src="images/simply_share.png" alt="Simply Share Logo" class="logo" />
         <div class="brand d-none d-md-block">Second Serve by <span>Simply</span><span>Share</span></div>
       </div>
+
+  <!-- Recipients List Alerts Modal -->
+  <div class="modal fade" id="rlAlertModal" tabindex="-1" aria-labelledby="rlAlertTitle" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="rlAlertTitle">Notice</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="rlAlertBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
       <div class="nav-icons">
         <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
           <i class="bi bi-bell-fill fs-5"></i>
@@ -246,6 +262,8 @@
 
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+  <!-- Toast container for Recipients List alerts -->
+  <div id="rlToastContainer" class="position-fixed top-0 end-0 p-3" style="z-index: 1080"></div>
   <script src="scripts/js/auth.js"></script>
   <script src="scripts/js/notifications.js"></script>
   <script src="scripts/js/adminDashboard.js"></script>
