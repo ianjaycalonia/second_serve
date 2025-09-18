@@ -40,18 +40,37 @@ class Allocation
 
     private function getFinalWeekList(string $periodKey): array
     {
-        // Try the most recent snapshot for this period
-        $row = $this->db->query(
-            "SELECT selected_ids_json FROM distribution_selection_logs WHERE period_type='weekly' AND period_key = ? ORDER BY id DESC LIMIT 1",
+        // Assemble final list from normalized tables: carry-overs from previous week (absent), then planned for this week, capped to planned size
+        if (!preg_match('/^(\d{4})-(\d{2})-W([1-4])$/', $periodKey, $m)) return [];
+        $year = (int)$m[1]; $mon = (int)$m[2]; $wIndex = (int)$m[3];
+        $prevW = $wIndex - 1; $prevYear = $year; $prevMon = $mon;
+        if ($prevW < 1){ $prevW = 4; $prevMon = $mon - 1; if ($prevMon < 1){ $prevMon = 12; $prevYear = $year - 1; } }
+        $prevKey = sprintf('%04d-%02d-W%d', $prevYear, $prevMon, $prevW);
+
+        // planned list
+        $rowsPlan = $this->db->query(
+            "SELECT recipient_id FROM recipient_plans WHERE period_key = ? AND source = 'planned' ORDER BY position ASC",
             [$periodKey]
-        )->fetch();
-        if ($row && !empty($row['selected_ids_json'])){
-            $ids = json_decode($row['selected_ids_json'], true);
-            if (is_array($ids)){
-                return array_values(array_filter(array_map('intval', $ids), fn($v)=>$v>0));
-            }
+        )->fetchAll();
+        $planned = array_map(fn($r)=> (int)$r['recipient_id'], $rowsPlan ?: []);
+        $plannedCount = count($planned);
+
+        // carryovers (absent from previous week)
+        $rowsCo = $this->db->query(
+            "SELECT recipient_id FROM recipient_attendance WHERE period_key = ? AND status = 'absent'",
+            [$prevKey]
+        )->fetchAll();
+        $carryOvers = array_map(fn($r)=> (int)$r['recipient_id'], $rowsCo ?: []);
+        $carryKeep = array_slice($carryOvers, 0, max(0, $plannedCount));
+
+        // merge
+        $final = [];
+        $seen = [];
+        foreach ($carryKeep as $id){ if ($id>0 && !isset($seen[$id])){ $seen[$id]=true; $final[]=$id; if (count($final) >= $plannedCount) break; } }
+        if (count($final) < $plannedCount){
+            foreach ($planned as $id){ if ($id>0 && !isset($seen[$id])){ $seen[$id]=true; $final[]=$id; if (count($final) >= $plannedCount) break; } }
         }
-        return [];
+        return $final;
     }
 
     private function getInventoryCandidates(): array
@@ -67,7 +86,10 @@ class Allocation
         )->fetchAll();
         // Normalize tags and index
         foreach ($rows as &$r){
-            $r['tag_list'] = $this->normalizeTags($r['tags'] ?? '');
+            $full = $this->normalizeTags($r['tags'] ?? '');
+            // keep only specialty triad for matching
+            $triad = ['infant'=>true,'elderly'=>true,'medical'=>true];
+            $r['tag_list'] = array_values(array_filter($full, fn($t)=> isset($triad[$t])));
         }
         unset($r);
         return $rows;
@@ -75,28 +97,26 @@ class Allocation
 
     private function matchBestInventory(array $recipientTags, array &$inventory): ?array
     {
-        // Compute a simple score: 2 for exact-all, 1 for partial-any, 0 for fallback (no tags on recipient or item)
-        $recSet = array_flip($recipientTags);
+        // Specialty-first: intersect recipient specialty triad with item specialty triad
+        $triad = ['infant'=>true,'elderly'=>true,'medical'=>true];
+        $recSpec = array_values(array_filter($recipientTags, fn($t)=> isset($triad[$t])));
         $best = null; $bestScore = -1; $bestIdx = -1;
         foreach ($inventory as $idx => $item){
             if ((int)$item['quantity'] <= 0) continue;
             $itTags = $item['tag_list'] ?? [];
             $score = 0;
-            if (!empty($recipientTags)){
-                if (!empty($itTags)){
-                    // exact-all: all recipient tags are present in item tags
-                    $all = true;
-                    foreach ($recipientTags as $t){ if (!in_array($t, $itTags, true)) { $all = false; break; } }
-                    if ($all) $score = 2; else {
-                        // partial-any
-                        $intersect = array_intersect($recipientTags, $itTags);
-                        if (!empty($intersect)) $score = 1; else $score = -1; // no match
-                    }
+            if (!empty($recSpec)){
+                // require at least one specialty intersection
+                $inter = array_intersect($recSpec, $itTags);
+                if (!empty($inter)){
+                    // exact-all within triad gets higher score
+                    $all = true; foreach ($recSpec as $t){ if (!in_array($t, $itTags, true)) { $all=false; break; } }
+                    $score = $all ? 3 : 2;
                 } else {
-                    $score = 0; // fallback candidate
+                    $score = -1; // no specialty match
                 }
             } else {
-                // Recipient has no tags → general allocation
+                // recipient has no specialty → neutral; prefer untagged item or any
                 $score = empty($itTags) ? 1 : 0;
             }
             if ($score > $bestScore){ $bestScore = $score; $best = $item; $bestIdx = $idx; }

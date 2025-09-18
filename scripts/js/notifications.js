@@ -10,10 +10,10 @@
         return '/Capstone%20Project/php/api';
       })();
 
-  // Attempt to read the current logged-in user from sessionStorage/localStorage
+  // Attempt to read the current logged-in user from sessionStorage only
   function getStoredUser() {
     try {
-      const s = sessionStorage.getItem('user') || localStorage.getItem('user');
+      const s = sessionStorage.getItem('user');
       return s ? JSON.parse(s) : null;
     } catch(_) { return null; }
   }

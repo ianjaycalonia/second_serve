@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     const requiredRole = getRequiredRoleByPath(path);
-    const stored = (() => { try { return sessionStorage.getItem('user') || localStorage.getItem('user'); } catch(_) { return null; } })();
+    const stored = (() => { try { return sessionStorage.getItem('user'); } catch(_) { return null; } })();
     const currentUser = stored ? (() => { try { return JSON.parse(stored); } catch(_) { return null; } })() : null;
 
     if (requiredRole) {
@@ -401,8 +401,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Populate greeting placeholders from stored session
     const getStoredUser = () => {
         try {
-            // Prefer sessionStorage (set on login), fallback to localStorage if used somewhere else
-            const s = sessionStorage.getItem('user') || localStorage.getItem('user');
+            const s = sessionStorage.getItem('user');
             return s ? JSON.parse(s) : null;
         } catch (_) { return null; }
     };
@@ -429,7 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
     populateGreeting();
     // Expose current user globals for modules like the messages modal
     try {
-        const u = (function(){ try { return JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user')); } catch(_) { return null; } })();
+        const u = (function(){ try { return JSON.parse(sessionStorage.getItem('user')); } catch(_) { return null; } })();
         window.CURRENT_USER_ID = u && u.user_id ? Number(u.user_id) : null;
         window.CURRENT_USER_ROLE = u && u.role ? String(u.role).toLowerCase() : null;
     } catch(_) {
@@ -453,7 +452,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         credentials: 'include'
                     });
                 } catch(_) { /* ignore */ }
-                try { localStorage.removeItem('user'); } catch(_) {}
                 try { sessionStorage.removeItem('user'); } catch(_) {}
                 window.location.href = 'index.html';
             });
@@ -653,7 +651,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function getCurrentRole(){
             try {
-                const s = sessionStorage.getItem('user') || localStorage.getItem('user');
+                const s = sessionStorage.getItem('user');
                 const u = s ? JSON.parse(s) : null;
                 return (u && u.role) ? String(u.role).toLowerCase() : null;
             } catch(_) { return null; }

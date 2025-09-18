@@ -51,6 +51,13 @@
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
       <h5 class="mb-0">Recipients List (Weekly)</h5>
       <div class="d-flex align-items-center gap-2">
+        <div class="input-group input-group-sm" style="width: 260px;">
+          <span class="input-group-text">Week start</span>
+          <select id="rlWeekStart" class="form-select form-select-sm">
+            <option value="sunday">Sunday–Saturday</option>
+            <option value="monday">Monday–Sunday</option>
+          </select>
+        </div>
         <button id="reloadBtn" class="btn btn-outline-secondary btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Reload recipients">
           <i class="bi bi-arrow-clockwise"></i>
         </button>
@@ -80,7 +87,7 @@
         <div class="card card-accent h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center justify-content-between">
-              <div class="fw-semibold">Week 1</div>
+              <div class="fw-semibold" id="w1Label">Week 1</div>
               <div class="btn-group">
                 <button class="btn btn-sm btn-outline-secondary" id="clearW1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Clear Week 1">
                   <i class="bi bi-eraser"></i>
@@ -101,7 +108,7 @@
         <div class="card card-accent h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center justify-content-between">
-              <div class="fw-semibold">Week 2</div>
+              <div class="fw-semibold" id="w2Label">Week 2</div>
               <div class="btn-group">
                 <button class="btn btn-sm btn-outline-secondary" id="clearW2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Clear Week 2">
                   <i class="bi bi-eraser"></i>
@@ -122,7 +129,7 @@
         <div class="card card-accent h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center justify-content-between">
-              <div class="fw-semibold">Week 3</div>
+              <div class="fw-semibold" id="w3Label">Week 3</div>
               <div class="btn-group">
                 <button class="btn btn-sm btn-outline-secondary" id="clearW3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Clear Week 3">
                   <i class="bi bi-eraser"></i>
@@ -143,7 +150,7 @@
         <div class="card card-accent h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center justify-content-between">
-              <div class="fw-semibold">Week 4</div>
+              <div class="fw-semibold" id="w4Label">Week 4</div>
               <div class="btn-group">
                 <button class="btn btn-sm btn-outline-secondary" id="clearW4" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Clear Week 4">
                   <i class="bi bi-eraser"></i>

@@ -17,7 +17,8 @@
     try{
       const pk = getPeriodKeyFromInputs();
       if (!pk) return;
-      const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=finalize_week&period_key=${encodeURIComponent(pk)}`, { credentials: 'include' });
+      const weekStart = getWeekStart();
+      const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=finalize_week&period_key=${encodeURIComponent(pk)}&week_start=${encodeURIComponent(weekStart)}`, { credentials: 'include' });
       const j = await res.json().catch(()=>null);
       if (j && j.success){
         const prevKey = j.data?.previous_period_key || null;
@@ -34,10 +35,22 @@
   function updateCurrentWeekBadge(){
     const badge = qs('#diCurrentWeek');
     if (!badge) return;
-    const wk = getCurrentWeekBucket();
-    // Map to contextual color same as badges
-    const color = wk==='W1' ? 'primary' : wk==='W2' ? 'danger' : wk==='W3' ? 'warning' : 'info';
-    badge.textContent = wk;
+    // Display ISO week-of-year (e.g., W38) for clarity, while keeping backend keys as YYYY-MM-Wn
+    const iso = (function isoWeekNumber(d){
+      const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      // Set to nearest Thursday: current date + 4 - current day number (Sun=7)
+      const dayNum = (date.getUTCDay() || 7);
+      date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+      // Year of the week
+      const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+      // Calculate full weeks to nearest Thursday
+      const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+      return weekNo;
+    })(new Date());
+    // Cycle colors in the same pattern as W1..W4: 1->primary, 2->danger, 3->warning, 4->info
+    const idx = (iso % 4) + 1; // 1..4, aligns W36->1, W37->2, W38->3, W39->4
+    const color = idx===1 ? 'primary' : idx===2 ? 'danger' : idx===3 ? 'warning' : 'info';
+    badge.textContent = `W${iso}`;
     badge.className = `badge bg-${color}`;
   }
 
@@ -46,14 +59,68 @@
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
   }
 
+  // Helpers to mirror RecipientsList week-of-year labeling
+  function isoWeekNumber(date){
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7; // Sun=7
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum); // nearest Thursday
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  }
+  function monthWeekStartDates(month, weekStart){
+    const m = /^(\d{4})-(\d{2})$/.exec(String(month));
+    if (!m) return [];
+    const year = parseInt(m[1],10), mon = parseInt(m[2],10);
+    const wsDow = (weekStart === 'monday') ? 1 : 0; // 0=Sun..6=Sat
+    const first = new Date(year, mon-1, 1);
+    const firstDow = first.getDay();
+    const offset = (firstDow - wsDow + 7) % 7;
+    const firstWeekStart = new Date(year, mon-1, 1 - offset);
+    return [0,1,2,3].map(i => new Date(firstWeekStart.getFullYear(), firstWeekStart.getMonth(), firstWeekStart.getDate() + i*7));
+  }
+  function colorForIsoWeek(iso){
+    const idx = (iso % 4) + 1; // 1..4, aligns with W1..W4 colors
+    return idx===1 ? 'primary' : idx===2 ? 'danger' : idx===3 ? 'warning' : 'info';
+  }
+
+  async function loadWeekStartSetting(){
+    try{
+      const res = await fetch(`${API_BASE_URL}/settings.php?action=get&key=week_start`, { credentials:'include' });
+      const j = await res.json().catch(()=>null);
+      const val = (j && j.success && j.data && typeof j.data.value === 'string') ? j.data.value.toLowerCase() : 'sunday';
+      window.__WEEK_START = (val === 'monday') ? 'monday' : 'sunday';
+    } catch(_){ window.__WEEK_START = 'sunday'; }
+  }
+
+  function getWeekStart(){
+    return (window.__WEEK_START === 'monday') ? 'monday' : 'sunday';
+  }
+
   function getPeriodKeyFromInputs(){
     const monthEl = qs('#diMonth');
     const month = (monthEl?.value || currentMonth());
     if (!/^\d{4}-\d{2}$/.test(month)) return null;
-    // Derive week bucket from current date: 1-7 W1, 8-14 W2, 15-21 W3, 22+ W4
+    // Derive week bucket from today's date according to selected week start
     const today = new Date();
-    const day = today.getDate();
-    const w = day <= 7 ? 'W1' : day <= 14 ? 'W2' : day <= 21 ? 'W3' : 'W4';
+    const ws = getWeekStart();
+    // compute week-of-month index by counting boundaries within the month
+    const y = today.getFullYear();
+    const m = today.getMonth(); // 0-based
+    const first = new Date(y, m, 1);
+    const firstDow = first.getDay(); // 0=Sun..6=Sat
+    const weekStartDow = (ws === 'monday') ? 1 : 0;
+    // shift first date to first week start on/before
+    const offset = (firstDow - weekStartDow + 7) % 7;
+    const firstWeekStart = new Date(y, m, 1 - offset);
+    let wIndex = 1;
+    let cursor = new Date(firstWeekStart);
+    while (new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate()+7) <= new Date(y, m+1, 1)){
+      const next = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate()+7);
+      if (today >= cursor && today < next) break;
+      wIndex++;
+      cursor = next;
+    }
+    const w = `W${Math.min(4, Math.max(1, wIndex))}`;
     return `${month}-${w}`;
   }
 
@@ -84,6 +151,7 @@
       <td><button type="button" class="btn btn-sm btn-outline-danger di-del-item"><i class="bi bi-x"></i></button></td>
     `;
     tbody.appendChild(tr);
+    attachRowAllocationHandlers(tr);
   }
 
   function collectItems(){
@@ -196,14 +264,34 @@
   }
 
   function getCurrentWeekBucket(){
-    const d = new Date();
-    const day = d.getDate();
-    return day <= 7 ? 'W1' : day <= 14 ? 'W2' : day <= 21 ? 'W3' : 'W4';
+    try{
+      // Prefer matching today's ISO week number to the month's four week starts
+      const basis = getWeekStart(); // 'sunday'|'monday'
+      const monthStr = qs('#diMonth')?.value || currentMonth();
+      const starts = monthWeekStartDates(monthStr, basis);
+      const todayIso = isoWeekNumber(new Date());
+      for (let i=0;i<starts.length;i++){
+        if (isoWeekNumber(starts[i]) === todayIso){
+          return `W${i+1}`; // map to W1..W4
+        }
+      }
+      // Fallback to original period_key logic if no exact ISO match
+      const pk = getPeriodKeyFromInputs();
+      if (!pk) return 'W1';
+      const m = /W([1-4])$/.exec(pk);
+      return m ? `W${m[1]}` : 'W1';
+    } catch(_){
+      const pk = getPeriodKeyFromInputs();
+      if (!pk) return 'W1';
+      const m = /W([1-4])$/.exec(pk);
+      return m ? `W${m[1]}` : 'W1';
+    }
   }
 
   async function fetchMonthlyPlan(month){
     const m = month || currentMonth();
-    const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=get_plan&month=${encodeURIComponent(m)}`, { credentials:'include' });
+    const weekStart = getWeekStart();
+    const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=get_plan&month=${encodeURIComponent(m)}&week_start=${encodeURIComponent(weekStart)}`, { credentials:'include' });
     if (!res.ok) return { month: m, weeks: { W1:[], W2:[], W3:[], W4:[] } };
     const j = await res.json().catch(()=>null);
     if (!j?.success) return { month: m, weeks: { W1:[], W2:[], W3:[], W4:[] } };
@@ -213,43 +301,51 @@
   function annotateCardsWithWeeks(weeksMap){
     const toSet = (arr)=> new Set((Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(n=>Number.isFinite(n)&&n>0));
     const W1 = toSet(weeksMap?.W1); const W2 = toSet(weeksMap?.W2); const W3 = toSet(weeksMap?.W3); const W4 = toSet(weeksMap?.W4);
-    const currentW = getCurrentWeekBucket();
+    const currentW = getCurrentWeekBucket(); // 'W1'..'W4' for border highlighting
     const isInWeek = (id, wk)=> wk==='W1'?W1.has(id):wk==='W2'?W2.has(id):wk==='W3'?W3.has(id):W4.has(id);
-    const colorFor = (wk)=> wk==='W1' ? 'primary' : wk==='W2' ? 'danger' : wk==='W3' ? 'warning' : 'info';
-    const carrySet = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
-    let prevW = null;
+    const weekStartBasis = getWeekStart(); // 'sunday' | 'monday'
+    const monthStr = qs('#diMonth')?.value || currentMonth();
+    const starts = monthWeekStartDates(monthStr, weekStartBasis);
+    const isoLabels = starts.map(dt => `W${isoWeekNumber(dt)}`);
+    const isoColors = starts.map(dt => colorForIsoWeek(isoWeekNumber(dt)));
+    // Map 'W1'..'W4' to corresponding iso label/color based on index
+    const wkToIso = { W1: { label: isoLabels[0], color: isoColors[0] }, W2: { label: isoLabels[1], color: isoColors[1] }, W3: { label: isoLabels[2], color: isoColors[2] }, W4: { label: isoLabels[3], color: isoColors[3] } };
+    // For carryover previous week: compute its iso label/color too
     const prevKey = window.__diPrevWeekKey || '';
-    const m = /^\d{4}-\d{2}-W([1-4])$/.exec(prevKey);
-    if (m) prevW = `W${m[1]}`;
+    let prevIsoLabel = null, prevIsoColor = null;
+    const m = /^(\d{4})-(\d{2})-W([1-4])$/.exec(prevKey);
+    if (m){
+      const y = parseInt(m[1],10), mon = parseInt(m[2],10), wIdx = parseInt(m[3],10);
+      const prevStarts = monthWeekStartDates(`${y}-${String(mon).padStart(2,'0')}`, weekStartBasis);
+      const dt = prevStarts[wIdx-1];
+      if (dt){ const iso = isoWeekNumber(dt); prevIsoLabel = `W${iso}`; prevIsoColor = colorForIsoWeek(iso); }
+    }
+    const carrySet = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
     qsa('.di-card').forEach(card => {
       const id = parseInt(card.dataset.id||'0',10) || 0;
       const host = qs('.di-week-badges', card);
       if (host) host.innerHTML = '';
       card.classList.remove('border-primary','border-danger','border-warning','border-info');
-      // If this is a carry-over, show previous-week badge and border using that week's color
-      if (carrySet.has(id) && prevW){
-        const c = colorFor(prevW);
-        if (host){
-          const span = document.createElement('span');
-          span.className = `badge bg-${c} text-uppercase`;
-          span.style.fontSize = '0.65rem';
-          span.textContent = prevW;
-          host.appendChild(span);
-        }
-        card.classList.add(`border-${c}`);
+      if (carrySet.has(id) && prevIsoLabel && prevIsoColor){
+        const span = document.createElement('span');
+        span.className = `badge bg-${prevIsoColor} text-uppercase`;
+        span.style.fontSize = '0.65rem';
+        span.textContent = prevIsoLabel;
+        host?.appendChild(span);
+        card.classList.add(`border-${prevIsoColor}`);
       } else {
-        // Otherwise, annotate based on scheduled week(s)
         ['W1','W2','W3','W4'].forEach(wk => {
           if (isInWeek(id, wk)){
-            if (host){
+            const meta = wkToIso[wk];
+            if (host && meta){
               const span = document.createElement('span');
-              span.className = `badge bg-${colorFor(wk)} text-uppercase`;
+              span.className = `badge bg-${meta.color} text-uppercase`;
               span.style.fontSize = '0.65rem';
-              span.textContent = wk;
+              span.textContent = meta.label;
               host.appendChild(span);
             }
-            if (wk === currentW){
-              card.classList.add(`border-${colorFor(wk)}`);
+            if (wk === currentW && meta){
+              card.classList.add(`border-${meta.color}`);
             }
           }
         });
@@ -259,7 +355,9 @@
 
   function autoMoveCurrentWeekRecipients(weeksMap){
     const currentW = getCurrentWeekBucket();
-    const ids = new Set((weeksMap?.[currentW]||[]).map(v=>parseInt(v,10)).filter(n=>Number.isFinite(n)&&n>0));
+    const plannedIds = (weeksMap?.[currentW]||[]).map(v=>parseInt(v,10)).filter(n=>Number.isFinite(n)&&n>0);
+    const carrySet = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
+    const ids = new Set([...plannedIds, ...carrySet]);
     if (!ids.size) return;
     const pool = qs('#diPool');
     const selected = qs('#diSelected');
@@ -349,7 +447,9 @@
     const makeSlide = (r, isActive) => {
       const slide = document.createElement('div');
       slide.className = `carousel-item ${isActive ? 'active' : ''}`;
-      const title = (r.organization_name && r.organization_name.trim()) ? r.organization_name : (r.name || ('Recipient ' + r.id));
+      const orgName = (r.organization_name && r.organization_name.trim()) ? r.organization_name : (r.name || ('Recipient ' + r.id));
+      const orgType = (r.organization_type && String(r.organization_type).trim()) ? String(r.organization_type).trim() : '';
+      const title = orgType ? `${orgName} - ${orgType}` : orgName;
       slide.innerHTML = `
         <div class="p-2 h-100 d-flex flex-column">
           <div class="d-flex justify-content-between align-items-center mb-2">
@@ -394,6 +494,33 @@
       const bsTab = new bootstrap.Tab(tabBtn);
       bsTab.show();
     }
+
+    // Initialize carousel and wire controls after slides exist
+    const carouselEl = document.getElementById('diAllocCarousel');
+    let carousel = null;
+    try { if (carouselEl && typeof bootstrap !== 'undefined' && bootstrap.Carousel) {
+      carousel = bootstrap.Carousel.getOrCreateInstance(carouselEl, { interval: false, ride: false, keyboard: false, touch: false });
+    } } catch(_) {}
+    // Indicators and counter on slide
+    if (carouselEl){
+      carouselEl.addEventListener('slide.bs.carousel', (ev) => {
+        const to = ev.to;
+        const dots = qsa('#diAllocIndicators [data-bs-target]');
+        dots.forEach((d,i)=>{ if (i===to) d.classList.add('active'); else d.classList.remove('active'); });
+        const c = qs('#diAllocCounter');
+        if (c){ c.textContent = `${to+1} / ${dots.length}`; }
+      }, { once: false });
+    }
+    // Prev/Next buttons
+    qs('#diAllocPrevBtn')?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (carousel) carousel.prev(); });
+    qs('#diAllocNextBtn')?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (carousel) carousel.next(); });
+    // Keyboard navigation while modal focused
+    const modalEl = document.getElementById('distributeItemsModal');
+    modalEl?.addEventListener('keydown', (e) => {
+      if (!carousel) return;
+      if (e.key === 'ArrowLeft'){ e.preventDefault(); carousel.prev(); }
+      if (e.key === 'ArrowRight'){ e.preventDefault(); carousel.next(); }
+    });
   }
 
   // With no global items/availability, we skip cross-recipient validation here.
@@ -422,279 +549,112 @@
       <td style="width:40px"><button type="button" class="btn btn-sm btn-outline-danger di-del-row">&times;</button></td>
     `;
     tbody.appendChild(tr);
+    attachRowAllocationHandlers(tr);
   }
 
-  function addRecipientRowWithValues(recId, cat, name, qty){
-    const tbody = qs(`.di-rec-tbody[data-rec="${recId}"]`);
-    if (!tbody) return;
-    const q = Math.max(0, parseInt(qty || '0', 10) || 0);
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input class="form-control form-control-sm di-cat" placeholder="Category (optional)" value="${(cat||'').replace(/"/g,'&quot;')}"></td>
-      <td><input class="form-control form-control-sm di-name" placeholder="Item name" value="${(name||'').replace(/"/g,'&quot;')}"></td>
-      <td style="width:90px"><input type="number" min="0" step="1" class="form-control form-control-sm di-alloc" data-rec="${recId}" data-item="${(name||'').replace(/"/g,'&quot;')}" value="${q}"></td>
-      <td style="width:40px"><button type="button" class="btn btn-sm btn-outline-danger di-del-row">&times;</button></td>
-    `;
-    tbody.appendChild(tr);
-  }
-
-  async function suggest(){
-    const fb = qs('#diFeedback');
-    const items = collectItems();
-    if (!items.length){ showMsg(fb, 'Please add at least one item with quantity > 0', 'danger'); return; }
-
-    const allRecipients = await fetchRecipients();
-    // Decide pool type and specialty based on items (simple keyword rules)
-    function detectPoolFromItems(items){
-      const text = (s)=> String(s||'').toLowerCase();
-      const keys = new Set();
-      for (const it of items){
-        const name = text(it.name);
-        const cat = text(it.category);
-        const blob = name + ' ' + cat;
-        if (/infant|baby|children|kid|child|milk/gi.test(blob)) keys.add('children');
-        if (/elderly|senior|aged/gi.test(blob)) keys.add('elderly');
-        if (/medical|kit|medicine/gi.test(blob)) keys.add('medical');
-      }
-      if (keys.size === 1){ return { pool_type: 'specialty', specialty_key: Array.from(keys)[0] }; }
-      return { pool_type: 'general', specialty_key: null };
-    }
-    const periodType = getPeriodType();
-    const roundSize = parseInt(qs('#diRoundSize')?.value || '5', 10) || 5;
-    const { pool_type, specialty_key } = detectPoolFromItems(items);
-    // Ask server to suggest ordered recipients for this period/pool
-    let suggestedIds = [];
-    let leftoverSlots = 0;
-    try{
-      const res = await fetch(`${API_BASE_URL}/distribution.php?action=suggest`, {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ period_type: periodType, round_size: roundSize, pool_type, specialty_key })
-      });
-      const j = await res.json();
-      if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
-      suggestedIds = Array.isArray(j?.data?.recipient_ids) ? j.data.recipient_ids.map(n=>parseInt(n,10)).filter(Number.isFinite) : [];
-      leftoverSlots = parseInt(j?.data?.leftover_slots ?? '0', 10) || 0;
-      window.__diPeriodKey = j?.data?.period_key || null;
-      window.__diPeriodType = periodType;
-    } catch(err){ console.warn('distribution suggest failed; falling back to manual selection', err); }
-
-    const recipients = buildRecipientsPayload(allRecipients);
-    // If suggest returned ids, preselect them in UI before allocation
-    if (suggestedIds.length){
-      renderRecipientPools(allRecipients, suggestedIds);
-    }
-    const payload = buildRecipientsPayload(allRecipients);
-    if (!payload.length){ showMsg(fb, 'Please select recipients or paste their IDs', 'danger'); return; }
-
-    const options = buildOptions();
-
-    try{
-      showMsg(fb, 'Requesting suggestion...', 'secondary');
-      const res = await fetch(`${API_BASE_URL}/allocate-items.php`, {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, recipients, options })
-      });
-      const j = await res.json();
-      if (!res.ok || !j?.success){ throw new Error(j?.error || `HTTP ${res.status}`); }
-      const data = j.data || {};
-      window.__diItems = items; // store for totals enforcement
-      const usedRecipients = data.prioritized || payload;
-      buildAllocationColumns(usedRecipients, data.allocations || {});
-      attachSuggestTableEvents([], usedRecipients);
-      const meta = qs('#diAllocMeta');
-      if (meta){
-        const sampled = j.meta?.sampled_count;
-        const parts = [];
-        if (typeof sampled === 'number') parts.push(`Sampled recipients: ${sampled}`);
-        if (pool_type === 'specialty' && leftoverSlots > 0) parts.push(`Specialty leftover slots: ${leftoverSlots} (review to redistribute or hold)`);
-        meta.textContent = parts.join(' · ');
-      }
-      showMsg(fb, '', '');
-    } catch(err){
-      console.error('Suggestion failed:', err);
-      showMsg(fb, err.message || 'Suggestion failed', 'danger');
-    }
-  }
-
-  async function preloadFiveRecipients(){
-    const fb = qs('#diFeedback');
-    try{
-      showMsg(fb, 'Loading recipients...', 'secondary');
-      const all = await fetchRecipients();
-      window.__diAllRecipients = all;
-      // Render all recipients into Pool (no auto-selection)
-      renderRecipientPools(all, []);
-      updateSelectedCount();
-      showMsg(fb, '', '');
-    } catch(err){
-      console.error('Load recipients failed:', err);
-      showMsg(qs('#diFeedback'), err.message || 'Failed to load recipients', 'danger');
-    }
-  }
-
-  async function init(){
-    // Items add/remove
-    qs('#diAddItem')?.addEventListener('click', addItemRow);
-    document.addEventListener('click', (e) => {
-      const t = e.target;
-      if (!(t instanceof HTMLElement)) return;
-      if (t.classList.contains('di-del-item')){
-        e.preventDefault(); e.stopPropagation();
-        const tr = t.closest('tr');
-        tr?.remove();
-      }
-      if (t.classList.contains('di-add-item-rec')){
-        e.preventDefault(); e.stopPropagation();
-        const rec = parseInt(t.getAttribute('data-rec') || '0', 10);
-        if (rec) addRecipientRow(rec);
-      }
-      if (t.classList.contains('di-del-row')){
-        e.preventDefault(); e.stopPropagation();
-        const tr = t.closest('tr');
-        tr?.remove();
-      }
-    });
-    // Drag-and-drop interactions
-    const pool = qs('#diPool');
-    const selected = qs('#diSelected');
-    function onDragStart(e){
-      const target = e.target;
-      if (!(target instanceof HTMLElement) || !target.classList.contains('di-card')) return;
-      e.dataTransfer?.setData('text/plain', target.dataset.id || '');
-      e.dataTransfer?.setDragImage(target, 10, 10);
-    }
-    function onDragOver(e){ e.preventDefault(); }
-    function onDropToSelected(e){
-      e.preventDefault();
-      const id = parseInt(e.dataTransfer?.getData('text/plain') || '0', 10);
-      const card = qs(`.di-card[data-id="${id}"]`);
-      if (card && selected) { selected.appendChild(card); updateSelectedCount(); }
-    }
-    function onDropToPool(e){
-      e.preventDefault();
-      const id = parseInt(e.dataTransfer?.getData('text/plain') || '0', 10);
-      const card = qs(`.di-card[data-id="${id}"]`);
-      if (card && pool) { pool.appendChild(card); updateSelectedCount(); }
-    }
-    document.addEventListener('dragstart', onDragStart);
-    pool?.addEventListener('dragover', onDragOver);
-    selected?.addEventListener('dragover', onDragOver);
-    pool?.addEventListener('drop', onDropToPool);
-    selected?.addEventListener('drop', onDropToSelected);
-
-    // Click to toggle (faster than dragging)
-    document.addEventListener('click', (e) => {
-      const t = e.target;
-      if (!(t instanceof HTMLElement)) return;
-      if (t.classList.contains('di-card')){
-        const parent = t.parentElement;
-        if (parent && parent.id === 'diPool') selected.appendChild(t); else pool.appendChild(t);
-        updateSelectedCount();
-      }
-    });
-
-    // Clear selected
-    qs('#diClearSelected')?.addEventListener('click', () => {
-      qsa('#diSelected .di-card').forEach(card => pool.appendChild(card));
-      updateSelectedCount();
-    });
-
-    // preload a blank item row
-    addItemRow();
-
-    qs('#diSuggestBtn')?.addEventListener('click', suggest);
-    qs('#diRegenerate')?.addEventListener('click', () => preloadFiveRecipients(true));
-    qs('#diNextBtn')?.addEventListener('click', () => {
-      // build allocation columns from current selection or suggested/highlighted
-      let recObjs = getSelectedRecipientObjects();
-      if (!recObjs.length){
-        const all = window.__diAllRecipients || [];
-        const map = new Map(all.map(u => [u.user_id || u.id, u]));
-        const ids = getSelectedIds();
-        recObjs = ids.map(id => ({ id, ...(map.get(id)||{}) }));
-      }
-      buildAllocationColumns(recObjs, {});
-      const meta = qs('#diAllocMeta');
-      if (meta){ meta.textContent = recObjs.length ? '' : 'No recipients selected.'; }
-    });
-    qs('#diSearch')?.addEventListener('input', applySearchFilter);
-
-    // When modal opens, load recipients and auto-preselect 5 suggested
-    const modalEl = document.getElementById('distributeItemsModal');
-    if (modalEl){
-      modalEl.addEventListener('shown.bs.modal', () => {
-        // Default the month control to current if not set
-        const m = qs('#diMonth');
-        if (m && !m.value){ m.value = currentMonth(); }
-        preloadFiveRecipients().then(async () => {
-          try{
-            await finalizeCurrentWeekIfPossible();
-            const month = qs('#diMonth')?.value || currentMonth();
-            const data = await fetchMonthlyPlan(month);
-            annotateCardsWithWeeks(data?.weeks || {});
-            sortPoolByWeeks(data?.weeks || {});
-            autoMoveCurrentWeekRecipients(data?.weeks || {});
-            updateCurrentWeekBadge();
-          } catch(_) { /* ignore */ }
-        });
-      });
-      // If user switches tabs manually to Allocation, render empty columns based on current selection
-      modalEl.addEventListener('shown.bs.tab', (e) => {
-        if (e.target && e.target.id === 'di-alloc-tab'){
-          let recObjs = getSelectedRecipientObjects();
-          if (!recObjs.length){
-            const all = window.__diAllRecipients || [];
-            const map = new Map(all.map(u => [u.user_id || u.id, u]));
-            const hl = getHighlightedIdsFromPool();
-            const ids = (hl.length ? hl : getFirstIdsFromPool(5)).slice(0,5);
-            recObjs = ids.map(id => ({ id, ...(map.get(id)||{}) }));
-          }
-          buildAllocationColumns(recObjs, {});
+  // Collect allocations from Allocation tab grouped by recipient
+  function collectAllocationsFromUI(){
+    const groups = [];
+    qsa('.di-rec-tbody').forEach(tbody => {
+      const recId = parseInt(tbody.getAttribute('data-rec')||'0', 10) || 0;
+      if (!recId) return;
+      const items = [];
+      qsa('tr', tbody).forEach(tr => {
+        const name = qs('.di-name', tr)?.value.trim();
+        const cat = qs('.di-cat', tr)?.value.trim();
+        const qty = Math.max(0, parseInt(qs('.di-alloc', tr)?.value || '0', 10) || 0);
+        const key = invKey(name, cat);
+        if (__invSummary.has(key) && __invSummary.get(key).total >= qty){
+          items.push({ item_name: name, category: cat || '', quantity: qty });
+        } else {
+          throw new Error(`Invalid allocation: ${qty} of ${name} (${cat}) exceeds available stock`);
         }
       });
-      // Carousel handles single panel view; no accordion constraints needed
-      // Keyboard navigation for carousel: left/right arrows
-      modalEl.addEventListener('keydown', (e) => {
-        const key = e.key;
-        const carouselEl = document.getElementById('diAllocCarousel');
-        if (!carouselEl) return;
-        const carousel = bootstrap.Carousel.getOrCreateInstance(carouselEl, { interval: false, ride: false });
-        if (key === 'ArrowLeft') { e.preventDefault(); carousel.prev(); }
-        if (key === 'ArrowRight') { e.preventDefault(); carousel.next(); }
-      });
-      // Dedicated prev/next buttons near indicators
-      const carouselEl = document.getElementById('diAllocCarousel');
-      const carousel = carouselEl ? bootstrap.Carousel.getOrCreateInstance(carouselEl, { interval: false, touch: false, ride: false }) : null;
-      qs('#diAllocPrevBtn')?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); carousel?.prev(); });
-      qs('#diAllocNextBtn')?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); carousel?.next(); });
-      // Keep indicators and counter in sync with slide events
-      if (carouselEl){
-        carouselEl.addEventListener('slide.bs.carousel', (ev) => {
-          const to = ev.to; // index of the slide to be shown
-          const dots = qsa('#diAllocIndicators [data-bs-target]');
-          dots.forEach((d,i)=>{ if (i===to) d.classList.add('active'); else d.classList.remove('active'); });
-          const counter = qs('#diAllocCounter');
-          if (counter){ counter.textContent = `${to+1} / ${dots.length}`; }
-        });
-      }
+      if (items.length){ groups.push({ recipient_id: recId, items }); }
+    });
+    return groups;
+  }
 
-      // Main-window Add button wires to currently active slide
-      qs('#diGlobalAddBtn')?.addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const activeSlide = qs('#diAllocCarouselInner .carousel-item.active .di-rec-tbody');
-        if (!activeSlide) return;
-        const recId = parseInt(activeSlide.getAttribute('data-rec') || '0', 10);
-        if (!recId) return;
-        const cat = (qs('#diGlobalCat')?.value || '').trim();
-        const name = (qs('#diGlobalName')?.value || '').trim();
-        const qty = qs('#diGlobalQty')?.value || '0';
-        addRecipientRowWithValues(recId, cat, name, qty);
-        // optional: clear fields
-        // qs('#diGlobalName').value = '';
-        // qs('#diGlobalQty').value = '0';
-      });
-      // Confirm Round: mark served vs skipped for quarterly flow
-      qs('#diConfirmRound')?.addEventListener('click', async () => {
+  // Build lookup sets for categories and item names per category
+  function rebuildInventoryLookups(){
+    const cats = new Set();
+    const namesByCat = new Map();
+    __invSummary.forEach(meta => {
+      const cat = String(meta.category||'').trim();
+      const name = String(meta.name||'').trim();
+      cats.add(cat);
+      if (!namesByCat.has(cat)) namesByCat.set(cat, new Set());
+      namesByCat.get(cat).add(name);
+    });
+    return { cats, namesByCat };
+  }
+
+  function select2DataFromSet(set){
+    return Array.from(set).filter(v=>v!==null && v!==undefined).map(v => ({ id: v, text: v||'(Uncategorized)' }));
+  }
+
+  function initGlobalSelectsFromInventory(){
+    try{
+      const $ = window.jQuery || window.$;
+      if (!$ || typeof $.fn.select2 !== 'function') return;
+      const { cats, namesByCat } = rebuildInventoryLookups();
+      const $cat = $('#diGlobalCat');
+      const $name = $('#diGlobalName');
+      const ddParent = $('#distributeItemsModal');
+      // Populate Category from inventory (allow free typing; validate after)
+      if ($cat && $cat.length){
+        const catData = select2DataFromSet(cats);
+        $cat.empty();
+        $cat.select2({ data: catData, tags: true, placeholder: $cat.data('placeholder')||'Category', allowClear: true, width: '100%', dropdownParent: ddParent });
+      }
+      // Populate Item Name based on selected category
+      function refreshNames(){
+        const catVal = String(($cat.val()||'')).trim();
+        const namesSet = namesByCat.get(catVal) || new Set();
+        const nameData = select2DataFromSet(namesSet);
+        $name.empty();
+        $name.select2({ data: nameData, tags: true, placeholder: $name.data('placeholder')||'Item name', allowClear: true, width: '100%', dropdownParent: ddParent });
+      }
+      // Bind dependent select refresh
+      $cat.off('change.di').on('change.di', refreshNames);
+      // Initial populate for Item Name
+      try { refreshNames(); } catch(_) {}
+    } catch(_) { /* ignore */ }
+  }
+
+  // Initialize modal bindings and controls
+  function init(){
+    const modalEl = document.getElementById('distributeItemsModal');
+    // When modal opens, load recipients and annotate weeks, then update badge
+    modalEl?.addEventListener('shown.bs.modal', async () => {
+      try {
+        // Default the month control to current if not set
+        const mEl = qs('#diMonth');
+        if (mEl && !mEl.value){ mEl.value = currentMonth(); }
+        // Ensure week-start setting is loaded
+        if (!window.__WEEK_START) { await loadWeekStartSetting(); }
+        // Load inventory suggestions and init Select2s
+        await loadInventorySummary();
+        initGlobalSelectsFromInventory();
+        // Load recipients once and render the pool (selected will be auto-moved by plan)
+        window.__diAllRecipients = await fetchRecipients();
+        renderRecipientPools(window.__diAllRecipients, []);
+        // Fetch plan for current month and annotate/move
+        const month = (qs('#diMonth')?.value || currentMonth());
+        const data = await fetchMonthlyPlan(month);
+        annotateCardsWithWeeks(data?.weeks || {});
+        sortPoolByWeeks(data?.weeks || {});
+        autoMoveCurrentWeekRecipients(data?.weeks || {});
+        sortSelectedByCarryovers();
+        updateCurrentWeekBadge();
+        // Focus modal for keyboard navigation
+        try { modalEl.focus(); } catch(_) {}
+      } catch (e) {
+        console.warn('Distribute modal init failed:', e);
+      }
+    });
+    // Confirm Round: mark served vs skipped for quarterly flow
+    qs('#diConfirmRound')?.addEventListener('click', async () => {
         try{
           const selectedIds = getSelectedIds();
           if (!selectedIds.length) { showMsg(qs('#diFeedback'), 'No recipients selected to confirm.', 'warning'); return; }
@@ -716,6 +676,45 @@
           showMsg(qs('#diFeedback'), err.message || 'Failed to save round results', 'danger');
         }
       });
+
+    // Next button: build Allocation tab from current selection (or first 5 from Pool)
+    qs('#diNextBtn')?.addEventListener('click', () => {
+      const recObjs = getSelectedRecipientObjects();
+      if (!recObjs.length){
+        showMsg(qs('#diFeedback'), 'Select at least one recipient first.', 'warning');
+        return;
+      }
+      buildAllocationColumns(recObjs, {});
+    });
+
+    // If user switches to Allocation tab manually, auto-build columns once
+    document.getElementById('di-alloc-tab')?.addEventListener('shown.bs.tab', () => {
+      const host = qs('#diAllocCarouselInner');
+      if (host && host.children && host.children.length > 0) return; // already built
+      const recObjs = getSelectedRecipientObjects();
+      if (!recObjs.length){ showMsg(qs('#diFeedback'), 'Select at least one recipient first.', 'warning'); return; }
+      buildAllocationColumns(recObjs, {});
+    });
+
+    // Global Add: add row into currently active recipient slide
+    qs('#diGlobalAddBtn')?.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const activeTBody = qs('#diAllocCarouselInner .carousel-item.active .di-rec-tbody');
+      if (!activeTBody) return;
+      const recId = parseInt(activeTBody.getAttribute('data-rec')||'0', 10) || 0;
+      if (!recId) return;
+      // Read from Select2 selects (fallback to plain value)
+      const catEl = qs('#diGlobalCat');
+      const nameEl = qs('#diGlobalName');
+      const qtyEl = qs('#diGlobalQty');
+      const $ = window.jQuery || window.$;
+      const cat = ($ && $.fn && $(catEl).val) ? String($(catEl).val()||'').trim() : ((catEl?.value||'').trim());
+      const name = ($ && $.fn && $(nameEl).val) ? String($(nameEl).val()||'').trim() : ((nameEl?.value||'').trim());
+      const qty = ($ && $.fn && $(qtyEl).val) ? String($(qtyEl).val()||'0') : (qtyEl?.value || '0');
+      addRecipientRowWithValues(recId, cat, name, qty);
+      // optional: clear fields
+      try { if ($ && $.fn){ $('#diGlobalName').val(null).trigger('change'); $('#diGlobalQty').val('0').trigger('change'); } } catch(_){}
+    });
 
       // Load final weekly list (carry-overs first + planned)
       qs('#diLoadFinal')?.addEventListener('click', async () => {
@@ -766,30 +765,43 @@
           console.error('Preview allocation failed:', err);
           showMsg(qs('#diFeedback'), err.message || 'Failed to preview allocation', 'danger');
         }
+        // Load inventory summary for suggestions and initialize Select2s
+        loadInventorySummary().then(initGlobalSelectsFromInventory);
       });
 
-      // Allocate Now (deduct inventory, create movements)
+      // Allocate Now (deduct inventory, create movements) with pre-validation
       qs('#diAllocateWeek')?.addEventListener('click', async () => {
-        const fb = qs('#diFeedback');
+        const fb = qs('#diAllocMeta');
+        const btn = qs('#diAllocateWeek');
         try{
-          const pk = getPeriodKeyFromInputs();
-          if (!pk) { showMsg(fb, 'Please choose a valid Month and Week.', 'warning'); return; }
-          showMsg(fb, 'Allocating and deducting inventory...', 'secondary');
-          const res = await fetch(`${API_BASE_URL}/allocations.php?action=allocate_week`, {
-            method: 'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
-            body: JSON.stringify({ period_key: pk })
-          });
-          const j = await res.json();
-          if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
-          showMsg(fb, `Allocation completed. Allocated to ${j?.data?.allocated ?? 0} recipient(s).`, 'success');
+          // Validate against in-memory inventory
+          const planned = computePlannedTotals();
+          for (const [key, qty] of planned.entries()){
+            const have = __invSummary.get(key)?.total || 0;
+            if (qty > have){
+              const meta = __invSummary.get(key);
+              const label = meta ? `${meta.name} (${meta.category||'Uncategorized'})` : key.split('\u0001')[0];
+              showMsg(fb, `Cannot allocate ${qty} of ${label}; only ${have} in stock. Adjust quantities.`, 'danger');
+              return;
+            }
+          }
+          const groups = collectAllocationsFromUI();
+          if (!groups.length){ showMsg(fb, 'Nothing to allocate. Add items and quantities first.', 'warning'); return; }
+          btn.disabled = true;
+          showMsg(fb, 'Issuing items from inventory...', 'secondary');
+          const done = await issueAllocations(groups);
+          showMsg(fb, `Allocated ${done.length} line(s) successfully.`, 'success');
+          await loadInventorySummary();
         } catch(err){
-          console.error('Allocate week failed:', err);
-          showMsg(qs('#diFeedback'), err.message || 'Failed to allocate', 'danger');
+          console.error('Allocate (inventory move-out) failed:', err);
+          showMsg(qs('#diAllocMeta'), err?.message || 'Allocation failed', 'danger');
+        } finally {
+          btn.disabled = false;
         }
       });
 
       // Clean highlights on hide
-      modalEl.addEventListener('hide.bs.modal', () => {
+      modalEl?.addEventListener('hide.bs.modal', () => {
         showMsg(qs('#diFeedback'), '', '');
         // nothing else to clean for DnD
       });
@@ -803,15 +815,15 @@
           annotateCardsWithWeeks(data?.weeks || {});
           sortPoolByWeeks(data?.weeks || {});
           autoMoveCurrentWeekRecipients(data?.weeks || {});
+          sortSelectedByCarryovers();
           updateCurrentWeekBadge();
         } catch(err){ console.warn('Month change plan fetch failed', err); }
       });
-    }
   }
 
   if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => { if (typeof init === 'function') init(); });
   } else {
-    init();
+    if (typeof init === 'function') init();
   }
 })();

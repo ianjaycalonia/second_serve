@@ -49,6 +49,33 @@ try {
             $params[] = '%' . $q . '%';
         }
 
+    // POST /api/inventory/update-tags
+    if ($method === 'POST' && preg_match('#^/(update-tags|update-tags/)\z#', $sub)) {
+        $data = getJsonInput();
+        $scope = isset($data['scope']) ? sanitize($data['scope']) : '';
+        $tags = isset($data['tags']) ? trim((string)$data['tags']) : '';
+        if ($tags === '') { $tags = null; }
+        $inv = new Inventory();
+        try {
+            if ($scope === 'group'){
+                $item = isset($data['item_name']) ? sanitize($data['item_name']) : '';
+                $cat = isset($data['category']) ? sanitize($data['category']) : '';
+                if ($item === '' || $cat === '') { sendJson(['success'=>false,'error'=>'item_name and category are required'],400); }
+                $inv->updateTagsGroup($item, $cat, $tags);
+                sendJson(['success'=>true, 'message'=>'Tags updated']);
+            } else if ($scope === 'lot'){
+                $id = isset($data['inventory_id']) ? (int)$data['inventory_id'] : 0;
+                if ($id <= 0) { sendJson(['success'=>false,'error'=>'inventory_id is required'],400); }
+                $inv->updateTagsLot($id, $tags);
+                sendJson(['success'=>true, 'message'=>'Tags updated']);
+            } else {
+                sendJson(['success'=>false,'error'=>'scope must be group or lot'],400);
+            }
+        } catch (Exception $e){
+            sendJson(['success'=>false,'error'=>'Failed to update tags'],500);
+        }
+    }
+
     // POST /api/inventory/backfill - scan donations with status 'Picked Up' and add missing inventory lots
     if ($method === 'POST' && preg_match('#^/(backfill|backfill/)\z#', $sub)) {
         // Admin only (already enforced above)
@@ -105,6 +132,7 @@ try {
                         MIN(i.expiry_date) AS earliest_expiry,
                         MIN(i.added_at) AS first_added_at,
                         MAX(i.added_at) AS last_added_at,
+                        GROUP_CONCAT(DISTINCT NULLIF(i.tags, '') ORDER BY i.tags SEPARATOR ',') AS tags_concat,
                         COUNT(*) AS lots
                     FROM inventory i
                     $whereSql

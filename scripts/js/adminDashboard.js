@@ -6,7 +6,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Set the username in the welcome message
     try {
-        const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
+        const user = JSON.parse(sessionStorage.getItem('user') || '{}');
         const userNameElement = document.querySelector('.user-name');
         if (userNameElement && user.name) {
             userNameElement.textContent = user.name.split(' ')[0]; // Show just first name
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function loadDashboardData() {
     try {
         const apiUrl = '/Capstone%20Project/php/api/dashboard/summary.php';
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         
         const headers = {
             'Accept': 'application/json',

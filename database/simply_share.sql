@@ -81,8 +81,11 @@ CREATE TABLE `recipient_plans` (
   `recipient_id` int(11) NOT NULL,
   `source` enum('planned','carryover') NOT NULL,
   `position` int(11) NOT NULL DEFAULT 0,
+  `week_start_date` date DEFAULT NULL COMMENT 'Calculated start date of the week based on settings',
+  `week_basis` enum('sunday','monday') DEFAULT NULL COMMENT 'Week computation basis at time of save',
   PRIMARY KEY (`period_key`, `recipient_id`),
   KEY `rp_period_position_idx` (`period_key`, `position`),
+  KEY `rp_week_start_idx` (`week_start_date`),
   CONSTRAINT `rp_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -93,8 +96,11 @@ CREATE TABLE `recipient_attendance` (
   `status` enum('served','absent') NOT NULL,
   `served_count` int(11) NOT NULL DEFAULT 0,
   `last_served_at` timestamp NULL DEFAULT NULL,
+  `week_start_date` date DEFAULT NULL COMMENT 'Calculated start date of the week based on settings',
+  `week_basis` enum('sunday','monday') DEFAULT NULL COMMENT 'Week computation basis at time of mark',
   PRIMARY KEY (`period_key`, `recipient_id`),
   KEY `ra_recipient_idx` (`recipient_id`),
+  KEY `ra_week_start_idx` (`week_start_date`),
   CONSTRAINT `ra_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -356,4 +362,27 @@ INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, 
 
 INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category`, `contact_number`, `address`, `notes`) VALUES
 (2, 'TestDonor', NULL, '09910071271', 'Tabok, Mandaue City', NULL);
+
+-- settings (key-value store for global app settings)
+CREATE TABLE `settings` (
+  `key` varchar(64) NOT NULL,
+  `value` varchar(255) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- Seed default week start to sunday (can be 'sunday' or 'monday')
+INSERT INTO `settings` (`key`, `value`) VALUES ('week_start', 'sunday')
+ON DUPLICATE KEY UPDATE `value`=VALUES(`value`);
+
+-- user_preferences (per-user UI/UX preferences)
+CREATE TABLE `user_preferences` (
+  `user_id` int(11) NOT NULL,
+  `pref_key` varchar(64) NOT NULL,
+  `pref_value` varchar(255) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`user_id`, `pref_key`),
+  CONSTRAINT `user_prefs_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
 SET FOREIGN_KEY_CHECKS=1;

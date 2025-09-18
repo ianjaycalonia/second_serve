@@ -14,12 +14,14 @@
     document.addEventListener('click', async function(e){
       const btnRec = e.target.closest('.inv-issue-recipient');
       const btnOn = e.target.closest('.inv-issue-onsite');
+      const btnTag = e.target.closest('.inv-edit-tags');
       if (!btnRec && !btnOn) return;
       const itemName = btnRec ? (btnRec.getAttribute('data-item-name')||'') : (btnOn?.getAttribute('data-item-name')||'');
       const category = btnRec ? (btnRec.getAttribute('data-category')||'') : (btnOn?.getAttribute('data-category')||'');
       if (!itemName || !category) return;
 
       try{
+        if (btnTag){ /* handled in separate branch below */ }
         const qtyStr = prompt(`Enter quantity to issue for ${itemName} (${category}):`);
         if (qtyStr === null) return; // cancelled
         const quantity = parseInt(qtyStr, 10);
@@ -58,6 +60,30 @@
       }
     });
   }
+
+  // Separate delegation for tag editing to avoid quantity prompt
+  document.addEventListener('click', async function(e){
+    const btnTag = e.target.closest('.inv-edit-tags');
+    if (!btnTag) return;
+    const itemName = btnTag.getAttribute('data-item-name')||'';
+    const category = btnTag.getAttribute('data-category')||'';
+    const currentTags = btnTag.getAttribute('data-tags')||'';
+    try{
+      const tags = prompt(`Edit tags for ${itemName} (${category}). Use commas to separate.`, currentTags);
+      if (tags === null) return; // cancelled
+      const res = await fetch(`${API_BASE_URL}/inventory/index.php/update-tags`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'group', item_name: itemName, category: category, tags: String(tags||'').trim() })
+      });
+      const j = await res.json().catch(()=>({success:false,error:`HTTP ${res.status}`}));
+      if (!res.ok || !j?.success){ throw new Error(j?.error || `HTTP ${res.status}`); }
+      const p = (window.__inventoryLast?.pagination?.page) || 1;
+      await loadAndRender(p);
+    } catch(err){
+      console.error('Update tags failed:', err);
+      alert('Failed to update tags: ' + (err?.message || 'Unknown error'));
+    }
+  });
 
   function badge(status){
     switch(status){
@@ -98,7 +124,7 @@
     const tbody = document.querySelector('main .table tbody');
     if (!tbody) return;
     if (!Array.isArray(items) || items.length === 0){
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">No inventory items match the current filters.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">No inventory items match the current filters.</td></tr>';
       return;
     }
     const rows = items.map(r => {
@@ -106,10 +132,13 @@
       const cat = escapeHtml(r.category || '');
       const qty = (r.total_quantity ?? r.quantity ?? 0) + '';
       const soonest = escapeHtml(r.earliest_expiry || '—');
+      const tagsRaw = (r.tags_concat || r.tags || '') || '';
+      const tags = escapeHtml(tagsRaw);
       const status = badge(r.derived_status || 'In Stock');
-      const data = `data-item-name="${item}" data-category="${cat}"`;
+      const data = `data-item-name="${item}" data-category="${cat}" data-tags="${tags}"`;
       const actions = `
         <div class="d-flex justify-content-center" style="gap:6px;">
+          <button type="button" class="btn btn-sm btn-outline-warning inv-edit-tags" ${data} title="Edit Tags"><i class="bi bi-tags"></i></button>
           <button type="button" class="btn btn-sm btn-outline-success inv-issue-recipient" ${data} title="Give to Recipient"><i class="bi bi-box-arrow-up-right"></i></button>
           <button type="button" class="btn btn-sm btn-outline-secondary inv-issue-onsite" ${data} title="On-site Giveaway"><i class="bi bi-people"></i></button>
         </div>`;
@@ -119,6 +148,7 @@
           <td>${cat}</td>
           <td>${qty}</td>
           <td>${soonest}</td>
+          <td>${tags || '—'}</td>
           <td>${status}</td>
           <td>${actions}</td>
         </tr>

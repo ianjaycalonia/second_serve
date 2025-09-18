@@ -123,14 +123,53 @@
     });
   }
 
-  // TEMP persistence: localStorage until backend API/table is finalized
-  // Local fallback storage
-  function lsGet(){ try{ return JSON.parse(localStorage.getItem('recipients_week_assignments')||'{}'); } catch{ return {}; } }
-  function lsSet(data){ localStorage.setItem('recipients_week_assignments', JSON.stringify(data)); }
   function collectWeekIds(dropId){ return qsa(`#${dropId} .rcard[data-user-id]`).map(el => parseInt(el.getAttribute('data-user-id')||'0',10)).filter(Boolean); }
   function currentMonth(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+  function isoWeekNumber(date){
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7; // Sun=7
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum); // nearest Thursday
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  }
+  function monthWeekStartDates(month, weekStart){
+    // month: 'YYYY-MM', weekStart: 'sunday'|'monday'
+    const m = /^(\d{4})-(\d{2})$/.exec(String(month));
+    if (!m) return [];
+    const year = parseInt(m[1],10), mon = parseInt(m[2],10);
+    const wsDow = (weekStart === 'monday') ? 1 : 0; // 0=Sun..6=Sat
+    const first = new Date(year, mon-1, 1);
+    const firstDow = first.getDay();
+    const offset = (firstDow - wsDow + 7) % 7;
+    const firstWeekStart = new Date(year, mon-1, 1 - offset);
+    return [0,1,2,3].map(i => new Date(firstWeekStart.getFullYear(), firstWeekStart.getMonth(), firstWeekStart.getDate() + i*7));
+  }
+  function updateWeekLabels(){
+    try{
+      const month = currentMonth();
+      const basis = (window.__WEEK_START === 'monday') ? 'monday' : 'sunday';
+      const starts = monthWeekStartDates(month, basis);
+      const ids = ['w1Label','w2Label','w3Label','w4Label'];
+      starts.forEach((dt, i) => {
+        const iso = isoWeekNumber(dt);
+        const el = qs('#'+ids[i]);
+        if (el) el.textContent = `Week W${iso}`;
+      });
+      // Update aria-labels of dropzones and button titles for clarity (optional, non-breaking)
+      const dzMap = [['w1','W'+isoWeekNumber(starts[0]||new Date())],['w2','W'+isoWeekNumber(starts[1]||new Date())],['w3','W'+isoWeekNumber(starts[2]||new Date())],['w4','W'+isoWeekNumber(starts[3]||new Date())]];
+      dzMap.forEach(([id,w])=>{ const dz = qs('#'+id); if (dz) dz.setAttribute('aria-label', `Week ${w} assignments`); });
+      const btns = [
+        ['saveW1','Save '+('W'+isoWeekNumber(starts[0]||new Date()))],
+        ['saveW2','Save '+('W'+isoWeekNumber(starts[1]||new Date()))],
+        ['saveW3','Save '+('W'+isoWeekNumber(starts[2]||new Date()))],
+        ['saveW4','Save '+('W'+isoWeekNumber(starts[3]||new Date()))],
+      ];
+      btns.forEach(([id,title])=>{ const b = qs('#'+id); if (b) b.setAttribute('title', title); if (b) b.setAttribute('data-bs-original-title', title); });
+    } catch(_){}
+  }
   async function apiGetPlan(month){
-    const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=get_plan&month=${encodeURIComponent(month||currentMonth())}`, { credentials:'include' });
+    const ws = (window.__WEEK_START === 'monday') ? 'monday' : 'sunday';
+    const res = await fetch(`${API_BASE_URL}/recipients_list.php?action=get_plan&month=${encodeURIComponent(month||currentMonth())}&week_start=${encodeURIComponent(ws)}`, { credentials:'include' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const j = await res.json();
     if (!j?.success) throw new Error(j?.error || 'Failed to load plan');
@@ -162,9 +201,7 @@
         });
       });
     } catch (e) {
-      // Fallback to local storage
-      restoreFromLocal();
-      toast('Loaded local plan (server unavailable)', 'warning');
+      toast('Failed to load plan from server', 'danger');
     }
   }
 
@@ -174,9 +211,7 @@
       await apiSavePlan({ [weekKey]: ids }, currentMonth());
       toast(`Saved ${weekKey} (${ids.length})`, 'success');
     } catch (e) {
-      // Fallback to local storage
-      const data = lsGet(); data[weekKey] = ids; lsSet(data);
-      toast(`Saved locally ${weekKey} (${ids.length})`, 'warning');
+      toast(`Failed to save ${weekKey}: ${e.message || e}`, 'danger');
     }
   }
 
@@ -225,6 +260,46 @@
       ['w1','w2','w3','w4'].forEach(id => setupDropzone(qs('#'+id)));
       setupPoolDnD();
 
+      // Load global week_start from settings and wire dropdown
+      try{
+        const sel = qs('#rlWeekStart');
+        if (sel){
+          console.info('Week start control found; initializing...');
+          const r = await fetch(`${API_BASE_URL}/settings.php?action=get&key=week_start`, { credentials:'include' });
+          const j = await r.json().catch(()=>null);
+          const val = (j && j.success && j.data && typeof j.data.value === 'string') ? j.data.value.toLowerCase() : 'sunday';
+          window.__WEEK_START = (val === 'monday') ? 'monday' : 'sunday';
+          sel.value = window.__WEEK_START;
+          // Set dynamic week-of-year labels initially
+          updateWeekLabels();
+          sel.addEventListener('change', async ()=>{
+            const v = sel.value === 'monday' ? 'monday' : 'sunday';
+            try{
+              console.info('Submitting week_start update...', { url: `${API_BASE_URL}/settings.php?action=update`, value: v });
+              const upd = await fetch(`${API_BASE_URL}/settings.php?action=update`, { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, credentials:'include', body: JSON.stringify({ key:'week_start', value: v }) });
+              const raw = await upd.text();
+              let uj = null;
+              try { uj = JSON.parse(raw); } catch(_) { uj = null; }
+              if (upd.ok && uj?.success){
+                window.__WEEK_START = v;
+                toast('Week start updated', 'success');
+                updateWeekLabels();
+                await restoreFromServer();
+              } else {
+                // TEMP debug logging
+                console.error('Week start update failed', { status: upd.status, ok: upd.ok, response: uj, raw });
+                const msg = (uj && uj.error) ? uj.error : (`Failed to update setting (HTTP ${upd.status})` + (raw ? `: ${raw.slice(0,180)}` : ''));
+                toast(msg, 'danger');
+              }
+            } catch(e){
+              // TEMP debug logging
+              console.error('Week start update request error', e);
+              toast('Failed to update setting', 'danger');
+            }
+          });
+        }
+      } catch(_){ /* ignore */ }
+
       // load recipients
       const items = await fetchRecipients();
       window.__rl_usersById = new Map();
@@ -255,7 +330,7 @@
       qs('#saveAllBtn')?.addEventListener('click', async ()=>{
         const weeks = { W1: collectWeekIds('w1'), W2: collectWeekIds('w2'), W3: collectWeekIds('w3'), W4: collectWeekIds('w4') };
         try { await apiSavePlan(weeks, currentMonth()); toast('All weeks saved', 'success'); }
-        catch(e){ lsSet(weeks); toast('All weeks saved locally (server unavailable)', 'warning'); }
+        catch(e){ toast('Failed to save all weeks', 'danger'); }
       });
 
       // Enable Bootstrap tooltips for icon-only buttons
@@ -263,6 +338,8 @@
         const ttEls = qsa('[data-bs-toggle="tooltip"]');
         ttEls.forEach(el => new bootstrap.Tooltip(el));
       } catch(_) { /* bootstrap may not be defined yet */ }
+      // Ensure labels are set even if settings endpoint had issues
+      updateWeekLabels();
 
     } catch(err){
       console.error('Recipients List init failed:', err);
