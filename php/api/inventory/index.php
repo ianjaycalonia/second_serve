@@ -216,6 +216,58 @@ try {
         exit;
     }
 
+    // GET /api/inventory/movements
+    if ($method === 'GET' && preg_match('#^/(movements|movements/)\z#', $sub)) {
+        $db = Database::getInstance();
+        $limit = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 100;
+        $mode = isset($_GET['mode']) ? trim(sanitize($_GET['mode'])) : '';
+        $recipientId = isset($_GET['recipient_id']) && $_GET['recipient_id'] !== '' ? (int)$_GET['recipient_id'] : null;
+        $since = isset($_GET['since']) ? trim($_GET['since']) : '';
+        $days = isset($_GET['days']) ? max(1, min(31, (int)$_GET['days'])) : 2;
+
+        $where = ['im.direction = "out"'];
+        $params = [];
+        if ($mode !== '' && in_array($mode, ['recipient','onsite'], true)) {
+            $where[] = 'im.mode = ?';
+            $params[] = $mode;
+        }
+        if (!empty($recipientId)) {
+            $where[] = 'im.recipient_id = ?';
+            $params[] = $recipientId;
+        }
+        if ($since !== '') {
+            $where[] = 'im.created_at >= ?';
+            $params[] = $since;
+        } else {
+            $where[] = 'im.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
+            $params[] = $days;
+        }
+        $whereSql = 'WHERE ' . implode(' AND ', $where);
+
+        $sql = "SELECT 
+                    im.id,
+                    im.inventory_id,
+                    im.direction,
+                    im.quantity,
+                    im.mode,
+                    im.recipient_id,
+                    ur.name AS recipient_name,
+                    im.performed_by,
+                    up.name AS performed_by_name,
+                    im.created_at,
+                    i.product_name AS item_name,
+                    i.product_category AS category
+                FROM inventory_movements im
+                LEFT JOIN inventory i ON i.inventory_id = im.inventory_id
+                LEFT JOIN users ur ON ur.user_id = im.recipient_id
+                LEFT JOIN users up ON up.user_id = im.performed_by
+                $whereSql
+                ORDER BY im.created_at DESC, im.id DESC
+                LIMIT $limit";
+        $rows = $db->query($sql, $params)->fetchAll();
+        sendJson(['success' => true, 'data' => ['items' => $rows, 'limit' => $limit]]);
+    }
+
     // POST /api/inventory/move-out
     if ($method === 'POST' && preg_match('#^/(move-out|move-out/)\z#', $sub)) {
         $data = getJsonInput();

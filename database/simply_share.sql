@@ -245,30 +245,36 @@ CREATE TABLE `inventory` (
   CONSTRAINT `inventory_product_fk` FOREIGN KEY (`product_id`) REFERENCES `products`(`product_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- inventory_movements
+-- Seed initial inventory items
+INSERT INTO `inventory`
+  (`donation_id`, `product_id`, `product_name`, `product_category`, `tags`, `quantity`, `unit`, `total_weight`, `total_cost`, `expiry_date`, `donor_id`, `source_batch_id`, `admin_in_charge`, `pack_by`, `added_at`)
+VALUES
+  (NULL, NULL, 'Infant Formula',      'Dairy',        'specialty,infant',   30,  NULL, NULL, NULL, '2025-11-17', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Elderly Milk',         'Dairy',        'specialty,elderly',  50,  NULL, NULL, NULL, '2025-12-17', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Rice',                 'Grains',       'staple',            100,  NULL, NULL, NULL, '2026-03-17', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Canned Sardines',      'Canned Goods', 'protein',           200,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Instant Noodles',      'Dry Goods',    'fast_meal',         300,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Paracetamol 500mg',    'Medicine',     'specialty,medicine',100,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Vitamin C 500mg',      'Medicine',     'specialty,medicine',120,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW());
+
+-- inventory_movements (aligned with Inventory::ensureTables)
 CREATE TABLE `inventory_movements` (
-  `movement_id` int(11) NOT NULL AUTO_INCREMENT,
-  `inventory_id` int(11) DEFAULT NULL,
-  `date` timestamp NOT NULL DEFAULT current_timestamp(),
-  `recipient_id` int(11) DEFAULT NULL,
-  `beneficiary_agency` varchar(150) DEFAULT NULL,
-  `product_name` varchar(255) NOT NULL,
-  `product_category` varchar(100) DEFAULT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `inventory_id` int(11) NOT NULL,
+  `direction` enum('in','out') NOT NULL,
   `quantity` int(11) NOT NULL,
-  `unit` varchar(50) DEFAULT NULL,
-  `total_weight` decimal(14,3) DEFAULT NULL,
-  `admin_in_charge` int(11) DEFAULT NULL,
-  `batch_id` varchar(36) DEFAULT NULL,
+  `mode` enum('recipient','onsite') NOT NULL,
+  `recipient_id` int(11) DEFAULT NULL,
+  `note` text DEFAULT NULL,
+  `performed_by` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`movement_id`),
-  KEY `movements_inventory_idx` (`inventory_id`),
-  KEY `movements_recipient_idx` (`recipient_id`),
-  KEY `movements_admin_idx` (`admin_in_charge`),
-  KEY `movements_batch_idx` (`batch_id`),
-  CONSTRAINT `movements_admin_fk` FOREIGN KEY (`admin_in_charge`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `movements_batch_fk` FOREIGN KEY (`batch_id`) REFERENCES `batches`(`batch_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `movements_inventory_fk` FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `movements_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+  PRIMARY KEY (`id`),
+  KEY `im_inventory_idx` (`inventory_id`),
+  KEY `im_recipient_idx` (`recipient_id`),
+  KEY `im_performed_by_idx` (`performed_by`),
+  CONSTRAINT `im_inventory_fk` FOREIGN KEY (`inventory_id`) REFERENCES `inventory` (`inventory_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `im_performed_by_fk` FOREIGN KEY (`performed_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `im_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 -- messages

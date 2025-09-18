@@ -12,11 +12,13 @@ document.addEventListener('DOMContentLoaded', function() {
             userNameElement.textContent = user.name.split(' ')[0]; // Show just first name
         }
         
-        // Load dashboard data
-        loadDashboardData();
-        
-        // Set up auto-refresh every 5 minutes
-        setInterval(loadDashboardData, 5 * 60 * 1000);
+        // Load dashboard data only if metric cards exist on this page
+        const hasMetrics = document.getElementById('totalDonations') && document.getElementById('upcomingDonations') && document.getElementById('activeDonors') && document.getElementById('activeRecipients');
+        if (hasMetrics){
+            loadDashboardData();
+            // Set up auto-refresh every 5 minutes
+            setInterval(loadDashboardData, 5 * 60 * 1000);
+        }
     } catch (error) {
         console.error('Error initializing dashboard:', error);
     }
@@ -59,11 +61,18 @@ async function loadDashboardData() {
         // Use number of completed batches (distinct batch_id with status Completed)
         const completedCount = Number(totals.completed_batches || 0);
         
-        // Update the dashboard stats
-        document.getElementById('totalDonations').textContent = safeNumber(completedCount);
-        document.getElementById('upcomingDonations').textContent = safeNumber(totals.upcoming_pickups || 0);
-        document.getElementById('activeDonors').textContent = safeNumber(totals.active_donors || 0);
-        document.getElementById('activeRecipients').textContent = safeNumber(totals.active_recipients || 0);
+        // Update the dashboard stats (only if elements exist)
+        const elTotal = document.getElementById('totalDonations');
+        const elUpcoming = document.getElementById('upcomingDonations');
+        const elDonors = document.getElementById('activeDonors');
+        const elRecipients = document.getElementById('activeRecipients');
+        if (!elTotal || !elUpcoming || !elDonors || !elRecipients) {
+            return; // this page does not include dashboard metric cards
+        }
+        elTotal.textContent = safeNumber(completedCount);
+        elUpcoming.textContent = safeNumber(totals.upcoming_pickups || 0);
+        elDonors.textContent = safeNumber(totals.active_donors || 0);
+        elRecipients.textContent = safeNumber(totals.active_recipients || 0);
 
         // Update the chart if we have trend data
         if (trend.labels && trend.data && Array.isArray(trend.labels) && Array.isArray(trend.data)) {

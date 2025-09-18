@@ -17,33 +17,48 @@
   <nav>
     <div class="nav-items">
       <div class="toggle">
-        <button id="sidebarToggle" class="btn"><i class="bi bi-list fs-4"></i></button>
-      </div>
-      <div class="brand">
-        <img src="images/simply_share.png" alt="Simply Share" />
-        <span class="brand-name">Simply Share</span>
+        <button id="sidebarToggle" class="btn">
+          <i class="bi bi-list fs-4"></i>
+        </button>
+        <img src="images/simply_share.png" alt="Simply Share Logo" class="logo" />
+        <div class="brand d-none d-md-block">Second Serve by <span>Simply</span><span>Share</span></div>
       </div>
       <div class="nav-icons">
-        <button class="btn" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Notifications"><i class="bi bi-bell-fill"></i></button>
-        <button class="btn" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Help"><i class="bi bi-question-circle-fill"></i></button>
+        <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
+          <i class="bi bi-bell-fill fs-5"></i>
+          <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: 0.6rem"></span>
+        </a>
+        <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
+          <i class="bi bi-envelope-fill fs-5"></i>
+        </a>
+        <div class="dropdown">
+          <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-person-circle fs-5"></i>
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Profile</a></li>
+            <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            <li><hr class="dropdown-divider" /></li>
+            <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+          </ul>
+        </div>
       </div>
     </div>
+
   </nav>
   <div class="sidebar-backdrop" style="display: none"></div>
   <aside class="collapsed">
     <a href="AdminDashboard.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Dashboard"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
-    <a href="Donation.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Donations"><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a>
-    <a href="Donors.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Donors"><i class="bi bi-person-fill me-2"></i><span>Donors</span></a>
-    <a href="Recipient.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Recipients"><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a>
-    <a href="ReportAndAnalytics.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Reports & Analytics"><i class="bi bi-bar-chart-fill me-2"></i><span>Reports & Analytics</span></a>
-    <a href="Inventory.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Inventory"><i class="bi bi-box2-fill me-2"></i><span>Inventory</span></a>
-    <!-- Intentionally not listed in sidebar to avoid clutter -->
+    <a href="RecipientsList.html" class="nav-link active" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Recipients List"><i class="bi bi-calendar3 me-2"></i><span>Distribution: Recipients</span></a>
+    <a href="DistributeItems.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Allocation"><i class="bi bi-diagram-3 me-2"></i><span>Distribution: Allocation</span></a>
+    <a href="DistributeResult.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Result"><i class="bi bi-receipt me-2"></i><span>Distribution: Result</span></a>
   </aside>
 
   <main>
     <div aria-label="breadcrumb">
       <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="AdminDashboard.html">Dashboard</a></li>
+        <li class="breadcrumb-item">Distribution</li>
         <li class="breadcrumb-item active" aria-current="page">Recipients List</li>
       </ol>
     </div>
@@ -64,21 +79,6 @@
         <button id="saveAllBtn" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Save all weeks">
           <i class="bi bi-save"></i>
         </button>
-      </div>
-    </div>
-
-    <div class="card card-accent p-3 mb-3">
-      <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-        <div class="fw-semibold">Pool of Approved Recipients</div>
-        <div class="d-flex align-items-center gap-2">
-          <input id="poolSearch" class="form-control form-control-sm" style="width:220px" placeholder="Search recipients..." />
-          <div class="small text-muted">Drag to weeks below</div>
-        </div>
-      </div>
-      <div class="rpool-scroll">
-        <div id="pool" class="rpool list d-flex flex-wrap gap-2" aria-label="Pool of recipients">
-          <!-- Populated by JS -->
-        </div>
       </div>
     </div>
 
@@ -168,10 +168,88 @@
         </div>
       </div>
     </div>
+
+    <!-- Pool below weeks -->
+    <div class="card card-accent p-3 mb-3 mt-1">
+      <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+        <div class="fw-semibold">Pool of Approved Recipients</div>
+        <div class="d-flex align-items-center gap-2">
+          <input id="poolSearch" class="form-control form-control-sm" style="width:220px" placeholder="Search recipients..." />
+          <div class="small text-muted">Drag to weeks above</div>
+        </div>
+      </div>
+      <div class="rpool-scroll">
+        <div id="pool" class="rpool list d-flex flex-wrap gap-2" aria-label="Pool of recipients">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
   </main>
 
-  <script src="lib/jquery/3.7.1/jquery.min.js"></script>
+  <!-- Notifications Modal -->
+  <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-0">
+          <ul id="notificationsList" class="list-group list-group-flush">
+            <li class="list-group-item text-center text-muted py-4">
+              <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>
+              <span class="ms-2">Loading notifications...</span>
+            </li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">Mark all as read</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Messages Modal -->
+  <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex" style="min-height: 300px">
+            <div class="border-end pe-3 me-3" style="width: 220px">
+              <input class="form-control form-control-sm mb-2" placeholder="Search conversations" />
+              <div class="list-group small">
+                <a href="#" class="list-group-item list-group-item-action active">All Users</a>
+                <a href="#" class="list-group-item list-group-item-action">Donors</a>
+                <a href="#" class="list-group-item list-group-item-action">Recipients</a>
+              </div>
+            </div>
+            <div class="flex-grow-1 d-flex flex-column">
+              <div class="flex-grow-1 overflow-auto mb-2">
+                <div class="text-muted small mb-2">Today</div>
+                <div class="d-flex mb-2"><div class="p-2 rounded bg-light">Welcome to admin messaging!</div></div>
+              </div>
+              <div class="input-group">
+                <input type="text" class="form-control" placeholder="Type a message..." />
+                <button class="btn btn-warning" type="button"><i class="bi bi-send"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+  <script src="scripts/js/auth.js"></script>
+  <script src="scripts/js/notifications.js"></script>
+  <script src="scripts/js/adminDashboard.js"></script>
+  <script src="scripts/js/sidebar.js"></script>
   <script src="scripts/js/adminRecipientsList.js"></script>
 </body>
 </html>

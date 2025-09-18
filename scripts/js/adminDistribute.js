@@ -139,6 +139,151 @@
     });
   }
 
+  // Inventory helpers and allocation utilities
+  function invKey(name, category){
+    const n = String(name||'').trim();
+    const c = String(category||'').trim();
+    return n + '\u0001' + c; // compound key
+  }
+
+  // Global in-memory summary map: key -> { name, category, total }
+  let __invSummary = new Map();
+
+  async function loadInventorySummary(){
+    try{
+      // Primary attempt: inventory merged list
+      const url = `${API_BASE_URL}/inventory/index.php/list?group=merge&limit=500&t=${Date.now()}`;
+      let map = new Map();
+      try{
+        const res = await fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } });
+        const j = await res.json().catch(()=>null);
+        const arr = (j && j.success && Array.isArray(j.data?.items)) ? j.data.items : (Array.isArray(j?.items) ? j.items : []);
+        for (const it of arr){
+          const name = (it.item_name ?? it.product_name ?? it.name ?? '').toString();
+          const cat = (it.category ?? it.product_category ?? it.type ?? '').toString();
+          const qty = Number(it.total_quantity ?? it.total ?? it.quantity ?? 0) || 0;
+          const key = invKey(name, cat);
+          if (!map.has(key)) map.set(key, { name, category: cat, total: 0 });
+          map.get(key).total += Math.max(0, qty);
+        }
+      } catch(_) { /* fall through */ }
+
+      // Fallback: derive from donations list (Completed/Picked Up)
+      if (map.size === 0){
+        const collectFromDonations = async (status) => {
+          try{
+            const r = await fetch(`${API_BASE_URL}/donations/index.php/list?status=${encodeURIComponent(status)}&t=${Date.now()}`, { credentials:'include', headers:{'Accept':'application/json'} });
+            const jj = await r.json().catch(()=>null);
+            return Array.isArray(jj?.data?.items) ? jj.data.items : [];
+          } catch(_){ return []; }
+        };
+        const combined = [ ...(await collectFromDonations('Completed')), ...(await collectFromDonations('Picked Up')) ];
+        for (const it of combined){
+          const name = (it.product_name ?? it.name ?? '').toString();
+          const cat = (it.type ?? it.category ?? '').toString();
+          const qty = Number(it.quantity ?? 0) || 0;
+          const key = invKey(name, cat);
+          if (!map.has(key)) map.set(key, { name, category: cat, total: 0 });
+          map.get(key).total += Math.max(0, qty);
+        }
+      }
+
+      // Last-resort fallback: donations list without status filter
+      if (map.size === 0){
+        try{
+          const r = await fetch(`${API_BASE_URL}/donations/index.php/list?t=${Date.now()}`, { credentials:'include', headers:{'Accept':'application/json'} });
+          const jj = await r.json().catch(()=>null);
+          const items = Array.isArray(jj?.data?.items) ? jj.data.items : [];
+          for (const it of items){
+            const name = (it.product_name ?? it.name ?? '').toString();
+            const cat = (it.type ?? it.category ?? '').toString();
+            const qty = Number(it.quantity ?? 0) || 0;
+            const key = invKey(name, cat);
+            if (!map.has(key)) map.set(key, { name, category: cat, total: 0 });
+            map.get(key).total += Math.max(0, qty);
+          }
+        } catch(_){ /* ignore */ }
+      }
+
+      __invSummary = map;
+      try { window.__invSummary = map; } catch(_) {}
+      // Surface hint if still empty
+      if (map.size === 0){
+        const fb = qs('#diAllocMeta') || qs('#diFeedback');
+        if (fb){ showMsg(fb, 'No inventory suggestions found yet. You can still type Category and Item freely.', 'info'); }
+      }
+      return map;
+    } catch(err){ __invSummary = new Map(); return __invSummary; }
+  }
+
+  function attachRowAllocationHandlers(tr){
+    // Delete row
+    const del = qs('.di-del-row', tr);
+    del?.addEventListener('click', (e)=>{ e.preventDefault(); tr.remove(); });
+    // Sanitize quantity inputs
+    const qty = qs('.di-alloc', tr);
+    qty?.addEventListener('input', ()=>{
+      const v = Math.max(0, parseInt(qty.value||'0', 10) || 0);
+      qty.value = String(v);
+    });
+  }
+
+  function addRecipientRowWithValues(recId, category, name, qty){
+    addRecipientRow(recId);
+    const tbody = qs(`.di-rec-tbody[data-rec="${recId}"]`);
+    const last = tbody?.lastElementChild;
+    if (!last) return;
+    const catEl = qs('.di-cat', last);
+    const nameEl = qs('.di-name', last);
+    const qtyEl = qs('.di-alloc', last);
+    if (catEl) catEl.value = String(category||'');
+    if (nameEl) nameEl.value = String(name||'');
+    if (qtyEl) qtyEl.value = String(Math.max(0, parseInt(qty||'0',10)||0));
+  }
+
+  function computePlannedTotals(){
+    const totals = new Map();
+    qsa('.di-rec-tbody').forEach(tbody => {
+      qsa('tr', tbody).forEach(tr => {
+        const name = qs('.di-name', tr)?.value || '';
+        const cat = qs('.di-cat', tr)?.value || '';
+        const qty = Math.max(0, parseInt(qs('.di-alloc', tr)?.value || '0', 10) || 0);
+        const key = invKey(name, cat);
+        totals.set(key, (totals.get(key)||0) + qty);
+      });
+    });
+    return totals;
+  }
+
+  async function issueAllocations(groups){
+    // Use Inventory API to move out per item group, FIFO by earliest expiry
+    const endpoint = `${API_BASE_URL}/inventory/index.php/move-out-group`;
+    const done = [];
+    for (const g of (groups || [])){
+      const rid = Number(g.recipient_id || g.id || 0) || 0;
+      const items = Array.isArray(g.items) ? g.items : [];
+      for (const it of items){
+        const payload = {
+          item_name: String(it.item_name || it.name || ''),
+          category: String(it.category || it.product_category || ''),
+          quantity: Number(it.quantity || it.qty || 0) || 0,
+          mode: 'recipient',
+          recipient_id: rid,
+          note: it.note ? String(it.note) : null,
+        };
+        if (!payload.item_name || payload.quantity <= 0){ continue; }
+        const res = await fetch(endpoint, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(payload) });
+        const j = await res.json().catch(()=>null);
+        if (!res.ok || !j?.success){
+          const msg = j?.error || `Move-out failed for ${payload.item_name} (${payload.category}) x${payload.quantity}`;
+          throw new Error(msg);
+        }
+        done.push({ recipient_id: rid, item_name: payload.item_name, category: payload.category, quantity: payload.quantity, result: j.data });
+      }
+    }
+    return done;
+  }
+
   // Items table management
   function addItemRow(){
     const tbody = qs('#diItemsBody');
@@ -521,6 +666,11 @@
       if (e.key === 'ArrowLeft'){ e.preventDefault(); carousel.prev(); }
       if (e.key === 'ArrowRight'){ e.preventDefault(); carousel.next(); }
     });
+    // Disable nav buttons if fewer than 2 slides
+    const slides = qsa('#diAllocCarouselInner .carousel-item');
+    const disable = slides.length < 2;
+    const prevBtn = qs('#diAllocPrevBtn'); const nextBtn = qs('#diAllocNextBtn');
+    if (prevBtn) prevBtn.disabled = disable; if (nextBtn) nextBtn.disabled = disable;
   }
 
   // With no global items/availability, we skip cross-recipient validation here.
@@ -607,10 +757,15 @@
         $cat.empty();
         $cat.select2({ data: catData, tags: true, placeholder: $cat.data('placeholder')||'Category', allowClear: true, width: '100%', dropdownParent: ddParent });
       }
-      // Populate Item Name based on selected category
+      // Populate Item Name (filter by selected category; if none, show all)
       function refreshNames(){
         const catVal = String(($cat.val()||'')).trim();
-        const namesSet = namesByCat.get(catVal) || new Set();
+        let namesSet;
+        if (catVal){
+          namesSet = namesByCat.get(catVal) || new Set();
+        } else {
+          namesSet = new Set(Array.from(namesByCat.values()).flatMap(s => Array.from(s)));
+        }
         const nameData = select2DataFromSet(namesSet);
         $name.empty();
         $name.select2({ data: nameData, tags: true, placeholder: $name.data('placeholder')||'Item name', allowClear: true, width: '100%', dropdownParent: ddParent });
@@ -618,13 +773,17 @@
       // Bind dependent select refresh
       $cat.off('change.di').on('change.di', refreshNames);
       // Initial populate for Item Name
-      try { refreshNames(); } catch(_) {}
+      try {
+        // Force a change to refresh names now
+        refreshNames();
+      } catch(_) {}
     } catch(_) { /* ignore */ }
   }
 
   // Initialize modal bindings and controls
   function init(){
     const modalEl = document.getElementById('distributeItemsModal');
+    if (modalEl && !modalEl.hasAttribute('tabindex')){ modalEl.setAttribute('tabindex', '-1'); }
     // When modal opens, load recipients and annotate weeks, then update badge
     modalEl?.addEventListener('shown.bs.modal', async () => {
       try {
@@ -637,22 +796,72 @@
         await loadInventorySummary();
         initGlobalSelectsFromInventory();
         // Load recipients once and render the pool (selected will be auto-moved by plan)
-        window.__diAllRecipients = await fetchRecipients();
-        renderRecipientPools(window.__diAllRecipients, []);
+        try {
+          window.__diAllRecipients = await fetchRecipients();
+        } catch (e) {
+          window.__diAllRecipients = [];
+          showMsg(qs('#diFeedback'), 'Failed to load recipients. Please ensure you are logged in and have approved recipients.', 'danger');
+        }
+        renderRecipientPools(window.__diAllRecipients || [], []);
+        if (!window.__diAllRecipients || !window.__diAllRecipients.length){
+          showMsg(qs('#diFeedback'), 'No approved recipients found. Add or approve recipients to continue.', 'warning');
+        }
         // Fetch plan for current month and annotate/move
         const month = (qs('#diMonth')?.value || currentMonth());
-        const data = await fetchMonthlyPlan(month);
+        const data = await fetchMonthlyPlan(month).catch(()=>({weeks:{}}));
         annotateCardsWithWeeks(data?.weeks || {});
         sortPoolByWeeks(data?.weeks || {});
         autoMoveCurrentWeekRecipients(data?.weeks || {});
         sortSelectedByCarryovers();
         updateCurrentWeekBadge();
+        // If Selected has items, auto-build allocation slides so arrows work immediately
+        const selectedCount = qsa('#diSelected .di-card').length;
+        if (selectedCount > 0){
+          const recObjs = getSelectedRecipientObjects();
+          if (recObjs.length){ buildAllocationColumns(recObjs, {}); }
+        } else {
+          showMsg(qs('#diFeedback'), 'No recipients planned for this week. Drag from Pool to Selected, then click Next.', 'info');
+        }
         // Focus modal for keyboard navigation
         try { modalEl.focus(); } catch(_) {}
       } catch (e) {
         console.warn('Distribute modal init failed:', e);
       }
     });
+
+    // Standalone page init (no modal present)
+    const isPage = !modalEl && document.getElementById('diPool') && document.getElementById('diSelected');
+    if (isPage){
+      (async () => {
+        try {
+          // Month default and week-start
+          const mEl = qs('#diMonth');
+          if (mEl && !mEl.value){ mEl.value = currentMonth(); }
+          if (!window.__WEEK_START) { await loadWeekStartSetting(); }
+          // Inventory suggestions and selects
+          await loadInventorySummary();
+          initGlobalSelectsFromInventory();
+          // Recipients
+          try{ window.__diAllRecipients = await fetchRecipients(); } catch(_){ window.__diAllRecipients = []; }
+          renderRecipientPools(window.__diAllRecipients || [], []);
+          if (!window.__diAllRecipients || !window.__diAllRecipients.length){
+            showMsg(qs('#diFeedback'), 'No approved recipients found. Add or approve recipients to continue.', 'warning');
+          }
+          // Plan annotate and auto-move
+          const month = (qs('#diMonth')?.value || currentMonth());
+          const data = await fetchMonthlyPlan(month).catch(()=>({weeks:{}}));
+          annotateCardsWithWeeks(data?.weeks || {});
+          sortPoolByWeeks(data?.weeks || {});
+          autoMoveCurrentWeekRecipients(data?.weeks || {});
+          sortSelectedByCarryovers();
+          updateCurrentWeekBadge();
+          // Auto-build allocation if any selected
+          const recObjs = getSelectedRecipientObjects();
+          if (recObjs.length){ buildAllocationColumns(recObjs, {}); }
+        } catch(e){ console.warn('Distribute page init failed:', e); }
+      })();
+    }
+
     // Confirm Round: mark served vs skipped for quarterly flow
     qs('#diConfirmRound')?.addEventListener('click', async () => {
         try{
@@ -791,7 +1000,32 @@
           showMsg(fb, 'Issuing items from inventory...', 'secondary');
           const done = await issueAllocations(groups);
           showMsg(fb, `Allocated ${done.length} line(s) successfully.`, 'success');
+          // Persist minimal summary for the Result page
+          try{
+            const all = window.__diAllRecipients || [];
+            const recMap = {};
+            all.forEach(u => {
+              const id = Number(u.user_id || u.id);
+              if (!id) return;
+              const org = (u.organization_name && String(u.organization_name).trim()) ? String(u.organization_name).trim() : '';
+              const typ = (u.organization_type && String(u.organization_type).trim()) ? String(u.organization_type).trim() : '';
+              const label = org ? (typ ? `${org} - ${typ}` : org) : (u.name || `Recipient ${id}`);
+              recMap[String(id)] = { label };
+            });
+            const payload = JSON.stringify({ when: Date.now(), done, recipients: recMap });
+            sessionStorage.setItem('lastAllocation', payload);
+            try { localStorage.setItem('lastAllocation', payload); } catch(_){}
+          } catch(_){}
           await loadInventorySummary();
+          // Offer a link to view the result instead of auto-redirecting
+          try {
+            const link = document.createElement('a');
+            link.href = 'DistributeResult.html';
+            link.className = 'ms-2';
+            link.textContent = 'View Result';
+            const alert = fb?.querySelector('.alert');
+            if (alert) { alert.appendChild(link); } else if (fb) { fb.appendChild(link); }
+          } catch(_) {}
         } catch(err){
           console.error('Allocate (inventory move-out) failed:', err);
           showMsg(qs('#diAllocMeta'), err?.message || 'Allocation failed', 'danger');
