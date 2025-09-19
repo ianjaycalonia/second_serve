@@ -43,9 +43,10 @@
     <div class="sidebar-backdrop" style="display: none"></div>
     <aside class="collapsed">
       <a href="AdminDashboard.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Dashboard"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
-      <a href="RecipientsList.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Recipients List"><i class="bi bi-calendar3 me-2"></i><span>Distribution: Recipients</span></a>
-      <a href="DistributeItems.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Allocation"><i class="bi bi-diagram-3 me-2"></i><span>Distribution: Allocation</span></a>
-      <a href="DistributeResult.html" class="nav-link active" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Result"><i class="bi bi-receipt me-2"></i><span>Distribution: Result</span></a>
+      <a href="RecipientsList.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Recipients List"><i class="bi bi-clipboard-plus-fill me-2"></i><span>Distribution: Recipients</span></a>
+      <a href="DistributeItems.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Allocation"><i class="bi bi-diagram-3-fill me-2"></i><span>Distribution: Allocation</span></a>
+      <a href="DistributeResult.html" class="nav-link active" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Result"><i class="bi bi-box2-heart-fill me-2"></i><span>Distribution: Result</span></a>
+      <a href="Schedule.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Schedule"><i class="bi bi-calendar2-week-fill me-2"></i><span>Schedule</span></a>
     </aside>
     <main>
       <div aria-label="breadcrumb">
@@ -60,8 +61,9 @@
         <h5 class="mb-0">Distribution Result</h5>
         <div class="d-flex gap-2">
           <a class="btn btn-sm btn-outline-secondary" href="DistributeItems.html"><i class="bi bi-arrow-left"></i> Back</a>
-          <button class="btn btn-sm btn-outline-primary" id="printBtn"><i class="bi bi-printer"></i> Print</button>
-          <a class="btn btn-sm btn-outline-dark" href="Inventory.html"><i class="bi bi-box"></i> View Inventory</a>
+          <button class="btn btn-sm btn-outline-danger" id="clearLocalBtn"><i class="bi bi-trash"></i> Delete Local Data</button>
+          <button class="btn btn-sm btn-warning" id="notifyAllBtn"><i class="bi bi-megaphone"></i> Notify All</button>
+          <button class="btn btn-sm btn-success d-none" id="finalizeBtn"><i class="bi bi-check2-square"></i> Finalize &amp; Deduct</button>
         </div>
       </div>
 
@@ -72,6 +74,22 @@
         <div id="resultContainer"></div>
       </div>
     </main>
+
+    <!-- Result Alert Modal -->
+    <div class="modal fade" id="resultAlertModal" tabindex="-1" aria-labelledby="resultAlertModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="resultAlertModalLabel">Notice</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="resultAlertBody">Done.</div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Notifications Modal -->
     <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
@@ -138,11 +156,12 @@
     <script src="scripts/js/adminDashboard.js"></script>
     <script src="scripts/js/sidebar.js"></script>
     <script>
-      (function(){
+      (async function(){
         function showMsg(el, msg, type){ if (!el) return; try { el.innerHTML = msg ? `<div class="alert alert-${type} py-2 mb-0">${msg}</div>` : ''; } catch(_){} }
         const container = document.getElementById('resultContainer');
         const summary = document.getElementById('resultSummary');
         const feedback = document.getElementById('resultFeedback');
+        const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
         if (!container || !summary || !feedback){
           // Elements not present; nothing to render
           return;
@@ -153,7 +172,7 @@
           // Fetch from backend recent movements as fallback
           (async () => {
             try{
-              const res = await fetch('/Capstone%20Project/php/api/inventory/index.php/movements?mode=recipient&days=7&limit=200', { credentials:'include' });
+              const res = await fetch(`${API_BASE_URL}/inventory/index.php/movements?mode=recipient&days=7&limit=200`, { credentials:'include' });
               const j = await res.json();
               if (!res.ok || !j?.success){ throw new Error(j?.error || `HTTP ${res.status}`); }
               const items = Array.isArray(j?.data?.items) ? j.data.items : [];
@@ -165,7 +184,7 @@
               // Enrich with recipients profile to display org - type
               let rmap = new Map();
               try{
-                const rr = await fetch('/Capstone%20Project/php/api/users.php?action=list&role=recipient&status=approved', { credentials:'include' });
+                const rr = await fetch(`${API_BASE_URL}/users.php?action=list&role=recipient&status=approved`, { credentials:'include' });
                 const jj = await rr.json();
                 const arr = Array.isArray(jj?.data?.items) ? jj.data.items : [];
                 arr.forEach(u => {
@@ -175,6 +194,57 @@
                   const label = org ? (typ ? `${org} - ${typ}` : org) : (u.name || `Recipient ${id}`);
                   if (id) rmap.set(id, label);
                 });
+
+        // Finalize & Deduct: perform inventory move-outs per planned rows
+        const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+        async function moveOut(recipientId, item){
+          const payload = {
+            item_name: String(item.item_name||''),
+            category: String(item.category||''),
+            quantity: Number(item.quantity||0)||0,
+            mode: 'recipient',
+            recipient_id: Number(recipientId)||0
+          };
+          if (!payload.item_name || payload.quantity<=0 || !payload.recipient_id) return false;
+          try{
+            const res = await fetch(`${API_BASE_URL}/inventory/index.php/move-out-group`, { method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify(payload) });
+            const j = await res.json().catch(()=>null);
+            if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+            return true;
+          } catch(_){ return false; }
+        }
+        document.getElementById('finalizeBtn')?.addEventListener('click', async () => {
+          if (!planOnly){
+            showMsg(feedback, 'This allocation has already been finalized.', 'info');
+            return;
+          }
+          try{
+            const btn = document.getElementById('finalizeBtn'); if (btn) btn.disabled = true;
+            showMsg(feedback, 'Finalizing and deducting inventory...', 'secondary');
+            // Flatten and process sequentially to surface precise failures
+            let ok=0, fail=0;
+            for (const [rid, rows] of byRec.entries()){
+              for (const row of rows){
+                const success = await moveOut(rid, row);
+                if (success) ok++; else fail++;
+              }
+            }
+            // Update stored summary to mark as finalized
+            try{
+              const copy = { ...data, plan_only: false };
+              const payload = JSON.stringify(copy);
+              sessionStorage.setItem('lastAllocation', payload);
+              try { localStorage.setItem('lastAllocation', payload); } catch(_){}
+            } catch(_){}
+            const mEl = document.getElementById('resultAlertModal');
+            const bEl = document.getElementById('resultAlertBody');
+            if (bEl) bEl.textContent = (fail===0) ? `Finalized ${ok} line(s).` : `Finalized ${ok} line(s). Failed: ${fail}.`;
+            if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
+            // Hide finalize button after completion
+            document.getElementById('finalizeBtn')?.classList.add('d-none');
+          } catch(err){ showMsg(feedback, err?.message || 'Failed to finalize allocation', 'danger'); }
+          finally { const btn = document.getElementById('finalizeBtn'); if (btn) btn.disabled = false; }
+        });
               } catch(_){ /* ignore */ }
               // Group items by recipient
               const byRec = new Map();
@@ -207,13 +277,34 @@
               });
               try { container.appendChild(frag); } catch(_){}
             } catch(err){ showMsg(feedback, err.message || 'Failed to load recent movements', 'danger'); }
+            document.getElementById('clearLocalBtn')?.addEventListener('click', ()=>{
+              try{ sessionStorage.removeItem('lastAllocation'); }catch(_){}
+              try{ localStorage.removeItem('lastAllocation'); }catch(_){}
+              showMsg(feedback, 'Local allocation data cleared.', 'success');
+            });
           })();
           return;
         }
         let data; try{ data = JSON.parse(raw); } catch(_){ showMsg(feedback, 'Unable to read allocation summary.', 'danger'); return; }
+        const planOnly = !!data?.plan_only;
         const when = data?.when ? new Date(data.when) : new Date();
         const done = Array.isArray(data?.done) ? data.done : [];
         const recs = data?.recipients || {};
+        // Fetch recipients to enrich labels with population
+        let popMap = new Map(); // id -> population number
+        try{
+          const rr = await fetch(`${API_BASE_URL}/users.php?action=list&role=recipient&status=approved`, { credentials:'include' });
+          const jj = await rr.json();
+          const arr = Array.isArray(jj?.data?.items) ? jj.data.items : [];
+          arr.forEach(u => {
+            const id = Number(u.user_id||u.id)||0;
+            const total = Number(u.total_residents||0)||0;
+            const male = Number(u.male_count||0)||0;
+            const female = Number(u.female_count||0)||0;
+            const pop = total>0 ? total : (male+female);
+            if (id) popMap.set(id, pop);
+          });
+        } catch(_){ /* ignore if fails; fallback to label only */ }
         // Group by recipient
         const byRec = new Map();
         for (const row of done){
@@ -222,12 +313,13 @@
           byRec.get(rid).push(row);
         }
         // Render
-        const totalLines = done.length;
-        try { summary.textContent = `${totalLines} line(s) issued • ${when.toLocaleString()}`; } catch(_){}
+        try { summary.textContent = ''; } catch(_){ }
         try { container.innerHTML = ''; } catch(_){}
         const fragment = document.createDocumentFragment();
         byRec.forEach((rows, rid) => {
-          const name = recs[String(rid)]?.label || `Recipient ${rid}`;
+          const base = recs[String(rid)]?.label || `Recipient ${rid}`;
+          const pop = popMap.get(Number(rid)) || 0;
+          const name = pop ? `${base} - ${pop}` : base;
           const card = document.createElement('div');
           card.className = 'mb-3';
           card.innerHTML = `
@@ -255,7 +347,54 @@
           fragment.appendChild(card);
         });
         try { container.appendChild(fragment); } catch(_){}
-        document.getElementById('printBtn')?.addEventListener('click', ()=> window.print());
+        document.getElementById('clearLocalBtn')?.addEventListener('click', ()=>{
+          try{ sessionStorage.removeItem('lastAllocation'); }catch(_){}
+          try{ localStorage.removeItem('lastAllocation'); }catch(_){}
+          showMsg(feedback, 'Local allocation data cleared.', 'success');
+        });
+
+        // If this is a plan-only result, surface finalize controls and hint
+        try{
+          const finalizeBtn = document.getElementById('finalizeBtn');
+          if (planOnly && finalizeBtn){ finalizeBtn.classList.remove('d-none'); }
+        } catch(_){ }
+
+        // Notify All: send a notification to each recipient in this result set
+        async function createNotification(recipientId, message, type){
+          try{
+            const res = await fetch(`${API_BASE_URL}/notifications.php?action=create`, {
+              method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              body: JSON.stringify({ user_id: recipientId, message, type: type||'allocation_ready' })
+            });
+            const j = await res.json().catch(()=>null);
+            if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+            return true;
+          } catch(e){ return false; }
+        }
+        document.getElementById('notifyAllBtn')?.addEventListener('click', async ()=>{
+          try{
+            // derive recipient ids from the rendered data
+            const ids = Array.from(byRec.keys());
+            if (!ids.length){
+              const mEl = document.getElementById('resultAlertModal');
+              const bEl = document.getElementById('resultAlertBody');
+              if (bEl) bEl.textContent = 'No recipients to notify for this result.';
+              if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
+              return;
+            }
+            // Build a concise message
+            const whenStr = when.toLocaleString();
+            let ok=0, fail=0;
+            for (const rid of ids){
+              const success = await createNotification(rid, `Your allocation is ready (issued ${whenStr}). Please check the Distribution Result.`, 'allocation_ready');
+              if (success) ok++; else fail++;
+            }
+            const mEl = document.getElementById('resultAlertModal');
+            const bEl = document.getElementById('resultAlertBody');
+            if (bEl) bEl.textContent = (fail===0) ? `Notified ${ok} recipient(s).` : `Notified ${ok} recipient(s). Failed: ${fail}.`;
+            if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
+          } catch(err){ showMsg(feedback, err?.message || 'Failed to send notifications', 'danger'); }
+        });
       })();
     </script>
   </body>

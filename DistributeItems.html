@@ -20,6 +20,23 @@
           <img src="images/simply_share.png" alt="Simply Share Logo" class="logo" />
           <div class="brand d-none d-md-block">Second Serve by <span>Simply</span><span>Share</span></div>
         </div>
+
+      <!-- Generic Alert Modal for Allocation Messages -->
+      <div class="modal fade" id="diAlertModal" tabindex="-1" aria-labelledby="diAlertModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="diAlertModalLabel">Notice</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="diAlertBody">Done.</div>
+            <div class="modal-footer">
+              <a id="diAlertPrimaryLink" href="#" class="btn btn-primary d-none">Open</a>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
         <div class="nav-icons">
           <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
             <i class="bi bi-bell-fill fs-5"></i>
@@ -45,9 +62,10 @@
     <div class="sidebar-backdrop" style="display: none"></div>
     <aside class="collapsed">
       <a href="AdminDashboard.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Dashboard"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
-      <a href="RecipientsList.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Recipients List"><i class="bi bi-calendar3 me-2"></i><span>Distribution: Recipients</span></a>
-      <a href="DistributeItems.html" class="nav-link active" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Allocation"><i class="bi bi-diagram-3 me-2"></i><span>Distribution: Allocation</span></a>
-      <a href="DistributeResult.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Result"><i class="bi bi-receipt me-2"></i><span>Distribution: Result</span></a>
+      <a href="RecipientsList.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Recipients List"><i class="bi bi-clipboard-plus-fill me-2"></i><span>Distribution: Recipients</span></a>
+      <a href="DistributeItems.html" class="nav-link active" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Allocation"><i class="bi bi-diagram-3-fill me-2"></i><span>Distribution: Allocation</span></a>
+      <a href="DistributeResult.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Result"><i class="bi bi-box2-heart-fill me-2"></i><span>Distribution: Result</span></a>
+      <a href="Schedule.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Schedule"><i class="bi bi-calendar2-week-fill me-2"></i><span>Schedule</span></a>
     </aside>
     <main>
       <div aria-label="breadcrumb">
@@ -120,6 +138,10 @@
                 <div class="col-6 col-md-1 d-grid">
                   <button type="button" id="diGlobalAddBtn" class="btn btn-sm btn-primary">Add</button>
                 </div>
+                <div class="col-12 col-md-12 d-flex justify-content-end">
+                  <button type="button" id="diGlobalAutoAllBtn" class="btn btn-sm btn-outline-primary">Auto for All</button>
+                </div>
+                
               </div>
             </div>
             <div id="diAllocCarousel" class="carousel slide" data-bs-ride="false" data-bs-touch="false">

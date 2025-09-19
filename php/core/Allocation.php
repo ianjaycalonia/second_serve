@@ -26,7 +26,14 @@ class Allocation
             if ($t === '') continue;
             $t = preg_replace('/[\s\/]+/', '-', $t);
             $t = preg_replace('/-+/', '-', $t);
+            // Map known synonyms to canonical specialty triad keys
+            if ($t === 'medicine') { $t = 'medical'; }
+            if ($t === 'med') { $t = 'medical'; }
             $norm[$t] = true;
+            // Heuristics: if compound tag contains a triad keyword, add the triad tag too
+            if (strpos($t, 'medical') !== false) { $norm['medical'] = true; }
+            if (strpos($t, 'infant') !== false || strpos($t, 'baby') !== false || strpos($t, 'toddler') !== false) { $norm['infant'] = true; }
+            if (strpos($t, 'elder') !== false || strpos($t, 'senior') !== false) { $norm['elderly'] = true; }
         }
         return array_keys($norm);
     }
@@ -36,6 +43,28 @@ class Allocation
         $row = $this->db->query('SELECT tags FROM recipient_profiles WHERE user_id = ?', [$recipientId])->fetch();
         $tags = $row ? ($row['tags'] ?? '') : '';
         return $this->normalizeTags($tags);
+    }
+
+    private function getRecipientPopulations(array $recipientIds): array
+    {
+        if (empty($recipientIds)) return [];
+        $place = implode(',', array_fill(0, count($recipientIds), '?'));
+        $rows = $this->db->query(
+            "SELECT user_id, total_residents, male_count, female_count FROM recipient_profiles WHERE user_id IN ($place)",
+            array_map('intval', $recipientIds)
+        )->fetchAll();
+        $map = [];
+        foreach ($rows as $r){
+            $uid = (int)$r['user_id'];
+            $tot = (int)($r['total_residents'] ?? 0);
+            if ($tot <= 0){
+                $m = (int)($r['male_count'] ?? 0);
+                $f = (int)($r['female_count'] ?? 0);
+                $tot = $m + $f;
+            }
+            $map[$uid] = max(0, (int)$tot);
+        }
+        return $map;
     }
 
     private function getFinalWeekList(string $periodKey): array
@@ -87,7 +116,7 @@ class Allocation
         // Normalize tags and index
         foreach ($rows as &$r){
             $full = $this->normalizeTags($r['tags'] ?? '');
-            // keep only specialty triad for matching
+            // keep only specialty triad for matching (medicine -> medical mapping handled in normalizeTags)
             $triad = ['infant'=>true,'elderly'=>true,'medical'=>true];
             $r['tag_list'] = array_values(array_filter($full, fn($t)=> isset($triad[$t])));
         }
@@ -95,66 +124,151 @@ class Allocation
         return $rows;
     }
 
-    private function matchBestInventory(array $recipientTags, array &$inventory): ?array
+    private function eligibleRecipientsForItem(array $finalList, array $item, array $recipientTagsMap): array
     {
-        // Specialty-first: intersect recipient specialty triad with item specialty triad
+        $itTags = $item['tag_list'] ?? [];
+        $isSpecial = !empty($itTags);
+        if (!$isSpecial) return $finalList; // general items available to all
         $triad = ['infant'=>true,'elderly'=>true,'medical'=>true];
-        $recSpec = array_values(array_filter($recipientTags, fn($t)=> isset($triad[$t])));
-        $best = null; $bestScore = -1; $bestIdx = -1;
-        foreach ($inventory as $idx => $item){
-            if ((int)$item['quantity'] <= 0) continue;
-            $itTags = $item['tag_list'] ?? [];
-            $score = 0;
-            if (!empty($recSpec)){
-                // require at least one specialty intersection
-                $inter = array_intersect($recSpec, $itTags);
-                if (!empty($inter)){
-                    // exact-all within triad gets higher score
-                    $all = true; foreach ($recSpec as $t){ if (!in_array($t, $itTags, true)) { $all=false; break; } }
-                    $score = $all ? 3 : 2;
-                } else {
-                    $score = -1; // no specialty match
-                }
-            } else {
-                // recipient has no specialty → neutral; prefer untagged item or any
-                $score = empty($itTags) ? 1 : 0;
-            }
-            if ($score > $bestScore){ $bestScore = $score; $best = $item; $bestIdx = $idx; }
+        $eligible = [];
+        foreach ($finalList as $rid){
+            $rtags = $recipientTagsMap[$rid] ?? [];
+            $recSpec = array_values(array_filter($rtags, fn($t)=> isset($triad[$t])));
+            if (empty($recSpec)) continue;
+            if (!empty(array_intersect($recSpec, $itTags))) $eligible[] = $rid;
         }
-        if ($bestScore < 0) return null; // no candidate
-        // Reserve one unit from this item in-memory
-        if ($bestIdx >= 0){ $inventory[$bestIdx]['quantity'] = (int)$inventory[$bestIdx]['quantity'] - 1; }
-        // Return chosen item plus allocated qty
-        $best['alloc_qty'] = 1;
-        return $best;
+        return $eligible;
     }
 
-    public function previewAllocation(string $periodKey): array
+    public function previewAllocation(string $periodKey, ?array $limitRecipientIds = null): array
     {
-        $finalList = $this->getFinalWeekList($periodKey);
-        if (empty($finalList)) return ['period_key'=>$periodKey, 'allocations'=>[], 'summary'=>['recipients'=>0,'allocated'=>0]];
+        // If a limit list is provided, use it exactly; otherwise use the computed final weekly list
+        if (is_array($limitRecipientIds) && !empty($limitRecipientIds)){
+            $finalList = array_values(array_unique(array_map('intval', array_filter($limitRecipientIds, fn($v)=>$v>0))));
+        } else {
+            $finalList = $this->getFinalWeekList($periodKey);
+        }
+        if (empty($finalList)) return ['period_key'=>$periodKey, 'allocations'=>[], 'summary'=>['recipients'=>0,'allocated'=>0,'total_qty'=>0]];
         $inventory = $this->getInventoryCandidates();
+        // Preload recipient tags and populations
+        $recipientTagsMap = [];
+        foreach ($finalList as $rid){ $recipientTagsMap[$rid] = $this->getRecipientTags($rid); }
+        $popMap = $this->getRecipientPopulations($finalList);
+
         $allocations = [];
-        $allocatedCount = 0;
-        foreach ($finalList as $rid){
-            $rtags = $this->getRecipientTags($rid);
-            $chosen = $this->matchBestInventory($rtags, $inventory);
-            if ($chosen){
-                $allocations[] = [
-                    'recipient_id' => $rid,
-                    'inventory_id' => (int)$chosen['inventory_id'],
-                    'product_name' => $chosen['product_name'],
-                    'product_category' => $chosen['product_category'],
-                    'unit' => $chosen['unit'],
-                    'quantity' => (int)$chosen['alloc_qty'],
-                    'tags_match' => $chosen['tag_list'] ?? [],
-                ];
-                $allocatedCount++;
-            } else {
-                $allocations[] = [ 'recipient_id' => $rid, 'inventory_id' => null, 'product_name' => null, 'quantity' => 0, 'note' => 'No matching item'];
+        $totalQtyAllocated = 0;
+
+        // Group all inventory by product (name/category/unit) regardless of specialty
+        $groups = [];
+        foreach ($inventory as $it){
+            $k = ($it['product_name'] ?? '') . "\u0001" . ($it['product_category'] ?? '') . "\u0001" . ($it['unit'] ?? '');
+            if (!isset($groups[$k])){
+                $groups[$k] = [ 'rows' => [], 'name' => ($it['product_name'] ?? ''), 'category' => ($it['product_category'] ?? ''), 'unit' => ($it['unit'] ?? ''), 'tags' => ($it['tag_list'] ?? []) ];
+            }
+            $groups[$k]['rows'][] = $it;
+            // Combine tags (if any row has special tags, treat the product as special for eligibility purposes)
+            if (!empty($it['tag_list'])){
+                $groups[$k]['tags'] = array_values(array_unique(array_merge($groups[$k]['tags'], $it['tag_list'])));
             }
         }
-        return [ 'period_key'=>$periodKey, 'allocations'=>$allocations, 'summary'=>['recipients'=>count($finalList),'allocated'=>$allocatedCount] ];
+
+        // Proportional allocation with largest remainder per grouped product
+        foreach ($groups as $g){
+            $rows = $g['rows'];
+            $totalAvail = 0;
+            foreach ($rows as $r){ $totalAvail += (int)($r['quantity'] ?? 0); }
+            if ($totalAvail <= 0) continue;
+            $A = (int)floor($totalAvail * 0.90); // hold back 10%
+            if ($A <= 0) continue;
+
+            // Determine eligible recipients: if product has specialty tags, filter; else all finalList
+            $isSpecial = !empty($g['tags']);
+            $eligible = $isSpecial ? $this->eligibleRecipientsForItem($finalList, ['tag_list'=>$g['tags']], $recipientTagsMap) : $finalList;
+            if (empty($eligible)) continue;
+            // If specialty item has only one eligible recipient, cap to half of the 90% pool
+            if ($isSpecial && count($eligible) === 1){
+                $A = (int)floor($A * 0.5);
+                if ($A <= 0) continue;
+            }
+
+            // Build population vector with missing replaced by average of known if any
+            $knownSum = 0; $knownCnt = 0;
+            $pvec = [];
+            foreach ($eligible as $rid){
+                $p = (int)($popMap[$rid] ?? 0);
+                if ($p > 0){ $knownSum += $p; $knownCnt++; }
+                $pvec[$rid] = $p;
+            }
+            if ($knownCnt > 0){
+                $avg = (float)$knownSum / (float)$knownCnt;
+                foreach ($eligible as $rid){ if ($pvec[$rid] <= 0) $pvec[$rid] = $avg; }
+            }
+            // Compute S
+            $S = 0.0; foreach ($eligible as $rid){ $S += (float)$pvec[$rid]; }
+
+            $targets = [];
+            if ($S <= 0.0){
+                // Equal split
+                $n = count($eligible);
+                $base = (int)floor($A / $n);
+                $rem = $A - ($base * $n);
+                foreach ($eligible as $rid){ $targets[$rid] = $base; }
+                for ($i=0; $i<$rem; $i++){ $rid = $eligible[$i % $n]; $targets[$rid] += 1; }
+            } else {
+                // Largest remainder method
+                $floors = []; $fracs = []; $sumFloors = 0;
+                foreach ($eligible as $rid){
+                    $real = ($pvec[$rid] / $S) * $A;
+                    $f = (int)floor($real);
+                    $floors[$rid] = $f; $fracs[$rid] = $real - $f; $sumFloors += $f;
+                }
+                $R = $A - $sumFloors;
+                // sort recipients by fractional part desc, tie-breaker by population desc
+                $order = $eligible;
+                usort($order, function($a,$b) use ($fracs, $pvec){
+                    $dr = ($fracs[$b] <=> $fracs[$a]);
+                    if ($dr !== 0) return $dr;
+                    $dp = ($pvec[$b] <=> $pvec[$a]);
+                    if ($dp !== 0) return $dp;
+                    return $a <=> $b; // stable id tie-breaker
+                });
+                foreach ($eligible as $rid){ $targets[$rid] = $floors[$rid]; }
+                $i=0; $n=count($order);
+                while ($R > 0 && $n > 0){ $rid = $order[$i % $n]; $targets[$rid] += 1; $R--; $i++; }
+            }
+
+            // Map targets back to inventory rows FIFO
+            $rowIdx = 0; $rowRemain = [];
+            foreach ($rows as $idx => $r){ $rowRemain[$idx] = (int)($r['quantity'] ?? 0); }
+            foreach ($eligible as $rid){
+                $need = (int)($targets[$rid] ?? 0);
+                while ($need > 0 && $rowIdx < count($rows)){
+                    if ($rowRemain[$rowIdx] <= 0){ $rowIdx++; continue; }
+                    $take = min($need, $rowRemain[$rowIdx]);
+                    if ($take > 0){
+                        $allocations[] = [
+                            'recipient_id' => $rid,
+                            'inventory_id' => (int)$rows[$rowIdx]['inventory_id'],
+                            'product_name' => $rows[$rowIdx]['product_name'],
+                            'product_category' => $rows[$rowIdx]['product_category'],
+                            'unit' => $rows[$rowIdx]['unit'],
+                            'quantity' => $take,
+                            'tags_match' => $isSpecial ? ($g['tags'] ?? []) : [],
+                        ];
+                        $rowRemain[$rowIdx] -= $take;
+                        $need -= $take;
+                        $totalQtyAllocated += $take;
+                    }
+                    if ($rowRemain[$rowIdx] <= 0){ $rowIdx++; }
+                }
+            }
+        }
+        unset($item);
+
+        // Summary: number of recipients touched and total quantity
+        $recTouched = [];
+        foreach ($allocations as $a){ $recTouched[$a['recipient_id']] = true; }
+        return [ 'period_key'=>$periodKey, 'allocations'=>$allocations, 'summary'=>['recipients'=>count($finalList),'recipients_touched'=>count($recTouched),'total_qty'=>$totalQtyAllocated] ];
     }
 
     public function allocateWeek(string $periodKey, int $adminId = 0): array

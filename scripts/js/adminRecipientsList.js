@@ -33,6 +33,19 @@
     try { alert(String(msg||'')); } catch(_){ }
   }
 
+  // Determine recipient tag flags (infant/elderly/medicine) from user record
+  function recipientFlags(user){
+    const txt = [
+      String(user.tags||'').toLowerCase(),
+      String(user.organization_type||'').toLowerCase(),
+      String(user.age_group||'').toLowerCase(),
+    ].join(' ');
+    const hasInfant = /infant|baby|toddler|daycare|orphan/.test(txt);
+    const hasElderly = /elder|senior|aged|home for the aged/.test(txt);
+    const hasMedicine = /med|medicine|clinic|health|pharma|vitamin|paracetamol/.test(txt);
+    return { hasInfant, hasElderly, hasMedicine };
+  }
+
   async function confirmAction(message, title='Confirm'){
     // Creates a temporary Bootstrap modal for confirmation; resolves true/false
     try{
@@ -450,29 +463,62 @@
     const dz = qs('#'+dropId);
     const pool = qs('#pool');
     if (!dz || !pool) return;
-    // collect available ids from pool that are currently visible (not hidden by assignment)
+    // Visible candidates in pool
     const cards = qsa('#pool .rcard').filter(el => el.style.display !== 'none');
     if (!cards.length){ toast('No recipients available in pool', 'warning'); return; }
-    // shuffle
-    const idx = cards.map((_,i)=>i);
-    for (let i=idx.length-1; i>0; i--){ const j = Math.floor(Math.random()*(i+1)); [idx[i],idx[j]] = [idx[j],idx[i]]; }
-    let added = 0;
-    for (let k=0; k<idx.length && added < count; k++){
-      const card = cards[idx[k]];
-      const id = parseInt(card.getAttribute('data-user-id')||'0', 10);
+    // Partition by tags
+    const byId = window.__rl_usersById || new Map();
+    const infant = [], elderly = [], medicine = [], others = [], any = [];
+    for (const c of cards){
+      const id = parseInt(c.getAttribute('data-user-id')||'0', 10);
       if (!Number.isFinite(id) || id<=0) continue;
-      if (dz.querySelector(`.rcard[data-user-id="${id}"]`)) continue; // skip if already there
-      // append to week
-      const user = window.__rl_usersById?.get(id);
+      if (dz.querySelector(`.rcard[data-user-id="${id}"]`)) continue; // skip already assigned in target week
+      const user = byId.get(id);
       if (!user) continue;
-      dz.appendChild(createCard(user));
-      // hide in pool
-      card.style.display='none';
-      added++;
+      const f = recipientFlags(user);
+      if (f.hasInfant) infant.push({ id, card:c, user });
+      else if (f.hasElderly) elderly.push({ id, card:c, user });
+      else if (f.hasMedicine) medicine.push({ id, card:c, user });
+      else others.push({ id, card:c, user });
+      any.push({ id, card:c, user });
+    }
+    // Simple shuffle helper
+    function shuffle(arr){ for (let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
+    shuffle(infant); shuffle(elderly); shuffle(medicine); shuffle(others); shuffle(any);
+    const takeFrom = (arr, n, taken)=>{
+      for (let i=0; i<arr.length && taken.length < n; i++){
+        taken.push(arr[i]);
+      }
+    };
+    const selected = [];
+    // Priority picks: 2 infants, 2 elderly, 1 medicine
+    takeFrom(infant, 2, selected);
+    takeFrom(elderly, 2, selected);
+    takeFrom(medicine, 1, selected);
+    // Fill remaining with others (not in the three tags)
+    const need = Math.max(0, count - selected.length);
+    const poolOthers = others.filter(o => !selected.some(s => s.id === o.id));
+    for (let i=0; i<poolOthers.length && selected.length < count; i++) selected.push(poolOthers[i]);
+    // If still short, fill from any remaining candidates
+    if (selected.length < count){
+      const used = new Set(selected.map(s=>s.id));
+      for (const cand of any){ if (used.has(cand.id)) continue; selected.push(cand); if (selected.length >= count) break; }
+    }
+    // Commit selection to target week
+    let added = 0;
+    for (const it of selected){
+      const { id, card, user } = it;
+      if (!dz.querySelector(`.rcard[data-user-id="${id}"]`)){
+        dz.appendChild(createCard(user));
+        card.style.display='none';
+        added++;
+      }
     }
     updateCounts();
-    toast(`Auto added ${added} recipient(s)`, added ? 'success' : 'warning');
+    toast(`Auto added ${added} recipient(s) (priority: 2 infant, 2 elderly, 1 medicine)`, added ? 'success' : 'warning');
   }
+
+  
 
   async function fetchRecipients(){
     const res = await fetch(`${API_BASE_URL}/users.php?action=list&role=recipient&status=approved&t=${Date.now()}`, {
@@ -564,20 +610,26 @@
       qs('#saveAllBtn')?.addEventListener('click', async ()=>{
         const raw = { W1: collectWeekIds('w1'), W2: collectWeekIds('w2'), W3: collectWeekIds('w3'), W4: collectWeekIds('w4') };
         const weeks = {};
-        const skipped = [];
+        const truncated = [];
         Object.entries(raw).forEach(([k, ids])=>{
-          if (Array.isArray(ids) && ids.length === 10){ weeks[k] = ids; }
-          else if (Array.isArray(ids) && ids.length === 0){ /* saving empty will clear locks server-side */ weeks[k] = []; }
-          else { skipped.push(`${k} (${ids.length}/10)`); }
+          if (!Array.isArray(ids)) { weeks[k] = []; return; }
+          if (ids.length > 10){
+            weeks[k] = ids.slice(0,10);
+            truncated.push(`${k} (kept 10 of ${ids.length})`);
+          } else {
+            // Accept fewer than 10; save exactly what is in the week (including empty to clear)
+            weeks[k] = ids;
+          }
         });
-        try { 
-          await apiSavePlan(weeks, currentMonth()); 
-          if (skipped.length){ toast(`Saved eligible weeks. Skipped: ${skipped.join(', ')}`, 'warning'); }
+        try {
+          await apiSavePlan(weeks, currentMonth());
+          if (truncated.length){ toast(`Saved all weeks. Truncated: ${truncated.join(', ')}`, 'warning'); }
           else { toast('All weeks saved', 'success'); }
           await restoreFromServer();
           applyWeekFocusAndButtons();
+        } catch(e){
+          toast('Failed to save all weeks', 'danger');
         }
-        catch(e){ toast('Failed to save all weeks', 'danger'); }
       });
 
       // Enable Bootstrap tooltips for icon-only buttons

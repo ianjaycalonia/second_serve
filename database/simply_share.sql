@@ -249,13 +249,13 @@ CREATE TABLE `inventory` (
 INSERT INTO `inventory`
   (`donation_id`, `product_id`, `product_name`, `product_category`, `tags`, `quantity`, `unit`, `total_weight`, `total_cost`, `expiry_date`, `donor_id`, `source_batch_id`, `admin_in_charge`, `pack_by`, `added_at`)
 VALUES
-  (NULL, NULL, 'Infant Formula',      'Dairy',        'specialty,infant',   30,  NULL, NULL, NULL, '2025-11-17', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Elderly Milk',         'Dairy',        'specialty,elderly',  50,  NULL, NULL, NULL, '2025-12-17', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Rice',                 'Grains',       'staple',            100,  NULL, NULL, NULL, '2026-03-17', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Canned Sardines',      'Canned Goods', 'protein',           200,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Instant Noodles',      'Dry Goods',    'fast_meal',         300,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Paracetamol 500mg',    'Medicine',     'specialty,medicine',100,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Vitamin C 500mg',      'Medicine',     'specialty,medicine',120,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW());
+  (NULL, NULL, 'Infant Formula',      'Dairy',        'infant',   30,  NULL, NULL, NULL, '2025-11-17', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Elderly Milk',         'Dairy',        'elderly',  50,  NULL, NULL, NULL, '2025-12-17', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Rice',                 'Grains',       '',            100,  NULL, NULL, NULL, '2026-03-17', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Canned Sardines',      'Canned Goods', '',           200,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Instant Noodles',      'Dry Goods',    '',         300,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Paracetamol 500mg',    'Medicine',     'medicine',100,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Vitamin C 500mg',      'Medicine',     'medicine',120,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW());
 
 -- inventory_movements (aligned with Inventory::ensureTables)
 CREATE TABLE `inventory_movements` (
