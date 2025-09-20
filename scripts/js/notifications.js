@@ -114,15 +114,21 @@
         const refIdRaw = li.getAttribute('data-ref-id');
         const refId = refIdRaw && /^\d+$/.test(refIdRaw) ? parseInt(refIdRaw, 10) : null;
         try {
-          await fetch(`${API_BASE_URL}/notifications.php?action=read&id=${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include'
-          });
-          // Optimistically update UI
+          const wasUnread = li.classList.contains('unread');
+          // Optimistically update UI immediately
           li.classList.remove('unread');
           const badge = li.querySelector('.badge');
           if (badge) badge.remove();
+          // Only call PATCH when it was unread; ignore any errors (it might have been read via markAllRead)
+          if (wasUnread) {
+            try {
+              await fetch(`${API_BASE_URL}/notifications.php?action=read&id=${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+              });
+            } catch(_) { /* ignore */ }
+          }
           // Determine destination
           const user = getStoredUser();
           const role = (user?.role || '').toLowerCase();
@@ -137,6 +143,32 @@
           } else if (nType === 'donation_cancelled') {
             if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
+          } else if (nType === 'allocation_ready') {
+            // Recipients: open Messages modal and auto-start Food Bank conversation
+            if (role === 'recipient') {
+              try {
+                const mailAnchor = document.querySelector('a[data-bs-target="#messagesModal"]');
+                if (mailAnchor) {
+                  mailAnchor.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                  return; // handled via messages.js auto-init for non-admin
+                }
+                // Fallback: create modal if anchor missing
+                let modalEl = document.getElementById('messagesModal');
+                if (!modalEl) {
+                  modalEl = document.createElement('div');
+                  modalEl.id = 'messagesModal';
+                  modalEl.className = 'modal fade';
+                  modalEl.tabIndex = -1;
+                  modalEl.setAttribute('aria-hidden', 'true');
+                  modalEl.innerHTML = '<div class="modal-dialog modal-dialog-scrollable modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Messages</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"></div></div></div>';
+                  document.body.appendChild(modalEl);
+                }
+                if (window.__initMessagesModal) window.__initMessagesModal(modalEl);
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+                return;
+              } catch(_) { /* fall through to dest logic if something fails */ }
+            }
           }
           // Fallbacks by reference_type if not set above
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
@@ -168,7 +200,19 @@
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
       });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>`HTTP ${res.status}`);
+        // Show error in UI for visibility during testing
+        if (listEl) {
+          listEl.innerHTML = `<div class="text-center text-danger py-3">Notifications fetch failed (${res.status}). ${escapeHtml(txt)}</div>`;
+        }
+        if (bellIcon && bellAnchor) {
+          bellIcon.classList.add('text-danger');
+          bellAnchor.classList.add('text-danger');
+          bellAnchor.setAttribute('title', `Notifications fetch failed (${res.status})`);
+        }
+        throw new Error(txt);
+      }
       const json = await res.json();
       const items = json?.data?.items || [];
       // Render only if changed (shallow compare by id+read_status count)
@@ -179,6 +223,16 @@
       }
     } catch (e) {
       console.error('Notifications fetch failed', e);
+      // If we reach here and UI not yet updated, provide a minimal hint
+      try {
+        if (listEl && !listEl.innerHTML) {
+          listEl.innerHTML = '<div class="text-center text-muted py-3">Unable to load notifications.</div>';
+        }
+        if (bellIcon && bellAnchor) {
+          bellIcon.classList.add('text-danger');
+          bellAnchor.classList.add('text-danger');
+        }
+      } catch(_) {}
     }
   }
 
@@ -201,8 +255,8 @@
         await fetchNotifications();
       });
     }
-    // Regular polling in background (10 seconds)
-    pollingTimer = window.setInterval(fetchNotifications, 10000);
+    // Regular polling in background (1 second, testing)
+    pollingTimer = window.setInterval(fetchNotifications, 1000);
     // Initial background fetch too
     fetchNotifications();
   }

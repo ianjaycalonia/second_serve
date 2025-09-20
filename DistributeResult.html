@@ -260,7 +260,7 @@
                 });
 
         // Finalize & Deduct: perform inventory move-outs per planned rows
-        const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+        // Reuse existing API_BASE_URL defined earlier; do NOT redeclare to avoid runtime errors.
         async function moveOut(recipientId, item){
           const payload = {
             item_name: String(item.item_name||''),
@@ -340,15 +340,49 @@
                 frag.appendChild(card);
               });
               try { container.appendChild(frag); } catch(_){}
+              // Wire Notify All for fallback flow (derive recipient IDs from DOM like normal flow)
+              function __createNotification(recipientId, message, type){
+                return (async function(){
+                  try{
+                    const res = await fetch(`${API_BASE_URL}/notifications.php`, {
+                      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                      body: JSON.stringify({ user_id: recipientId, message, type: type||'allocation_ready' })
+                    });
+                    const j = await res.json().catch(()=>null);
+                    if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+                    return true;
+                  } catch(e){ return false; }
+                })();
+              }
+              document.getElementById('notifyAllBtn')?.addEventListener('click', async ()=>{
+                try{
+                  const ids = Array.from(document.querySelectorAll('.dr-recipient[data-rec]')).map(tb => parseInt(tb.getAttribute('data-rec')||'0',10)).filter(n=>Number.isFinite(n)&&n>0);
+                  if (!ids.length){
+                    const mEl = document.getElementById('resultAlertModal');
+                    const bEl = document.getElementById('resultAlertBody');
+                    if (bEl) bEl.textContent = 'No recipients to notify for this result.';
+                    if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
+                    return;
+                  }
+                  const whenStr = (new Date()).toLocaleString();
+                  let ok=0, fail=0;
+                  for (const rid of ids){ const success = await __createNotification(rid, `Your allocation is ready (issued ${whenStr}). Please check the Distribution Result.`, 'allocation_ready'); if (success) ok++; else fail++; }
+                  const mEl = document.getElementById('resultAlertModal');
+                  const bEl = document.getElementById('resultAlertBody');
+                  if (bEl) bEl.textContent = (fail===0) ? `Notified ${ok} recipient(s).` : `Notified ${ok} recipient(s). Failed: ${fail}.`;
+                  if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
+                } catch(err){ showMsg(feedback, err?.message || 'Failed to send notifications', 'danger'); }
+              });
             } catch(err){ showMsg(feedback, err.message || 'Failed to load recent movements', 'danger'); }
             document.getElementById('clearLocalBtn')?.addEventListener('click', ()=>{
               try{ sessionStorage.removeItem('lastAllocation'); }catch(_){}
               try{ localStorage.removeItem('lastAllocation'); }catch(_){}
               showMsg(feedback, 'Local allocation data cleared.', 'success');
             });
-          })();
-          return;
-        }
+
+            })();
+            return;
+          }
         let data; try{ data = JSON.parse(raw); } catch(_){ showMsg(feedback, 'Unable to read allocation summary.', 'danger'); return; }
         const planOnly = !!data?.plan_only;
         const when = data?.when ? new Date(data.when) : new Date();
@@ -389,7 +423,10 @@
           card.innerHTML = `
             <div class="d-flex align-items-center justify-content-between mb-1">
               <div class="fw-semibold">${name}</div>
-              <div><button type="button" class="btn btn-sm btn-outline-primary dr-add" data-rec="${rid}"><i class="bi bi-plus"></i> Add Item</button></div>
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-warning dr-notify" data-rec="${rid}"><i class="bi bi-megaphone"></i> Notify</button>
+                <button type="button" class="btn btn-sm btn-outline-primary dr-add" data-rec="${rid}"><i class="bi bi-plus"></i> Add Item</button>
+              </div>
             </div>
             <div class="table-responsive">
               <table class="table table-sm table-striped align-middle mb-0">
@@ -409,6 +446,30 @@
           // Wire add button
           card.querySelector('.dr-add')?.addEventListener('click', (e)=>{
             e.preventDefault(); addEditableRow(tbody, { item_name:'', category:'', quantity:0 }); persistEdits();
+          });
+          // Wire manual notify button (per recipient)
+          card.querySelector('.dr-notify')?.addEventListener('click', async (e)=>{
+            e.preventDefault();
+            const btn = e.currentTarget;
+            const rid = parseInt(btn.getAttribute('data-rec')||'0',10)||0;
+            if (!rid) return;
+            btn.disabled = true;
+            const origHtml = btn.innerHTML;
+            try {
+              btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Sending...';
+              const whenStr = (when instanceof Date) ? when.toLocaleString() : String(when||'now');
+              const ok = await createNotification(rid, `Test: Your allocation is ready (issued ${whenStr}).`, 'allocation_ready');
+              btn.classList.toggle('btn-outline-success', !!ok);
+              btn.classList.toggle('btn-outline-danger', !ok);
+              btn.innerHTML = ok ? '<i class="bi bi-check2"></i> Sent' : '<i class="bi bi-x"></i> Failed';
+            } catch(_) {
+              btn.classList.remove('btn-outline-warning');
+              btn.classList.add('btn-outline-danger');
+              btn.innerHTML = '<i class="bi bi-x"></i> Failed';
+            } finally {
+              // Re-enable after a short delay for re-test convenience
+              setTimeout(()=>{ btn.disabled = false; btn.className = 'btn btn-sm btn-outline-warning dr-notify'; btn.innerHTML = origHtml; }, 2000);
+            }
           });
           fragment.appendChild(card);
         });
