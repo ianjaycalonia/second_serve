@@ -284,73 +284,7 @@
       </div>
     </div>
 
-    <!-- Messages Modal -->
-    <div
-      class="modal fade"
-      id="messagesModal"
-      tabindex="-1"
-      aria-labelledby="messagesModalLabel"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog modal-dialog-scrollable modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div class="d-flex" style="min-height: 300px">
-              <div class="border-end pe-3 me-3" style="width: 220px">
-                <input
-                  class="form-control form-control-sm mb-2"
-                  placeholder="Search conversations"
-                />
-                <div class="list-group small">
-                  <a
-                    href="#"
-                    class="list-group-item list-group-item-action active"
-                    >Cebu Food Bank</a
-                  >
-                  <a href="#" class="list-group-item list-group-item-action"
-                    >Helping Hands</a
-                  >
-                </div>
-              </div>
-              <div class="flex-grow-1 d-flex flex-column">
-                <div class="flex-grow-1 overflow-auto mb-2">
-                  <div class="text-muted small mb-2">Today</div>
-                  <div class="d-flex mb-2">
-                    <div class="p-2 rounded bg-light">
-                      Hello! Thanks for your donation.
-                    </div>
-                  </div>
-                  <div class="d-flex justify-content-end mb-2">
-                    <div class="p-2 rounded bg-warning-subtle">
-                      You're welcome! Happy to help.
-                    </div>
-                  </div>
-                </div>
-                <div class="input-group">
-                  <input
-                    type="text"
-                    class="form-control"
-                    placeholder="Type a message..."
-                  />
-                  <button class="btn btn-warning" type="button">
-                    <i class="bi bi-send"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Messages Modal is injected by scripts/js/messages.js on demand -->
 
     <!-- Donation Modal -->
     <div
@@ -492,6 +426,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="scripts/js/auth.js"></script>
+    <script src="scripts/js/messages.js"></script>
     <script src="scripts/js/notifications.js"></script>
     <script src="scripts/js/donorDashboard.js"></script>
     <script src="scripts/js/sidebar.js"></script>

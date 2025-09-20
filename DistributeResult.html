@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -63,7 +64,6 @@
           <a class="btn btn-sm btn-outline-secondary" href="DistributeItems.html"><i class="bi bi-arrow-left"></i> Back</a>
           <button class="btn btn-sm btn-outline-danger" id="clearLocalBtn"><i class="bi bi-trash"></i> Delete Local Data</button>
           <button class="btn btn-sm btn-warning" id="notifyAllBtn"><i class="bi bi-megaphone"></i> Notify All</button>
-          <button class="btn btn-sm btn-success d-none" id="finalizeBtn"><i class="bi bi-check2-square"></i> Finalize &amp; Deduct</button>
         </div>
       </div>
 
@@ -115,46 +115,16 @@
       </div>
     </div>
 
-    <!-- Messages Modal -->
-    <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-scrollable modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="d-flex" style="min-height: 300px">
-              <div class="border-end pe-3 me-3" style="width: 220px">
-                <input class="form-control form-control-sm mb-2" placeholder="Search conversations" />
-                <div class="list-group small">
-                  <a href="#" class="list-group-item list-group-item-action active">All Users</a>
-                  <a href="#" class="list-group-item list-group-item-action">Donors</a>
-                  <a href="#" class="list-group-item list-group-item-action">Recipients</a>
-                </div>
-              </div>
-              <div class="flex-grow-1 d-flex flex-column">
-                <div class="flex-grow-1 overflow-auto mb-2">
-                  <div class="text-muted small mb-2">Today</div>
-                  <div class="d-flex mb-2"><div class="p-2 rounded bg-light">Welcome to admin messaging!</div></div>
-                </div>
-                <div class="input-group">
-                  <input type="text" class="form-control" placeholder="Type a message..." />
-                  <button class="btn btn-warning" type="button"><i class="bi bi-send"></i></button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Messages Modal is injected by scripts/js/messages.js on demand -->
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
     <script src="scripts/js/auth.js"></script>
+    <script src="scripts/js/messages.js"></script>
     <script src="scripts/js/notifications.js"></script>
     <script src="scripts/js/adminDashboard.js"></script>
     <script src="scripts/js/sidebar.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
       (async function(){
         function showMsg(el, msg, type){ if (!el) return; try { el.innerHTML = msg ? `<div class="alert alert-${type} py-2 mb-0">${msg}</div>` : ''; } catch(_){} }
@@ -162,6 +132,100 @@
         const summary = document.getElementById('resultSummary');
         const feedback = document.getElementById('resultFeedback');
         const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+        // Simple debounce helper for saving
+        const debounce = (fn, ms=400) => { let t=null; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; };
+        // Load inventory summary to feed Select2 options (categories and items)
+        async function loadInventorySummary(){
+          try{
+            const url = `${API_BASE_URL}/inventory/index.php/list?group=merge&limit=500&t=${Date.now()}`;
+            const res = await fetch(url, { credentials:'include', headers:{ 'Accept':'application/json' } });
+            const j = await res.json().catch(()=>null);
+            const arr = (j && j.success && Array.isArray(j.data?.items)) ? j.data.items : [];
+            const categories = new Set();
+            const itemsByCat = new Map();
+            for (const it of arr){
+              const name = (it.item_name ?? it.product_name ?? it.name ?? '').toString();
+              const cat = (it.category ?? it.product_category ?? it.type ?? '').toString();
+              if (cat) categories.add(cat);
+              if (!itemsByCat.has(cat)) itemsByCat.set(cat, new Set());
+              if (name) itemsByCat.get(cat).add(name);
+            }
+            return { categories, itemsByCat };
+          } catch(_){ return { categories: new Set(), itemsByCat: new Map() }; }
+        }
+        const invMeta = await loadInventorySummary();
+        function select2DataFromSet(set){ return Array.from(set||[]).sort((a,b)=>a.localeCompare(b)).map(v=>({ id:v, text:v })); }
+        function ensureOption(selectEl, value){ if (!selectEl) return; if (!value) return; const exists = Array.from(selectEl.options).some(o => o.value === value); if (!exists){ const opt=document.createElement('option'); opt.value=value; opt.textContent=value; selectEl.appendChild(opt); }
+        }
+        // Persist edited allocation back to storage
+        const persistEdits = debounce(() => {
+          try{
+            const newDone = [];
+            // For each recipient section, collect rows
+            document.querySelectorAll('tbody.dr-recipient[data-rec]')?.forEach(tbody => {
+              const rid = parseInt(tbody.getAttribute('data-rec')||'0',10)||0;
+              tbody.querySelectorAll('tr')?.forEach(tr => {
+                const name = tr.querySelector('.dr-name')?.value?.trim() || '';
+                const cat = tr.querySelector('.dr-cat')?.value?.trim() || '';
+                const qty = Math.max(0, parseInt(tr.querySelector('.dr-qty')?.value||'0',10)||0);
+                if (!rid || !name || qty<=0) return;
+                newDone.push({ recipient_id: rid, item_name: name, category: cat, quantity: qty });
+              });
+            });
+            // Read existing record to retain meta fields
+            let raw = sessionStorage.getItem('lastAllocation') || localStorage.getItem('lastAllocation');
+            let data = {};
+            try{ data = JSON.parse(raw||'{}'); }catch(_){ data = {}; }
+            const copy = { ...(data||{}), done: newDone };
+            const payload = JSON.stringify(copy);
+            sessionStorage.setItem('lastAllocation', payload);
+            try { localStorage.setItem('lastAllocation', payload); } catch(_){ }
+          } catch(err){ showMsg(feedback, 'Failed to save edits locally', 'danger'); }
+        }, 500);
+        // Initialize Select2 on a row
+        function initRowSelect2(tr, init){
+          try{
+            const $cat = window.jQuery && window.jQuery(tr).find('select.dr-cat');
+            const $name = window.jQuery && window.jQuery(tr).find('select.dr-name');
+            if (!$cat || !$name || !$cat.select2 || !$name.select2) return;
+            const catData = select2DataFromSet(invMeta.categories);
+            $cat.select2({ width: '100%', data: catData, tags: true, placeholder: 'Category' });
+            // If initial category is not in the list, ensure it's available
+            if (init?.category){ ensureOption($cat[0], init.category); $cat.val(init.category).trigger('change'); }
+            const setForCat = invMeta.itemsByCat.get(init?.category||'') || new Set();
+            $name.select2({ width: '100%', data: select2DataFromSet(setForCat), tags: true, placeholder: 'Item name' });
+            if (init?.item_name){ ensureOption($name[0], init.item_name); $name.val(init.item_name).trigger('change'); }
+            // On category change, rebuild item options from that category set
+            $cat.on('change', function(){
+              const v = (this.value||'').toString();
+              const set = invMeta.itemsByCat.get(v) || new Set();
+              $name.empty();
+              const data = select2DataFromSet(set);
+              $name.select2({ width:'100%', data, tags: true, placeholder: 'Item name' });
+              persistEdits();
+            });
+            $name.on('change', persistEdits);
+          } catch(_){ /* ignore */ }
+        }
+        // Factory to add an editable row
+        function addEditableRow(tbody, init){
+          if (!tbody) return;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><select class="form-select form-select-sm dr-cat"></select></td>
+            <td><select class="form-select form-select-sm dr-name"></select></td>
+            <td style="width:120px"><input type="number" min="0" step="1" class="form-control form-control-sm dr-qty" value="${Number(init?.quantity||0)||0}" /></td>
+            <td style="width:40px"><button type="button" class="btn btn-sm btn-outline-danger dr-del" title="Remove"><i class="bi bi-x"></i></button></td>
+          `;
+          tbody.appendChild(tr);
+          // Initialize Select2 for this row
+          initRowSelect2(tr, init||{});
+          // Wire events
+          tr.querySelector('.dr-name')?.addEventListener('change', persistEdits);
+          tr.querySelector('.dr-cat')?.addEventListener('change', persistEdits);
+          tr.querySelector('.dr-qty')?.addEventListener('input', persistEdits);
+          tr.querySelector('.dr-del')?.addEventListener('click', ()=>{ tr.remove(); persistEdits(); });
+        }
         if (!container || !summary || !feedback){
           // Elements not present; nothing to render
           return;
@@ -325,24 +389,26 @@
           card.innerHTML = `
             <div class="d-flex align-items-center justify-content-between mb-1">
               <div class="fw-semibold">${name}</div>
+              <div><button type="button" class="btn btn-sm btn-outline-primary dr-add" data-rec="${rid}"><i class="bi bi-plus"></i> Add Item</button></div>
             </div>
             <div class="table-responsive">
               <table class="table table-sm table-striped align-middle mb-0">
                 <thead class="table-light">
                   <tr>
-                    <th style="width:45%">Item</th>
                     <th style="width:35%">Category</th>
-                    <th style="width:20%">Quantity</th>
+                    <th style="width:45%">Item</th>
+                    <th style="width:16%">Quantity</th>
+                    <th style="width:4%"></th>
                   </tr>
                 </thead>
-                <tbody></tbody>
+                <tbody class="dr-recipient" data-rec="${rid}"></tbody>
               </table>
             </div>`;
           const tbody = card.querySelector('tbody');
-          rows.forEach(r => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${r.item_name}</td><td>${r.category||''}</td><td>${r.quantity}</td>`;
-            tbody.appendChild(tr);
+          rows.forEach(r => addEditableRow(tbody, r));
+          // Wire add button
+          card.querySelector('.dr-add')?.addEventListener('click', (e)=>{
+            e.preventDefault(); addEditableRow(tbody, { item_name:'', category:'', quantity:0 }); persistEdits();
           });
           fragment.appendChild(card);
         });
@@ -353,11 +419,8 @@
           showMsg(feedback, 'Local allocation data cleared.', 'success');
         });
 
-        // If this is a plan-only result, surface finalize controls and hint
-        try{
-          const finalizeBtn = document.getElementById('finalizeBtn');
-          if (planOnly && finalizeBtn){ finalizeBtn.classList.remove('d-none'); }
-        } catch(_){ }
+        // Hint: this page is now the final editable review before notifying
+        try{ summary.textContent = 'Review and edit allocations below. Changes are saved locally until you notify recipients.'; } catch(_){ }
 
         // Notify All: send a notification to each recipient in this result set
         async function createNotification(recipientId, message, type){
@@ -373,8 +436,10 @@
         }
         document.getElementById('notifyAllBtn')?.addEventListener('click', async ()=>{
           try{
-            // derive recipient ids from the rendered data
-            const ids = Array.from(byRec.keys());
+            // Persist latest edits first
+            try { await persistEdits(); } catch(_){ }
+            // derive recipient ids from current DOM (post-edit)
+            const ids = Array.from(document.querySelectorAll('.dr-recipient[data-rec]')).map(tb => parseInt(tb.getAttribute('data-rec')||'0',10)).filter(n=>Number.isFinite(n)&&n>0);
             if (!ids.length){
               const mEl = document.getElementById('resultAlertModal');
               const bEl = document.getElementById('resultAlertBody');

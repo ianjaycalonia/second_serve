@@ -239,18 +239,38 @@
   }
 
   function addRecipientRowWithValues(recId, category, name, qty){
-    addRecipientRow(recId);
     const tbody = qs(`.di-rec-tbody[data-rec="${recId}"]`);
-    const last = tbody?.lastElementChild;
-    if (!last) return;
-    const catEl = qs('.di-cat', last);
-    const nameEl = qs('.di-name', last);
-    const qtyEl = qs('.di-alloc', last);
-    if (catEl) catEl.value = String(category||'');
-    if (nameEl) nameEl.value = String(name||'');
-    if (qtyEl) qtyEl.value = String(Math.max(0, parseInt(qty||'0',10)||0));
-    try{ recomputeAvailabilities(); } catch(_){}
-  }
+    if (!tbody) return;
+    const targetCat = String(category||'').trim().toLowerCase();
+    const targetName = String(name||'').trim().toLowerCase();
+    const addQty = Math.max(0, parseInt(qty||'0',10)||0);
+    // Try to find an existing row with same category + name (case-insensitive)
+    let merged = false;
+    qsa('tr', tbody).some(tr => {
+      const catVal = (qs('.di-cat', tr)?.value || '').trim().toLowerCase();
+      const nameVal = (qs('.di-name', tr)?.value || '').trim().toLowerCase();
+      if (catVal === targetCat && nameVal === targetName){
+        const qtyEl = qs('.di-alloc', tr);
+        const cur = Math.max(0, parseInt(qtyEl?.value || '0', 10) || 0);
+        if (qtyEl) qtyEl.value = String(cur + addQty);
+        merged = true;
+        return true; // stop iteration
+      }
+      return false;
+    });
+    if (!merged){
+      // Append a new row
+      addRecipientRow(recId);
+      const last = tbody?.lastElementChild;
+      if (!last) return;
+      const catEl = qs('.di-cat', last);
+      const nameEl = qs('.di-name', last);
+      const qtyEl = qs('.di-alloc', last);
+      if (catEl) catEl.value = String(category||'');
+      if (nameEl) nameEl.value = String(name||'');
+      if (qtyEl) qtyEl.value = String(addQty);
+    }
+    try{ recomputeAvailabilities(); } catch(_){}}
 
   function computePlannedTotals(){
     const totals = new Map();

@@ -49,31 +49,7 @@ CREATE TABLE `batches` (
   CONSTRAINT `batches_donor_fk` FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- conversations
-CREATE TABLE `conversations` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `type` enum('direct','group') NOT NULL,
-  `created_by` int(11) NOT NULL,
-  `title` varchar(255) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `conversations_created_by_idx` (`created_by`),
-  CONSTRAINT `conversations_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users`(`user_id`) ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- conversation_participants
-CREATE TABLE `conversation_participants` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `conversation_id` int(11) NOT NULL,
-  `user_id` int(11) NOT NULL,
-  `last_read_at` timestamp NULL DEFAULT NULL,
-  `joined_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_conversation_user` (`conversation_id`,`user_id`),
-  KEY `conversation_participants_user_idx` (`user_id`),
-  CONSTRAINT `cp_conversation_fk` FOREIGN KEY (`conversation_id`) REFERENCES `conversations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `cp_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- (Legacy messaging schema removed: conversations, conversation_participants)
 
 -- recipient_plans (weekly planning; normalized order and source)
 CREATE TABLE `recipient_plans` (
@@ -251,7 +227,7 @@ INSERT INTO `inventory`
 VALUES
   (NULL, NULL, 'Infant Formula',      'Dairy',        'infant',   30,  NULL, NULL, NULL, '2025-11-17', NULL, NULL, NULL, NULL, NOW()),
   (NULL, NULL, 'Elderly Milk',         'Dairy',        'elderly',  50,  NULL, NULL, NULL, '2025-12-17', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Rice',                 'Grains',       '',            100,  NULL, NULL, NULL, '2026-03-17', NULL, NULL, NULL, NULL, NOW()),
+  (NULL, NULL, 'Rice',                 'Grains/Grain Products',       '',            100,  NULL, NULL, NULL, '2026-03-17', NULL, NULL, NULL, NULL, NOW()),
   (NULL, NULL, 'Canned Sardines',      'Canned Goods', '',           200,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
   (NULL, NULL, 'Instant Noodles',      'Dry Goods',    '',         300,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
   (NULL, NULL, 'Paracetamol 500mg',    'Medicine',     'medicine',100,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
@@ -277,34 +253,18 @@ CREATE TABLE `inventory_movements` (
   CONSTRAINT `im_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- messages
+-- Minimal messages table (direct messages only) with role-based trigger
 CREATE TABLE `messages` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `conversation_id` int(11) NOT NULL,
-  `sender_id` int(11) NOT NULL,
-  `body` text NOT NULL,
-  `attachment_url` varchar(255) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `deleted_at` timestamp NULL DEFAULT NULL,
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `sender_id` INT NOT NULL,
+  `receiver_id` INT NOT NULL,
+  `content` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `messages_conversation_idx` (`conversation_id`),
-  KEY `messages_sender_idx` (`sender_id`),
-  CONSTRAINT `messages_conversation_fk` FOREIGN KEY (`conversation_id`) REFERENCES `conversations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `messages_sender_fk` FOREIGN KEY (`sender_id`) REFERENCES `users`(`user_id`) ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
-
--- message_reads
-CREATE TABLE `message_reads` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `message_id` int(11) NOT NULL,
-  `user_id` int(11) NOT NULL,
-  `read_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_message_user` (`message_id`,`user_id`),
-  KEY `message_reads_user_idx` (`user_id`),
-  CONSTRAINT `message_reads_message_fk` FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `message_reads_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+  KEY `messages_sender_receiver_idx` (`sender_id`, `receiver_id`),
+  CONSTRAINT `messages_sender_fk` FOREIGN KEY (`sender_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `messages_receiver_fk` FOREIGN KEY (`receiver_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- notifications
 CREATE TABLE `notifications` (
@@ -361,7 +321,15 @@ CREATE TABLE `recipient_profiles` (
 
 INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
 (1, 'Ian Jay Calonia', 'admin@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
-(2, 'Jay Piañar', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW());
+(2, 'Jay Piañar', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW()),
+
+
+-- Sample valid/invalid message inserts for the minimal messages schema
+-- Valid: donor -> admin
+INSERT INTO `messages` (`sender_id`, `receiver_id`, `content`) VALUES (2, 1, 'Hello Admin, I would like to coordinate a donation.');
+
+-- Invalid (blocked by trigger): donor -> recipient
+-- INSERT INTO `messages` (`sender_id`, `receiver_id`, `content`) VALUES (2, 3, 'This should be blocked by trigger');
 
 INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, `address`) VALUES
 (1, 'Simply Share', '09910071270', 'Subangdaku, Mandaue City');
