@@ -1,17 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Inventory</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet"/>
-  <!-- Use the shared admin layout styling for consistent logo/sidebar UI -->
-  <link rel="stylesheet" href="scripts/css/dashboardLayout.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body class="sidebar-collapsed">
-<nav>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventory</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <!-- Use the shared admin layout styling for consistent logo/sidebar UI -->
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body class="sidebar-collapsed">
+    <nav>
       <div class="nav-items">
         <div class="toggle">
           <button id="sidebarToggle" class="btn">
@@ -35,7 +41,11 @@
             aria-label="Open notifications"
           >
             <i class="bi bi-bell-fill fs-5"></i>
-            <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: .6rem;"></span>
+            <span
+              id="notificationsBadge"
+              class="position-absolute translate-middle badge rounded-pill bg-danger"
+              style="top: 6px; right: 2px; display: none; font-size: 0.6rem"
+            ></span>
           </a>
           <a
             class="nav-link me-3"
@@ -80,35 +90,45 @@
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
     <aside class="collapsed">
-      <a href="AdminDashboard.html" class="nav-link"
+      <a
+        href="AdminDashboard.html"
+        class="nav-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Dashboard"
         ><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a
       >
-      <a href="Donation.html" class="nav-link"
+      <a
+        href="Donation.html"
+        class="nav-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Donations"
         ><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a
       >
-      <a href="Donors.html" class="nav-link"
+      <a
+        href="Donors.html"
+        class="nav-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Donors"
         ><i class="bi bi-person-fill me-2"></i><span>Donors</span></a
       >
-      <a href="Recipient.html" class="nav-link"
+      <a
+        href="Recipient.html"
+        class="nav-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Recipients"
         ><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a
       >
-      <a href="ReportAndAnalytics.html" class="nav-link"
+      <a
+        href="ReportAndAnalytics.html"
+        class="nav-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
@@ -117,7 +137,9 @@
         ><span>Reports & Analytics</span></a
       >
       <!-- Inventory link for this page -->
-      <a href="Inventory.html" class="nav-link active"
+      <a
+        href="Inventory.html"
+        class="nav-link active"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
@@ -126,194 +148,341 @@
       >
     </aside>
 
-  <main>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4>Inventory</h4>
-    </div>
-    <div class="d-flex flex-wrap gap-3 mb-3 p-2 rounded" style="background-color: #00a0b0;">
-      <div class="fw-bold align-self-center">Inventory</div>
-      <div class="dropdown d-lg-none ms-auto">
-        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="filtersDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false">
-          Filters
-        </button>
-        <ul class="dropdown-menu p-3" aria-labelledby="filtersDropdownBtn" style="min-width: 250px;">
-          <li class="mb-2">
-            <label class="form-label mb-1" for="categorySelectMobile">Category:</label>
-            <select id="categorySelectMobile" class="form-select form-select-sm">
-              <option>All</option>
-              <option>Food</option>
-              <option>Non-Food</option>
-            </select>
+    <main>
+      <div
+        class="d-flex justify-content-between align-items-center mb-3"
+        aria-label="breadcrumb"
+      >
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="AdminDashboard.html">Dashboard</a>
           </li>
-          <li>
-            <label class="form-label mb-1" for="dateSelectMobile">Date:</label>
-            <select id="dateSelectMobile" class="form-select form-select-sm">
-              <option>All</option>
-              <option>Today</option>
-              <option>This Week</option>
-              <option>This Month</option>
-            </select>
-          </li>
-          <li><hr class="dropdown-divider"></li>
-          <li>
-            <button type="button" class="btn btn-sm btn-secondary w-100" data-bs-toggle="modal" data-bs-target="#importInventoryModal">
-              <i class="bi bi-file-earmark-arrow-up"></i> Import
+          <li class="breadcrumb-item active" aria-current="page">Inventory</li>
+        </ol>
+      </div>
+
+      <div class="card card-accent p-3">
+        <div
+          class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2"
+        >
+          <div class="fw-bold align-self-center">Inventory Log</div>
+          <div class="dropdown d-lg-none ms-auto">
+            <button
+              class="btn btn-sm btn-outline-secondary dropdown-toggle"
+              type="button"
+              id="filtersDropdownBtn"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              Filters
             </button>
-          </li>
-        </ul>
-      </div>
-      <div class="d-none d-lg-flex flex-wrap gap-3 ms-auto">
-        <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px;">
-          <label class="form-label mb-0" for="categorySelectDesktop">Category:</label>
-          <select id="categorySelectDesktop" class="form-select form-select-sm">
-            <option>All</option>
-            <option>Food</option>
-            <option>Non-Food</option>
-          </select>
-        </div>
-        <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px;">
-          <label class="form-label mb-0" for="dateSelectDesktop">Date:</label>
-          <select id="dateSelectDesktop" class="form-select form-select-sm">
-            <option>All</option>
-            <option>Today</option>
-            <option>This Week</option>
-            <option>This Month</option>
-          </select>
-        </div>
-        <div class="ms-2">
-          <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#importInventoryModal">
-            <i class="bi bi-file-earmark-arrow-up"></i> Import
-          </button>
-        </div>
-      </div>
-  </div>
-  <!-- Inventory Table -->
-  <div class="table-responsive">
-    <table class="table table-bordered table-striped align-middle">
-      <thead class="table-light">
-        <tr>
-          <th>Item</th>
-          <th>Category</th>
-          <th>Quantity</th>
-          <th>Soonest to Expire</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-      </tbody>
-    </table>
-  </div>
-  <div id="inventoryPagination" class="d-flex justify-content-center align-items-center gap-2 my-2"></div>
-  <!-- Close .main container -->
-</main>
-
-  <!-- Import Inventory Modal -->
-  <div class="modal fade" id="importInventoryModal" tabindex="-1" aria-labelledby="importInventoryModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="importInventoryModalLabel">Import Inventory (CSV Preview)</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="alert alert-info small" role="alert">
-            Supported: CSV and XLSX files. Expected columns (flexible, order-insensitive): item_name, category, quantity, expiry_date.
+            <ul
+              class="dropdown-menu p-3"
+              aria-labelledby="filtersDropdownBtn"
+              style="min-width: 250px"
+            >
+              <li class="mb-2">
+                <label class="form-label mb-1" for="categorySelectMobile"
+                  >Category:</label
+                >
+                <select
+                  id="categorySelectMobile"
+                  class="form-select form-select-sm"
+                >
+                  <option>All</option>
+                  <option>Food</option>
+                  <option>Non-Food</option>
+                </select>
+              </li>
+              <li>
+                <label class="form-label mb-1" for="dateSelectMobile"
+                  >Date:</label
+                >
+                <select
+                  id="dateSelectMobile"
+                  class="form-select form-select-sm"
+                >
+                  <option>All</option>
+                  <option>Today</option>
+                  <option>This Week</option>
+                  <option>This Month</option>
+                </select>
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-secondary w-100"
+                  data-bs-toggle="modal"
+                  data-bs-target="#importInventoryModal"
+                >
+                  <i class="bi bi-file-earmark-arrow-up"></i> Import
+                </button>
+              </li>
+            </ul>
           </div>
-          <div class="mb-3">
-            <label for="importFileInput" class="form-label">Choose CSV or XLSX file</label>
-            <input class="form-control" type="file" id="importFileInput" accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx">
-          </div>
-          <div id="importParseStatus" class="small text-muted mb-2"></div>
-          <div class="table-responsive" style="max-height: 300px;">
-            <table class="table table-sm table-bordered align-middle">
-              <thead class="table-light" id="importPreviewHead"></thead>
-              <tbody id="importPreviewBody"><tr><td class="text-center text-muted">No file loaded.</td></tr></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="button" id="importInventorySubmitBtn" class="btn btn-warning" disabled>Import Previewed Rows</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Notifications Modal -->
-  <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body p-0">
-          <ul id="notificationsList" class="list-group list-group-flush">
-            <!-- Notifications will be inserted here by notifications.js -->
-            <li class="list-group-item text-center text-muted py-4">
-              <div class="spinner-border spinner-border-sm" role="status">
-                <span class="visually-hidden">Loading...</span>
-              </div>
-              <span class="ms-2">Loading notifications...</span>
-            </li>
-          </ul>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">
-            Mark all as read
-          </button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Messages Modal -->
-  <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="d-flex" style="min-height: 300px;">
-            <div class="border-end pe-3 me-3" style="width: 220px;">
-              <input class="form-control form-control-sm mb-2" placeholder="Search conversations">
-              <div class="list-group small">
-                <a href="#" class="list-group-item list-group-item-action active">All Users</a>
-                <a href="#" class="list-group-item list-group-item-action">Donors</a>
-                <a href="#" class="list-group-item list-group-item-action">Recipients</a>
-              </div>
+          <div class="d-none d-lg-flex flex-wrap gap-3 ms-auto">
+            <div
+              class="d-flex align-items-center gap-2 flex-shrink-1"
+              style="min-width: 120px"
+            >
+              <label class="form-label mb-0" for="categorySelectDesktop"
+                >Category:</label
+              >
+              <select
+                id="categorySelectDesktop"
+                class="form-select form-select-sm"
+              >
+                <option>All</option>
+                <option>Food</option>
+                <option>Non-Food</option>
+              </select>
             </div>
-            <div class="flex-grow-1 d-flex flex-column">
-              <div class="flex-grow-1 overflow-auto mb-2">
-                <div class="text-muted small mb-2">Today</div>
-                <div class="d-flex mb-2">
-                  <div class="p-2 rounded bg-light">Welcome to admin messaging!</div>
+            <div
+              class="d-flex align-items-center gap-2 flex-shrink-1"
+              style="min-width: 120px"
+            >
+              <label class="form-label mb-0" for="dateSelectDesktop"
+                >Date:</label
+              >
+              <select id="dateSelectDesktop" class="form-select form-select-sm">
+                <option>All</option>
+                <option>Today</option>
+                <option>This Week</option>
+                <option>This Month</option>
+              </select>
+            </div>
+            <div class="ms-2">
+              <button
+                type="button"
+                class="btn btn-sm btn-secondary"
+                data-bs-toggle="modal"
+                data-bs-target="#importInventoryModal"
+              >
+                <i class="bi bi-file-earmark-arrow-up"></i> Import
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-striped align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Item</th>
+                <th>Category</th>
+                <th>Quantity</th>
+                <th>Soonest to Expire</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div
+          id="inventoryPagination"
+          class="d-flex justify-content-center align-items-center gap-2"
+        ></div>
+      </div>
+
+      <!-- Close .main container -->
+    </main>
+
+    <!-- Import Inventory Modal -->
+    <div
+      class="modal fade"
+      id="importInventoryModal"
+      tabindex="-1"
+      aria-labelledby="importInventoryModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importInventoryModalLabel">
+              Import Inventory (CSV Preview)
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="alert alert-info small" role="alert">
+              Supported: CSV and XLSX files. Expected columns (flexible,
+              order-insensitive): item_name, category, quantity, expiry_date.
+            </div>
+            <div class="mb-3">
+              <label for="importFileInput" class="form-label"
+                >Choose CSV or XLSX file</label
+              >
+              <input
+                class="form-control"
+                type="file"
+                id="importFileInput"
+                accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
+              />
+            </div>
+            <div id="importParseStatus" class="small text-muted mb-2"></div>
+            <div class="table-responsive" style="max-height: 300px">
+              <table class="table table-sm table-bordered align-middle">
+                <thead class="table-light" id="importPreviewHead"></thead>
+                <tbody id="importPreviewBody">
+                  <tr>
+                    <td class="text-center text-muted">No file loaded.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              id="importInventorySubmitBtn"
+              class="btn btn-warning"
+              disabled
+            >
+              Import Previewed Rows
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notifications Modal -->
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body p-0">
+            <ul id="notificationsList" class="list-group list-group-flush">
+              <!-- Notifications will be inserted here by notifications.js -->
+              <li class="list-group-item text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading notifications...</span>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              id="markAllReadBtn"
+            >
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Messages Modal -->
+    <div
+      class="modal fade"
+      id="messagesModal"
+      tabindex="-1"
+      aria-labelledby="messagesModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex" style="min-height: 300px">
+              <div class="border-end pe-3 me-3" style="width: 220px">
+                <input
+                  class="form-control form-control-sm mb-2"
+                  placeholder="Search conversations"
+                />
+                <div class="list-group small">
+                  <a
+                    href="#"
+                    class="list-group-item list-group-item-action active"
+                    >All Users</a
+                  >
+                  <a href="#" class="list-group-item list-group-item-action"
+                    >Donors</a
+                  >
+                  <a href="#" class="list-group-item list-group-item-action"
+                    >Recipients</a
+                  >
                 </div>
               </div>
-              <div class="input-group">
-                <input type="text" class="form-control" placeholder="Type a message...">
-                <button class="btn btn-warning" type="button"><i class="bi bi-send"></i></button>
+              <div class="flex-grow-1 d-flex flex-column">
+                <div class="flex-grow-1 overflow-auto mb-2">
+                  <div class="text-muted small mb-2">Today</div>
+                  <div class="d-flex mb-2">
+                    <div class="p-2 rounded bg-light">
+                      Welcome to admin messaging!
+                    </div>
+                  </div>
+                </div>
+                <div class="input-group">
+                  <input
+                    type="text"
+                    class="form-control"
+                    placeholder="Type a message..."
+                  />
+                  <button class="btn btn-warning" type="button">
+                    <i class="bi bi-send"></i>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="scripts/js/auth.js"></script>
-  <script src="scripts/js/notifications.js"></script>
-  <script src="scripts/js/sidebar.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="scripts/js/adminInventory.js"></script>
-  <!-- Exclude donation-specific scripts to avoid unintended behavior on inventory page -->
-</body>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="scripts/js/auth.js"></script>
+    <script src="scripts/js/notifications.js"></script>
+    <script src="scripts/js/sidebar.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="scripts/js/adminInventory.js"></script>
+    <!-- Exclude donation-specific scripts to avoid unintended behavior on inventory page -->
+  </body>
 </html>

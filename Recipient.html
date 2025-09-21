@@ -151,68 +151,91 @@
         </ol>
       </div>
 
-      <div
-        class="d-flex flex-wrap gap-3 mb-3 p-2 rounded"
-        style="background-color: #00a0b0"
-      >
-        <div class="fw-bold align-self-center">Recipients Log</div>
-        <div class="dropdown d-lg-none ms-auto">
-          <button
-            class="btn btn-sm btn-outline-secondary dropdown-toggle"
-            type="button"
-            id="filtersDropdownBtn"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
-          >
-            Filters
-          </button>
-          <ul
-            class="dropdown-menu p-3"
-            aria-labelledby="filtersDropdownBtn"
-            style="min-width: 250px"
-          >
-            <li class="mb-2">
-              <label class="form-label mb-1" for="donorSelectMobile"
-                >Status:</label
+      <div class="card card-accent p-4">
+        <div
+          class="d-flex justify-content-between align-items-center mb-xl-3 mb-3"
+        >
+          <h6>Donors Log</h6>
+          <div class="d-flex gap-2">
+            <div class="dropdown d-lg-none ms-auto">
+              <button
+                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                type="button"
+                id="filtersDropdownBtn"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
               >
-              <select id="donorSelectMobile" class="form-select form-select-sm">
-                <option>None</option>
-                <option>...</option>
-                <option>...</option>
-              </select>
-            </li>
-            <li class="mb-2">
-              <label class="form-label mb-1" for="statusSelectMobile"
-                >Organization Type:</label
+                Filters
+              </button>
+              <ul
+                class="dropdown-menu p-3"
+                aria-labelledby="filtersDropdownBtn"
+                style="min-width: 250px"
               >
-              <select
-                id="statusSelectMobile"
-                class="form-select form-select-sm"
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="donorSelectMobile"
+                    >Status:</label
+                  >
+                  <select
+                    id="donorSelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>None</option>
+                    <option>...</option>
+                    <option>...</option>
+                  </select>
+                </li>
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="statusSelectMobile"
+                    >Organization Type:</label
+                  >
+                  <select
+                    id="statusSelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>...</option>
+                    <option>...</option>
+                  </select>
+                </li>
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="categorySelectMobile"
+                    >Region/City:</label
+                  >
+                  <select
+                    id="categorySelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>Other</option>
+                    <option>VI</option>
+                    <option>VII</option>
+                  </select>
+                </li>
+              </ul>
+            </div>
+
+            <div class="d-flex align-items-center">
+              <button
+                id="importRecipientsBtn"
+                class="btn btn-sm btn-light"
+                type="button"
+                title="Import recipients from Excel"
               >
-                <option>...</option>
-                <option>...</option>
-              </select>
-            </li>
-            <li class="mb-2">
-              <label class="form-label mb-1" for="categorySelectMobile"
-                >Region/City:</label
-              >
-              <select
-                id="categorySelectMobile"
-                class="form-select form-select-sm"
-              >
-                <option>Other</option>
-                <option>VI</option>
-                <option>VII</option>
-              </select>
-            </li>
-          </ul>
+                <i class="bi bi-file-earmark-arrow-up me-1"></i> Import
+              </button>
+            </div>
+          </div>
+
+          <input
+            id="importRecipientsInput"
+            type="file"
+            accept=".xlsx,.xls"
+            hidden
+          />
         </div>
-        <!-- Mobile: Import Button -->
-        <button id="importRecipientsBtnMobile" class="btn btn-sm btn-light d-lg-none" type="button" title="Import recipients from Excel">
-          <i class="bi bi-file-earmark-arrow-up me-1"></i> Import
-        </button>
-        <div class="d-none d-lg-flex flex-wrap gap-3 ms-auto">
+
+        <div
+          class="d-none d-lg-flex justify-content-start mb-lg-3 mb-md-0 flex-wrap gap-2"
+        >
           <div
             class="d-flex align-items-center gap-2 flex-shrink-1"
             style="min-width: 120px"
@@ -263,34 +286,26 @@
               <option>VII</option>
             </select>
           </div>
-          <!-- Desktop: Import Button -->
-          <div class="d-flex align-items-center">
-            <button id="importRecipientsBtn" class="btn btn-sm btn-light" type="button" title="Import recipients from Excel">
-              <i class="bi bi-file-earmark-arrow-up me-1"></i> Import
-            </button>
-          </div>
         </div>
-        <!-- Hidden file input shared by both buttons -->
-        <input id="importRecipientsInput" type="file" accept=".xlsx,.xls" hidden />
-      </div>
-      <!-- Recipients Table (mirrors Import Preview columns) -->
-      <div class="table-responsive">
-        <table class="table table-bordered table-striped table-sm align-middle stacked-table">
-          <thead class="table-light">
-            <tr>
-              <th>Name of Beneficiary</th>
-              <th class="d-none d-sm-table-cell">Type</th>
-              <th class="d-none d-sm-table-cell">Address</th>
-              <th>Contact Person</th>
-              <th class="d-none d-md-table-cell">Position/Designation</th>
-              <th class="d-none d-md-table-cell">Contact#</th>
-              <th class="d-none d-lg-table-cell">Email Address</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+
+        <div class="table-responsive">
+          <table class="table table-borderless table-sm table-striped">
+            <thead class="table-light">
+              <tr>
+                <th>Name of Beneficiary</th>
+                <th class="d-none d-sm-table-cell">Type</th>
+                <th class="d-none d-sm-table-cell">Address</th>
+                <th>Contact Person</th>
+                <th class="d-none d-md-table-cell">Position/Designation</th>
+                <th class="d-none d-md-table-cell">Contact#</th>
+                <th class="d-none d-lg-table-cell">Email Address</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </main>
 
@@ -423,22 +438,45 @@
       /* Stacked table layout for very small screens */
       @media (max-width: 575.98px) {
         /* Hide sidebar and free content width on mobile */
-        aside { display: none !important; }
-        main { margin-left: 0 !important; padding: .75rem !important; }
+        aside {
+          display: none !important;
+        }
+        main {
+          margin-left: 0 !important;
+          padding: 0.75rem !important;
+        }
 
         /* Nav compaction */
-        nav .nav-items { flex-wrap: wrap; gap: .25rem .5rem; }
-        nav .nav-icons { gap: .25rem; }
-        nav .nav-icons .nav-link { padding: .25rem; }
-        nav .toggle .logo { height: 28px; }
-        nav .toggle .btn { padding: .25rem .4rem; }
+        nav .nav-items {
+          flex-wrap: wrap;
+          gap: 0.25rem 0.5rem;
+        }
+        nav .nav-icons {
+          gap: 0.25rem;
+        }
+        nav .nav-icons .nav-link {
+          padding: 0.25rem;
+        }
+        nav .toggle .logo {
+          height: 28px;
+        }
+        nav .toggle .btn {
+          padding: 0.25rem 0.4rem;
+        }
 
         /* Header bar readability */
-        .fw-bold.align-self-center { color: #fff; }
-        #filtersDropdownBtn { color: #fff; border-color: rgba(255,255,255,.6); }
+        .fw-bold.align-self-center {
+          color: #fff;
+        }
+        #filtersDropdownBtn {
+          color: #fff;
+          border-color: rgba(255, 255, 255, 0.6);
+        }
 
         /* Mobile import button spans full width */
-        #importRecipientsBtnMobile { width: 100%; }
+        #importRecipientsBtnMobile {
+          width: 100%;
+        }
 
         table.stacked-table thead {
           display: none;
@@ -446,18 +484,18 @@
         table.stacked-table tbody tr {
           display: block;
           border: 1px solid #dee2e6;
-          border-radius: .25rem;
-          margin-bottom: .5rem;
-          padding: .5rem;
+          border-radius: 0.25rem;
+          margin-bottom: 0.5rem;
+          padding: 0.5rem;
         }
         table.stacked-table tbody tr td {
           /* Use grid so label and value align cleanly */
           display: grid;
           grid-template-columns: 140px 1fr; /* label fixed, value flexible */
-          column-gap: .5rem;
+          column-gap: 0.5rem;
           align-items: start;
           border: 0 !important;
-          padding: .375rem 0 !important;
+          padding: 0.375rem 0 !important;
           overflow-wrap: anywhere;
           word-break: break-word;
         }
@@ -479,7 +517,7 @@
         table.stacked-table tbody tr td[data-label="Actions"] {
           flex-direction: column;
           align-items: flex-start;
-          gap: .25rem;
+          gap: 0.25rem;
         }
         table.stacked-table tbody tr td[data-label="Actions"] a {
           word-break: break-word;
@@ -487,74 +525,180 @@
       }
 
       /* Better wrapping for table cells on all sizes */
-      table.stacked-table td, table.stacked-table th { word-wrap: anywhere; }
-      .table-responsive { overflow-x: auto; }
+      table.stacked-table td,
+      table.stacked-table th {
+        word-wrap: anywhere;
+      }
+      .table-responsive {
+        overflow-x: auto;
+      }
     </style>
-    
+
     <!-- Import Result Modal -->
-    <div class="modal fade" id="importResultModal" tabindex="-1" aria-labelledby="importResultModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="importResultModal"
+      tabindex="-1"
+      aria-labelledby="importResultModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="importResultModalLabel">Import Result</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <h5 class="modal-title" id="importResultModalLabel">
+              Import Result
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
-          <div class="modal-body" id="importResultBody">
-          </div>
+          <div class="modal-body" id="importResultBody"></div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Import Options Modal (manual header row selection) -->
-    <div class="modal fade" id="importOptionsModal" tabindex="-1" aria-labelledby="importOptionsModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="importOptionsModal"
+      tabindex="-1"
+      aria-labelledby="importOptionsModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="importOptionsModalLabel">Import Options</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <h5 class="modal-title" id="importOptionsModalLabel">
+              Import Options
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body">
-            <div class="mb-2">We couldn't detect your header automatically. Specify the header row number (1-based, Excel row number). For example, if your first data is in A3, set header row to 2.</div>
-            <label for="headerRowInput" class="form-label">Header row (1-10)</label>
-            <input type="number" class="form-control" id="headerRowInput" value="2" min="1" max="50" />
+            <div class="mb-2">
+              We couldn't detect your header automatically. Specify the header
+              row number (1-based, Excel row number). For example, if your first
+              data is in A3, set header row to 2.
+            </div>
+            <label for="headerRowInput" class="form-label"
+              >Header row (1-10)</label
+            >
+            <input
+              type="number"
+              class="form-control"
+              id="headerRowInput"
+              value="2"
+              min="1"
+              max="50"
+            />
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary" id="applyHeaderRowBtn">Apply</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="applyHeaderRowBtn"
+            >
+              Apply
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Import Preview & Edit Modal -->
-    <div class="modal fade" id="importPreviewModal" tabindex="-1" aria-labelledby="importPreviewModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="importPreviewModal"
+      tabindex="-1"
+      aria-labelledby="importPreviewModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="importPreviewModalLabel">Preview & Edit Import</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <h5 class="modal-title" id="importPreviewModalLabel">
+              Preview & Edit Import
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body">
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="small text-muted">Edit cells before importing. Rows in red have validation issues.</div>
+              <div class="small text-muted">
+                Edit cells before importing. Rows in red have validation issues.
+              </div>
               <div class="btn-group btn-group-sm" role="group">
-                <button class="btn btn-outline-secondary" id="previewSelectAllBtn">Select All</button>
-                <button class="btn btn-outline-secondary" id="previewDeselectAllBtn">Deselect All</button>
-                <button class="btn btn-outline-secondary" id="previewValidateBtn">Validate</button>
+                <button
+                  class="btn btn-outline-secondary"
+                  id="previewSelectAllBtn"
+                >
+                  Select All
+                </button>
+                <button
+                  class="btn btn-outline-secondary"
+                  id="previewDeselectAllBtn"
+                >
+                  Deselect All
+                </button>
+                <button
+                  class="btn btn-outline-secondary"
+                  id="previewValidateBtn"
+                >
+                  Validate
+                </button>
                 <div class="form-check form-check-inline ms-2">
-                  <input class="form-check-input" type="checkbox" id="previewFillDownCheck" checked>
-                  <label class="form-check-label" for="previewFillDownCheck">Fill down blanks</label>
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="previewFillDownCheck"
+                    checked
+                  />
+                  <label class="form-check-label" for="previewFillDownCheck"
+                    >Fill down blanks</label
+                  >
                 </div>
               </div>
             </div>
-            <div class="table-responsive border rounded" style="max-height: 60vh;">
-              <table class="table table-sm table-hover align-middle mb-0" id="importPreviewTable">
+            <div
+              class="table-responsive border rounded"
+              style="max-height: 60vh"
+            >
+              <table
+                class="table table-sm table-hover align-middle mb-0"
+                id="importPreviewTable"
+              >
                 <thead class="table-light">
                   <tr>
-                    <th style="width:32px;"><input type="checkbox" id="previewMasterCheck"></th>
+                    <th style="width: 32px">
+                      <input type="checkbox" id="previewMasterCheck" />
+                    </th>
                     <th>Name of Beneficiary</th>
                     <th>Advocacy</th>
                     <th>Type</th>
@@ -571,8 +715,16 @@
           </div>
           <div class="modal-footer">
             <div class="me-auto small" id="previewStatus"></div>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary" id="previewImportBtn">Import Selected</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button type="button" class="btn btn-primary" id="previewImportBtn">
+              Import Selected
+            </button>
           </div>
         </div>
       </div>

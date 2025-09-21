@@ -152,68 +152,88 @@
         </ol>
       </div>
 
-      <div
-        class="d-flex flex-wrap gap-3 mb-3 p-2 rounded"
-        style="background-color: #00a0b0"
-      >
-        <div class="fw-bold align-self-center">Donor Log</div>
-        <div class="dropdown d-lg-none ms-auto">
-          <button
-            class="btn btn-sm btn-outline-secondary dropdown-toggle"
-            type="button"
-            id="filtersDropdownBtn"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
-          >
-            Filters
-          </button>
-          <ul
-            class="dropdown-menu p-3"
-            aria-labelledby="filtersDropdownBtn"
-            style="min-width: 250px"
-          >
-            <li class="mb-2">
-              <label class="form-label mb-1" for="donorSelectMobile"
-                >Status:</label
+      <div class="card card-accent p-4">
+        <div
+          class="d-flex justify-content-between align-items-center mb-xl-3 mb-3"
+        >
+          <h6>Donors Log</h6>
+          <div class="d-flex gap-2">
+            <div class="dropdown d-lg-none ms-auto">
+              <button
+                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                type="button"
+                id="filtersDropdownBtn"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
               >
-              <select id="donorSelectMobile" class="form-select form-select-sm">
-                <option>None</option>
-                <option>ABC Food</option>
-                <option>Zenith</option>
-              </select>
-            </li>
-            <li class="mb-2">
-              <label class="form-label mb-1" for="categorySelectMobile"
-                >Type:</label
+                Filters
+              </button>
+              <ul
+                class="dropdown-menu p-3"
+                aria-labelledby="filtersDropdownBtn"
+                style="min-width: 250px"
               >
-              <select
-                id="categorySelectMobile"
-                class="form-select form-select-sm"
-              >
-                <option>Other</option>
-                <option>Meals</option>
-                <option>Produce</option>
-              </select>
-            </li>
-            <li class="mb-2">
-              <label class="form-label mb-1" for="statusSelectMobile"
-                >Activity Level:</label
-              >
-              <select
-                id="statusSelectMobile"
-                class="form-select form-select-sm"
-              >
-                <option>Pending</option>
-                <option>Completed</option>
-              </select>
-            </li>
-          </ul>
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="donorSelectMobile"
+                    >Status:</label
+                  >
+                  <select
+                    id="donorSelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>None</option>
+                    <option>ABC Food</option>
+                    <option>Zenith</option>
+                  </select>
+                </li>
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="categorySelectMobile"
+                    >Type:</label
+                  >
+                  <select
+                    id="categorySelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>Other</option>
+                    <option>Meals</option>
+                    <option>Produce</option>
+                  </select>
+                </li>
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="statusSelectMobile"
+                    >Activity Level:</label
+                  >
+                  <select
+                    id="statusSelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>Pending</option>
+                    <option>Completed</option>
+                  </select>
+                </li>
+              </ul>
+            </div>
+
+            <button
+              id="importDonorsBtn"
+              class="btn btn-sm btn-light"
+              type="button"
+              title="Import donors from Excel"
+            >
+              <i class="bi bi-file-earmark-arrow-up me-1"></i> Import
+            </button>
+            <input
+              id="importDonorsInput"
+              type="file"
+              accept=".xlsx,.xls"
+              hidden
+            />
+          </div>
         </div>
-        <!-- Mobile: Import Button -->
-        <button id="importDonorsBtnMobile" class="btn btn-sm btn-light d-lg-none" type="button" title="Import donors from Excel">
-          <i class="bi bi-file-earmark-arrow-up me-1"></i> Import
-        </button>
-        <div class="d-none d-lg-flex flex-wrap gap-3 ms-auto">
+
+        <div
+          class="d-none d-lg-flex justify-content-start mb-lg-3 mb-md-0 flex-wrap gap-2"
+        >
           <div
             class="d-flex align-items-center gap-2 flex-shrink-1"
             style="min-width: 120px"
@@ -264,33 +284,24 @@
               <option>Completed</option>
             </select>
           </div>
-          <!-- Desktop: Import Button -->
-          <div class="d-flex align-items-center">
-            <button id="importDonorsBtn" class="btn btn-sm btn-light" type="button" title="Import donors from Excel">
-              <i class="bi bi-file-earmark-arrow-up me-1"></i> Import
-            </button>
-          </div>
         </div>
-        <!-- Hidden file input shared by both buttons -->
-        <input id="importDonorsInput" type="file" accept=".xlsx,.xls" hidden />
-      </div>
 
-      <!-- Donations Table -->
-      <div class="table-responsive">
-        <table class="table table-bordered table-striped align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>Donor Name</th>
-              <th>Contact Person</th>
-              <th>Location</th>
-              <th>Total Donation</th>
-              <th>Last Donation Date</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="table table-borderless table-sm table-striped">
+            <thead class="table-light">
+              <tr>
+                <th>Donor Name</th>
+                <th>Contact Person</th>
+                <th>Location</th>
+                <th>Total Donation</th>
+                <th>Last Donation Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </main>
 

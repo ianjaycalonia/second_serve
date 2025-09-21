@@ -4,16 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Donations</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
       /* Standardize status badge width for alignment */
-      td.status-col .badge { display: inline-block; min-width: 110px; }
+      td.status-col .badge {
+        display: inline-block;
+        min-width: 110px;
+      }
       /* Keep a smooth transition on edit buttons; rely on Bootstrap's outline->solid hover */
-      .btn.edit-donation, .btn.edit-batch { transition: background-color .15s ease-in-out, color .15s ease-in-out, box-shadow .15s ease-in-out; }
+      .btn.edit-donation,
+      .btn.edit-batch {
+        transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out,
+          box-shadow 0.15s ease-in-out;
+      }
     </style>
   </head>
   <body class="sidebar-collapsed">
@@ -23,28 +39,66 @@
           <button id="sidebarToggle" class="btn">
             <i class="bi bi-list fs-4"></i>
           </button>
-          <img src="images/simply_share.png" alt="Simply Share Logo" class="logo" />
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
           <div class="brand d-none d-md-block">
             Second Serve by <span>Simply</span><span>Share</span>
           </div>
         </div>
         <div class="nav-icons">
-          <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
+          <a
+            class="nav-link me-3 position-relative"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
             <i class="bi bi-bell-fill fs-5"></i>
-            <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: 0.6rem"></span>
+            <span
+              id="notificationsBadge"
+              class="position-absolute translate-middle badge rounded-pill bg-danger"
+              style="top: 6px; right: 2px; display: none; font-size: 0.6rem"
+            ></span>
           </a>
-          <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
+          <a
+            class="nav-link me-3"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
             <i class="bi bi-envelope-fill fs-5"></i>
           </a>
           <div class="dropdown">
-            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <a
+              class="nav-link dropdown-toggle d-flex align-items-center"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
               <i class="bi bi-person-circle fs-5"></i>
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Profile</a></li>
-              <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
+              <li>
+                <a class="dropdown-item" href="#"
+                  ><i class="bi bi-person me-2"></i>Profile</a
+                >
+              </li>
+              <li>
+                <a class="dropdown-item" href="#"
+                  ><i class="bi bi-gear me-2"></i>Settings</a
+                >
+              </li>
               <li><hr class="dropdown-divider" /></li>
-              <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#"
+                  ><i class="bi bi-box-arrow-right me-2"></i>Logout</a
+                >
+              </li>
             </ul>
           </div>
         </div>
@@ -53,19 +107,189 @@
 
     <div class="sidebar-backdrop" style="display: none"></div>
     <aside class="collapsed">
-      <a href="DonorDashboard.html" class="nav-link"><i class="bi bi-house-door-fill me-2"></i> <span>Dashboard</span></a>
-      <a href="MyDonations.html" class="nav-link active"><i class="bi bi-box-seam me-2"></i> <span>My Donations</span></a>
+      <a href="DonorDashboard.html" class="nav-link"
+        ><i class="bi bi-house-door-fill me-2"></i> <span>Dashboard</span></a
+      >
+      <a href="MyDonations.html" class="nav-link active"
+        ><i class="bi bi-box-seam me-2"></i> <span>My Donations</span></a
+      >
     </aside>
 
     <!-- Main Content -->
     <main>
-      <h4 class="mb-4">My Donation</h4>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="DonorDashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">
+            My Donations
+          </li>
+        </ol>
+      </div>
 
       <!-- Donation Log Table Only (KPIs removed as requested) -->
-      <div class="card shadow-sm">
-        <div class="card-header fw-bold">Donation Log</div>
+      <div class="card card-accent p-3">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h6>Donation Log</h6>
+          <div class="d-flex gap-2">
+            <!-- Small screens -->
+            <div class="dropdown d-xl-none ms-auto">
+              <button
+                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                type="button"
+                id="filtersDropdownBtn"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                Filters
+              </button>
+              <ul
+                class="dropdown-menu p-3"
+                aria-labelledby="filtersDropdownBtn"
+                style="min-width: 250px"
+              >
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="donorSelectMobile"
+                    >Donor:</label
+                  >
+                  <select
+                    id="donorSelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>All</option>
+                  </select>
+                </li>
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="statusSelectMobile"
+                    >Donation Status:</label
+                  >
+                  <select
+                    id="statusSelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option selected>All</option>
+                    <option>Pending</option>
+                    <option>Acknowledged</option>
+                    <option>Picked Up</option>
+                    <option>Completed</option>
+                    <option>Failed Safety</option>
+                    <option>Cancelled</option>
+                  </select>
+                </li>
+                <li class="mb-2">
+                  <label class="form-label mb-1" for="categorySelectMobile"
+                    >Category:</label
+                  >
+                  <select
+                    id="categorySelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>All</option>
+                    <option>rice</option>
+                    <option>canned goods</option>
+                    <option>frozen meat</option>
+                    <option>bread and pastries</option>
+                    <option>beverages and snacks</option>
+                  </select>
+                </li>
+                <li>
+                  <label class="form-label mb-1" for="dateSelectMobile"
+                    >Date:</label
+                  >
+                  <select
+                    id="dateSelectMobile"
+                    class="form-select form-select-sm"
+                  >
+                    <option>All</option>
+                    <option>Today</option>
+                    <option>This Week</option>
+                    <option>This Month</option>
+                  </select>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Large screens -->
+            <div class="d-none d-xl-flex flex-wrap gap-3 ms-auto">
+              <div
+                class="d-flex align-items-center gap-2 flex-shrink-1"
+                style="min-width: 120px"
+              >
+                <label class="form-label mb-0" for="donorSelectDesktop"
+                  >Donor:</label
+                >
+                <select
+                  id="donorSelectDesktop"
+                  class="form-select form-select-sm"
+                >
+                  <option>All</option>
+                </select>
+              </div>
+              <div
+                class="d-flex align-items-center gap-2 flex-shrink-1"
+                style="min-width: 160px"
+              >
+                <label
+                  class="form-label mb-0"
+                  for="statusSelectDesktop"
+                  style="white-space: nowrap"
+                  >Donation Status:</label
+                >
+                <select
+                  id="statusSelectDesktop"
+                  class="form-select form-select-sm"
+                  style="min-width: 140px"
+                >
+                  <option selected>All</option>
+                  <option>Pending</option>
+                  <option>Acknowledged</option>
+                  <option>Picked Up</option>
+                  <option>Completed</option>
+                  <option>Failed Safety</option>
+                  <option>Cancelled</option>
+                </select>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-shrink-1">
+                <label class="form-label mb-0" for="categorySelectDesktop"
+                  >Category:</label
+                >
+                <select
+                  id="categorySelectDesktop"
+                  class="form-select form-select-sm"
+                >
+                  <option>All</option>
+                  <option>rice</option>
+                  <option>canned goods</option>
+                  <option>frozen meat</option>
+                  <option>bread and pastries</option>
+                  <option>beverages and snacks</option>
+                </select>
+              </div>
+
+              <div
+                class="d-flex align-items-center gap-2 flex-shrink-1"
+                style="min-width: 120px"
+              >
+                <label class="form-label mb-0" for="dateSelectDesktop"
+                  >Date:</label
+                >
+                <select
+                  id="dateSelectDesktop"
+                  class="form-select form-select-sm"
+                >
+                  <option>All</option>
+                  <option>Today</option>
+                  <option>This Week</option>
+                  <option>This Month</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="table-responsive">
-          <table class="table table-bordered mb-0">
+          <table class="table table-borderless table-sm table-striped">
             <thead class="table-light">
               <tr>
                 <th>Category</th>
@@ -77,7 +301,9 @@
             </thead>
             <tbody>
               <tr>
-                <td colspan="5" class="text-center">No donations logged yet.</td>
+                <td colspan="5" class="text-center">
+                  No donations logged yet.
+                </td>
               </tr>
             </tbody>
           </table>
@@ -86,30 +312,60 @@
     </main>
 
     <!-- Notifications Modal -->
-    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-dialog-scrollable modal-lg">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body">
             <div id="notificationsList"></div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Messages Modal -->
-    <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="messagesModal"
+      tabindex="-1"
+      aria-labelledby="messagesModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-dialog-scrollable modal-lg">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body"></div>
         </div>
@@ -117,12 +373,25 @@
     </div>
 
     <!-- Edit Donation Modal -->
-    <div class="modal fade" id="editDonationModal" tabindex="-1" aria-labelledby="editDonationModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="editDonationModal"
+      tabindex="-1"
+      aria-labelledby="editDonationModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="editDonationModalLabel">Edit Donation</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <h5 class="modal-title" id="editDonationModalLabel">
+              Edit Donation
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body">
             <form id="editDonationForm">
@@ -133,96 +402,194 @@
                   <option value="Rice">Rice</option>
                   <option value="Canned Goods">Canned Goods</option>
                   <option value="Frozen Meat">Frozen Meat</option>
-                  <option value="Bread &amp; Pastries">Bread &amp; Pastries</option>
+                  <option value="Bread &amp; Pastries">
+                    Bread &amp; Pastries
+                  </option>
                   <option value="Beverages">Beverages</option>
                   <option value="Snacks">Snacks</option>
                 </select>
               </div>
               <div class="mb-3">
                 <label class="form-label">Name</label>
-                <select class="form-select" id="editNameSelect" data-placeholder="Search or type new" required></select>
+                <select
+                  class="form-select"
+                  id="editNameSelect"
+                  data-placeholder="Search or type new"
+                  required
+                ></select>
               </div>
               <div class="mb-3">
                 <label class="form-label">Quantity</label>
-                <input type="number" min="1" class="form-control" id="editQuantity" required />
+                <input
+                  type="number"
+                  min="1"
+                  class="form-control"
+                  id="editQuantity"
+                  required
+                />
               </div>
               <div class="mb-3">
                 <label class="form-label">Expiry Date</label>
-                <input type="date" class="form-control" id="editExpiry" required />
+                <input
+                  type="date"
+                  class="form-control"
+                  id="editExpiry"
+                  required
+                />
               </div>
             </form>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary" id="saveEditDonationBtn">Save changes</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="saveEditDonationBtn"
+            >
+              Save changes
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Cancel Donation Modal -->
-    <div class="modal fade" id="cancelDonationModal" tabindex="-1" aria-labelledby="cancelDonationModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="cancelDonationModal"
+      tabindex="-1"
+      aria-labelledby="cancelDonationModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="cancelDonationModalLabel">Cancel Donation</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <h5 class="modal-title" id="cancelDonationModalLabel">
+              Cancel Donation
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body">
             <input type="hidden" id="cancelDonationId" />
             <input type="hidden" id="cancelBatchId" />
             <div class="mb-3">
               <label class="form-label">Reason for cancellation</label>
-              <textarea id="cancelReason" class="form-control" rows="4" placeholder="Please provide a reason" required></textarea>
+              <textarea
+                id="cancelReason"
+                class="form-control"
+                rows="4"
+                placeholder="Please provide a reason"
+                required
+              ></textarea>
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-danger" id="confirmCancelDonationBtn">Confirm Cancel</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger"
+              id="confirmCancelDonationBtn"
+            >
+              Confirm Cancel
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Success Confirmation Modal -->
-    <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="successModal"
+      tabindex="-1"
+      aria-labelledby="successModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="successModalLabel">Success</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body">
             <div id="successModalMessage">Action completed successfully.</div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              data-bs-dismiss="modal"
+            >
+              OK
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Edit Batch Modal -->
-    <div class="modal fade" id="editBatchModal" tabindex="-1" aria-labelledby="editBatchModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div
+      class="modal fade"
+      id="editBatchModal"
+      tabindex="-1"
+      aria-labelledby="editBatchModalLabel"
+      aria-hidden="true"
+    >
+      <div
+        class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"
+      >
         <div class="modal-content rounded-3 shadow">
           <div class="modal-header border-0 pb-0">
             <div>
               <h5 class="modal-title" id="editBatchModalLabel">Edit Batch</h5>
-              <div class="text-muted small">Update the category and items in this batch. Expiry date is required for all.</div>
+              <div class="text-muted small">
+                Update the category and items in this batch. Expiry date is
+                required for all.
+              </div>
             </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body pt-3">
             <input type="hidden" id="editBatchId" />
             <div class="row g-3 mb-3">
               <div class="col-12 col-md-6">
-                <label for="editBatchCategory" class="form-label">Category</label>
+                <label for="editBatchCategory" class="form-label"
+                  >Category</label
+                >
                 <select id="editBatchCategory" class="form-select" required>
                   <option value="Rice">Rice</option>
                   <option value="Canned Goods">Canned Goods</option>
                   <option value="Frozen Meat">Frozen Meat</option>
-                  <option value="Bread &amp; Pastries">Bread &amp; Pastries</option>
+                  <option value="Bread &amp; Pastries">
+                    Bread &amp; Pastries
+                  </option>
                   <option value="Beverages">Beverages</option>
                   <option value="Snacks">Snacks</option>
                 </select>
@@ -230,17 +597,41 @@
             </div>
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label mb-0">Batch Items</label>
-              <button type="button" id="addBatchItemBtn" class="btn btn-sm btn-outline-primary">
+              <button
+                type="button"
+                id="addBatchItemBtn"
+                class="btn btn-sm btn-outline-primary"
+              >
                 <i class="bi bi-plus-circle me-1"></i> Add Item
               </button>
             </div>
-            <div class="text-muted small mb-2">Edit each item's name, quantity, and expiry date. Use the search box for names.</div>
-            <div id="batchItemsContainer" class="d-flex flex-column gap-3"></div>
+            <div class="text-muted small mb-2">
+              Edit each item's name, quantity, and expiry date. Use the search
+              box for names.
+            </div>
+            <div
+              id="batchItemsContainer"
+              class="d-flex flex-column gap-3"
+            ></div>
           </div>
           <div class="modal-footer border-0 pt-0">
-            <div class="me-auto text-muted small">Changes apply to the entire batch.</div>
-            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" id="submitBatchEditBtn" class="btn btn-warning">Save Batch</button>
+            <div class="me-auto text-muted small">
+              Changes apply to the entire batch.
+            </div>
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              id="submitBatchEditBtn"
+              class="btn btn-warning"
+            >
+              Save Batch
+            </button>
           </div>
         </div>
       </div>
