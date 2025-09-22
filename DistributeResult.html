@@ -61,13 +61,26 @@
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
         <h5 class="mb-0">Distribution Result</h5>
         <div class="d-flex gap-2">
-          <a class="btn btn-sm btn-outline-secondary" href="DistributeItems.html"><i class="bi bi-arrow-left"></i> Back</a>
-          <button class="btn btn-sm btn-outline-danger" id="clearLocalBtn"><i class="bi bi-trash"></i> Delete Local Data</button>
-          <button class="btn btn-sm btn-warning" id="notifyAllBtn"><i class="bi bi-megaphone"></i> Notify All</button>
+          <button class="btn btn-sm btn-outline-primary" id="autoAllocateBtn"><i class="bi bi-magic"></i> Auto Allocate</button>
+          <button class="btn btn-sm btn-primary" id="saveChangesBtn"><i class="bi bi-save"></i> Save Changes</button>
+          <button class="btn btn-sm btn-warning" id="notifyRunBtn"><i class="bi bi-megaphone"></i> Notify All</button>
         </div>
       </div>
 
       <div id="resultFeedback" class="small mb-2"></div>
+
+      <div class="card p-2 mb-2">
+        <div class="row g-2 align-items-center">
+          <div class="col-auto small text-muted">Week</div>
+          <div class="col-auto">
+            <input id="periodKeyInput" class="form-control form-control-sm" placeholder="YYYY-MM-Wn" style="width: 160px;" />
+          </div>
+          <div class="col-auto">
+            <button id="periodKeyGo" class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i> Load</button>
+          </div>
+          <div class="col small text-muted">Tip: e.g., W38 or 2025-09-W3</div>
+        </div>
+      </div>
 
       <div class="card card-accent p-3">
         <div id="resultSummary" class="mb-2 small text-muted"></div>
@@ -86,6 +99,25 @@
           <div class="modal-body" id="resultAlertBody">Done.</div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unsaved Changes Modal -->
+    <div class="modal fade" id="dirtyModal" tabindex="-1" aria-labelledby="dirtyModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="dirtyModalLabel">Unsaved changes</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            You have unsaved changes. Please save them before notifying recipients.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" id="dirtySaveNowBtn">Save Now</button>
           </div>
         </div>
       </div>
@@ -125,403 +157,8 @@
     <script src="scripts/js/adminDashboard.js"></script>
     <script src="scripts/js/sidebar.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script>
-      (async function(){
-        function showMsg(el, msg, type){ if (!el) return; try { el.innerHTML = msg ? `<div class="alert alert-${type} py-2 mb-0">${msg}</div>` : ''; } catch(_){} }
-        const container = document.getElementById('resultContainer');
-        const summary = document.getElementById('resultSummary');
-        const feedback = document.getElementById('resultFeedback');
-        const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
-        // Simple debounce helper for saving
-        const debounce = (fn, ms=400) => { let t=null; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; };
-        // Load inventory summary to feed Select2 options (categories and items)
-        async function loadInventorySummary(){
-          try{
-            const url = `${API_BASE_URL}/inventory/index.php/list?group=merge&limit=500&t=${Date.now()}`;
-            const res = await fetch(url, { credentials:'include', headers:{ 'Accept':'application/json' } });
-            const j = await res.json().catch(()=>null);
-            const arr = (j && j.success && Array.isArray(j.data?.items)) ? j.data.items : [];
-            const categories = new Set();
-            const itemsByCat = new Map();
-            for (const it of arr){
-              const name = (it.item_name ?? it.product_name ?? it.name ?? '').toString();
-              const cat = (it.category ?? it.product_category ?? it.type ?? '').toString();
-              if (cat) categories.add(cat);
-              if (!itemsByCat.has(cat)) itemsByCat.set(cat, new Set());
-              if (name) itemsByCat.get(cat).add(name);
-            }
-            return { categories, itemsByCat };
-          } catch(_){ return { categories: new Set(), itemsByCat: new Map() }; }
-        }
-        const invMeta = await loadInventorySummary();
-        function select2DataFromSet(set){ return Array.from(set||[]).sort((a,b)=>a.localeCompare(b)).map(v=>({ id:v, text:v })); }
-        function ensureOption(selectEl, value){ if (!selectEl) return; if (!value) return; const exists = Array.from(selectEl.options).some(o => o.value === value); if (!exists){ const opt=document.createElement('option'); opt.value=value; opt.textContent=value; selectEl.appendChild(opt); }
-        }
-        // Persist edited allocation back to storage
-        const persistEdits = debounce(() => {
-          try{
-            const newDone = [];
-            // For each recipient section, collect rows
-            document.querySelectorAll('tbody.dr-recipient[data-rec]')?.forEach(tbody => {
-              const rid = parseInt(tbody.getAttribute('data-rec')||'0',10)||0;
-              tbody.querySelectorAll('tr')?.forEach(tr => {
-                const name = tr.querySelector('.dr-name')?.value?.trim() || '';
-                const cat = tr.querySelector('.dr-cat')?.value?.trim() || '';
-                const qty = Math.max(0, parseInt(tr.querySelector('.dr-qty')?.value||'0',10)||0);
-                if (!rid || !name || qty<=0) return;
-                newDone.push({ recipient_id: rid, item_name: name, category: cat, quantity: qty });
-              });
-            });
-            // Read existing record to retain meta fields
-            let raw = sessionStorage.getItem('lastAllocation') || localStorage.getItem('lastAllocation');
-            let data = {};
-            try{ data = JSON.parse(raw||'{}'); }catch(_){ data = {}; }
-            const copy = { ...(data||{}), done: newDone };
-            const payload = JSON.stringify(copy);
-            sessionStorage.setItem('lastAllocation', payload);
-            try { localStorage.setItem('lastAllocation', payload); } catch(_){ }
-          } catch(err){ showMsg(feedback, 'Failed to save edits locally', 'danger'); }
-        }, 500);
-        // Initialize Select2 on a row
-        function initRowSelect2(tr, init){
-          try{
-            const $cat = window.jQuery && window.jQuery(tr).find('select.dr-cat');
-            const $name = window.jQuery && window.jQuery(tr).find('select.dr-name');
-            if (!$cat || !$name || !$cat.select2 || !$name.select2) return;
-            const catData = select2DataFromSet(invMeta.categories);
-            $cat.select2({ width: '100%', data: catData, tags: true, placeholder: 'Category' });
-            // If initial category is not in the list, ensure it's available
-            if (init?.category){ ensureOption($cat[0], init.category); $cat.val(init.category).trigger('change'); }
-            const setForCat = invMeta.itemsByCat.get(init?.category||'') || new Set();
-            $name.select2({ width: '100%', data: select2DataFromSet(setForCat), tags: true, placeholder: 'Item name' });
-            if (init?.item_name){ ensureOption($name[0], init.item_name); $name.val(init.item_name).trigger('change'); }
-            // On category change, rebuild item options from that category set
-            $cat.on('change', function(){
-              const v = (this.value||'').toString();
-              const set = invMeta.itemsByCat.get(v) || new Set();
-              $name.empty();
-              const data = select2DataFromSet(set);
-              $name.select2({ width:'100%', data, tags: true, placeholder: 'Item name' });
-              persistEdits();
-            });
-            $name.on('change', persistEdits);
-          } catch(_){ /* ignore */ }
-        }
-        // Factory to add an editable row
-        function addEditableRow(tbody, init){
-          if (!tbody) return;
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><select class="form-select form-select-sm dr-cat"></select></td>
-            <td><select class="form-select form-select-sm dr-name"></select></td>
-            <td style="width:120px"><input type="number" min="0" step="1" class="form-control form-control-sm dr-qty" value="${Number(init?.quantity||0)||0}" /></td>
-            <td style="width:40px"><button type="button" class="btn btn-sm btn-outline-danger dr-del" title="Remove"><i class="bi bi-x"></i></button></td>
-          `;
-          tbody.appendChild(tr);
-          // Initialize Select2 for this row
-          initRowSelect2(tr, init||{});
-          // Wire events
-          tr.querySelector('.dr-name')?.addEventListener('change', persistEdits);
-          tr.querySelector('.dr-cat')?.addEventListener('change', persistEdits);
-          tr.querySelector('.dr-qty')?.addEventListener('input', persistEdits);
-          tr.querySelector('.dr-del')?.addEventListener('click', ()=>{ tr.remove(); persistEdits(); });
-        }
-        if (!container || !summary || !feedback){
-          // Elements not present; nothing to render
-          return;
-        }
-        let raw = sessionStorage.getItem('lastAllocation');
-        if (!raw){ try { raw = localStorage.getItem('lastAllocation'); } catch(_) {} }
-        if (!raw){
-          // Fetch from backend recent movements as fallback
-          (async () => {
-            try{
-              const res = await fetch(`${API_BASE_URL}/inventory/index.php/movements?mode=recipient&days=7&limit=200`, { credentials:'include' });
-              const j = await res.json();
-              if (!res.ok || !j?.success){ throw new Error(j?.error || `HTTP ${res.status}`); }
-              const items = Array.isArray(j?.data?.items) ? j.data.items : [];
-              if (!items.length){
-                showMsg(feedback, 'No recent allocations found. Allocate items or try broadening the date range.', 'warning');
-                try { const a = document.createElement('a'); a.href = 'DistributeItems.html'; a.className = 'btn btn-sm btn-primary mt-2'; a.textContent = 'Go to Distribute Items'; feedback.appendChild(a); } catch(_){}
-                return;
-              }
-              // Enrich with recipients profile to display org - type
-              let rmap = new Map();
-              try{
-                const rr = await fetch(`${API_BASE_URL}/users.php?action=list&role=recipient&status=approved`, { credentials:'include' });
-                const jj = await rr.json();
-                const arr = Array.isArray(jj?.data?.items) ? jj.data.items : [];
-                arr.forEach(u => {
-                  const id = Number(u.user_id||u.id)||0;
-                  const org = (u.organization_name||'').toString().trim();
-                  const typ = (u.organization_type||'').toString().trim();
-                  const label = org ? (typ ? `${org} - ${typ}` : org) : (u.name || `Recipient ${id}`);
-                  if (id) rmap.set(id, label);
-                });
-
-        // Finalize & Deduct: perform inventory move-outs per planned rows
-        // Reuse existing API_BASE_URL defined earlier; do NOT redeclare to avoid runtime errors.
-        async function moveOut(recipientId, item){
-          const payload = {
-            item_name: String(item.item_name||''),
-            category: String(item.category||''),
-            quantity: Number(item.quantity||0)||0,
-            mode: 'recipient',
-            recipient_id: Number(recipientId)||0
-          };
-          if (!payload.item_name || payload.quantity<=0 || !payload.recipient_id) return false;
-          try{
-            const res = await fetch(`${API_BASE_URL}/inventory/index.php/move-out-group`, { method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify(payload) });
-            const j = await res.json().catch(()=>null);
-            if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
-            return true;
-          } catch(_){ return false; }
-        }
-        document.getElementById('finalizeBtn')?.addEventListener('click', async () => {
-          if (!planOnly){
-            showMsg(feedback, 'This allocation has already been finalized.', 'info');
-            return;
-          }
-          try{
-            const btn = document.getElementById('finalizeBtn'); if (btn) btn.disabled = true;
-            showMsg(feedback, 'Finalizing and deducting inventory...', 'secondary');
-            // Flatten and process sequentially to surface precise failures
-            let ok=0, fail=0;
-            for (const [rid, rows] of byRec.entries()){
-              for (const row of rows){
-                const success = await moveOut(rid, row);
-                if (success) ok++; else fail++;
-              }
-            }
-            // Update stored summary to mark as finalized
-            try{
-              const copy = { ...data, plan_only: false };
-              const payload = JSON.stringify(copy);
-              sessionStorage.setItem('lastAllocation', payload);
-              try { localStorage.setItem('lastAllocation', payload); } catch(_){}
-            } catch(_){}
-            const mEl = document.getElementById('resultAlertModal');
-            const bEl = document.getElementById('resultAlertBody');
-            if (bEl) bEl.textContent = (fail===0) ? `Finalized ${ok} line(s).` : `Finalized ${ok} line(s). Failed: ${fail}.`;
-            if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
-            // Hide finalize button after completion
-            document.getElementById('finalizeBtn')?.classList.add('d-none');
-          } catch(err){ showMsg(feedback, err?.message || 'Failed to finalize allocation', 'danger'); }
-          finally { const btn = document.getElementById('finalizeBtn'); if (btn) btn.disabled = false; }
-        });
-              } catch(_){ /* ignore */ }
-              // Group items by recipient
-              const byRec = new Map();
-              items.forEach(r => {
-                if (String(r.direction).toLowerCase() !== 'out') return;
-                const rid = Number(r.recipient_id||0)||0;
-                const label = rmap.get(rid) || r.recipient_name || `Recipient ${rid}`;
-                if (!byRec.has(rid)) byRec.set(rid, { name: label, rows: [] });
-                byRec.get(rid).rows.push({ item_name: r.item_name, category: r.category, quantity: Number(r.quantity||0)||0 });
-              });
-              const totalLines = items.length;
-              try { summary.textContent = `${totalLines} line(s) issued in the last 7 day(s)`; } catch(_){}
-              try { container.innerHTML = ''; } catch(_){}
-              const frag = document.createDocumentFragment();
-              byRec.forEach((obj, rid) => {
-                const card = document.createElement('div'); card.className = 'mb-3';
-                card.innerHTML = `
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <div class="fw-semibold">${obj.name}</div>
-                  </div>
-                  <div class="table-responsive">
-                    <table class="table table-sm table-striped align-middle mb-0">
-                      <thead class="table-light"><tr><th style="width:45%">Item</th><th style="width:35%">Category</th><th style="width:20%">Qty</th></tr></thead>
-                      <tbody></tbody>
-                    </table>
-                  </div>`;
-                const tbody = card.querySelector('tbody');
-                obj.rows.forEach(r => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${r.item_name}</td><td>${r.category||''}</td><td>${r.quantity}</td>`; tbody.appendChild(tr); });
-                frag.appendChild(card);
-              });
-              try { container.appendChild(frag); } catch(_){}
-              // Wire Notify All for fallback flow (derive recipient IDs from DOM like normal flow)
-              function __createNotification(recipientId, message, type){
-                return (async function(){
-                  try{
-                    const res = await fetch(`${API_BASE_URL}/notifications.php`, {
-                      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                      body: JSON.stringify({ user_id: recipientId, message, type: type||'allocation_ready' })
-                    });
-                    const j = await res.json().catch(()=>null);
-                    if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
-                    return true;
-                  } catch(e){ return false; }
-                })();
-              }
-              document.getElementById('notifyAllBtn')?.addEventListener('click', async ()=>{
-                try{
-                  const ids = Array.from(document.querySelectorAll('.dr-recipient[data-rec]')).map(tb => parseInt(tb.getAttribute('data-rec')||'0',10)).filter(n=>Number.isFinite(n)&&n>0);
-                  if (!ids.length){
-                    const mEl = document.getElementById('resultAlertModal');
-                    const bEl = document.getElementById('resultAlertBody');
-                    if (bEl) bEl.textContent = 'No recipients to notify for this result.';
-                    if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
-                    return;
-                  }
-                  const whenStr = (new Date()).toLocaleString();
-                  let ok=0, fail=0;
-                  for (const rid of ids){ const success = await __createNotification(rid, `Your allocation is ready (issued ${whenStr}). Please check the Distribution Result.`, 'allocation_ready'); if (success) ok++; else fail++; }
-                  const mEl = document.getElementById('resultAlertModal');
-                  const bEl = document.getElementById('resultAlertBody');
-                  if (bEl) bEl.textContent = (fail===0) ? `Notified ${ok} recipient(s).` : `Notified ${ok} recipient(s). Failed: ${fail}.`;
-                  if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
-                } catch(err){ showMsg(feedback, err?.message || 'Failed to send notifications', 'danger'); }
-              });
-            } catch(err){ showMsg(feedback, err.message || 'Failed to load recent movements', 'danger'); }
-            document.getElementById('clearLocalBtn')?.addEventListener('click', ()=>{
-              try{ sessionStorage.removeItem('lastAllocation'); }catch(_){}
-              try{ localStorage.removeItem('lastAllocation'); }catch(_){}
-              showMsg(feedback, 'Local allocation data cleared.', 'success');
-            });
-
-            })();
-            return;
-          }
-        let data; try{ data = JSON.parse(raw); } catch(_){ showMsg(feedback, 'Unable to read allocation summary.', 'danger'); return; }
-        const planOnly = !!data?.plan_only;
-        const when = data?.when ? new Date(data.when) : new Date();
-        const done = Array.isArray(data?.done) ? data.done : [];
-        const recs = data?.recipients || {};
-        // Fetch recipients to enrich labels with population
-        let popMap = new Map(); // id -> population number
-        try{
-          const rr = await fetch(`${API_BASE_URL}/users.php?action=list&role=recipient&status=approved`, { credentials:'include' });
-          const jj = await rr.json();
-          const arr = Array.isArray(jj?.data?.items) ? jj.data.items : [];
-          arr.forEach(u => {
-            const id = Number(u.user_id||u.id)||0;
-            const total = Number(u.total_residents||0)||0;
-            const male = Number(u.male_count||0)||0;
-            const female = Number(u.female_count||0)||0;
-            const pop = total>0 ? total : (male+female);
-            if (id) popMap.set(id, pop);
-          });
-        } catch(_){ /* ignore if fails; fallback to label only */ }
-        // Group by recipient
-        const byRec = new Map();
-        for (const row of done){
-          const rid = Number(row.recipient_id||0)||0;
-          if (!byRec.has(rid)) byRec.set(rid, []);
-          byRec.get(rid).push(row);
-        }
-        // Render
-        try { summary.textContent = ''; } catch(_){ }
-        try { container.innerHTML = ''; } catch(_){}
-        const fragment = document.createDocumentFragment();
-        byRec.forEach((rows, rid) => {
-          const base = recs[String(rid)]?.label || `Recipient ${rid}`;
-          const pop = popMap.get(Number(rid)) || 0;
-          const name = pop ? `${base} - ${pop}` : base;
-          const card = document.createElement('div');
-          card.className = 'mb-3';
-          card.innerHTML = `
-            <div class="d-flex align-items-center justify-content-between mb-1">
-              <div class="fw-semibold">${name}</div>
-              <div class="d-flex gap-2">
-                <button type="button" class="btn btn-sm btn-outline-warning dr-notify" data-rec="${rid}"><i class="bi bi-megaphone"></i> Notify</button>
-                <button type="button" class="btn btn-sm btn-outline-primary dr-add" data-rec="${rid}"><i class="bi bi-plus"></i> Add Item</button>
-              </div>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-sm table-striped align-middle mb-0">
-                <thead class="table-light">
-                  <tr>
-                    <th style="width:35%">Category</th>
-                    <th style="width:45%">Item</th>
-                    <th style="width:16%">Quantity</th>
-                    <th style="width:4%"></th>
-                  </tr>
-                </thead>
-                <tbody class="dr-recipient" data-rec="${rid}"></tbody>
-              </table>
-            </div>`;
-          const tbody = card.querySelector('tbody');
-          rows.forEach(r => addEditableRow(tbody, r));
-          // Wire add button
-          card.querySelector('.dr-add')?.addEventListener('click', (e)=>{
-            e.preventDefault(); addEditableRow(tbody, { item_name:'', category:'', quantity:0 }); persistEdits();
-          });
-          // Wire manual notify button (per recipient)
-          card.querySelector('.dr-notify')?.addEventListener('click', async (e)=>{
-            e.preventDefault();
-            const btn = e.currentTarget;
-            const rid = parseInt(btn.getAttribute('data-rec')||'0',10)||0;
-            if (!rid) return;
-            btn.disabled = true;
-            const origHtml = btn.innerHTML;
-            try {
-              btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Sending...';
-              const whenStr = (when instanceof Date) ? when.toLocaleString() : String(when||'now');
-              const ok = await createNotification(rid, `Test: Your allocation is ready (issued ${whenStr}).`, 'allocation_ready');
-              btn.classList.toggle('btn-outline-success', !!ok);
-              btn.classList.toggle('btn-outline-danger', !ok);
-              btn.innerHTML = ok ? '<i class="bi bi-check2"></i> Sent' : '<i class="bi bi-x"></i> Failed';
-            } catch(_) {
-              btn.classList.remove('btn-outline-warning');
-              btn.classList.add('btn-outline-danger');
-              btn.innerHTML = '<i class="bi bi-x"></i> Failed';
-            } finally {
-              // Re-enable after a short delay for re-test convenience
-              setTimeout(()=>{ btn.disabled = false; btn.className = 'btn btn-sm btn-outline-warning dr-notify'; btn.innerHTML = origHtml; }, 2000);
-            }
-          });
-          fragment.appendChild(card);
-        });
-        try { container.appendChild(fragment); } catch(_){}
-        document.getElementById('clearLocalBtn')?.addEventListener('click', ()=>{
-          try{ sessionStorage.removeItem('lastAllocation'); }catch(_){}
-          try{ localStorage.removeItem('lastAllocation'); }catch(_){}
-          showMsg(feedback, 'Local allocation data cleared.', 'success');
-        });
-
-        // Hint: this page is now the final editable review before notifying
-        try{ summary.textContent = 'Review and edit allocations below. Changes are saved locally until you notify recipients.'; } catch(_){ }
-
-        // Notify All: send a notification to each recipient in this result set
-        async function createNotification(recipientId, message, type){
-          try{
-            const res = await fetch(`${API_BASE_URL}/notifications.php?action=create`, {
-              method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-              body: JSON.stringify({ user_id: recipientId, message, type: type||'allocation_ready' })
-            });
-            const j = await res.json().catch(()=>null);
-            if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
-            return true;
-          } catch(e){ return false; }
-        }
-        document.getElementById('notifyAllBtn')?.addEventListener('click', async ()=>{
-          try{
-            // Persist latest edits first
-            try { await persistEdits(); } catch(_){ }
-            // derive recipient ids from current DOM (post-edit)
-            const ids = Array.from(document.querySelectorAll('.dr-recipient[data-rec]')).map(tb => parseInt(tb.getAttribute('data-rec')||'0',10)).filter(n=>Number.isFinite(n)&&n>0);
-            if (!ids.length){
-              const mEl = document.getElementById('resultAlertModal');
-              const bEl = document.getElementById('resultAlertBody');
-              if (bEl) bEl.textContent = 'No recipients to notify for this result.';
-              if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
-              return;
-            }
-            // Build a concise message
-            const whenStr = when.toLocaleString();
-            let ok=0, fail=0;
-            for (const rid of ids){
-              const success = await createNotification(rid, `Your allocation is ready (issued ${whenStr}). Please check the Distribution Result.`, 'allocation_ready');
-              if (success) ok++; else fail++;
-            }
-            const mEl = document.getElementById('resultAlertModal');
-            const bEl = document.getElementById('resultAlertBody');
-            if (bEl) bEl.textContent = (fail===0) ? `Notified ${ok} recipient(s).` : `Notified ${ok} recipient(s). Failed: ${fail}.`;
-            if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
-          } catch(err){ showMsg(feedback, err?.message || 'Failed to send notifications', 'danger'); }
-        });
-      })();
-    </script>
+    <script src="scripts/js/distributeResult.js"></script>
+  </body>
+</html>
   </body>
 </html>

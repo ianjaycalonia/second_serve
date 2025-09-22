@@ -168,7 +168,7 @@
       console.error('Failed to load inventory:', err);
       const tbody = document.querySelector('main .table tbody');
       if (tbody){
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Failed to load inventory (${escapeHtml(err.message)})</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Failed to load inventory (${escapeHtml(err.message)}). You must be logged in as Admin to view inventory.</td></tr>`;
       }
     }
   }

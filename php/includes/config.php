@@ -15,9 +15,12 @@ ini_set('session.gc_maxlifetime', SESSION_LIFETIME);
 ini_set('session.cookie_lifetime', SESSION_LIFETIME);
 session_start();
 
-// Error reporting
+// Error reporting (log errors, do not display in HTTP responses)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
+ini_set('html_errors', 0);
+// Enable output buffering so API helpers can clear any warnings/notices before emitting JSON
+if (function_exists('ob_get_level') && @ob_get_level() === 0) { @ob_start(); }
 
 // Set default timezone
 date_default_timezone_set('Asia/Manila');
@@ -25,4 +28,3 @@ date_default_timezone_set('Asia/Manila');
 // Include required files
 require_once __DIR__ . '/../core/Database.php';
 require_once __DIR__ . '/functions.php';
-?>

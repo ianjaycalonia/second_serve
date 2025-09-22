@@ -47,6 +47,9 @@
         case 'donation_created': return '📦';
         case 'status_updated': return '🚚';
         case 'donation_cancelled': return '🛑';
+        case 'allocation_ready': return '📦';
+        case 'allocation_acknowledged': return '✅';
+        case 'allocation_cancelled': return '❌';
         default: return '🔔';
       }
     })((n.type || '').toLowerCase());
@@ -144,30 +147,9 @@
             if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
           } else if (nType === 'allocation_ready') {
-            // Recipients: open Messages modal and auto-start Food Bank conversation
+            // Recipients: redirect to Received Items page to view allocations
             if (role === 'recipient') {
-              try {
-                const mailAnchor = document.querySelector('a[data-bs-target="#messagesModal"]');
-                if (mailAnchor) {
-                  mailAnchor.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-                  return; // handled via messages.js auto-init for non-admin
-                }
-                // Fallback: create modal if anchor missing
-                let modalEl = document.getElementById('messagesModal');
-                if (!modalEl) {
-                  modalEl = document.createElement('div');
-                  modalEl.id = 'messagesModal';
-                  modalEl.className = 'modal fade';
-                  modalEl.tabIndex = -1;
-                  modalEl.setAttribute('aria-hidden', 'true');
-                  modalEl.innerHTML = '<div class="modal-dialog modal-dialog-scrollable modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Messages</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"></div></div></div>';
-                  document.body.appendChild(modalEl);
-                }
-                if (window.__initMessagesModal) window.__initMessagesModal(modalEl);
-                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-                modal.show();
-                return;
-              } catch(_) { /* fall through to dest logic if something fails */ }
+              dest = 'RecievedItems.html';
             }
           }
           // Fallbacks by reference_type if not set above
@@ -190,12 +172,9 @@
   }
 
   async function fetchNotifications() {
-    const user = getStoredUser();
-    const userId = user?.user_id || user?.userId || user?.id;
-    if (!userId) return;
-
+    // Let server default to current session user
     try {
-      const res = await fetch(`${API_BASE_URL}/notifications.php?user_id=${encodeURIComponent(userId)}`, {
+      const res = await fetch(`${API_BASE_URL}/notifications.php`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
@@ -255,18 +234,15 @@
         await fetchNotifications();
       });
     }
-    // Regular polling in background (1 second, testing)
-    pollingTimer = window.setInterval(fetchNotifications, 1000);
+    // Regular polling in background (10 seconds, normal operation)
+    pollingTimer = window.setInterval(fetchNotifications, 10000);
     // Initial background fetch too
     fetchNotifications();
   }
 
   async function markAllRead() {
-    const user = getStoredUser();
-    const userId = user?.user_id || user?.userId || user?.id;
-    if (!userId) return;
     try {
-      await fetch(`${API_BASE_URL}/notifications.php?action=read_all&user_id=${encodeURIComponent(userId)}`, {
+      await fetch(`${API_BASE_URL}/notifications.php?action=read_all`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'

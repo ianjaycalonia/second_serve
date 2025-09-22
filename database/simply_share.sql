@@ -321,15 +321,7 @@ CREATE TABLE `recipient_profiles` (
 
 INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
 (1, 'Ian Jay Calonia', 'admin@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
-(2, 'Jay Piañar', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW()),
-
-
--- Sample valid/invalid message inserts for the minimal messages schema
--- Valid: donor -> admin
-INSERT INTO `messages` (`sender_id`, `receiver_id`, `content`) VALUES (2, 1, 'Hello Admin, I would like to coordinate a donation.');
-
--- Invalid (blocked by trigger): donor -> recipient
--- INSERT INTO `messages` (`sender_id`, `receiver_id`, `content`) VALUES (2, 3, 'This should be blocked by trigger');
+(2, 'Jay Piañar', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW());
 
 INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, `address`) VALUES
 (1, 'Simply Share', '09910071270', 'Subangdaku, Mandaue City');
@@ -357,6 +349,40 @@ CREATE TABLE `user_preferences` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`user_id`, `pref_key`),
   CONSTRAINT `user_prefs_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+CREATE TABLE `allocations` (
+  `allocation_id` int(11) NOT NULL AUTO_INCREMENT,
+  `recipient_id` int(11) NOT NULL,
+  `run_id` bigint(20) unsigned DEFAULT NULL COMMENT 'optional link to allocation_runs.period_key',
+  `status` enum('Allocated','Acknowledged','Picked Up','Completed','Cancelled') NOT NULL DEFAULT 'Allocated',
+  `scheduled_pickup_at` datetime DEFAULT NULL,
+  `acknowledged_at` datetime DEFAULT NULL,
+  `cancelled_at` datetime DEFAULT NULL,
+  `delivered_at` datetime DEFAULT NULL,
+  `cancel_reason` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`allocation_id`),
+  KEY `alloc_recipient_idx` (`recipient_id`),
+  KEY `alloc_status_idx` (`status`),
+  KEY `alloc_run_idx` (`run_id`),
+  CONSTRAINT `alloc_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `alloc_run_fk` FOREIGN KEY (`run_id`) REFERENCES `allocation_runs`(`run_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- allocation_items (distribution results details - now linked to inventory)
+CREATE TABLE `allocation_items` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `allocation_id` int(11) NOT NULL,
+  `inventory_id` int(11) NOT NULL COMMENT 'References the actual inventory item being allocated',
+  `quantity` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `ai_allocation_idx` (`allocation_id`),
+  KEY `ai_inventory_idx` (`inventory_id`),
+  CONSTRAINT `ai_allocation_fk` FOREIGN KEY (`allocation_id`) REFERENCES `allocations`(`allocation_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `ai_inventory_fk` FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 SET FOREIGN_KEY_CHECKS=1;

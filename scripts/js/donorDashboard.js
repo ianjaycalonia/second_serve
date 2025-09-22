@@ -217,6 +217,14 @@
             const items = data && data.items ? data.items : [];
             return { results: items.map((n) => ({ id: n, text: n })) };
           },
+          xhrFields: { withCredentials: true },
+          error: function(xhr){
+            try {
+              const msg = xhr?.responseJSON?.error || 'Failed to load item suggestions';
+              // Non-intrusive console warning to aid debugging if suggestions fail (e.g., not authenticated)
+              console.warn('Select2 items AJAX error:', msg);
+            } catch(_) { /* ignore */ }
+          },
           cache: true,
         },
         createTag: function (params) {
