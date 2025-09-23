@@ -13,6 +13,13 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <!-- Select2 CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
+    <!-- Distribute Items modal styles -->
+    <link rel="stylesheet" href="scripts/css/adminDashboard.modal.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body class="sidebar-collapsed">
@@ -144,6 +151,15 @@
         data-bs-title="Inventory"
         ><i class="bi bi-box2-fill me-2"></i><span>Inventory</span></a
       >
+      <a
+        href="Schedule.html"
+        class="nav-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+        ><i class="bi bi-calendar-week me-2"></i><span>Schedule</span></a
+      >
     </aside>
     <main>
       <div aria-label="breadcrumb">
@@ -157,18 +173,6 @@
       >
         <h5 class="mb-0">Welcome, <span class="user-name"></span></h5>
         <div class="d-flex gap-2">
-          <button
-            class="btn btn-sm"
-            style="
-              background-color: #00a0b0;
-              border-color: #00a0b0;
-              color: #fff;
-            "
-            data-bs-toggle="modal"
-            data-bs-target="#distributeItemsModal"
-          >
-            <i class="bi bi-diagram-3 me-1"></i> Distribute Items
-          </button>
           <a
             class="btn btn-sm"
             href="RecipientsList.html"
@@ -178,7 +182,7 @@
               color: #fff;
             "
           >
-            <i class="bi bi-calendar3 me-1"></i> Recipients List
+            <i class="bi bi-diagram-3 me-1"></i> Distribution
           </a>
         </div>
       </div>
@@ -308,7 +312,7 @@
       aria-labelledby="distributeItemsLabel"
       aria-hidden="true"
     >
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-dialog modal-xl">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="distributeItemsLabel">
@@ -348,7 +352,7 @@
                 </button>
               </li>
             </ul>
-            <div class="tab-content pt-3">
+            <div class="tab-content pt-0">
               <!-- Recipients -->
               <div
                 class="tab-pane fade show active"
@@ -368,17 +372,6 @@
                           class="badge text-bg-secondary"
                           >Selected: 0</span
                         >
-                        <div
-                          class="input-group input-group-sm"
-                          style="width: 210px"
-                        >
-                          <span class="input-group-text">Month</span>
-                          <input
-                            id="diMonth"
-                            type="month"
-                            class="form-control"
-                          />
-                        </div>
                         <span id="diCurrentWeek" class="badge bg-secondary"
                           >W1</span
                         >
@@ -394,11 +387,8 @@
                     </div>
                     <div class="row g-2">
                       <div class="col-12 col-md-7">
-                        <div
-                          class="border rounded p-2"
-                          style="max-height: 300px; overflow: auto"
-                        >
-                          <div class="fw-semibold mb-2">Pool</div>
+                        <div class="fw-semibold mb-2">Pool</div>
+                        <div class="border rounded p-2 di-scroll-panel">
                           <div id="diPool" class="d-grid gap-2">
                             <!-- populated by JS as draggable cards -->
                           </div>
@@ -406,21 +396,18 @@
                       </div>
                       <div class="col-12 col-md-5">
                         <div
-                          class="border rounded p-2"
-                          style="max-height: 300px; overflow: auto"
+                          class="d-flex align-items-center justify-content-between mb-2"
                         >
-                          <div
-                            class="d-flex align-items-center justify-content-between mb-2"
+                          <div class="fw-semibold">Selected</div>
+                          <button
+                            type="button"
+                            id="diClearSelected"
+                            class="btn btn-sm btn-outline-secondary"
                           >
-                            <div class="fw-semibold">Selected</div>
-                            <button
-                              type="button"
-                              id="diClearSelected"
-                              class="btn btn-sm btn-outline-secondary"
-                            >
-                              Clear
-                            </button>
-                          </div>
+                            Clear
+                          </button>
+                        </div>
+                        <div class="border rounded p-2 di-scroll-panel">
                           <div id="diSelected" class="d-grid gap-2">
                             <!-- drop targets -->
                           </div>
@@ -448,19 +435,19 @@
                   <div class="row g-2 align-items-end">
                     <div class="col-12 col-md-4">
                       <label class="form-label mb-1">Category</label>
-                      <input
+                      <select
                         id="diGlobalCat"
-                        class="form-control form-control-sm"
-                        placeholder="e.g., Food"
-                      />
+                        class="form-select form-select-sm"
+                        data-placeholder="Category"
+                      ></select>
                     </div>
                     <div class="col-12 col-md-5">
                       <label class="form-label mb-1">Item Name</label>
-                      <input
+                      <select
                         id="diGlobalName"
-                        class="form-control form-control-sm"
-                        placeholder="e.g., Sardines"
-                      />
+                        class="form-select form-select-sm"
+                        data-placeholder="Item name"
+                      ></select>
                     </div>
                     <div class="col-6 col-md-2">
                       <label class="form-label mb-1">Qty</label>
@@ -469,8 +456,8 @@
                         type="number"
                         min="0"
                         step="1"
-                        class="form-control form-control-sm"
                         value="0"
+                        class="form-control form-control-sm"
                       />
                     </div>
                     <div class="col-6 col-md-1 d-grid">
@@ -484,32 +471,13 @@
                     </div>
                   </div>
                 </div>
-                <style>
-                  /* Improve visibility of carousel indicators */
-                  #diAllocCarousel .carousel-indicators [data-bs-target] {
-                    background-color: #6c757d;
-                  }
-                  #diAllocCarousel .carousel-indicators .active {
-                    background-color: #0d6efd;
-                  }
-                </style>
                 <div
                   id="diAllocCarousel"
                   class="carousel slide"
                   data-bs-ride="false"
                   data-bs-touch="false"
                 >
-                  <div class="carousel-indicators" id="diAllocIndicators"></div>
-                  <div
-                    class="carousel-inner"
-                    id="diAllocCarouselInner"
-                    style="
-                      border: 1px solid #ddd;
-                      border-radius: 0.5rem;
-                      background: #fff;
-                      height: 360px;
-                    "
-                  ></div>
+                  <div class="carousel-inner" id="diAllocCarouselInner"></div>
                   <!-- Hide default side controls to avoid accidental navigation -->
                   <button
                     class="carousel-control-prev d-none"
@@ -524,7 +492,9 @@
                     data-bs-slide="next"
                   ></button>
                 </div>
+                <div class="carousel-indicators" id="diAllocIndicators"></div>
                 <div
+                  id="diAllocNav"
                   class="d-flex align-items-center justify-content-center gap-2 mt-2"
                 >
                   <button
@@ -548,47 +518,14 @@
                     <i class="bi bi-chevron-right"></i>
                   </button>
                 </div>
-                <div class="d-flex justify-content-between mt-3">
-                  <div class="btn-group">
-                    <button
-                      type="button"
-                      id="diResetEdits"
-                      class="btn btn-outline-secondary btn-sm"
-                    >
-                      Reset edits
-                    </button>
-                    <button
-                      type="button"
-                      id="diRerun"
-                      class="btn btn-outline-secondary btn-sm"
-                    >
-                      Re-run Suggestion
-                    </button>
-                  </div>
-                  <div class="btn-group">
-                    <button
-                      type="button"
-                      id="diPreviewAlloc"
-                      class="btn btn-outline-primary btn-sm"
-                    >
-                      Preview Allocation
-                    </button>
-                    <button
-                      type="button"
-                      id="diAllocateWeek"
-                      class="btn btn-primary btn-sm"
-                    >
-                      Allocate Now
-                    </button>
-                    <button
-                      type="button"
-                      id="diCloseBtn"
-                      class="btn btn-success btn-sm"
-                      data-bs-dismiss="modal"
-                    >
-                      Close
-                    </button>
-                  </div>
+                <div class="d-flex justify-content-end mt-3">
+                  <button
+                    type="button"
+                    id="diAllocateWeek"
+                    class="btn btn-primary btn-sm"
+                  >
+                    Allocate Now
+                  </button>
                 </div>
                 <div id="diAllocMeta" class="small text-muted mt-2"></div>
               </div>
@@ -719,6 +656,8 @@
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Select2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="scripts/js/auth.js"></script>
     <script src="scripts/js/notifications.js"></script>
     <script src="scripts/js/adminDashboard.js"></script>

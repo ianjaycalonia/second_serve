@@ -179,4 +179,27 @@ class Inventory
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
         );
     }
+
+    /**
+     * Update tags for all lots of an item/category group.
+     * Passing null clears the tags.
+     */
+    public function updateTagsGroup(string $itemName, string $category, ?string $tags): void
+    {
+        $this->db->query(
+            "UPDATE inventory SET tags = ? WHERE product_name = ? AND product_category = ?",
+            [$tags, $itemName, $category]
+        );
+    }
+
+    /**
+     * Update tags for a single inventory lot by id.
+     */
+    public function updateTagsLot(int $inventoryId, ?string $tags): void
+    {
+        $this->db->query(
+            "UPDATE inventory SET tags = ? WHERE inventory_id = ?",
+            [$tags, $inventoryId]
+        );
+    }
 }

@@ -158,41 +158,68 @@ function startDonationAutoRefresh(){
   // Helper: show Next Steps modal after acknowledge
   function showAckNextStepsModal(){
     try {
-      // Respect user preference to not show again
-      try {
-        if (localStorage.getItem('ackNextStepsDontShow') === '1') return;
-      } catch(_p) {}
-      const modalEl = document.getElementById('ackNextStepsModal');
-      if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
-      // Defensive cleanup: remove any stray backdrops and modal-open state
-      try {
-        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-        document.body.classList.remove('modal-open');
-        document.body.style.removeProperty('overflow');
-        document.body.style.removeProperty('padding-right');
-      } catch(_c) {}
-      const m = bootstrap.Modal.getOrCreateInstance(modalEl);
-      const openBtn = document.getElementById('ackOpenMessagesBtn');
-      const closeBtn = document.getElementById('ackCloseBtn');
-      const dontShow = document.getElementById('ackDontShowAgain');
-      if (dontShow) { dontShow.checked = false; }
-      if (openBtn){
-        openBtn.onclick = function(){
-          try { if (dontShow && dontShow.checked) { localStorage.setItem('ackNextStepsDontShow', '1'); } } catch(_s) {}
-          const messagesEl = document.getElementById('messagesModal');
-          if (messagesEl){
-            const mm = bootstrap.Modal.getOrCreateInstance(messagesEl);
-            mm.show();
-          }
-          m.hide();
-        };
+      // Respect user preference to not show again (DB-backed)
+      // Small helper to fetch user preference
+      async function getUserPref(key){
+        try{
+          const res = await fetch(`${API_BASE_URL}/user_preferences.php?action=get&key=${encodeURIComponent(key)}`, { credentials:'include' });
+          const j = await res.json().catch(()=>null);
+          return (j && j.success && j.data) ? (j.data.value || null) : null;
+        } catch(_){ return null; }
       }
-      if (closeBtn){
-        closeBtn.onclick = function(){
-          try { if (dontShow && dontShow.checked) { localStorage.setItem('ackNextStepsDontShow', '1'); } } catch(_s) {}
-        };
+      async function setUserPref(key, value){
+        try{
+          const res = await fetch(`${API_BASE_URL}/user_preferences.php?action=update`, { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, credentials:'include', body: JSON.stringify({ key, value }) });
+          return res.ok;
+        } catch(_){ return false; }
       }
-      m.show();
+
+      // Early return if pref says do not show
+      // We block showing the modal if pref is already set
+      // Note: this call is async; we bail if it returns '1'
+      // If API fails, we proceed to show the modal (fail-open)
+      // eslint-disable-next-line no-inner-declarations
+      const maybeAbort = (async () => {
+        const val = await getUserPref('ackNextStepsDontShow');
+        return (val === '1');
+      })();
+
+      // Since this function is not async, we schedule the rest after pref check
+      maybeAbort.then((shouldAbort) => {
+        if (shouldAbort) return; // do not show
+
+        const modalEl = document.getElementById('ackNextStepsModal');
+        if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+        // Defensive cleanup: remove any stray backdrops and modal-open state
+        try {
+          document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('overflow');
+          document.body.style.removeProperty('padding-right');
+        } catch(_c) {}
+        const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+        const openBtn = document.getElementById('ackOpenMessagesBtn');
+        const closeBtn = document.getElementById('ackCloseBtn');
+        const dontShow = document.getElementById('ackDontShowAgain');
+        if (dontShow) { dontShow.checked = false; }
+        if (openBtn){
+          openBtn.onclick = async function(){
+            if (dontShow && dontShow.checked) { await setUserPref('ackNextStepsDontShow', '1'); }
+            const messagesEl = document.getElementById('messagesModal');
+            if (messagesEl){
+              const mm = bootstrap.Modal.getOrCreateInstance(messagesEl);
+              mm.show();
+            }
+            m.hide();
+          };
+        }
+        if (closeBtn){
+          closeBtn.onclick = async function(){
+            if (dontShow && dontShow.checked) { await setUserPref('ackNextStepsDontShow', '1'); }
+          };
+        }
+        m.show();
+      });
     } catch(_e) { /* ignore */ }
   }
   // Initialize page: load items, populate filters, bind events
@@ -220,13 +247,16 @@ function startDonationAutoRefresh(){
       bindActions();
       bindFoodSafetySubmit();
       bindFilters();
-      // Bind temporary restore toggle
+      // Bind restore toggle (reset DB-backed preference)
       try {
         const restore = document.getElementById('restoreAckPromptBtn');
         if (restore){
-          restore.addEventListener('click', function(e){
+          restore.addEventListener('click', async function(e){
             e.preventDefault();
-            try { localStorage.removeItem('ackNextStepsDontShow'); alert('Acknowledge prompt will show again next time.'); } catch(_e) {}
+            try {
+              await fetch(`${API_BASE_URL}/user_preferences.php?action=update`, { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, credentials:'include', body: JSON.stringify({ key:'ackNextStepsDontShow', value: '' }) });
+            } catch(_e){}
+            alert('Acknowledge prompt will show again next time.');
           });
         }
       } catch(_e) {}

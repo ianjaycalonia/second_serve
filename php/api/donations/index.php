@@ -289,7 +289,8 @@ try {
     }
 
     // PUT /api/donations/batch/{batch_id}/edit (method override via POST supported)
-    if ($method === 'PUT' && preg_match('#^/batch/([0-9a-fA-F-]{36})/edit/?\z#', $sub, $m)) {
+    // Accept both UUID and non-UUID batch ids (up to 64 chars, no slashes)
+    if ($method === 'PUT' && preg_match('#^/batch/([^/]{1,64})/edit/?\z#', $sub, $m)) {
         // Only donors can edit donation content; admins cannot edit items
         requireRole(['donor']);
         $batchId = $m[1];
@@ -563,7 +564,8 @@ try {
     }
 
     // GET /api/donations/batch/{batch_id}
-    if ($method === 'GET' && preg_match('#^/batch/([0-9a-fA-F-]{36})/?\z#', $sub, $m)) {
+    // Accept both UUID and non-UUID batch ids (up to 64 chars, no slashes)
+    if ($method === 'GET' && preg_match('#^/batch/([^/]{1,64})/?\z#', $sub, $m)) {
         requireRole(['admin','donor']);
         $batchId = $m[1];
         $items = $service->listByBatch($batchId);
@@ -604,7 +606,8 @@ try {
     }
 
     // PUT /api/donations/batch/{batch_id}/status
-    if ($method === 'PUT' && preg_match('#^/batch/([0-9a-fA-F-]{36})/status/?\z#', $sub, $m)) {
+    // Accept both UUID and non-UUID batch ids (up to 64 chars, no slashes)
+    if ($method === 'PUT' && preg_match('#^/batch/([^/]{1,64})/status/?\z#', $sub, $m)) {
         requireRole(['admin']);
         $batchId = $m[1];
         $input = getJsonInput();
@@ -628,7 +631,8 @@ try {
     }
 
     // DELETE /api/donations/batch/{batch_id}
-    if ($method === 'DELETE' && preg_match('#^/batch/([0-9a-fA-F-]{36})/?\z#', $sub, $m)) {
+    // Accept both UUID and non-UUID batch ids (up to 64 chars, no slashes)
+    if ($method === 'DELETE' && preg_match('#^/batch/([^/]{1,64})/?\z#', $sub, $m)) {
         requireRole(['admin']);
         $batchId = $m[1];
         $service->deleteByBatch($batchId);

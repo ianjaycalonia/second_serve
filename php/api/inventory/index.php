@@ -49,6 +49,33 @@ try {
             $params[] = '%' . $q . '%';
         }
 
+    // POST /api/inventory/update-tags
+    if ($method === 'POST' && preg_match('#^/(update-tags|update-tags/)\z#', $sub)) {
+        $data = getJsonInput();
+        $scope = isset($data['scope']) ? sanitize($data['scope']) : '';
+        $tags = isset($data['tags']) ? trim((string)$data['tags']) : '';
+        if ($tags === '') { $tags = null; }
+        $inv = new Inventory();
+        try {
+            if ($scope === 'group'){
+                $item = isset($data['item_name']) ? sanitize($data['item_name']) : '';
+                $cat = isset($data['category']) ? sanitize($data['category']) : '';
+                if ($item === '' || $cat === '') { sendJson(['success'=>false,'error'=>'item_name and category are required'],400); }
+                $inv->updateTagsGroup($item, $cat, $tags);
+                sendJson(['success'=>true, 'message'=>'Tags updated']);
+            } else if ($scope === 'lot'){
+                $id = isset($data['inventory_id']) ? (int)$data['inventory_id'] : 0;
+                if ($id <= 0) { sendJson(['success'=>false,'error'=>'inventory_id is required'],400); }
+                $inv->updateTagsLot($id, $tags);
+                sendJson(['success'=>true, 'message'=>'Tags updated']);
+            } else {
+                sendJson(['success'=>false,'error'=>'scope must be group or lot'],400);
+            }
+        } catch (Exception $e){
+            sendJson(['success'=>false,'error'=>'Failed to update tags'],500);
+        }
+    }
+
     // POST /api/inventory/backfill - scan donations with status 'Picked Up' and add missing inventory lots
     if ($method === 'POST' && preg_match('#^/(backfill|backfill/)\z#', $sub)) {
         // Admin only (already enforced above)
@@ -105,6 +132,7 @@ try {
                         MIN(i.expiry_date) AS earliest_expiry,
                         MIN(i.added_at) AS first_added_at,
                         MAX(i.added_at) AS last_added_at,
+                        GROUP_CONCAT(DISTINCT NULLIF(i.tags, '') ORDER BY i.tags SEPARATOR ',') AS tags_concat,
                         COUNT(*) AS lots
                     FROM inventory i
                     $whereSql
@@ -186,6 +214,58 @@ try {
         ];
         echo json_encode($resp);
         exit;
+    }
+
+    // GET /api/inventory/movements
+    if ($method === 'GET' && preg_match('#^/(movements|movements/)\z#', $sub)) {
+        $db = Database::getInstance();
+        $limit = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 100;
+        $mode = isset($_GET['mode']) ? trim(sanitize($_GET['mode'])) : '';
+        $recipientId = isset($_GET['recipient_id']) && $_GET['recipient_id'] !== '' ? (int)$_GET['recipient_id'] : null;
+        $since = isset($_GET['since']) ? trim($_GET['since']) : '';
+        $days = isset($_GET['days']) ? max(1, min(31, (int)$_GET['days'])) : 2;
+
+        $where = ['im.direction = "out"'];
+        $params = [];
+        if ($mode !== '' && in_array($mode, ['recipient','onsite'], true)) {
+            $where[] = 'im.mode = ?';
+            $params[] = $mode;
+        }
+        if (!empty($recipientId)) {
+            $where[] = 'im.recipient_id = ?';
+            $params[] = $recipientId;
+        }
+        if ($since !== '') {
+            $where[] = 'im.created_at >= ?';
+            $params[] = $since;
+        } else {
+            $where[] = 'im.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
+            $params[] = $days;
+        }
+        $whereSql = 'WHERE ' . implode(' AND ', $where);
+
+        $sql = "SELECT 
+                    im.id,
+                    im.inventory_id,
+                    im.direction,
+                    im.quantity,
+                    im.mode,
+                    im.recipient_id,
+                    ur.name AS recipient_name,
+                    im.performed_by,
+                    up.name AS performed_by_name,
+                    im.created_at,
+                    i.product_name AS item_name,
+                    i.product_category AS category
+                FROM inventory_movements im
+                LEFT JOIN inventory i ON i.inventory_id = im.inventory_id
+                LEFT JOIN users ur ON ur.user_id = im.recipient_id
+                LEFT JOIN users up ON up.user_id = im.performed_by
+                $whereSql
+                ORDER BY im.created_at DESC, im.id DESC
+                LIMIT $limit";
+        $rows = $db->query($sql, $params)->fetchAll();
+        sendJson(['success' => true, 'data' => ['items' => $rows, 'limit' => $limit]]);
     }
 
     // POST /api/inventory/move-out

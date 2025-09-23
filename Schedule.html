@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schedule</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet" />
+    <style>
+      .fc-toolbar-title { font-size: 1.1rem; }
+      .fc .fc-button { padding: .25rem .5rem; font-size: .875rem; }
+      .event-owned { border-left: 4px solid #0d6efd; }
+      .event-assigned { border-left: 4px solid #198754; }
+      /* Show past dates but make them unclickable */
+      .fc-day-past { pointer-events: none; }
+    </style>
+  </head>
+  <body class="sidebar-collapsed">
+    <nav>
+      <div class="nav-items">
+        <div class="toggle">
+          <button id="sidebarToggle" class="btn">
+            <i class="bi bi-list fs-4"></i>
+          </button>
+          <img src="images/simply_share.png" alt="Simply Share Logo" class="logo" />
+          <div class="brand d-none d-md-block">Second Serve by <span>Simply</span><span>Share</span></div>
+        </div>
+        <div class="nav-icons">
+          <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
+            <i class="bi bi-bell-fill fs-5"></i>
+            <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: 0.6rem"></span>
+          </a>
+          <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
+            <i class="bi bi-envelope-fill fs-5"></i>
+          </a>
+          <div class="dropdown">
+            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="bi bi-person-circle fs-5"></i>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Profile</a></li>
+              <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
+              <li><hr class="dropdown-divider" /></li>
+              <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-backdrop" style="display: none"></div>
+    <aside class="collapsed">
+      <a href="AdminDashboard.html" class="nav-link"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
+      <a href="RecipientsList.html" class="nav-link"><i class="bi bi-clipboard-plus-fill me-2"></i><span>Distribution: Recipients</span></a>
+      <a href="DistributeItems.html" class="nav-link"><i class="bi bi-diagram-3-fill me-2"></i><span>Distribution: Allocation</span></a>
+      <a href="DistributeResult.html" class="nav-link"><i class="bi bi-box2-heart-fill me-2"></i><span>Distribution: Result</span></a>
+      <a href="Schedule.html" class="nav-link active"><i class="bi bi-calendar2-week-fill me-2"></i><span>Schedule</span></a>
+    </aside>
+    <main>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="AdminDashboard.html">Dashboard</a></li>
+          <li class="breadcrumb-item active" aria-current="page">Schedule</li>
+        </ol>
+      </div>
+
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <h5 class="mb-0">Schedule</h5>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-primary" id="newEventBtn"><i class="bi bi-plus-lg"></i> New Event</button>
+          <button class="btn btn-sm btn-outline-secondary" id="refreshCalBtn"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+        </div>
+      </div>
+
+      <div id="calFeedback" class="small mb-2"></div>
+      <div class="card card-accent p-3">
+        <div id="calendar"></div>
+      </div>
+    </main>
+
+    <!-- Calendar Alert Modal -->
+    <div class="modal fade" id="calAlertModal" tabindex="-1" aria-labelledby="calAlertModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="calAlertModalLabel">Notice</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="calAlertBody">Done.</div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Modal -->
+    <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Schedule Event</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="eventForm">
+              <input type="hidden" id="evId" />
+              <div class="mb-2">
+                <label class="form-label mb-1">Title</label>
+                <input type="text" id="evTitle" class="form-control form-control-sm" required />
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label mb-1">Start</label>
+                  <input type="datetime-local" id="evStart" class="form-control form-control-sm" required />
+                </div>
+                <div class="col-6">
+                  <label class="form-label mb-1">End</label>
+                  <input type="datetime-local" id="evEnd" class="form-control form-control-sm" />
+                </div>
+              </div>
+              <div class="row g-2 mt-2">
+                <div class="col-6">
+                  <label class="form-label mb-1">Recipient ID</label>
+                  <input type="number" id="evRecipient" class="form-control form-control-sm" placeholder="optional" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label mb-1">Donor ID</label>
+                  <input type="number" id="evDonor" class="form-control form-control-sm" placeholder="optional" />
+                </div>
+              </div>
+              <div class="mt-2">
+                <label class="form-label mb-1">Location</label>
+                <input type="text" id="evLocation" class="form-control form-control-sm" placeholder="e.g., pickup address" />
+              </div>
+              <div class="mt-2">
+                <label class="form-label mb-1">Notes</label>
+                <textarea id="evNotes" class="form-control form-control-sm" rows="3" placeholder="Include batch/donation details, contact person, etc."></textarea>
+              </div>
+              <div class="mt-2">
+                <label class="form-label mb-1">Status</label>
+                <select id="evStatus" class="form-select form-select-sm">
+                  <option value="scheduled">Scheduled</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-danger" id="deleteEventBtn">Delete</button>
+            <button type="button" class="btn btn-primary" id="saveEventBtn">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notifications Modal (existing shared) -->
+    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-0">
+            <ul id="notificationsList" class="list-group list-group-flush">
+              <li class="list-group-item text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>
+                <span class="ms-2">Loading notifications...</span>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">Mark all as read</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <script src="scripts/js/auth.js"></script>
+    <script src="scripts/js/notifications.js"></script>
+    <script src="scripts/js/adminDashboard.js"></script>
+    <script src="scripts/js/sidebar.js"></script>
+    <script src="scripts/js/calendar.js"></script>
+  </body>
+</html>

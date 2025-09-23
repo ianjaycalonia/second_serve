@@ -172,9 +172,10 @@ class User
         if (!empty($filters['role'])){ $where[]='u.role = ?'; $params[]=$filters['role']; }
         $role = $filters['role'] ?? null;
         if ($role === 'recipient') {
-            // Join recipient_profiles and primary contact for contact fields
+            // Join recipient_profiles and primary contact; expose tags and age_group for allocation logic
             $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at,
                            rp.organization_name, rp.organization_type, rp.address,
+                           rp.tags, rp.age_group, rp.male_count, rp.female_count, rp.total_residents,
                            pc.position_designation, pc.contact_number
                     FROM users u
                     LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
