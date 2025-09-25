@@ -15,7 +15,6 @@
       const btnOn = e.target.closest('.inv-issue-onsite');
       const btnTag = e.target.closest('.inv-edit-tags');
       if (!btnOn) return;
-      try { console.debug('[adminInventory] onsite button clicked'); } catch(_){ }
       const itemName = btnOn.getAttribute('data-item-name')||'';
       const category = btnOn.getAttribute('data-category')||'';
       if (!itemName || !category) return;
@@ -35,7 +34,6 @@
         const mEl = document.getElementById('onsiteIssueModal');
         if (mEl && typeof bootstrap !== 'undefined' && bootstrap.Modal){
           bootstrap.Modal.getOrCreateInstance(mEl).show();
-          try { console.debug('[adminInventory] opened onsite modal'); } catch(_){ }
         }
       } catch(err){
         console.error('Open onsite modal failed:', err);
@@ -405,7 +403,7 @@
   }
 
   async function init(){
-    try { console.info('[adminInventory] init v20250925-02'); } catch(_){ }
+    // init
     ensureSearchBox();
     bindFilters();
     bindActions();

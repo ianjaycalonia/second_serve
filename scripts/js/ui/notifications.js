@@ -149,7 +149,7 @@
           } else if (nType === 'allocation_ready') {
             // Recipients: redirect to Received Items page to view allocations
             if (role === 'recipient') {
-              dest = 'RecievedItems.html';
+              dest = 'ReceivedItems.html';
             }
           }
           // Fallbacks by reference_type if not set above
@@ -201,7 +201,6 @@
         lastRender = sig.split('|');
       }
     } catch (e) {
-      console.error('Notifications fetch failed', e);
       // If we reach here and UI not yet updated, provide a minimal hint
       try {
         if (listEl && !listEl.innerHTML) {

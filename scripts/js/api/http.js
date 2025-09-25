@@ -11,13 +11,11 @@
     if (ct.includes('application/json')){
       try { return await res.json(); } catch(_) { /* fallthrough */ }
     }
-    const text = await res.text();
-    try { return JSON.parse(text); } catch(_){
-      const snippet = text && text.slice ? text.slice(0, 300) : '';
-      const err = new Error(`Non-JSON response (HTTP ${res.status}). Snippet: ${snippet}`);
-      err.status = res.status;
-      throw err;
-    }
+    const _ = await res.text();
+    // Hide raw body; return generic error structure
+    const err = new Error(`HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
 
   async function fetchJson(url, options){

@@ -24,7 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Match existing filenames/casing used in recipient pages
         sidebar.innerHTML = `
           <a href="recipientDashboard.html" class="nav-link"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
-          <a href="RecievedItems.html" class="nav-link"><i class="bi bi-box-seam me-2"></i><span>Recieved Items</span></a>
+          <a href="ReceivedItems.html" class="nav-link"><i class="bi bi-box-seam me-2"></i><span>Received Items</span></a>
           <a href="Schedule.html" class="nav-link"><i class="bi bi-calendar2-week-fill me-2"></i><span>Schedule</span></a>
         `;
       } else {
