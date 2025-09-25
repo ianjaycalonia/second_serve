@@ -61,7 +61,6 @@
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
         <h5 class="mb-0">Distribution Result</h5>
         <div class="d-flex gap-2">
-          <button class="btn btn-sm btn-outline-primary" id="autoAllocateBtn"><i class="bi bi-magic"></i> Auto Allocate</button>
           <button class="btn btn-sm btn-primary" id="saveChangesBtn"><i class="bi bi-save"></i> Save Changes</button>
           <button class="btn btn-sm btn-warning" id="notifyRunBtn"><i class="bi bi-megaphone"></i> Notify All</button>
         </div>
@@ -147,18 +146,24 @@
       </div>
     </div>
 
-    <!-- Messages Modal is injected by scripts/js/messages.js on demand -->
+    <!-- Messages Modal is injected by scripts/js/ui/messages.js on demand -->
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
-    <script src="scripts/js/auth.js"></script>
-    <script src="scripts/js/messages.js"></script>
-    <script src="scripts/js/notifications.js"></script>
-    <script src="scripts/js/adminDashboard.js"></script>
-    <script src="scripts/js/sidebar.js"></script>
+    <!-- Shared config and API modules -->
+    <script src="scripts/js/config/constants.js?v=20250925"></script>
+    <script src="scripts/js/api/http.js?v=20250925"></script>
+    <script src="scripts/js/api/communications.js?v=20250925"></script>
+    <script src="scripts/js/api/allocations.js?v=20250925"></script>
+    <script src="scripts/js/utils/auth.js"></script>
+    <script src="scripts/js/ui/messages.js"></script>
+    <script src="scripts/js/ui/notifications.js"></script>
+    <script src="scripts/js/charts/adminDashboard.js"></script>
+    <script src="scripts/js/ui/sidebar.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="scripts/js/distributeResult.js"></script>
+    <script src="scripts/js/ui/distributeResult.js"></script>
   </body>
 </html>
   </body>
 </html>
+

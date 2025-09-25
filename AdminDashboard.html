@@ -263,11 +263,11 @@
                 at 3 PM
               </div>
               <div class="details mb-2">
-                <strong>8:15 AM</strong><br />New Recipient registered: “Helping
-                Hands Shelter”
+                <strong>8:15 AM</strong><br />New Recipient registered: â€œHelping
+                Hands Shelterâ€
               </div>
               <div class="details mb-2">
-                <strong>4:00 PM</strong><br />Donation from “DailyBites”
+                <strong>4:00 PM</strong><br />Donation from â€œDailyBitesâ€
                 successfully delivered
               </div>
             </div>
@@ -442,19 +442,25 @@
       </div>
     </div>
 
-    <!-- Messages Modal is injected by scripts/js/messages.js on demand -->
+    <!-- Messages Modal is injected by scripts/js/ui/messages.js on demand -->
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Select2 JS -->
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="scripts/js/auth.js"></script>
-    <script src="scripts/js/messages.js"></script>
-    <script src="scripts/js/notifications.js"></script>
-    <script src="scripts/js/adminDashboard.js"></script>
-    <script src="scripts/js/adminDistribute.js"></script>
-    
-    <script src="scripts/js/sidebar.js"></script>
+    <!-- Shared config and API modules -->
+    <script src="scripts/js/config/constants.js?v=20250925"></script>
+    <script src="scripts/js/api/http.js?v=20250925"></script>
+    <script src="scripts/js/api/communications.js?v=20250925"></script>
+    <script src="scripts/js/api/allocations.js?v=20250925"></script>
+    <!-- Custom scripts -->
+    <script src="scripts/js/utils/auth.js"></script>
+    <script src="scripts/js/ui/messages.js"></script>
+    <script src="scripts/js/ui/notifications.js"></script>
+    <script src="scripts/js/charts/adminDashboard.js"></script>
+    <script src="scripts/js/ui/adminDistribute.js"></script>
+    <script src="scripts/js/ui/sidebar.js"></script>
   </body>
 </html>
+
