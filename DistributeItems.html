@@ -193,17 +193,25 @@
         </div>
       </div>
 
-      <!-- Messages Modal is injected by scripts/js/messages.js on demand -->
+      <!-- Messages Modal is injected by scripts/js/ui/messages.js on demand -->
     </main>
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="scripts/js/auth.js"></script>
-    <script src="scripts/js/messages.js"></script>
-    <script src="scripts/js/notifications.js"></script>
-    <script src="scripts/js/adminDashboard.js"></script>
-    <script src="scripts/js/adminDistribute.js"></script>
-    <script src="scripts/js/sidebar.js"></script>
+    <!-- Shared config and API modules -->
+    <script src="scripts/js/config/constants.js?v=20250925"></script>
+    <script src="scripts/js/api/http.js?v=20250925"></script>
+    <script src="scripts/js/api/communications.js?v=20250925"></script>
+    <script src="scripts/js/api/allocations.js?v=20250925"></script>
+    <script src="scripts/js/api/recipients.js?v=20250925"></script>
+    <!-- Custom scripts -->
+    <script src="scripts/js/utils/auth.js?v=20250925"></script>
+    <script src="scripts/js/ui/messages.js?v=20250925"></script>
+    <script src="scripts/js/ui/notifications.js?v=20250925"></script>
+    <script src="scripts/js/charts/adminDashboard.js?v=20250925"></script>
+    <script src="scripts/js/ui/adminDistribute.js?v=20250925"></script>
+    <script src="scripts/js/ui/sidebar.js?v=20250925"></script>
   </body>
 </html>
+

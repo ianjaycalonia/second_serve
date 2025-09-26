@@ -30,6 +30,7 @@ CREATE TABLE `admin_profiles` (
   `organization_name` varchar(150) DEFAULT NULL,
   `contact_number` varchar(20) DEFAULT NULL,
   `address` text DEFAULT NULL,
+  `ack_next_steps_dont_show` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`user_id`),
   CONSTRAINT `ap_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -320,14 +321,24 @@ CREATE TABLE `recipient_profiles` (
 
 
 INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
-(1, 'Ian Jay Calonia', 'admin@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
-(2, 'Jay Piañar', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW());
+(1, 'Admin One', 'admin1@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
+(2, 'Admin Two', 'admin2@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
+(3, 'Admin Three', 'admin3@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
+(4, 'Foodbank (On-site)', 'onsite@invalid.local', '', 'recipient', 'approved', NOW(), NOW()),
+(5, 'Test Donor', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW());
 
 INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, `address`) VALUES
-(1, 'Simply Share', '09910071270', 'Subangdaku, Mandaue City');
+(1, 'Simply Share', '09910071270', 'Subangdaku, Mandaue City'),
+(2, 'Simply Share', '09910071271', 'Subangdaku, Mandaue City'),
+(3, 'Simply Share', '09910071272', 'Subangdaku, Mandaue City');
 
+-- Recipient profile for Foodbank (On-site)
+INSERT INTO `recipient_profiles` (`user_id`, `organization_name`, `organization_type`, `tags`, `address`, `total_residents`, `age_group`, `male_count`, `female_count`, `external_id`, `primary_contact_id`) VALUES
+(4, 'Foodbank (On-site)', 'Foodbank', 'onsite', 'Subangdaku, Mandaue City', NULL, NULL, NULL, NULL, NULL, NULL);
+
+-- Donor profile for TestDonor
 INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category`, `contact_number`, `address`, `notes`) VALUES
-(2, 'TestDonor', NULL, '09910071271', 'Tabok, Mandaue City', NULL);
+(5, 'TestDonor', NULL, '09910071273', 'Tabok, Mandaue City', NULL);
 
 -- settings (key-value store for global app settings)
 CREATE TABLE `settings` (
@@ -355,7 +366,7 @@ CREATE TABLE `allocations` (
   `allocation_id` int(11) NOT NULL AUTO_INCREMENT,
   `recipient_id` int(11) NOT NULL,
   `run_id` bigint(20) unsigned DEFAULT NULL COMMENT 'optional link to allocation_runs.period_key',
-  `status` enum('Allocated','Acknowledged','Picked Up','Completed','Cancelled') NOT NULL DEFAULT 'Allocated',
+  `status` enum('Pending','Notified','Acknowledged','Picked Up','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
   `scheduled_pickup_at` datetime DEFAULT NULL,
   `acknowledged_at` datetime DEFAULT NULL,
   `cancelled_at` datetime DEFAULT NULL,

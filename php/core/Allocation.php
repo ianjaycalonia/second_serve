@@ -346,7 +346,7 @@ class Allocation
         try {
             // Create allocation record
             $this->db->query(
-                'INSERT INTO allocations (recipient_id, run_id, status, created_at, updated_at) VALUES (?, ?, "Allocated", NOW(), NOW())',
+                'INSERT INTO allocations (recipient_id, run_id, status, created_at, updated_at) VALUES (?, ?, "Pending", NOW(), NOW())',
                 [$recipientId, $runId ?: null]
             );
 
@@ -622,7 +622,7 @@ class Allocation
         if ($runId <= 0) return false;
         $this->db->beginTransaction();
         try {
-            $this->db->query('UPDATE allocations SET status = "Allocated", updated_at = NOW() WHERE run_id = ? AND status IN ("Allocated","Acknowledged")', [$runId]);
+            $this->db->query('UPDATE allocations SET status = "Notified", updated_at = NOW() WHERE run_id = ? AND status IN ("Pending","Allocated","Acknowledged")', [$runId]);
             $this->db->commit();
             return true;
         } catch (Exception $e){ if ($this->db->inTransaction()) $this->db->rollBack(); throw $e; }
