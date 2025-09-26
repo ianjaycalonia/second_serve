@@ -17,10 +17,13 @@ $payload = getJsonInput(); // raw (no sanitize) to preserve strings
 try {
     switch ($method) {
         case 'GET':
-            // GET /notifications?user_id=xxx
+            // GET /notifications (defaults to current session) or /notifications?user_id=xxx
             $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
             if ($userId <= 0) {
-                sendJson(['success' => false, 'error' => 'user_id is required'], 400);
+                $userId = (int)(currentUserId() ?? 0);
+            }
+            if ($userId <= 0) {
+                sendJson(['success' => false, 'error' => 'Authentication required'], 401);
             }
             // Only allow user themselves or admin to view
             $currentId = (int)(currentUserId() ?? 0);
@@ -65,7 +68,8 @@ try {
             }
             if ($action === 'read_all') {
                 $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
-                if ($userId <= 0) sendJson(['success' => false, 'error' => 'user_id is required'], 400);
+                if ($userId <= 0) { $userId = (int)(currentUserId() ?? 0); }
+                if ($userId <= 0) sendJson(['success' => false, 'error' => 'Authentication required'], 401);
                 // Permission: user themselves or admin only
                 $currentId = (int)(currentUserId() ?? 0);
                 $role = (string)(currentUserRole() ?? '');

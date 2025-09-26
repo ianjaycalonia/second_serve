@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <style>
       .fc-toolbar-title { font-size: 1.1rem; }
       .fc .fc-button { padding: .25rem .5rem; font-size: .875rem; }
@@ -65,6 +66,27 @@
         </ol>
       </div>
 
+    <!-- Day Events Modal -->
+    <div class="modal fade" id="dayEventsModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Scheduled Events</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="small text-muted mb-2" id="dayEventsDate"></div>
+            <ul class="list-group" id="dayEventsList">
+              <li class="list-group-item text-center text-muted">No events</li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
         <h5 class="mb-0">Schedule</h5>
         <div class="d-flex gap-2">
@@ -107,10 +129,18 @@
             <form id="eventForm">
               <input type="hidden" id="evId" />
               <div class="mb-2">
+                <label class="form-label mb-1">Event Type</label>
+                <select id="evType" class="form-select form-select-sm">
+                  <option value="admin">Admin event</option>
+                  <option value="donor">Pickup</option>
+                  <option value="recipient">Recipient availability / pickup</option>
+                </select>
+              </div>
+              <div class="mb-2">
                 <label class="form-label mb-1">Title</label>
                 <input type="text" id="evTitle" class="form-control form-control-sm" required />
               </div>
-              <div class="row g-2">
+              <div class="row g-2" id="wrapDateTimeDefault">
                 <div class="col-6">
                   <label class="form-label mb-1">Start</label>
                   <input type="datetime-local" id="evStart" class="form-control form-control-sm" required />
@@ -120,14 +150,26 @@
                   <input type="datetime-local" id="evEnd" class="form-control form-control-sm" />
                 </div>
               </div>
-              <div class="row g-2 mt-2">
+              <!-- Admin Pickup date+time (no end) -->
+              <div class="row g-2" id="wrapDateTimeAdmin" style="display:none;">
                 <div class="col-6">
+                  <label class="form-label mb-1">Date</label>
+                  <input type="date" id="evDate" class="form-control form-control-sm" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label mb-1">Time</label>
+                  <input type="time" id="evTime" class="form-control form-control-sm" />
+                </div>
+              </div>
+              <div class="row g-2 mt-2">
+                <div class="col-6" id="wrapRecipient">
                   <label class="form-label mb-1">Recipient ID</label>
                   <input type="number" id="evRecipient" class="form-control form-control-sm" placeholder="optional" />
                 </div>
-                <div class="col-6">
-                  <label class="form-label mb-1">Donor ID</label>
-                  <input type="number" id="evDonor" class="form-control form-control-sm" placeholder="optional" />
+                <div class="col-6" id="wrapDonor">
+                  <label class="form-label mb-1">Donor</label>
+                  <select id="evDonorSelect" class="form-select form-select-sm" style="width:100%;"></select>
+                  <input type="number" id="evDonor" class="form-control form-control-sm" placeholder="optional" style="display:none;" />
                 </div>
               </div>
               <div class="mt-2">
@@ -137,15 +179,6 @@
               <div class="mt-2">
                 <label class="form-label mb-1">Notes</label>
                 <textarea id="evNotes" class="form-control form-control-sm" rows="3" placeholder="Include batch/donation details, contact person, etc."></textarea>
-              </div>
-              <div class="mt-2">
-                <label class="form-label mb-1">Status</label>
-                <select id="evStatus" class="form-select form-select-sm">
-                  <option value="scheduled">Scheduled</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
               </div>
             </form>
           </div>
@@ -184,7 +217,9 @@
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="scripts/js/auth.js"></script>
+    <script src="scripts/js/messages.js"></script>
     <script src="scripts/js/notifications.js"></script>
     <script src="scripts/js/adminDashboard.js"></script>
     <script src="scripts/js/sidebar.js"></script>

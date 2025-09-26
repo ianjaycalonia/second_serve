@@ -1,0 +1,468 @@
+(function(){
+  'use strict';
+
+  // Lightweight debug: confirm script load
+  try { console.debug('[receivedItems] script loaded'); } catch(_) {}
+
+  // Derive API base URL similar to other scripts
+  const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
+    ? window.API_BASE_URL
+    : (function(){
+        try { console.debug('[receivedItems] Deriving API_BASE_URL from location:', window.location.href); } catch(_) {}
+        return '/Capstone%20Project/php/api';
+      })();
+
+  function getStoredUser() {
+    try {
+      const s = sessionStorage.getItem('user');
+      const user = s ? JSON.parse(s) : null;
+      try { console.debug('[receivedItems] getStoredUser:', user); } catch(_) {}
+      return user;
+    } catch(e) {
+      try { console.error('[receivedItems] getStoredUser error:', e); } catch(_) {}
+      return null;
+    }
+  }
+
+  function qs(sel, root=document){ return root.querySelector(sel); }
+
+  function fmtDate(iso){
+    const d = new Date(iso);
+    return isNaN(d) ? (iso || '') : d.toLocaleString();
+  }
+
+  function getQueryParam(name){
+    try{
+      const u = new URL(window.location.href);
+      const param = u.searchParams.get(name);
+      try { console.debug('[receivedItems] getQueryParam', name, '=', param); } catch(_) {}
+      return param;
+    } catch(e) {
+      try { console.error('[receivedItems] getQueryParam error:', e); } catch(_) {}
+      return null;
+    }
+  }
+
+  async function fetchJson(url, opts={}){
+    try { console.debug('[receivedItems] fetchJson called:', url, opts); } catch(_) {}
+    const res = await fetch(url, opts);
+    const ct = (res.headers.get('content-type')||'').toLowerCase();
+    // Try to parse JSON regardless of header correctness
+    let bodyText = null;
+    let json = null;
+    if (ct.includes('application/json')){
+      json = await res.json().catch(()=>null);
+    } else {
+      bodyText = await res.text();
+      try { json = JSON.parse(bodyText); } catch(_) { json = null; }
+    }
+    if (!json){
+      const err = new Error(bodyText || `HTTP ${res.status}`);
+      err.status = res.status;
+      try { console.error('[receivedItems] fetchJson parse error:', { url, status: res.status, contentType: ct, bodyText }); } catch(_) {}
+      throw err;
+    }
+    if (!res.ok || json.success === false){
+      const msg = (json && json.error) ? json.error : `HTTP ${res.status}`;
+      const err = new Error(msg);
+      err.status = res.status;
+      try { console.error('[receivedItems] fetchJson API error:', { url, status: res.status, json }); } catch(_) {}
+      throw err;
+    }
+    try { console.debug('[receivedItems] fetchJson success:', { url, response: json }); } catch(_) {}
+    return json;
+  }
+
+  // Refresh allocation data from server
+  async function refreshAllocations(){
+    const tbody = qs('main table tbody');
+    const main = document.querySelector('main');
+    let banner = document.getElementById('riFeedback');
+
+    try { console.debug('[receivedItems] refreshAllocations: starting'); } catch(_) {}
+    try { console.debug('[receivedItems] refreshAllocations: tbody exists:', !!tbody); } catch(_) {}
+    try { console.debug('[receivedItems] refreshAllocations: main exists:', !!main); } catch(_) {}
+    try { console.debug('[receivedItems] refreshAllocations: banner exists:', !!banner); } catch(_) {}
+
+    if (!banner && main){
+      banner = document.createElement('div');
+      banner.id = 'riFeedback';
+      banner.className = 'alert alert-info py-2';
+      banner.style.marginTop = '0.5rem';
+      banner.textContent = 'Refreshing...';
+      main.insertBefore(banner, main.firstChild);
+    }
+    if (!tbody) {
+      try { console.error('[receivedItems] refreshAllocations: no tbody found'); } catch(_) {}
+      return;
+    }
+
+    try {
+      const user = getStoredUser();
+      const role = (user && user.role) ? String(user.role).toLowerCase() : '';
+      const recipientIdParam = getQueryParam('recipient_id');
+      const ridQuery = (role === 'admin' && recipientIdParam) ? `&recipient_id=${encodeURIComponent(recipientIdParam)}` : '';
+      const url = `${API_BASE_URL}/allocations.php?action=list_by_recipient${ridQuery}&t=${Date.now()}`;
+
+      try { console.debug('[receivedItems] refreshAllocations: API URL:', url); } catch(_) {}
+      try { console.debug('[receivedItems] refreshAllocations: user:', user); } catch(_) {}
+      try { console.debug('[receivedItems] refreshAllocations: role:', role); } catch(_) {}
+      try { console.debug('[receivedItems] refreshAllocations: recipientIdParam:', recipientIdParam); } catch(_) {}
+
+      const j = await fetchJson(url, { credentials:'include', headers: { 'Accept':'application/json' } });
+      const items = Array.isArray(j?.data?.items) ? j.data.items : [];
+
+      try { console.debug('[receivedItems] refreshAllocations: API response:', j); } catch(_) {}
+      try { console.debug('[receivedItems] refreshAllocations: items count:', items.length); } catch(_) {}
+      try { console.debug('[receivedItems] refreshAllocations: items:', items); } catch(_) {}
+
+      // Rebuild the table with fresh data
+      const rowsHtml = items.map((a, idx) => {
+        const id = Number(a.allocation_id);
+        const status = String(a.status || 'Allocated');
+        const createdAt = a.created_at ? fmtDate(a.created_at) : '';
+        const pickupAt = a.scheduled_pickup_at ? fmtDate(a.scheduled_pickup_at) : '';
+        const chevron = 'bi-chevron-up';
+        const itemsHtml = (Array.isArray(a.items) ? a.items : []).map(it => `• ${escapeHtml(`${it.quantity}x ${it.item_name}`)}`).join('<br/>');
+        let actionsHtml = '';
+        if (status.toLowerCase() === 'allocated' || status.toLowerCase() === 'notified'){
+          actionsHtml = `
+            <button type="button" class="btn btn-sm btn-outline-success me-2 btn-ack" data-bs-toggle="tooltip" data-bs-placement="top" title="Acknowledge" aria-label="Acknowledge">
+              <i class="bi bi-check2-circle"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
+              <i class="bi bi-x-circle"></i>
+            </button>`;
+        } else if (status.toLowerCase() === 'acknowledged'){
+          actionsHtml = `
+            <button type="button" class="btn btn-sm btn-outline-primary me-2 btn-schedule" data-bs-toggle="tooltip" data-bs-placement="top" title="Pick Up Items" aria-label="Pick Up Items">
+              <i class="bi bi-truck"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
+              <i class="bi bi-x-circle"></i>
+            </button>`;
+        } else if (status.toLowerCase() === 'scheduled' || status.toLowerCase() === 'picked up'){
+          actionsHtml = `
+            <button type="button" class="btn btn-sm btn-outline-success me-2 btn-complete" data-bs-toggle="tooltip" data-bs-placement="top" title="Complete" aria-label="Complete">
+              <i class="bi bi-check2-circle"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
+              <i class="bi bi-x-circle"></i>
+            </button>`;
+        } else if (status.toLowerCase() === 'completed' || status.toLowerCase() === 'cancelled'){
+          actionsHtml = `<span class="text-muted">No actions</span>`;
+        } else {
+          actionsHtml = `<span class="text-muted">No actions</span>`;
+        }
+        return `
+          <tr data-aid="${id}">
+            <td>${createdAt}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-secondary alloc-toggle" type="button" aria-expanded="false" aria-label="View items">
+                <i class="bi ${chevron}"></i>
+              </button>
+              <div class="d-inline-block ms-2 align-middle items-inline d-none">${itemsHtml}</div>
+            </td>
+            <td class="text-center">
+              <span class="badge ${statusBadgeClass(status)}">${escapeHtml(status)}</span>
+            </td>
+            <td>${pickupAt}</td>
+            <td style="width: 160px" class="text-nowrap">
+              ${actionsHtml}
+            </td>
+          </tr>`;
+      }).join('');
+      tbody.innerHTML = rowsHtml;
+
+      try { console.debug('[receivedItems] refreshAllocations: HTML generated, length:', rowsHtml.length); } catch(_) {}
+
+      // Update banner
+      if (banner){
+        if (items.length > 0){
+          banner.className = 'alert alert-success py-2';
+          banner.textContent = ``;
+        } else {
+          banner.className = 'alert alert-warning py-2';
+          banner.textContent = '';
+        }
+      }
+
+      // Reattach all event handlers
+      attachEventHandlers();
+
+      // Initialize tooltips
+      try{
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+          if (window.bootstrap && bootstrap.Tooltip) {
+            bootstrap.Tooltip.getOrCreateInstance(tooltipTriggerEl);
+          }
+        });
+      } catch(_) {}
+
+      try { console.debug('[receivedItems] refreshed', { count: items.length }); } catch(_) {}
+      return items;
+    } catch(e){
+      try { console.error('[receivedItems] refresh failed', e); } catch(_) {}
+      const msg = e && e.message ? e.message : 'An error occurred';
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Failed to refresh allocations. ${escapeHtml(msg)}</td></tr>`;
+      if (banner){ banner.className = 'd-none'; }
+      throw e;
+    }
+  }
+
+  // Attach event handlers to all buttons
+  function attachEventHandlers(){
+    const tbody = qs('main table tbody');
+    if (!tbody) {
+      try { console.error('[receivedItems] attachEventHandlers: no tbody found'); } catch(_) {}
+      return;
+    }
+
+    const cancelModalEl = document.getElementById('cancelAllocationModal');
+    const reasonInput = document.getElementById('cancelReason');
+    const confirmCancelBtn = document.getElementById('confirmCancelAllocationBtn');
+    const cancelModal = (cancelModalEl && window.bootstrap && bootstrap.Modal) ? bootstrap.Modal.getOrCreateInstance(cancelModalEl) : null;
+    let pendingCancelAid = null;
+
+    try { console.debug('[receivedItems] attachEventHandlers: modal elements:', { cancelModalEl: !!cancelModalEl, reasonInput: !!reasonInput, confirmCancelBtn: !!confirmCancelBtn, cancelModal: !!cancelModal }); } catch(_) {}
+
+    tbody.querySelectorAll('tr[data-aid]').forEach(tr => {
+      const aid = Number(tr.getAttribute('data-aid'));
+      const toggleBtn = tr.querySelector('.alloc-toggle');
+      const icon = toggleBtn?.querySelector('i');
+      const itemsDiv = tr.querySelector('.items-inline');
+      const statusBadge = tr.querySelector('.badge');
+      const ackBtn = tr.querySelector('.btn-ack');
+      const scheduleBtn = tr.querySelector('.btn-schedule');
+      const completeBtn = tr.querySelector('.btn-complete');
+      const cancelBtn = tr.querySelector('.btn-cancel');
+
+      try { console.debug('[receivedItems] attachEventHandlers: allocation', aid, { toggleBtn: !!toggleBtn, ackBtn: !!ackBtn, scheduleBtn: !!scheduleBtn, completeBtn: !!completeBtn, cancelBtn: !!cancelBtn, status: statusBadge?.textContent }); } catch(_) {}
+
+      // Toggle inline items
+      if (toggleBtn && icon && itemsDiv){
+        toggleBtn.addEventListener('click', ()=>{
+          const isShown = !itemsDiv.classList.contains('d-none');
+          if (isShown){
+            itemsDiv.classList.add('d-none');
+            icon.classList.remove('bi-chevron-down');
+            icon.classList.add('bi-chevron-up');
+            toggleBtn.setAttribute('aria-expanded','false');
+          } else {
+            itemsDiv.classList.remove('d-none');
+            icon.classList.remove('bi-chevron-up');
+            icon.classList.add('bi-chevron-down');
+            toggleBtn.setAttribute('aria-expanded','true');
+          }
+        });
+      }
+
+      // Acknowledge
+      if (ackBtn){
+        ackBtn.addEventListener('click', async ()=>{
+          try{
+            const currentStatus = statusBadge.textContent.toLowerCase();
+            if (currentStatus === 'acknowledged'){
+              showToast('Already acknowledged.');
+              return;
+            }
+            const user = getStoredUser();
+            const role = (user && user.role) ? String(user.role).toLowerCase() : '';
+            const action = (role === 'admin') ? 'acknowledge_admin' : 'acknowledge';
+            ackBtn.disabled = true;
+            const res = await fetch(`${API_BASE_URL}/allocations.php?action=${action}` , {
+              method: 'POST', credentials:'include', headers: { 'Content-Type':'application/json','Accept':'application/json' },
+              body: JSON.stringify({ allocation_id: aid })
+            });
+            const j = await res.json().catch(()=>null);
+            if (!res.ok || !j?.success){
+              const msg = j?.error || `HTTP ${res.status}`;
+              if (res.status === 400 && msg.includes('Invalid state: only Allocated/Notified can be acknowledged')){
+                showToast('Already acknowledged. Schedule pickup.');
+              } else if (res.status === 400 || res.status === 403){
+                showToast(`Unable to acknowledge: ${msg}`);
+                alert(`Unable to acknowledge: ${msg} (Check console for details)`);
+              } else {
+                showToast(`Failed to acknowledge. ${msg}`);
+                alert(`Failed to acknowledge. ${msg} (Check console for details)`);
+              }
+              ackBtn.disabled = false;
+              return;
+            }
+            // Refresh data from server
+            await refreshAllocations();
+            showToast('Allocation acknowledged. Schedule pickup in messages.');
+            } catch(e){ ackBtn.disabled = false; showToast('Failed to acknowledge.'); }
+        });
+      }
+
+      // Schedule Pickup via modal confirmation
+      if (scheduleBtn){
+        scheduleBtn.addEventListener('click', ()=>{
+          try { console.debug('[receivedItems] scheduleBtn clicked for allocation:', aid); } catch(_) {}
+          const modalEl = document.getElementById('pickupConfirmModal');
+          const confirmBtn = document.getElementById('confirmPickupBtn');
+          if (!modalEl || !confirmBtn){
+            // Fallback to immediate action if modal missing
+            doPickup();
+            return;
+          }
+          const modal = (window.bootstrap && bootstrap.Modal) ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+          if (!modal){ doPickup(); return; }
+
+          // Ensure previous listeners are cleared
+          const newBtn = confirmBtn.cloneNode(true);
+          confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+
+          newBtn.addEventListener('click', async ()=>{
+            modal.hide();
+            await doPickup();
+          });
+          modal.show();
+        });
+
+        async function doPickup(){
+          try{
+            scheduleBtn.disabled = true;
+            const url = `${API_BASE_URL}/allocations.php?action=schedule`;
+            const res = await fetch(url, {
+              method: 'POST', credentials:'include', headers: { 'Content-Type':'application/json','Accept':'application/json' },
+              body: JSON.stringify({ allocation_id: aid })
+            });
+            const j = await res.json().catch(()=>null);
+            if (!res.ok || !j?.success){
+              const msg = j?.error || `HTTP ${res.status}`;
+              showToast(`Failed to pick up items. ${msg}`);
+              scheduleBtn.disabled = false;
+              return;
+            }
+            await refreshAllocations();
+            showToast('Items picked up successfully.');
+          } catch(e){
+            try { console.error('[receivedItems] scheduleBtn/doPickup exception:', e); } catch(_) {}
+            scheduleBtn.disabled = false;
+            showToast('Failed to pick up items.');
+          }
+        }
+      }
+
+      // Complete
+      if (completeBtn){
+        completeBtn.addEventListener('click', async ()=>{
+          try{
+            completeBtn.disabled = true;
+            const res = await fetch(`${API_BASE_URL}/allocations.php?action=complete` , {
+              method: 'POST', credentials:'include', headers: { 'Content-Type':'application/json','Accept':'application/json' },
+              body: JSON.stringify({ allocation_id: aid })
+            });
+            const j = await res.json().catch(()=>null);
+            if (!res.ok || !j?.success){
+              const msg = j?.error || `HTTP ${res.status}`;
+              showToast(`Failed to complete. ${msg}`);
+              completeBtn.disabled = false;
+              return;
+            }
+            // Refresh data from server
+            await refreshAllocations();
+            showToast('Allocation completed.');
+          } catch(e){ completeBtn.disabled = false; showToast('Failed to complete.'); }
+        });
+      }
+
+      // Cancel
+      if (cancelBtn && cancelModal){
+        cancelBtn.addEventListener('click', ()=>{
+          pendingCancelAid = aid; if (reasonInput) reasonInput.value = ''; cancelModal.show();
+        });
+      }
+    });
+  }
+
+  async function loadAllocations(){
+    const tbody = qs('main table tbody');
+    const main = document.querySelector('main');
+    let banner = document.getElementById('riFeedback');
+
+    try { console.debug('[receivedItems] loadAllocations: starting'); } catch(_) {}
+    try { console.debug('[receivedItems] loadAllocations: document ready state:', document.readyState); } catch(_) {}
+    try { console.debug('[receivedItems] loadAllocations: tbody exists:', !!tbody); } catch(_) {}
+    try { console.debug('[receivedItems] loadAllocations: main exists:', !!main); } catch(_) {}
+    try { console.debug('[receivedItems] loadAllocations: banner exists:', !!banner); } catch(_) {}
+
+    if (!banner && main){
+      banner = document.createElement('div');
+      banner.id = 'riFeedback';
+      banner.className = 'alert alert-info py-2';
+      banner.style.marginTop = '0.5rem';
+      banner.textContent = '';
+      main.insertBefore(banner, main.firstChild);
+    }
+    if (!tbody) {
+      try { console.error('[receivedItems] loadAllocations: no tbody found - waiting for DOM'); } catch(_) {}
+      // Don't return here, wait for DOM to be ready
+      setTimeout(() => loadAllocations(), 100);
+      return;
+    }
+
+    try {
+      // Load initial data and attach event handlers
+      await refreshAllocations();
+    } catch(e){
+      try { console.error('[receivedItems] load failed', e); } catch(_) {}
+      const msg = e && e.message ? e.message : 'An error occurred';
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Failed to load allocations. ${escapeHtml(msg)}</td></tr>`;
+      if (banner){ banner.className = 'd-none'; }
+    }
+  }
+
+  function statusBadgeClass(status){
+    const s = String(status||'').toLowerCase();
+    if (s === 'acknowledged') return 'bg-success';
+    if (s === 'cancelled') return 'bg-danger';
+    if (s === 'delivered') return 'bg-primary';
+    if (s === 'scheduled') return 'bg-warning';
+    if (s === 'completed') return 'bg-info';
+    if (s === 'picked up') return 'bg-secondary';
+    return 'bg-info'; // Allocated
+  }
+
+  function showToast(msg){
+    try{
+      try { console.debug('[receivedItems] showToast:', msg); } catch(_) {}
+      const toastEl = document.getElementById('feedbackToast');
+      if (toastEl){
+        const body = document.getElementById('toastBody');
+        if (body) body.textContent = msg;
+        const t = bootstrap.Toast.getOrCreateInstance(toastEl);
+        t.show();
+      } else {
+        try { console.warn('[receivedItems] showToast: no toast element found'); } catch(_) {}
+      }
+    } catch(e) {
+      try { console.error('[receivedItems] showToast error:', e); } catch(_) {}
+    }
+  }
+
+  function escapeHtml(s){
+    return (s || '').replace(/[&<>"']|\n/g, function(c){
+      switch(c){
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&#39;';
+        case '\n': return '<br/>';
+      }
+      return c;
+    });
+  }
+
+  if (document.readyState === 'loading'){
+    try { console.debug('[receivedItems] DOM not ready, adding event listener'); } catch(_) {}
+    document.addEventListener('DOMContentLoaded', loadAllocations);
+  } else {
+    try { console.debug('[receivedItems] DOM ready, loading immediately'); } catch(_) {}
+    loadAllocations();
+  }
+})();

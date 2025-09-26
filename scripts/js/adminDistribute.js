@@ -13,6 +13,62 @@
     el.innerHTML = msg ? `<div class="alert alert-${type} py-2 mb-0">${msg}</div>` : '';
   }
 
+  async function fetchJson(url, opts={}){
+    const res = await fetch(url, opts);
+    const ct = (res.headers.get('content-type')||'').toLowerCase();
+    if (ct.includes('application/json')){
+      try {
+        const j = await res.json();
+        if (!res.ok || !j){
+          const err = new Error((j && j.error) ? j.error : `HTTP ${res.status}`);
+          err.status = res.status; throw err;
+        }
+        return j;
+      } catch(parseErr){
+        try {
+          const raw = await res.clone().text();
+          // Fallback: if it looks like JSON, try to parse
+          const looksJson = raw && (raw.trim().startsWith('{') || raw.trim().startsWith('['));
+          if (looksJson){
+            const j = JSON.parse(raw);
+            if (!res.ok || !j){
+              const err = new Error((j && j.error) ? j.error : `HTTP ${res.status}`);
+              err.status = res.status; throw err;
+            }
+            return j;
+          }
+          const snippet = (raw || '').slice(0, 300);
+          const err = new Error(`Invalid JSON (HTTP ${res.status}). Snippet: ${snippet}`);
+          err.status = res.status; throw err;
+        } catch(_) {
+          const err = new Error(`Invalid JSON (HTTP ${res.status}).`);
+          err.status = res.status; throw err;
+        }
+      }
+    } else {
+      // Content-Type not JSON. Still try to parse body if it looks like JSON.
+      const text = await res.text();
+      const trimmed = (text || '').trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')){
+        try {
+          const j = JSON.parse(trimmed);
+          if (!res.ok || !j){
+            const err = new Error((j && j.error) ? j.error : `HTTP ${res.status}`);
+            err.status = res.status; throw err;
+          }
+          return j;
+        } catch(parseErr){
+          const snippet = trimmed.slice(0, 300);
+          const err = new Error(`Invalid JSON (HTTP ${res.status}). Snippet: ${snippet}`);
+          err.status = res.status; throw err;
+        }
+      }
+      const snippet = trimmed.slice(0, 300);
+      const err = new Error(`Non-JSON response (HTTP ${res.status}). Snippet: ${snippet}`);
+      err.status = res.status; throw err;
+    }
+  }
+
   async function finalizeCurrentWeekIfPossible(){
     try{
       const pk = getPeriodKeyFromInputs();
@@ -128,6 +184,52 @@
     return `${month}-${w}`;
   }
 
+  async function updateAllocateNowState(selectedRecipientIds){
+    try{
+      const btn = qs('#diAllocateWeek');
+      const top = qs('#diTopFeedback');
+      const meta = qs('#diAllocMeta') || qs('#diFeedback');
+      if (!btn) return;
+      // Default: enabled
+      btn.disabled = false;
+      if (top) showMsg(top, '', 'secondary');
+      if (meta) showMsg(meta, '', 'secondary');
+
+      const pk = getPeriodKeyFromInputs();
+      if (!pk) return; // cannot resolve period
+
+      // Resolve run by period
+      const runRes = await fetch(`${API_BASE_URL}/allocations.php?action=run_by_period&period_key=${encodeURIComponent(pk)}&t=${Date.now()}`, { credentials:'include', headers:{'Accept':'application/json'} });
+      const runJ = await runRes.json().catch(()=>null);
+      if (!runRes.ok || !runJ?.success || !runJ?.data?.run_id){
+        // No run yet => allocation allowed
+        return;
+      }
+      const runId = parseInt(runJ.data.run_id,10)||0;
+      if (!runId) return;
+
+      // Load allocations for that run
+      const listRes = await fetch(`${API_BASE_URL}/allocations.php?action=list_by_run&run_id=${encodeURIComponent(String(runId))}&t=${Date.now()}`, { credentials:'include', headers:{'Accept':'application/json'} });
+      const listJ = await listRes.json().catch(()=>null);
+      if (!listRes.ok || !listJ?.success){ return; }
+      const arr = Array.isArray(listJ?.data?.items) ? listJ.data.items : [];
+      if (arr.length === 0){ return; }
+
+      // If any allocation belongs to the currently selected recipients, disable
+      const selected = Array.isArray(selectedRecipientIds) ? selectedRecipientIds.map(n=>parseInt(n,10)).filter(Number.isFinite) : getSelectedIds();
+      const selSet = new Set(selected);
+      const overlap = arr.some(a => selSet.has(parseInt(a.recipient_id,10)||0));
+      if (overlap){
+        btn.disabled = true;
+        const link = `DistributeResult.html?period_key=${encodeURIComponent(pk)}`;
+        const text = `Allocate Now is disabled: current run already has allocations for one or more selected recipients. <a href="${link}" class="alert-link">Open Distribution: Result</a> to review.`;
+        if (top) showMsg(top, text, 'warning');
+        // Also clear/hide bottom meta to avoid duplicate
+        if (meta) showMsg(meta, '', 'secondary');
+      }
+    } catch(_){ /* non-blocking */ }
+  }
+
   function updateSelectedCount(){
     const count = (qs('#diSelected')?.children.length) || 0;
     const badge = qs('#diSelectedCount');
@@ -239,18 +341,38 @@
   }
 
   function addRecipientRowWithValues(recId, category, name, qty){
-    addRecipientRow(recId);
     const tbody = qs(`.di-rec-tbody[data-rec="${recId}"]`);
-    const last = tbody?.lastElementChild;
-    if (!last) return;
-    const catEl = qs('.di-cat', last);
-    const nameEl = qs('.di-name', last);
-    const qtyEl = qs('.di-alloc', last);
-    if (catEl) catEl.value = String(category||'');
-    if (nameEl) nameEl.value = String(name||'');
-    if (qtyEl) qtyEl.value = String(Math.max(0, parseInt(qty||'0',10)||0));
-    try{ recomputeAvailabilities(); } catch(_){}
-  }
+    if (!tbody) return;
+    const targetCat = String(category||'').trim().toLowerCase();
+    const targetName = String(name||'').trim().toLowerCase();
+    const addQty = Math.max(0, parseInt(qty||'0',10)||0);
+    // Try to find an existing row with same category + name (case-insensitive)
+    let merged = false;
+    qsa('tr', tbody).some(tr => {
+      const catVal = (qs('.di-cat', tr)?.value || '').trim().toLowerCase();
+      const nameVal = (qs('.di-name', tr)?.value || '').trim().toLowerCase();
+      if (catVal === targetCat && nameVal === targetName){
+        const qtyEl = qs('.di-alloc', tr);
+        const cur = Math.max(0, parseInt(qtyEl?.value || '0', 10) || 0);
+        if (qtyEl) qtyEl.value = String(cur + addQty);
+        merged = true;
+        return true; // stop iteration
+      }
+      return false;
+    });
+    if (!merged){
+      // Append a new row
+      addRecipientRow(recId);
+      const last = tbody?.lastElementChild;
+      if (!last) return;
+      const catEl = qs('.di-cat', last);
+      const nameEl = qs('.di-name', last);
+      const qtyEl = qs('.di-alloc', last);
+      if (catEl) catEl.value = String(category||'');
+      if (nameEl) nameEl.value = String(name||'');
+      if (qtyEl) qtyEl.value = String(addQty);
+    }
+    try{ recomputeAvailabilities(); } catch(_){}}
 
   function computePlannedTotals(){
     const totals = new Map();
@@ -671,6 +793,12 @@
     const prevBtn = qs('#diAllocPrevBtn'); const nextBtn = qs('#diAllocNextBtn');
     if (prevBtn) prevBtn.disabled = disable; if (nextBtn) nextBtn.disabled = disable;
 
+    // After rendering, update Allocate Now button state based on current run allocations
+    try {
+      const ids = Array.isArray(recipients) ? recipients.map(r => parseInt(r.id||r.user_id||r.recipient_id||0,10)).filter(Number.isFinite) : [];
+      updateAllocateNowState(ids);
+    } catch(_){ /* ignore */ }
+
     // Wire Auto button (per recipient) using server-side preview restricted to current selection
     document.addEventListener('click', async (e)=>{
       const t = e.target;
@@ -1088,7 +1216,11 @@
       // Populate Category from inventory (allow free typing; validate after)
       if ($cat && $cat.length){
         const catData = select2DataFromSet(cats);
-        try{ $cat.select2('destroy'); } catch(_){ }
+        try{
+          if ($cat.hasClass('select2-hidden-accessible') || ($cat.data && $cat.data('select2'))){
+            $cat.select2('destroy');
+          }
+        } catch(_){ }
         $cat.empty();
         $cat.select2({ data: catData, tags: true, placeholder: $cat.data('placeholder')||'Category', allowClear: true, width: '100%', dropdownParent: ddParent });
       }
@@ -1102,7 +1234,11 @@
           namesSet = new Set(Array.from(namesByCat.values()).flatMap(s => Array.from(s)));
         }
         const nameData = select2DataFromSet(namesSet);
-        try{ $name.select2('destroy'); } catch(_){ }
+        try{
+          if ($name.hasClass('select2-hidden-accessible') || ($name.data && $name.data('select2'))){
+            $name.select2('destroy');
+          }
+        } catch(_){ }
         $name.empty();
         $name.select2({ data: nameData, tags: true, placeholder: $name.data('placeholder')||'Item name', allowClear: true, width: '100%', dropdownParent: ddParent });
       }
@@ -1278,14 +1414,12 @@
         if (!window.__diAllRecipients) window.__diAllRecipients = await fetchRecipients();
         const recMap = new Map((window.__diAllRecipients||[]).map(u => [Number(u.user_id || u.id), u]));
         // Call server preview (pooled distribution across inventory) restricted to current selection
-        const res = await fetch(`${API_BASE_URL}/allocations.php?action=preview_allocation`, {
+        const j = await fetchJson(`${API_BASE_URL}/allocations.php?action=preview_allocation&recipient_ids=${encodeURIComponent(selIds.join(','))}`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ period_key: pk, recipient_ids: selIds })
         });
-        const j = await res.json();
-        if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
         const allocations = Array.isArray(j?.data?.allocations) ? j.data.allocations : [];
         if (!allocations.length){ showMsg(fb, 'No allocations suggested for this week.', 'warning'); return; }
         const orderedIds = Array.from(new Set(allocations.map(a => Number(a.recipient_id)).filter(n=>Number.isFinite(n)&&n>0)));
@@ -1333,19 +1467,22 @@
         try{
           const pk = getPeriodKeyFromInputs();
           if (!pk) { showMsg(fb, 'Please choose a valid Month and Week.', 'warning'); return; }
-          showMsg(fb, 'Previewing allocation...', 'secondary');
-          // Ensure recipients are loaded for labels
+          const selIds = getSelectedIds();
+          if (!selIds.length){ showMsg(fb, 'Select at least one recipient first.', 'warning'); return; }
+          // Ensure recipients loaded for labels
           if (!window.__diAllRecipients) window.__diAllRecipients = await fetchRecipients();
-          const recMap = new Map(window.__diAllRecipients.map(u => [Number(u.user_id || u.id), u]));
-          // Call preview
-          const res = await fetch(`${API_BASE_URL}/allocations.php?action=preview_allocation&period_key=${encodeURIComponent(pk)}`, { credentials:'include' });
-          const j = await res.json();
-          if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+          const recMap = new Map((window.__diAllRecipients||[]).map(u => [Number(u.user_id || u.id), u]));
+          // Call preview for the currently selected recipients
+          const j = await fetchJson(`${API_BASE_URL}/allocations.php?action=preview_allocation&recipient_ids=${encodeURIComponent(selIds.join(','))}`, {
+            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ period_key: pk, recipient_ids: selIds })
+          });
           const allocations = Array.isArray(j?.data?.allocations) ? j.data.allocations : [];
-          const orderedIds = allocations.map(a => Number(a.recipient_id)).filter(n=>Number.isFinite(n)&&n>0);
+          if (!allocations.length){ showMsg(fb, 'No allocations suggested for this selection.', 'warning'); return; }
+          const orderedIds = Array.from(new Set(allocations.map(a => Number(a.recipient_id)).filter(n=>Number.isFinite(n)&&n>0)));
           const recipients = orderedIds.map(id => ({ id, ...(recMap.get(id) || {}) }));
           buildAllocationColumns(recipients, {});
-          // Populate rows per recipient with preview suggestion (aggregate by item per recipient)
+          // Aggregate and populate rows per recipient
           const agg = new Map();
           allocations.forEach(a => {
             const rid = Number(a.recipient_id);
@@ -1361,15 +1498,15 @@
             addRecipientRowWithValues(Number(ridStr), cat, name, qty);
           });
           showMsg(fb, 'Allocation preview loaded (no inventory deducted).', 'success');
+          // Refresh inventory suggestions and selects
+          loadInventorySummary().then(initGlobalSelectsFromInventory);
         } catch(err){
           console.error('Preview allocation failed:', err);
           showMsg(qs('#diFeedback'), err.message || 'Failed to preview allocation', 'danger');
         }
-        // Load inventory summary for suggestions and initialize Select2s
-        loadInventorySummary().then(initGlobalSelectsFromInventory);
       });
 
-      // Allocate Now (plan only; DO NOT deduct inventory). Recipients will later acknowledge and pickup.
+      // Allocate Now (persist to DB; DO NOT deduct inventory). Recipients will later acknowledge and pickup.
       qs('#diAllocateWeek')?.addEventListener('click', async () => {
         const fb = qs('#diAllocMeta');
         const btn = qs('#diAllocateWeek');
@@ -1388,37 +1525,57 @@
           const groups = collectAllocationsFromUI();
           if (!groups.length){ showMsg(fb, 'Nothing to allocate. Add items and quantities first.', 'warning'); return; }
           btn.disabled = true;
-          showMsg(fb, 'Saving allocation plan (no inventory deducted)...', 'secondary');
-          // Build a 'done' style array from planned groups without calling inventory APIs
-          const done = [];
+          showMsg(fb, 'Saving allocations to database (no inventory deducted)...', 'secondary');
+          // Create an allocation run first
+          function computePeriodKey(d){
+            const y = d.getFullYear();
+            const m = String(d.getMonth()+1).padStart(2,'0');
+            const day = d.getDate();
+            let w = Math.ceil(day/7);
+            if (w < 1) w = 1; if (w > 4) w = 4;
+            return `${y}-${m}-W${w}`;
+          }
+          const periodKey = computePeriodKey(new Date());
+          let runId = 0;
+          try{
+            const rr = await fetch(`${API_BASE_URL}/allocations.php?action=create_run`, {
+              method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
+              body: JSON.stringify({ note: `Auto-run ${new Date().toISOString()}`, period_key: periodKey })
+            });
+            const rj = await rr.json().catch(()=>null);
+            if (!(rr.ok && rj && rj.success && rj.data && rj.data.run_id)) throw new Error('Failed to create run');
+            runId = Number(rj.data.run_id)||0;
+          } catch(e){ showMsg(fb, 'Failed to create allocation run.', 'danger'); btn.disabled=false; return; }
+
+          // Persist allocations per recipient directly to DB with run_id
+          const results = [];
           for (const g of groups){
             const rid = Number(g.recipient_id || g.id || 0) || 0;
-            const items = Array.isArray(g.items) ? g.items : [];
-            for (const it of items){
-              const item_name = String(it.item_name || it.name || '');
-              const category = String(it.category || it.product_category || '');
-              const quantity = Number(it.quantity || it.qty || 0) || 0;
-              if (!item_name || quantity <= 0) continue;
-              done.push({ recipient_id: rid, item_name, category, quantity });
-            }
+            const items = (Array.isArray(g.items) ? g.items : []).map(it => ({
+              item_name: String(it.item_name || it.name || ''),
+              category: String(it.category || it.product_category || ''),
+              quantity: Number(it.quantity || it.qty || 0) || 0,
+            })).filter(x => x.item_name && x.quantity > 0);
+            if (!rid || !items.length) continue;
+            try{
+              const res = await fetch(`${API_BASE_URL}/allocations.php?action=create_result`, {
+                method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
+                body: JSON.stringify({ recipient_id: rid, items, run_id: runId })
+              });
+              const j = await res.json().catch(()=>null);
+              const ok = !!(res.ok && j && j.success && j.data && j.data.allocation_id);
+              results.push({ rid, ok, id: j?.data?.allocation_id || null });
+            } catch(_){ results.push({ rid, ok:false, id:null }); }
           }
-          // Persist minimal summary for the Result page (plan only)
-          const all = window.__diAllRecipients || [];
-          const recMap = {};
-          all.forEach(u => {
-            const id = Number(u.user_id || u.id);
-            if (!id) return;
-            const org = (u.organization_name && String(u.organization_name).trim()) ? String(u.organization_name).trim() : '';
-            const typ = (u.organization_type && String(u.organization_type).trim()) ? String(u.organization_type).trim() : '';
-            const label = org ? (typ ? `${org} - ${typ}` : org) : (u.name || `Recipient ${id}`);
-            recMap[String(id)] = { label };
-          });
-          const payload = JSON.stringify({ when: Date.now(), done, recipients: recMap, plan_only: true });
-          sessionStorage.setItem('lastAllocation', payload);
-          try { localStorage.setItem('lastAllocation', payload); } catch(_){ }
-          await loadInventorySummary();
-          // Show modal safely; fallback to inline if modal fails
-          safeShowAlertModal(`Allocation successful!`, 'DistributeResult.html', 'Notify All Recipients');
+          const okIds = results.filter(r=>r.ok).map(r=>r.rid);
+          if (okIds.length > 0 && runId){
+            // Redirect to DB-backed result view by period_key to keep URL clean
+            window.location.href = `DistributeResult.html?period_key=${encodeURIComponent(String(periodKey))}`;
+            return;
+          } else {
+            const failCount = results.length;
+            showMsg(fb, `No allocations were saved. Failed: ${failCount}.`, 'danger');
+          }
         } catch(err){
           console.error('Save plan failed:', err);
           showMsg(qs('#diAllocMeta'), err?.message || 'Failed to save allocation plan', 'danger');

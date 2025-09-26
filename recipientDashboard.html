@@ -12,6 +12,10 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
       rel="stylesheet"
     />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
@@ -87,25 +91,27 @@
         </div>
       </div>
     </nav>
+
     <div class="sidebar-backdrop" style="display: none"></div>
+
     <aside class="collapsed">
       <a
-        href="recipientDashboard.html"
+        href="DonorDashboard.html"
         class="nav-link active"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Dashboard"
-        ><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a
+        ><i class="bi bi-house-door-fill me-2"></i> <span>Dashboard</span></a
       >
       <a
-        href="recipientHistory.html"
+        href="RecievedItems.html"
         class="nav-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
-        data-bs-title="History"
-        ><i class="bi bi-clock-history me-2"></i><span>History</span></a
+        data-bs-title="Recieved Items"
+        ><i class="bi bi-box-seam me-2"></i> <span>Recieved Items</span></a
       >
     </aside>
 
@@ -116,11 +122,7 @@
         </ol>
       </div>
 
-      <div
-        class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap"
-      >
-        <h5 class="mb-0">Welcome, <span class="user-name"></span></h5>
-      </div>
+      <h5 class="mb-3">Welcome, <span class="user-name"></span></h5>
 
       <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
         <div class="col">
@@ -129,10 +131,10 @@
               <h6 class="card-title">Donations Received</h6>
               <div class="card-elements">
                 <div class="card-icon">
-                  <i class="bi bi-bucket-fill"></i>
+                  <i class="bi bi-box2-heart-fill"></i>
                 </div>
                 <div class="card-text">
-                  <h3 class="metric-number" id="totalDonationsReceived">0</h3>
+                  <h3 class="mb-0" id="totalDonations">0</h3>
                   <small class="text-muted">Received</small>
                 </div>
               </div>
@@ -143,13 +145,13 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Scheduled Pickups</h6>
+              <h6 class="card-title">Upcoming Deliveries</h6>
               <div class="card-elements">
                 <div class="card-icon">
-                  <i class="bi bi-truck"></i>
+                  <i class="bi bi-calendar-week-fill"></i>
                 </div>
                 <div class="card-text">
-                  <h3 class="metric-number" id="scheduledPickups">0</h3>
+                  <h3 class="mb-0" id="upcomingDonations">0</h3>
                   <small class="text-muted">Scheduled</small>
                 </div>
               </div>
@@ -160,14 +162,14 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Fulfillment Rate</h6>
+              <h6 class="card-title">Pending Deliveries</h6>
               <div class="card-elements">
                 <div class="card-icon">
-                  <i class="bi bi-people-fill"></i>
+                  <i class="bi bi-clock-fill"></i>
                 </div>
                 <div class="card-text">
-                  <h3 class="metric-number" id="fulfillmentRate">0%</h3>
-                  <small class="text-muted">Rate</small>
+                  <h3 class="mb-0" id="activeDonors">0</h3>
+                  <small class="text-muted">Pending</small>
                 </div>
               </div>
             </div>
@@ -177,14 +179,14 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Meals Served</h6>
+              <h6 class="card-title">Missed Deliveries</h6>
               <div class="card-elements">
                 <div class="card-icon">
-                  <i class="bi bi-building-check"></i>
+                  <i class="bi bi-x-lg"></i>
                 </div>
                 <div class="card-text">
-                  <h3 class="metric-number" id="mealsServed">0</h3>
-                  <small class="text-muted">Served</small>
+                  <h3 class="mb-0" id="activeRecipients">0</h3>
+                  <small class="text-muted">Missed</small>
                 </div>
               </div>
             </div>
@@ -193,25 +195,19 @@
 
         <div class="col-12 col-lg-9">
           <div class="card card-accent p-4 w-100 h-100">
-            <div
-              class="d-flex justify-content-between align-items-center mb-3 gap-2"
-            >
-              <h6 class="section-title mb-0">Metrics</h6>
-              <select class="form-select w-auto">
-                <option>This week</option>
-                <option>Last week</option>
-              </select>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0">Metrics</h6>
             </div>
-            <div style="height: 100%">
+
+            <div style="height: 300px">
               <canvas id="lineChart"></canvas>
             </div>
-            <div class="fs-6 mt-3 text-center">Pickups this week</div>
           </div>
         </div>
 
         <div class="col-12 col-lg-3">
           <div class="card card-accent p-4 w-100 h-100 d-flex flex-column">
-            <div class="mb-3 text-start section-title">Activity Feed</div>
+            <div class="fs-5 mb-3 text-start">Activity Feed</div>
             <div class="flex-grow-1 activity-feed">
               <div class="details mb-2">
                 <strong>10:45 AM</strong><br />Donor "ABC Foods" submitted 20
@@ -239,7 +235,6 @@
       </div>
     </main>
 
-    <!-- Modals -->
     <!-- Notifications Modal -->
     <div
       class="modal fade"
@@ -277,74 +272,39 @@
       </div>
     </div>
 
-    <!-- Messages Modal -->
+    <!-- Messages Modal is injected by scripts/js/messages.js on demand -->
+
+    <!-- Toast Container -->
     <div
-      class="modal fade"
-      id="messagesModal"
-      tabindex="-1"
-      aria-labelledby="messagesModalLabel"
-      aria-hidden="true"
+      class="toast-container position-fixed top-0 end-0 p-3"
+      style="z-index: 1080"
     >
-      <div class="modal-dialog modal-dialog-scrollable modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div class="d-flex" style="min-height: 300px">
-              <div class="border-end pe-3 me-3" style="width: 220px">
-                <input
-                  class="form-control form-control-sm mb-2"
-                  placeholder="Search conversations"
-                />
-                <div class="list-group small">
-                  <a
-                    href="#"
-                    class="list-group-item list-group-item-action active"
-                    >Cebu Food Bank</a
-                  >
-                  <a href="#" class="list-group-item list-group-item-action"
-                    >Operations</a
-                  >
-                </div>
-              </div>
-              <div class="flex-grow-1 d-flex flex-column">
-                <div class="flex-grow-1 overflow-auto mb-2">
-                  <div class="text-muted small mb-2">Today</div>
-                  <div class="d-flex mb-2">
-                    <div class="p-2 rounded bg-light">
-                      Welcome to messaging!
-                    </div>
-                  </div>
-                </div>
-                <div class="input-group">
-                  <input
-                    type="text"
-                    class="form-control"
-                    placeholder="Type a message..."
-                  />
-                  <button class="btn btn-warning" type="button">
-                    <i class="bi bi-send"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+      <div
+        id="feedbackToast"
+        class="toast align-items-center text-bg-dark border-0"
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+      >
+        <div class="d-flex">
+          <div class="toast-body" id="toastBody">Action completed.</div>
+          <button
+            type="button"
+            class="btn-close btn-close-white me-2 m-auto"
+            data-bs-dismiss="toast"
+            aria-label="Close"
+          ></button>
         </div>
       </div>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="scripts/js/auth.js"></script>
+    <script src="scripts/js/messages.js"></script>
     <script src="scripts/js/notifications.js"></script>
-    <script src="scripts/js/recipientDashboard.js"></script>
     <script src="scripts/js/sidebar.js"></script>
+    <script src="scripts/js/recipientDashboard.js"></script>
   </body>
 </html>

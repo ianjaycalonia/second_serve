@@ -1,0 +1,15 @@
+AddType application/x-httpd-php .php
+AddType application/x-httpd-php .php3
+AddType application/x-httpd-php .php4
+AddType application/x-httpd-php .php5
+AddType application/x-httpd-php .phtml
+
+# Enable PHP execution
+<FilesMatch "\.php$">
+    SetHandler application/x-httpd-php
+</FilesMatch>
+
+# Hide PHP files from being downloaded
+<FilesMatch "\.php$">
+    Header set Content-type "application/x-httpd-php"
+</FilesMatch>

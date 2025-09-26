@@ -47,6 +47,9 @@
         case 'donation_created': return '📦';
         case 'status_updated': return '🚚';
         case 'donation_cancelled': return '🛑';
+        case 'allocation_ready': return '📦';
+        case 'allocation_acknowledged': return '✅';
+        case 'allocation_cancelled': return '❌';
         default: return '🔔';
       }
     })((n.type || '').toLowerCase());
@@ -114,15 +117,21 @@
         const refIdRaw = li.getAttribute('data-ref-id');
         const refId = refIdRaw && /^\d+$/.test(refIdRaw) ? parseInt(refIdRaw, 10) : null;
         try {
-          await fetch(`${API_BASE_URL}/notifications.php?action=read&id=${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include'
-          });
-          // Optimistically update UI
+          const wasUnread = li.classList.contains('unread');
+          // Optimistically update UI immediately
           li.classList.remove('unread');
           const badge = li.querySelector('.badge');
           if (badge) badge.remove();
+          // Only call PATCH when it was unread; ignore any errors (it might have been read via markAllRead)
+          if (wasUnread) {
+            try {
+              await fetch(`${API_BASE_URL}/notifications.php?action=read&id=${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+              });
+            } catch(_) { /* ignore */ }
+          }
           // Determine destination
           const user = getStoredUser();
           const role = (user?.role || '').toLowerCase();
@@ -137,6 +146,11 @@
           } else if (nType === 'donation_cancelled') {
             if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
+          } else if (nType === 'allocation_ready') {
+            // Recipients: redirect to Received Items page to view allocations
+            if (role === 'recipient') {
+              dest = 'RecievedItems.html';
+            }
           }
           // Fallbacks by reference_type if not set above
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
@@ -158,17 +172,26 @@
   }
 
   async function fetchNotifications() {
-    const user = getStoredUser();
-    const userId = user?.user_id || user?.userId || user?.id;
-    if (!userId) return;
-
+    // Let server default to current session user
     try {
-      const res = await fetch(`${API_BASE_URL}/notifications.php?user_id=${encodeURIComponent(userId)}`, {
+      const res = await fetch(`${API_BASE_URL}/notifications.php`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
       });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>`HTTP ${res.status}`);
+        // Show error in UI for visibility during testing
+        if (listEl) {
+          listEl.innerHTML = `<div class="text-center text-danger py-3">Notifications fetch failed (${res.status}). ${escapeHtml(txt)}</div>`;
+        }
+        if (bellIcon && bellAnchor) {
+          bellIcon.classList.add('text-danger');
+          bellAnchor.classList.add('text-danger');
+          bellAnchor.setAttribute('title', `Notifications fetch failed (${res.status})`);
+        }
+        throw new Error(txt);
+      }
       const json = await res.json();
       const items = json?.data?.items || [];
       // Render only if changed (shallow compare by id+read_status count)
@@ -179,6 +202,16 @@
       }
     } catch (e) {
       console.error('Notifications fetch failed', e);
+      // If we reach here and UI not yet updated, provide a minimal hint
+      try {
+        if (listEl && !listEl.innerHTML) {
+          listEl.innerHTML = '<div class="text-center text-muted py-3">Unable to load notifications.</div>';
+        }
+        if (bellIcon && bellAnchor) {
+          bellIcon.classList.add('text-danger');
+          bellAnchor.classList.add('text-danger');
+        }
+      } catch(_) {}
     }
   }
 
@@ -201,18 +234,15 @@
         await fetchNotifications();
       });
     }
-    // Regular polling in background (10 seconds)
+    // Regular polling in background (10 seconds, normal operation)
     pollingTimer = window.setInterval(fetchNotifications, 10000);
     // Initial background fetch too
     fetchNotifications();
   }
 
   async function markAllRead() {
-    const user = getStoredUser();
-    const userId = user?.user_id || user?.userId || user?.id;
-    if (!userId) return;
     try {
-      await fetch(`${API_BASE_URL}/notifications.php?action=read_all&user_id=${encodeURIComponent(userId)}`, {
+      await fetch(`${API_BASE_URL}/notifications.php?action=read_all`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
