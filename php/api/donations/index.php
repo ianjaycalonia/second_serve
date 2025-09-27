@@ -358,12 +358,75 @@ try {
     if ($method === 'GET' && preg_match('#^/(items|items/)\z#', $sub)) {
         // Donors and admins can search names
         requireRole(['donor','admin']);
-        $q = isset($_GET['q']) ? sanitize($_GET['q']) : '';
-        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
-        $category = isset($_GET['category']) ? sanitize((string)$_GET['category']) : null;
-        $names = $service->searchItemNames($q, $limit, $category);
+        $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+        $limit = isset($_GET['limit']) ? max(1, min(100, (int)$_GET['limit'])) : 20; // 1..100
+        $category = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
+        $items = [];
+        try {
+            $db = Database::getInstance();
+            $params = [];
+            $where = "WHERE product_name IS NOT NULL AND product_name <> ''";
+            if ($category !== '') { $where .= " AND product_category = ?"; $params[] = $category; }
+            if ($q !== '') { $where .= " AND product_name LIKE ?"; $params[] = ('%'.$q.'%'); }
+            $sql = "SELECT DISTINCT product_name AS name FROM inventory $where ORDER BY name ASC LIMIT ".$limit;
+            $rows = $db->query($sql, $params)->fetchAll();
+            foreach ($rows as $r) {
+                $n = isset($r['name']) ? trim((string)$r['name']) : '';
+                if ($n !== '') { $items[] = $n; }
+            }
+        } catch (Exception $e) {
+            error_log('items endpoint inventory query failed: ' . $e->getMessage());
+        }
+        // Fallback to donations-based search if inventory is empty
+        if (empty($items)) {
+            try {
+                $names = $service->searchItemNames(sanitize($q), $limit, ($category!==''?sanitize($category):null));
+                if (is_array($names)) { $items = $names; }
+            } catch (Exception $e) {
+                error_log('items endpoint donations fallback failed: ' . $e->getMessage());
+            }
+        }
         // Simple list response; front-end maps to Select2 results
-        sendJson(['success' => true, 'items' => $names]);
+        sendJson(['success' => true, 'items' => $items]);
+    }
+
+    // GET /api/donations/categories - list distinct categories primarily from inventory, fallback to donations
+    if ($method === 'GET' && preg_match('#^/(categories|categories/)\z#', $sub)) {
+        requireRole(['donor','admin']);
+        $cats = [];
+        try {
+            $db = Database::getInstance();
+            // Optional client search term (Select2 may send 'term' or we pass 'q')
+            $term = isset($_GET['q']) ? trim((string)$_GET['q']) : (isset($_GET['term']) ? trim((string)$_GET['term']) : '');
+            // First try inventory categories
+            if ($term !== '') {
+                $like = '%' . $term . '%';
+                $rows = $db->query("SELECT DISTINCT product_category AS category FROM inventory WHERE product_category IS NOT NULL AND product_category <> '' AND product_category LIKE ? ORDER BY category ASC", [$like])->fetchAll();
+            } else {
+                $rows = $db->query("SELECT DISTINCT product_category AS category FROM inventory WHERE product_category IS NOT NULL AND product_category <> '' ORDER BY category ASC")->fetchAll();
+            }
+            foreach ($rows as $r) {
+                $t = isset($r['category']) ? trim((string)$r['category']) : '';
+                if ($t !== '') { $cats[] = $t; }
+            }
+            // If none in inventory, fallback to donations.type
+            if (empty($cats)) {
+                if ($term !== '') {
+                    $like = '%' . $term . '%';
+                    $rows2 = $db->query("SELECT DISTINCT type FROM donations WHERE type IS NOT NULL AND type <> '' AND type LIKE ? ORDER BY type ASC", [$like])->fetchAll();
+                } else {
+                    $rows2 = $db->query("SELECT DISTINCT type FROM donations WHERE type IS NOT NULL AND type <> '' ORDER BY type ASC")->fetchAll();
+                }
+                foreach ($rows2 as $r) {
+                    $t = isset($r['type']) ? trim((string)$r['type']) : '';
+                    if ($t !== '') { $cats[] = $t; }
+                }
+            }
+        } catch (Exception $e) {
+            error_log('categories endpoint failed: ' . $e->getMessage());
+            // fall through with empty list
+        }
+        sendJson(['success' => true, 'items' => $cats]);
     }
 
     // GET /api/donations/debug?id=123 OR /api/donations/debug?batch=<uuid>

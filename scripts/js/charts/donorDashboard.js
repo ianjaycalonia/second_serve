@@ -199,7 +199,7 @@
     function initSelect2($el) {
       if (!$el || !$el.length || !$.fn.select2) return;
       $el.select2({
-        tags: true, // allow new entries
+        tags: true, // allow new entries, but we'll validate length
         width: "100%",
         placeholder: $el.data("placeholder") || "Search or type new",
         minimumInputLength: 1,
@@ -229,7 +229,7 @@
         },
         createTag: function (params) {
           const term = (params.term || "").trim();
-          if (term === "") return null;
+          if (term.length < 1) return null; // enforce min length for free-typed names (>=1)
           return { id: term, text: term, newTag: true };
         },
       });
@@ -242,17 +242,34 @@
       $name.val(null).trigger('change');
     });
 
-    function initCategorySelect2() {
-      const $cat = $("#donationType");
+    function initRowCategorySelect2($row) {
+      const $cat = $row.find('.item-cat');
       if (!$cat.length || !$.fn.select2) return;
-      // Initialize once
+      // If already initialized, skip
       if ($cat.hasClass('select2-hidden-accessible')) return;
       $cat.select2({
         width: '100%',
         placeholder: 'Select category',
         dropdownParent: $modal,
         tags: false,
-        minimumResultsForSearch: 5 // show search when many
+        allowClear: true,
+        minimumInputLength: 0,
+        ajax: {
+          url: `${API_BASE_URL}/donations/index.php/categories`,
+          dataType: 'json',
+          delay: 250,
+          processResults: function(data){
+            const items = (data && Array.isArray(data.items)) ? data.items : [];
+            return { results: items.map(t => ({ id: t, text: t })) };
+          },
+          xhrFields: { withCredentials: true },
+          cache: true
+        }
+      });
+      // When opened and no options loaded yet, trigger an initial query
+      $cat.on('select2:open', function(){
+        const $search = $('.select2-container--open .select2-search__field');
+        if ($search.length) { $search.trigger('input'); }
       });
     }
 
@@ -279,27 +296,6 @@
             <label class="form-label mb-1">Category</label>
             <select class="form-select item-cat" required>
               <option value="">Select category</option>
-              <option value="Bakery">Bakery</option>
-              <option value="Beverage - Juices/Coffee/Tea">Beverage - Juices/Coffee/Tea</option>
-              <option value="Beverage - Sweetened Beverages">Beverage - Sweetened Beverages</option>
-              <option value="Beverage - Water">Beverage - Water</option>
-              <option value="Confectionary">Confectionary</option>
-              <option value="Dairy">Dairy</option>
-              <option value="Fats &amp; Oils">Fats &amp; Oils</option>
-              <option value="Fruits &amp; Vegetables">Fruits &amp; Vegetables</option>
-              <option value="Grains/Grain Products">Grains/Grain Products</option>
-              <option value="Non-Food - Baby Products">Non-Food - Baby Products</option>
-              <option value="Non-Food - Cleaning Products">Non-Food - Cleaning Products</option>
-              <option value="Non-Food - Others">Non-Food - Others</option>
-              <option value="Non-Food - Personal Hygiene">Non-Food - Personal Hygiene</option>
-              <option value="Non-Food - Pet Food">Non-Food - Pet Food</option>
-              <option value="Prepared Foods">Prepared Foods</option>
-              <option value="Processed Cereals/ Cereal Products">Processed Cereals/ Cereal Products</option>
-              <option value="Protein-Animal Based">Protein-Animal Based</option>
-              <option value="Ready-To-Eat Savories">Ready-To-Eat Savories</option>
-              <option value="Sauces/Condiments/Seasonings">Sauces/Condiments/Seasonings</option>
-              <option value="Special Nutritional Uses">Special Nutritional Uses</option>
-              <option value="Sweeteners">Sweeteners</option>
             </select>
             <div class="invalid-feedback">Category is required.</div>
           </div>
@@ -346,9 +342,9 @@
     function addItemRow() {
       const id = __rowId++;
       $itemsContainer.append(itemRowTemplate(id));
-      initSelect2(
-        $itemsContainer.find(`.item-row[data-id="${id}"] .item-name-select`)
-      );
+      const $row = $itemsContainer.find(`.item-row[data-id="${id}"]`);
+      initRowCategorySelect2($row);
+      initSelect2($row.find('.item-name-select'));
     }
     function removeItemRow(btn) {
       $(btn).closest(".item-row").remove();
@@ -391,7 +387,7 @@
         const qty = parseInt($row.find(".item-qty").val(), 10);
         const expiry = String($row.find('.item-expiry').val() || '').trim();
         const cat = String($row.find('.item-cat').val() || '').trim();
-        if (!name) {
+        if (!name || name.length < 1) {
           $row.find(".item-name-select").addClass("is-invalid");
           ok = false;
         }
@@ -583,12 +579,14 @@
     // When modal becomes visible, ensure at least one item row exists and init Select2
     $modal.on("shown.bs.modal", function () {
       if ($itemsContainer.find(".item-row").length === 0) addItemRow();
-      $itemsContainer.find(".item-name-select").each(function () {
-        if (!$(this).hasClass("select2-hidden-accessible")) {
-          initSelect2($(this));
+      $itemsContainer.find(".item-row").each(function(){
+        const $row = $(this);
+        initRowCategorySelect2($row);
+        const $name = $row.find('.item-name-select');
+        if ($name.length && !$name.hasClass('select2-hidden-accessible')) {
+          initSelect2($name);
         }
       });
-      initCategorySelect2();
     });
 
     // History listing remains defined above; no duplicates below
@@ -604,7 +602,7 @@
     // Initial load
     fetchHistory(true);
 
-    // If the modal content is already present before opening, prep the category select for better UX
-    initCategorySelect2();
+    // If content exists pre-open, ensure row selects are initialized
+    $itemsContainer.find('.item-row').each(function(){ initRowCategorySelect2($(this)); });
   });
 })();

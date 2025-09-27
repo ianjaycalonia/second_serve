@@ -7,6 +7,8 @@
 
   const qs = (s, r=document)=> r.querySelector(s);
   const qsa = (s, r=document)=> Array.from(r.querySelectorAll(s));
+  // Track recipients whose allocation is considered locked (cannot return to pool unless cancelled)
+  const lockedIds = new Set();
 
   function toast(msg, type='secondary'){
     try{
@@ -158,7 +160,7 @@
       const before = findBeforeElement(el, e.clientY);
       if (before) el.insertBefore(card, before); else el.appendChild(card);
       const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`);
-      if (poolCard) poolCard.style.display='none';
+      if (poolCard) { poolCard.style.display='none'; /* keep hidden; may be locked later after save */ }
       updateCounts();
     });
   }
@@ -173,6 +175,8 @@
       e.preventDefault(); poolWrap.classList.remove('drag-over');
       const id = parseInt(e.dataTransfer?.getData('text/plain') || '0', 10);
       if (!id) return;
+      // If locked, do not allow returning to pool unless explicitly unlocked (cancellation TBD)
+      if (lockedIds.has(id)) { toast('Recipient is locked. Cancel allocation to return to pool.', 'warning'); return; }
       // remove from any week
       const assigned = document.querySelector(`.dropzone .rcard[data-user-id="${id}"]`);
       if (assigned) assigned.remove();
@@ -182,7 +186,11 @@
         const user = window.__rl_usersById?.get(id);
         if (user){ poolCard = createCard(user); pool.appendChild(poolCard); }
       }
-      if (poolCard){ poolCard.style.display=''; }
+      if (poolCard){
+        // If previously marked locked, keep hidden; else show
+        if (poolCard.dataset.locked === '1') poolCard.style.display='none';
+        else poolCard.style.display='';
+      }
       updateCounts();
     });
   }
@@ -191,6 +199,8 @@
     const t = String(term||'').toLowerCase();
     qsa('#pool .rcard').forEach(el => {
       const lbl = (el.textContent||'').toLowerCase();
+      // Do not reveal locked entries via search
+      if (el.dataset.locked === '1') { el.style.display = 'none'; return; }
       el.style.display = (!t || lbl.includes(t)) ? '' : 'none';
     });
   }
@@ -390,6 +400,8 @@
       const data = await apiGetPlan(currentMonth());
       window.__rl_locks = data?.locks || {};
       const weeks = data?.weeks || {};
+      // Rebuild locked set from server plan
+      lockedIds.clear();
       [['W1','w1'],['W2','w2'],['W3','w3'],['W4','w4']].forEach(([key,drop])=>{
         const dz = qs('#'+drop); if (!dz) return; dz.innerHTML='';
         const ids = Array.isArray(weeks[key]) ? weeks[key] : [];
@@ -397,6 +409,9 @@
           const user = map.get(id); if (!user) return;
           dz.appendChild(createCard(user));
           const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`); if (poolCard) poolCard.style.display='none';
+          // Mark as locked in pool representation
+          if (poolCard) poolCard.dataset.locked='1';
+          lockedIds.add(Number(id));
         });
       });
       updateCounts();
@@ -451,6 +466,12 @@
     try {
       await apiSavePlan({ [weekKey]: ids }, currentMonth());
       toast(`Saved ${weekKey} (${ids.length})`, 'success');
+      // Lock saved recipients so they do not return to pool unless cancelled
+      ids.forEach(id => {
+        const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`);
+        if (poolCard) { poolCard.dataset.locked='1'; poolCard.style.display='none'; }
+        lockedIds.add(Number(id));
+      });
       // Refresh plan to get updated server locks
       await restoreFromServer();
       applyWeekFocusAndButtons();
@@ -585,7 +606,12 @@
       window.__rl_usersById = new Map();
       const pool = qs('#pool');
       pool.innerHTML = '';
-      items.forEach(u => { window.__rl_usersById.set(Number(u.user_id), u); pool.appendChild(createCard(u)); });
+      // Exclude Foodbank (On-site) from the pool permanently
+      const filtered = items.filter(u => {
+        const org = String(u.organization_name||'').trim().toLowerCase();
+        return org !== 'foodbank (on-site)';
+      });
+      filtered.forEach(u => { window.__rl_usersById.set(Number(u.user_id), u); pool.appendChild(createCard(u)); });
 
       // Load plan from server (fallback to local if needed)
       await restoreFromServer();
@@ -623,6 +649,14 @@
         });
         try {
           await apiSavePlan(weeks, currentMonth());
+          // Lock all saved recipients across all weeks
+          ['W1','W2','W3','W4'].forEach(k => {
+            (weeks[k]||[]).forEach(id => {
+              const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`);
+              if (poolCard) { poolCard.dataset.locked='1'; poolCard.style.display='none'; }
+              lockedIds.add(Number(id));
+            });
+          });
           if (truncated.length){ toast(`Saved all weeks. Truncated: ${truncated.join(', ')}`, 'warning'); }
           else { toast('All weeks saved', 'success'); }
           await restoreFromServer();
@@ -631,6 +665,9 @@
           toast('Failed to save all weeks', 'danger');
         }
       });
+
+      // Expose a placeholder unlock function for future allocation cancellation
+      window.__rl_unlockRecipient = function(id){ try{ id=Number(id)||0; if(!id) return; lockedIds.delete(id); const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`); if (poolCard){ delete poolCard.dataset.locked; } }catch(_){ } };
 
       // Enable Bootstrap tooltips for icon-only buttons
       try {

@@ -5,11 +5,28 @@
   const API = 'php/api/communications/messages.php';
   const qs = (s, r=document)=> r.querySelector(s);
 
-  // Modal injector for any anchor with data-bs-target="#messagesModal"
+  // Upgrade any messages triggers to avoid Bootstrap's data-api (which can conflict with dynamic injection)
+  function upgradeTriggers(){
+    document.querySelectorAll('[data-bs-target="#messagesModal"]').forEach(el=>{
+      if (!el.getAttribute('data-messages-trigger')){
+        el.setAttribute('data-messages-trigger','1');
+        // Remove data-bs-toggle so Bootstrap's data-api won't run
+        el.removeAttribute('data-bs-toggle');
+      }
+    });
+  }
+  upgradeTriggers();
+  const mo = new MutationObserver(()=> upgradeTriggers());
+  mo.observe(document.body, { childList:true, subtree:true });
+
+  // Modal injector for any anchor with data-messages-trigger
   document.addEventListener('click', function(e){
-    const anchor = e.target.closest('a[data-bs-toggle="modal"][data-bs-target="#messagesModal"]');
-    if (!anchor) return;
+    const trigger = e.target.closest('[data-messages-trigger], [data-bs-toggle="modal"][data-bs-target="#messagesModal"]');
+    if (!trigger) return;
+    // Prevent Bootstrap's data-api from running its own handler before we inject the modal
     e.preventDefault();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    e.stopPropagation();
     let modalEl = document.getElementById('messagesModal');
     if (!modalEl) {
       modalEl = document.createElement('div');
@@ -17,6 +34,9 @@
       modalEl.className = 'modal fade';
       modalEl.tabIndex = -1;
       modalEl.setAttribute('aria-hidden', 'true');
+      // Set explicit data attributes for broader Bootstrap compatibility
+      modalEl.setAttribute('data-bs-backdrop', 'true');
+      modalEl.setAttribute('data-bs-keyboard', 'true');
       modalEl.innerHTML = `
         <div class="modal-dialog modal-dialog-scrollable modal-lg">
           <div class="modal-content">
@@ -30,8 +50,16 @@
       document.body.appendChild(modalEl);
       try { window.__initMessagesModal && window.__initMessagesModal(modalEl); } catch(_){ }
     }
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
+    // Some Bootstrap builds expect an options object; pass explicit defaults to avoid 'backdrop' undefined errors
+    let modal = null;
+    try {
+      if (bootstrap && bootstrap.Modal) {
+        // Prefer constructor to avoid edge-cases in getOrCreateInstance with data-api interactions
+        modal = new bootstrap.Modal(modalEl, { backdrop: true, keyboard: true, focus: true });
+      }
+    } catch(_) { /* ignore */ }
+    try { if (!modal && bootstrap && bootstrap.Modal) { modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: true, keyboard: true, focus: true }); } } catch(_) { /* ignore */ }
+    if (modal && typeof modal.show === 'function') { modal.show(); }
   }, true);
 
   // Badge polling for mail icon
@@ -162,8 +190,18 @@
         if (!wrap) return;
         if (window.__limitToSingleChannel){ wrap.innerHTML=''; return; }
         wrap.innerHTML='';
-        // For admin, show recent first (assuming API returns ordered by last activity; if not, we could sort)
-        const list = Array.isArray(convs) ? convs.slice(0, 15) : [];
+        // For admin, show recent first. If there is a preselected conversation without messages yet,
+        // include it so the empty-state text is replaced immediately upon selection.
+        let list = Array.isArray(convs) ? convs.slice(0, 15) : [];
+        try {
+          const tmp = window.__messagesTempRecent; // {id,title,other_role}
+          if (role==='admin' && tmp && tmp.id) {
+            const exists = list.some(c => String(c.id)===String(tmp.id));
+            if (!exists) {
+              list = [{ id: tmp.id, display_title: tmp.title || ('Conversation #'+tmp.id), other_role: tmp.other_role||'', unread_count: 0, last_message: null }, ...list];
+            }
+          }
+        } catch(_){ /* ignore */ }
         if (!list.length){
           try { wrap.innerHTML = '<div class="text-muted small px-2 py-1">No recent conversations yet. Use the search above to start one.</div>'; } catch(_){ }
           return;
@@ -216,7 +254,19 @@
               const label=(u.organization_name&&u.organization_name.trim())? u.organization_name : (u.name || ('User #'+u.user_id));
               const badge = u.__role==='donor' ? '<span class="badge text-bg-warning">Donor</span>' : '<span class="badge text-bg-info">Recipient</span>';
               a.innerHTML = `<span>${label}</span>${badge}`;
-              a.addEventListener('click', async (e)=>{ e.preventDefault(); const r=await apiPost('get_or_create_direct',{ other_user_id:Number(u.user_id)}); if (r&&r.success){ if (searchInput) searchInput.value=''; resultsBox.innerHTML=''; await loadConversations(); await selectConversation(r.data.conversation.id); }});
+              a.addEventListener('click', async (e)=>{
+                e.preventDefault();
+                const r=await apiPost('get_or_create_direct',{ other_user_id:Number(u.user_id)});
+                if (r&&r.success){
+                  // Pre-insert temp recent so empty-state is replaced immediately
+                  try { window.__messagesTempRecent = { id: r.data.conversation.id, title: label, other_role: u.__role||'' }; } catch(_) {}
+                  if (searchInput) searchInput.value='';
+                  resultsBox.innerHTML='';
+                  await loadConversations();
+                  await selectConversation(r.data.conversation.id);
+                  renderConversations();
+                }
+              });
               resultsBox.appendChild(a);
             });
           } catch(_){ resultsBox.innerHTML = '<div class="text-muted small px-2 py-1">Search failed</div>'; }
@@ -232,7 +282,26 @@
       function startPolling(){ stopPolling(); pollTimer=window.setInterval(async ()=>{ if (isTickRunning) return; isTickRunning=true; try { await Promise.all([loadConversations(), loadMessages()]); if (activeId && window.__messagesModalOpen){ try{ await markRead(); }catch(_){ } } } catch(_){ } finally { isTickRunning=false; } }, MODAL_POLL_MS); msgTimer=window.setInterval(async ()=>{ if (!activeId || !window.__messagesModalOpen) return; try { await loadMessages(); } catch(_){ } }, SINGLE_CHANNEL_MSG_MS); }
       function stopPolling(){ if (pollTimer){ clearInterval(pollTimer); pollTimer=0; } if (msgTimer){ clearInterval(msgTimer); msgTimer=0; } }
 
-      modalEl.addEventListener('shown.bs.modal', async ()=>{ window.__messagesModalOpen=true; await initOnceUI(); try { await Promise.all([ loadConversations(), (async()=>{ await loadMessages(true); })(), ]); } catch(_){ } startPolling(); if (window.__refreshMessagesBadge) window.__refreshMessagesBadge(); });
+      modalEl.addEventListener('shown.bs.modal', async ()=>{
+        window.__messagesModalOpen=true;
+        await initOnceUI();
+        try {
+          await Promise.all([
+            loadConversations(),
+            (async()=>{ await loadMessages(true); })(),
+          ]);
+          // If a preselect conversation id was set globally, select it now
+          try {
+            const pre = (typeof window.__messagesPreselectConvId !== 'undefined') ? window.__messagesPreselectConvId : null;
+            if (pre) {
+              window.__messagesPreselectConvId = null;
+              await selectConversation(pre);
+            }
+          } catch(_) { /* ignore */ }
+        } catch(_){ }
+        startPolling();
+        if (window.__refreshMessagesBadge) window.__refreshMessagesBadge();
+      });
       modalEl.addEventListener('hidden.bs.modal', ()=>{ window.__messagesModalOpen=false; stopPolling(); if (window.__refreshMessagesBadge) window.__refreshMessagesBadge(); });
     }
 

@@ -160,14 +160,59 @@
   function startDonationAutoRefresh(){ if(__pollTimer) return; try{ __lastSig=sig(applyFilters(window.__adminDonationRaw||[])); }catch(_){ __lastSig=''; } __pollTimer=window.setInterval(refreshOnce,10000); refreshOnce(); }
 
   // Modals / next steps
-  function showAckNextStepsModal(){
+  function showAckNextStepsModal(donorId, donorTitle){
     try{
       (async ()=> (await Api.getUserPref('ackNextStepsDontShow'))==='1')().then(skip=>{
         if(skip) return;
         const el=getEl('ackNextStepsModal'); if(!el||typeof bootstrap==='undefined'||!bootstrap.Modal) return;
         try{ document.querySelectorAll('.modal-backdrop').forEach(n=>n.remove()); document.body.classList.remove('modal-open'); document.body.style.removeProperty('overflow'); document.body.style.removeProperty('padding-right'); }catch(_){ }
         const m=bootstrap.Modal.getOrCreateInstance(el), open=getEl('ackOpenMessagesBtn'), close=getEl('ackCloseBtn'), chk=getEl('ackDontShowAgain'); if(chk) chk.checked=false;
-        if(open) open.onclick=async ()=>{ if(chk&&chk.checked) await Api.setUserPref('ackNextStepsDontShow','1'); const msg=getEl('messagesModal'); if(msg) bootstrap.Modal.getOrCreateInstance(msg).show(); m.hide(); };
+        if(open) open.onclick=async ()=>{
+          if(chk&&chk.checked) await Api.setUserPref('ackNextStepsDontShow','1');
+          try{
+            const msg=getEl('messagesModal');
+            // Prefer preloading a direct conversation when donorId is available
+            if (donorId) {
+              try {
+                // Resolve API base from AdminDonationApi or global window
+                const API_BASE = (window.AdminDonationApi && window.AdminDonationApi.API_BASE_URL)
+                  ? window.AdminDonationApi.API_BASE_URL
+                  : (window.API_BASE_URL || '/Capstone%20Project/php/api');
+                const url = `${API_BASE}/communications/messages.php?action=get_or_create_direct`;
+                const res = await fetch(url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ other_user_id: Number(donorId) })
+                });
+                let convId = null;
+                try {
+                  const j = await res.json();
+                  convId = j && j.data && j.data.conversation ? j.data.conversation.id : null;
+                } catch(_) { /* ignore JSON parse issues */ }
+                // Hint the messages UI to preselect this conversation and show it in Recent immediately
+                if (convId) {
+                  try {
+                    window.__messagesPreselectConvId = convId;
+                    // Emulate a search selection so the left pane replaces the empty-state
+                    window.__messagesTempRecent = {
+                      id: convId,
+                      title: (donorTitle && String(donorTitle).trim()) ? donorTitle : 'Donor',
+                      other_role: 'donor'
+                    };
+                  } catch(_) { /* ignore */ }
+                }
+                if (msg && bootstrap?.Modal) bootstrap.Modal.getOrCreateInstance(msg).show();
+              } catch(_e) {
+                // Fallback: open modal only
+                if (msg && bootstrap?.Modal) bootstrap.Modal.getOrCreateInstance(msg).show();
+              }
+            } else {
+              if (msg && bootstrap?.Modal) bootstrap.Modal.getOrCreateInstance(msg).show();
+            }
+          }catch(_){ }
+          try{ m.hide(); }catch(_){ }
+        };
         if(close) close.onclick=async ()=>{ if(chk&&chk.checked) await Api.setUserPref('ackNextStepsDontShow','1'); };
         m.show();
       });
@@ -180,13 +225,32 @@
       const btn=e.target.closest('.view-image-btn'); if(!btn) return;
       const modalEl=getEl('imageViewerModal'), img=getEl('imageViewerImg'), info=getEl('imageViewerInfo');
       if(!(modalEl&&typeof bootstrap!=='undefined'&&bootstrap.Modal)) return;
-      const m=bootstrap.Modal.getOrCreateInstance(modalEl); if(img){ img.style.transform='scale(1)'; img.src=''; img.alt='Loading receipt...'; } if(info) info.textContent='Resolving image URL...'; m.show();
+      const m=bootstrap.Modal.getOrCreateInstance(modalEl);
+      if(img){ img.style.transform='scale(1)'; img.src=''; img.alt='Loading receipt...'; }
+      if(info) info.textContent='Loading image...';
+      m.show();
       const batch=btn.getAttribute('data-batch')||'', id=btn.getAttribute('data-id')||''; let src=btn.getAttribute('data-img')||'';
       if((!src)&&(batch||id)){ try{ if(batch&&donationCache.byBatch.has(batch)){ const arr=donationCache.byBatch.get(batch)||[]; const any=arr.find(it=>it&&(it.receipt_full_url||it.image_full_url)); if(any) src=any.receipt_full_url||any.image_full_url||''; } else if(id&&donationCache.byId.has(String(id))){ const it=donationCache.byId.get(String(id)); src=it.receipt_full_url||it.image_full_url||it.image_url||''; } }catch(_){ }}
       if((!src)&&(batch||id)){ try{ const items=await Api.fetchAdminList(); if(batch){ const any=items.find(it=>it.batch_id===batch&&(it.receipt_full_url||it.image_full_url)); if(any) src=any.receipt_full_url||any.image_full_url||''; } else if(id){ const it=items.find(it=>String(it.id)===String(id)); if(it) src=it.receipt_full_url||it.image_full_url||''; } }catch(_){ }}
       if((!src)&&id){ try{ const row=await Api.fetchDonationDetail(id); if(row) src=row.receipt_full_url||row.image_full_url||''; }catch(_){ }}
-      if(!src){ if(img){ img.alt='No receipt uploaded yet'; img.removeAttribute('src'); } try{ const t=modalEl.querySelector('.modal-title'); if(t) t.textContent='Receipt Image (none available)'; }catch(_){ } if(info) info.textContent='No image URL found for this donation/batch.'; return; }
-      const tmp=new Image(); tmp.onload=()=>{ img.src=src; img.alt='Receipt'; try{ const t=modalEl.querySelector('.modal-title'); if(t) t.textContent='Receipt Image'; }catch(_){ } if(info) info.textContent='URL: '+src; }; tmp.onerror=()=>{ img.alt='Failed to load receipt image'; try{ const t=modalEl.querySelector('.modal-title'); if(t) t.textContent='Receipt Image (failed to load)'; }catch(_){ } if(info) info.textContent='Failed to load URL: '+src; }; tmp.src=src;
+      if(!src){
+        if(img){ img.alt='No receipt uploaded yet'; img.removeAttribute('src'); }
+        try{ const t=modalEl.querySelector('.modal-title'); if(t) t.textContent='Receipt Image (none available)'; }catch(_){ }
+        if(info) info.textContent='No image available for this donation/batch.';
+        return;
+      }
+      const tmp=new Image();
+      tmp.onload=()=>{
+        img.src=src; img.alt='Receipt';
+        try{ const t=modalEl.querySelector('.modal-title'); if(t) t.textContent='Receipt Image'; }catch(_){ }
+        if(info) info.textContent=''; // Do not show the URL
+      };
+      tmp.onerror=()=>{
+        img.alt='Failed to load receipt image';
+        try{ const t=modalEl.querySelector('.modal-title'); if(t) t.textContent='Receipt Image (failed to load)'; }catch(_){ }
+        if(info) info.textContent='Failed to load image.'; // Generic message, no URL
+      };
+      tmp.src=src;
     });
     const img=getEl('imageViewerImg'), zin=getEl('imgZoomInBtn'), zout=getEl('imgZoomOutBtn'), zreset=getEl('imgZoomResetBtn'); let scale=1; const apply=()=>{ if(img) img.style.transform=`scale(${scale})`; };
     if(zin) zin.addEventListener('click',()=>{ scale=Math.min(5,scale+0.25); apply(); });
@@ -222,7 +286,21 @@
   }
   function bindActions(){
     document.addEventListener('click',async e=>{
-      const ack=e.target.closest('.action-ack'); if(ack){ const id=ack.getAttribute('data-id')||'', batch=ack.getAttribute('data-batch')||''; try{ if(batch&&!id){ await Api.updateDonationBatchStatus(batch,'Acknowledged'); const arr=donationCache.byBatch.get(batch)||[]; arr.forEach(it=>it.status='Acknowledged'); donationCache.byBatch.set(batch,arr); const row=document.querySelector(`tr.group-row[data-batch-id="${batch}"]`); if(row){ const st=row.querySelector('td:nth-child(5)'); if(st) st.innerHTML=badge('Acknowledged'); const ac=row.querySelector('td:nth-child(7)'); const ds=`data-batch="${batch}" data-status="Acknowledged"`; const parts=[`<button class="btn btn-sm btn-outline-warning action-fs" ${ds}><i class="bi bi-clipboard-check"></i></button>`,`<button class="btn btn-sm btn-outline-danger action-delete" ${ds}><i class="bi bi-trash"></i></button>`]; if(ac) ac.innerHTML=`<div class="d-flex justify-content-center" style="gap:5px;">${parts.join('')}</div>`; } showAckNextStepsModal(); } else if(id){ await Api.updateDonationStatus(id,'Acknowledged'); const it=donationCache.byId.get(String(id)); if(it){ it.status='Acknowledged'; donationCache.byId.set(String(id),it); } const ref=document.querySelector(`.action-ack[data-id="${id}"]`)||document.querySelector(`.action-delete[data-id="${id}"]`), tr=ref?ref.closest('tr'):null; if(tr){ const st=tr.querySelector('td:nth-child(5)'); if(st) st.innerHTML=badge('Acknowledged'); const ac=tr.querySelector('td:nth-child(7)'); const ds=`data-id="${id}" data-batch="" data-status="Acknowledged"`; const parts=[`<button class="btn btn-sm btn-outline-warning action-fs" ${ds}><i class="bi bi-clipboard-check"></i></button>`,`<button class="btn btn-sm btn-outline-danger action-delete" ${ds}><i class="bi bi-trash"></i></button>`]; if(ac) ac.innerHTML=`<div class="d-flex justify-content-center" style="gap:5px;">${parts.join('')}</div>`; } showAckNextStepsModal(); } }catch(err){ console.error('Acknowledge failed:',err); alert('Failed to acknowledge donation: '+(err?.message||'Unknown error')); } return; }
+      const ack=e.target.closest('.action-ack'); if(ack){ const id=ack.getAttribute('data-id')||'', batch=ack.getAttribute('data-batch')||''; try{ if(batch&&!id){ await Api.updateDonationBatchStatus(batch,'Acknowledged'); const arr=donationCache.byBatch.get(batch)||[]; arr.forEach(it=>it.status='Acknowledged'); donationCache.byBatch.set(batch,arr); const row=document.querySelector(`tr.group-row[data-batch-id="${batch}"]`); if(row){ const st=row.querySelector('td:nth-child(5)'); if(st) st.innerHTML=badge('Acknowledged'); const ac=row.querySelector('td:nth-child(7)'); const ds=`data-batch="${batch}" data-status="Acknowledged"`; const parts=[`<button class="btn btn-sm btn-outline-warning action-fs" ${ds}><i class="bi bi-clipboard-check"></i></button>`,`<button class="btn btn-sm btn-outline-danger action-delete" ${ds}><i class="bi bi-trash"></i></button>`]; if(ac) ac.innerHTML=`<div class="d-flex justify-content-center" style="gap:5px;">${parts.join('')}</div>`; }
+        // derive donor id and title from batch items
+        let donorId=null, donorTitle='';
+        try{ if(arr && arr.length){ const first=arr[0]||{}; if(first.donor_id) donorId=Number(first.donor_id); donorTitle = (first.donor_org||first.organization_name||'').trim(); } }catch(_){ }
+        // fallback: fetch from list if cache lacks donor_id/title
+        if(!donorId || !donorTitle){ try{ const items=await Api.fetchAdminList(); const any=(Array.isArray(items)?items:[]).find(it=>String(it.batch_id||'')===String(batch)); if(any){ if(!donorId && any.donor_id) donorId=Number(any.donor_id); if(!donorTitle) donorTitle=(any.donor_org||any.organization_name||'').trim(); } }catch(_){ } }
+        showAckNextStepsModal(donorId, donorTitle);
+      } else if(id){ await Api.updateDonationStatus(id,'Acknowledged'); const it=donationCache.byId.get(String(id)); if(it){ it.status='Acknowledged'; donationCache.byId.set(String(id),it); } const ref=document.querySelector(`.action-ack[data-id="${id}"]`)||document.querySelector(`.action-delete[data-id="${id}"]`), tr=ref?ref.closest('tr'):null; if(tr){ const st=tr.querySelector('td:nth-child(5)'); if(st) st.innerHTML=badge('Acknowledged'); const ac=tr.querySelector('td:nth-child(7)'); const ds=`data-id="${id}" data-batch="" data-status="Acknowledged"`; const parts=[`<button class="btn btn-sm btn-outline-warning action-fs" ${ds}><i class="bi bi-clipboard-check"></i></button>`,`<button class="btn btn-sm btn-outline-danger action-delete" ${ds}><i class="bi bi-trash"></i></button>`]; if(ac) ac.innerHTML=`<div class="d-flex justify-content-center" style="gap:5px;">${parts.join('')}</div>`; }
+        // derive donor id and title from single donation row
+        let donorId=null, donorTitle='';
+        try{ const it2=donationCache.byId.get(String(id)); if(it2){ if(it2.donor_id) donorId=Number(it2.donor_id); donorTitle = (it2.donor_org||it2.organization_name||'').trim(); } }catch(_){ }
+        // fallback: fetch exact donation to resolve donor_id/title
+        if(!donorId || !donorTitle){ try{ const row=await Api.fetchDonationDetail(id); if(row){ if(!donorId && row.donor_id) donorId=Number(row.donor_id); if(!donorTitle) donorTitle=(row.donor_org||row.organization_name||'').trim(); } }catch(_){ } }
+        showAckNextStepsModal(donorId, donorTitle);
+      } }catch(err){ console.error('Acknowledge failed:',err); alert('Failed to acknowledge donation: '+(err?.message||'Unknown error')); } return; }
       const del=e.target.closest('.action-delete'); if(del){ const id=del.getAttribute('data-id')||'', batch=del.getAttribute('data-batch')||'', modal=getEl('deleteConfirmModal'), confirm=getEl('deleteConfirmBtn'), txt=getEl('deleteConfirmText'); if(modal&&confirm){ confirm.setAttribute('data-id',id); confirm.setAttribute('data-batch',batch); if(txt){ txt.textContent=(!!batch&&!id)?'Are you sure you want to delete this entire batch? This action cannot be undone.':'Are you sure you want to delete this donation? This action cannot be undone.'; } try{ bootstrap.Modal.getOrCreateInstance(modal).show(); }catch(_){ } } return; }
       const fs=e.target.closest('.action-fs'); if(fs){ const id=fs.getAttribute('data-id')||'', batch=fs.getAttribute('data-batch')||'', elDon=getEl('fsDonationId'), elBatch=getEl('fsBatchId'); if(elDon) elDon.value=id; if(elBatch) elBatch.value=batch; const container=getEl('fsBatchItems'); if(container){ let items=[]; if(batch&&donationCache.byBatch.has(batch)) items=donationCache.byBatch.get(batch)||[]; else if(id&&donationCache.byId.has(String(id))) items=[donationCache.byId.get(String(id))]; if(!items.length) items=id?[{id,name:'',quantity:''}]:[]; container.innerHTML=items.map((it,idx)=>{ const label=`${idx+1}. ${escapeHtml(it?.name||'')}${it?.quantity?` (x${it.quantity})`:''}`, did=String(it?.id||''); return `<div class="border rounded p-2 d-flex flex-column gap-1"><div class="fw-semibold">${label||('Item'+(did?` #${did}`:''))}</div><input type="hidden" name="item_ids[]" value="${did}"><label class="form-label mb-1">Expiry date photo (one per item)</label><input type="file" class="form-control" name="expiry_item_photo[${did}]" accept="image/*" capture="environment"></div>`; }).join(''); } const modal=getEl('foodSafetyModal'); if(modal&&bootstrap?.Modal) bootstrap.Modal.getOrCreateInstance(modal).show(); return; }
       const recv=e.target.closest('.action-receive'); if(recv){ const id=recv.getAttribute('data-id')||'', batch=recv.getAttribute('data-batch')||'', modal=getEl('receiveConfirmModal'), confirm=getEl('receiveConfirmBtn'); if(modal&&confirm&&bootstrap?.Modal){ confirm.setAttribute('data-id',id); confirm.setAttribute('data-batch',batch); bootstrap.Modal.getOrCreateInstance(modal).show(); } else { await completeDonation({ id, batch }); } return; }
