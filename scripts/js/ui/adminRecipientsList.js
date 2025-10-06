@@ -483,6 +483,11 @@
 
   async function saveWeekKey(weekKey, dropId){
     const ids = collectWeekIds(dropId);
+    // Disallow saving an empty column
+    if (ids.length === 0){
+      toast(`Cannot save ${weekKey}: column is empty. Add at least 1 recipient.`, 'warning');
+      return;
+    }
     // If not exactly 10, ask for confirmation instead of blocking
     if (ids.length !== 10){
       const ok = await confirmAction(`This week has ${ids.length}/10 recipients. Do you want to proceed?`, 'Not exactly 10');
@@ -641,6 +646,14 @@
       qs('#saveAllBtn')?.addEventListener('click', async ()=>{
         const raw = { W1: collectWeekIds('w1'), W2: collectWeekIds('w2'), W3: collectWeekIds('w3'), W4: collectWeekIds('w4') };
         if (qs('#w5Col') && qs('#w5Col').style.display !== 'none') raw.W5 = collectWeekIds('w5');
+        // Disallow saving if any column is empty
+        const emptyKeys = Object.entries(raw)
+          .filter(([k, ids]) => Array.isArray(ids) && ids.length === 0)
+          .map(([k]) => k);
+        if (emptyKeys.length){
+          toast(`Cannot save: the following week(s) are empty: ${emptyKeys.join(', ')}`, 'warning');
+          return;
+        }
         const weeks = {};
         const truncated = [];
         Object.entries(raw).forEach(([k, ids])=>{

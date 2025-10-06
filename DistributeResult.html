@@ -70,14 +70,10 @@
 
       <div class="card p-2 mb-2">
         <div class="row g-2 align-items-center">
-          <div class="col-auto small text-muted">Week</div>
-          <div class="col-auto">
-            <input id="periodKeyInput" class="form-control form-control-sm" placeholder="YYYY-MM-Wn" style="width: 160px;" />
+          <div class="col-auto small text-muted">Search Week</div>
+          <div class="col-12 col-sm-4">
+            <select id="drWeekSelect" style="width:100%"></select>
           </div>
-          <div class="col-auto">
-            <button id="periodKeyGo" class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i> Load</button>
-          </div>
-          <div class="col small text-muted">Tip: e.g., W38 or 2025-09-W3</div>
         </div>
       </div>
 
@@ -180,6 +176,95 @@
         } catch(_){ }
       })();
     </script>
+    <!-- Per-recipient Notify button beside Add Item (post-render injection) -->
+    <script>
+      (function(){
+        function getAPI(){ return (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api'; }
+        function lockRecipientUI(rid){
+          try{
+            const container = document.getElementById('resultContainer'); if (!container) return;
+            // Disable inputs in this recipient's table
+            const tb = container.querySelector('tbody.dr-recipient[data-rec="'+rid+'"]');
+            if (tb){
+              tb.querySelectorAll('.dr-name, .dr-qty').forEach(el=>{ el.disabled = true; el.readOnly = true; });
+              // Hide delete buttons in this tbody
+              tb.querySelectorAll('.dr-del').forEach(btn=>{ const cell = btn.parentElement; if (cell) cell.style.display='none'; });
+            }
+            // Hide Add Item button for this recipient
+            const addBtn = container.querySelector('.dr-add-item[data-rec="'+rid+'"]');
+            if (addBtn){ addBtn.classList.add('d-none'); addBtn.parentElement && (addBtn.parentElement.style.display=''); }
+            // Hide Notify button itself
+            const notifyBtn = container.querySelector('.dr-notify-one[data-rec="'+rid+'"]');
+            if (notifyBtn){ notifyBtn.classList.add('d-none'); }
+          } catch(_){ }
+        }
+        async function notifyOne(rid){
+          try{
+            const container = document.getElementById('resultContainer'); if (!container) return;
+            const tb = container.querySelector('tbody.dr-recipient[data-rec="'+rid+'"]');
+            let msg = 'You have been allocated items.';
+            try{
+              const parts = [];
+              if (tb){
+                tb.querySelectorAll('tr').forEach(tr=>{
+                  const name = tr.querySelector('.dr-name')?.value?.trim() || '';
+                  const qty = tr.querySelector('.dr-qty')?.value?.trim() || '';
+                  if (name && qty){ parts.push(qty+'x '+name); }
+                });
+              }
+              if (parts.length){ msg = 'You have been allocated items. Items: '+parts.slice(0,6).join(', ')+(parts.length>6?'…':''); }
+            } catch(_){ }
+            const API = getAPI();
+            const res = await fetch(API + '/communications/notifications.php?action=create', {
+              method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
+              body: JSON.stringify({ user_id: rid, type: 'allocation_ready', message: msg })
+            });
+            if (!res.ok) throw new Error('HTTP '+res.status);
+            // UI lock for this recipient only
+            lockRecipientUI(rid);
+            // Feedback modal
+            try{
+              const mEl = document.getElementById('resultAlertModal');
+              const bEl = document.getElementById('resultAlertBody');
+              if (bEl) bEl.textContent = 'Recipient notified and locked.';
+              if (mEl && window.bootstrap){ window.bootstrap.Modal.getOrCreateInstance(mEl).show(); }
+            } catch(_){ }
+          } catch(err){
+            const fb = document.getElementById('resultFeedback');
+            if (fb) fb.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to notify recipient.</div>';
+          }
+        }
+        function ensureButtons(){
+          try{
+            const container = document.getElementById('resultContainer'); if (!container) return;
+            container.querySelectorAll('.dr-add-item').forEach(btn=>{
+              try{
+                const rid = parseInt(btn.getAttribute('data-rec')||'0',10)||0; if (!rid) return;
+                const parent = btn.parentElement; if (!parent) return;
+                // Avoid duplicates
+                if (parent.querySelector('.dr-notify-one')) return;
+                const n = document.createElement('button');
+                n.className = 'btn btn-sm btn-outline-primary dr-notify-one';
+                n.setAttribute('data-rec', String(rid));
+                n.innerHTML = '<i class="bi bi-megaphone"></i> Notify';
+                n.addEventListener('click', ()=> notifyOne(rid));
+                parent.appendChild(n);
+              } catch(_){ }
+            });
+          } catch(_){ }
+        }
+        document.addEventListener('DOMContentLoaded', function(){
+          try{
+            ensureButtons();
+            const container = document.getElementById('resultContainer');
+            if (container && window.MutationObserver){
+              const obs = new MutationObserver(()=> ensureButtons());
+              obs.observe(container, { childList:true, subtree:true });
+            }
+          } catch(_){ }
+        });
+      })();
+    </script>
 
     <!-- Week badge injector to mirror Allocation badge from DistributeItems.html -->
     <script>
@@ -273,6 +358,90 @@
       })();
     </script>
     <script src="scripts/js/ui/distributeResult.js"></script>
+    <!-- Enhanced search and single-recipient notify (Select2 + AJAX) -->
+    <script>
+      (function(){
+        function fmtMDY(d){
+          const mm = String(d.getMonth()+1).padStart(2,'0');
+          const dd = String(d.getDate()).padStart(2,'0');
+          const yyyy = d.getFullYear();
+          return mm+'-'+dd+'-'+yyyy;
+        }
+        function computeRangeFromPeriodKey(pk){
+          // pk: YYYY-MM-Wn, fixed buckets: 1-7, 8-14, 15-21, 22-end
+          try{
+            const m = /^(\d{4})-(\d{2})-W([1-4])$/i.exec(String(pk||''));
+            if (!m) return null;
+            const y = parseInt(m[1],10), mo = parseInt(m[2],10)-1, w = parseInt(m[3],10);
+            const startDay = (w===1?1:(w===2?8:(w===3?15:22)));
+            const start = new Date(y, mo, startDay); start.setHours(0,0,0,0);
+            const end = new Date(y, mo+1, 0); // last day of month
+            const endDay = (w===1?7:(w===2?14:(w===3?21:end.getDate())));
+            const endDate = new Date(y, mo, endDay); endDate.setHours(0,0,0,0);
+            return { start: start, end: endDate };
+          } catch(_){ return null; }
+        }
+        function getAPI(){ return (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api'; }
+        function resolvedRunId(){
+          try{ const u=new URL(location.href); const rid=parseInt(u.searchParams.get('run_id')||'0',10)||0; return rid|| (window.__DR_RESOLVED_RUN_ID__||0); }catch(_){ return (window.__DR_RESOLVED_RUN_ID__||0); }
+        }
+
+        document.addEventListener('DOMContentLoaded', function(){
+          try{
+            // Week Select2 (AJAX via list_runs), formats label with MM-DD-YYYY
+            if (window.jQuery && jQuery.fn.select2){
+              const $week = jQuery('#drWeekSelect');
+              $week.select2({
+                theme: 'bootstrap-5',
+                placeholder: 'Search run…',
+                allowClear: true,
+                ajax: {
+                  transport: function (params, success, failure){
+                    const API = getAPI();
+                    const url = API + '/allocations/index.php?action=list_runs&limit=50&t=' + Date.now();
+                    fetch(url, { credentials:'include', headers:{'Accept':'application/json'} })
+                      .then(r=>r.json()).then(j=> success(j)).catch(failure);
+                  },
+                  processResults: function(data){
+                    const rows = Array.isArray(data?.data?.items) ? data.data.items : [];
+                    const out = rows.map(r=>{
+                      const pk = String(r.period_key||'');
+                      const range = computeRangeFromPeriodKey(pk);
+                      const rid = parseInt(r.run_id||0,10)||0;
+                      const labelCore = range ? (pk + ' • ' + fmtMDY(range.start) + ' to ' + fmtMDY(range.end)) : pk;
+                      const label = (rid?('Run #'+rid+' • '):'') + labelCore;
+                      return { id: rid || pk, text: label, pk, rid };
+                    });
+                    return { results: out };
+                  }
+                },
+                width: 'resolve'
+              }).on('select2:select', function(e){
+                try{
+                  const data = e.params.data;
+                  const rid = parseInt(data?.rid||data?.id||0,10)||0;
+                  if (rid){
+                    const url = new URL(location.href);
+                    url.searchParams.set('run_id', String(rid));
+                    url.searchParams.delete('period_key');
+                    location.href = url.toString();
+                  } else if (data?.pk){
+                    // Fallback: if no run_id, use period_key path
+                    const pk = data.pk;
+                    const inp = document.getElementById('periodKeyInput');
+                    if (inp) inp.value = pk;
+                    const btn = document.getElementById('periodKeyGo');
+                    if (btn) btn.click();
+                  }
+                } catch(_){ }
+              });
+
+              // Removed top-bar single-recipient controls; per-recipient Notify button remains injected below
+            }
+          } catch(_){ }
+        });
+      })();
+    </script>
     <!-- Post-hook: persist resolved run_id for future reloads -->
     <script>
       (function(){
