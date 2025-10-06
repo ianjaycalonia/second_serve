@@ -480,7 +480,9 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           // continue loop regardless of per-recipient errors
         }
         // 4) Redirect to result page for this run
-        window.location.href = `DistributeResult.html?run_id=${encodeURIComponent(String(runId))}`;
+        // Cache-bust to ensure latest DistributeResult.html and scripts load on first navigation
+        const v = Date.now();
+        window.location.href = `DistributeResult.html?run_id=${encodeURIComponent(String(runId))}&v=${v}`;
       } catch(_){
         // If anything fails, keep button enabled for retry
       } finally {

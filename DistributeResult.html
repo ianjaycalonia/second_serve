@@ -3,12 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Prevent caching to ensure latest inline scripts and markup always load -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Distribution Result</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
   </head>
+{{ ... }}
   <body class="sidebar-collapsed">
     <nav>
       <div class="nav-items">
@@ -162,6 +167,13 @@
       (function(){
         try{
           var url = new URL(window.location.href);
+          // Ensure a cache-busting param is present so this HTML isn't served stale
+          if (!url.searchParams.get('v')){
+            url.searchParams.set('v', String(Date.now()));
+            // Use location.replace to avoid history clutter
+            window.location.replace(url.toString());
+            return; // stop further execution on this old document
+          }
           var hasRun = (url.searchParams.get('run_id')||'').trim()!=='';
           var hasPk = (url.searchParams.get('period_key')||'').trim()!=='';
           var hasIds = (url.searchParams.get('recipient_ids')||'').trim()!=='';
@@ -174,6 +186,43 @@
             }
           }
         } catch(_){ }
+      })();
+    </script>
+    <!-- Cleanup: remove legacy week input UI if present (old periodKeyInput/periodKeyGo) -->
+    <script>
+      (function(){
+        function removeLegacyWeekUI(){
+          try{
+            var input = document.getElementById('periodKeyInput');
+            var btn = document.getElementById('periodKeyGo');
+            if (btn) { try{ btn.remove(); }catch(_){ } }
+            if (input){
+              // Remove tip near the input if it starts with "Tip:"
+              try{
+                var parent = input.parentElement;
+                if (parent){
+                  var sibs = Array.from(parent.querySelectorAll('*'));
+                  sibs.forEach(function(n){ try{ if ((n.textContent||'').trim().startsWith('Tip:')) n.remove(); }catch(_){ } });
+                }
+              } catch(_){ }
+              try{ input.remove(); }catch(_){ }
+            }
+            // Also remove any row that contains these legacy controls
+            try{
+              var rows = document.querySelectorAll('.card .row, .row');
+              rows.forEach(function(r){
+                try{
+                  if (r.querySelector('#periodKeyInput') || r.querySelector('#periodKeyGo')){ r.remove(); }
+                } catch(_){ }
+              });
+            } catch(_){ }
+          } catch(_){ }
+        }
+        if (document.readyState === 'loading'){
+          document.addEventListener('DOMContentLoaded', removeLegacyWeekUI);
+        } else {
+          removeLegacyWeekUI();
+        }
       })();
     </script>
     <!-- Per-recipient Notify button beside Add Item (post-render injection) -->
@@ -237,23 +286,30 @@
         function ensureButtons(){
           try{
             const container = document.getElementById('resultContainer'); if (!container) return;
-            container.querySelectorAll('.dr-add-item').forEach(btn=>{
+            container.querySelectorAll('tbody.dr-recipient[data-rec]').forEach(tb=>{
               try{
-                const rid = parseInt(btn.getAttribute('data-rec')||'0',10)||0; if (!rid) return;
-                const parent = btn.parentElement; if (!parent) return;
-                // Avoid duplicates
-                if (parent.querySelector('.dr-notify-one')) return;
+                const rid = parseInt(tb.getAttribute('data-rec')||'0',10)||0; if (!rid) return;
+                // Find header row for this card: go up to parent card div then query its header flex row
+                const card = tb.closest('div.mb-3') || tb.closest('div');
+                if (!card) return;
+                const headerRow = card.querySelector('div.d-flex.align-items-center.justify-content-between.mb-1');
+                if (!headerRow) return;
+                // Target actions container where Add Item lives and append Notify beside it
+                const actions = headerRow.querySelector('.d-flex.gap-2');
+                if (!actions){ setTimeout(()=> ensureButtons(), 100); return; }
+                // Avoid duplicates per recipient
+                if (actions.querySelector(`.dr-notify-one[data-rec="${rid}"]`)) return;
                 const n = document.createElement('button');
                 n.className = 'btn btn-sm btn-outline-primary dr-notify-one';
                 n.setAttribute('data-rec', String(rid));
                 n.innerHTML = '<i class="bi bi-megaphone"></i> Notify';
                 n.addEventListener('click', ()=> notifyOne(rid));
-                parent.appendChild(n);
+                actions.appendChild(n);
               } catch(_){ }
             });
           } catch(_){ }
         }
-        document.addEventListener('DOMContentLoaded', function(){
+        function initInject(){
           try{
             ensureButtons();
             const container = document.getElementById('resultContainer');
@@ -261,8 +317,32 @@
               const obs = new MutationObserver(()=> ensureButtons());
               obs.observe(container, { childList:true, subtree:true });
             }
+            // Extra: schedule a couple of retries to cover late async renders on first navigation
+            setTimeout(ensureButtons, 50);
+            setTimeout(ensureButtons, 150);
+            // Render-wait loop: poll for cards rendered (via __DR_BYREC__ or .dr-add-item)
+            (function waitForRender(maxMs){
+              let waited = 0; let delay = 100;
+              function tick(){
+                try{
+                  const hasFlag = typeof window.__DR_BYREC__ !== 'undefined' && Array.isArray(window.__DR_BYREC__);
+                  const hasBtn = !!document.querySelector('#resultContainer .dr-add-item');
+                  if (hasFlag || hasBtn){ ensureButtons(); return; }
+                  waited += delay; if (waited >= maxMs) return;
+                  setTimeout(tick, delay); delay = Math.min(800, Math.floor(delay*1.6));
+                } catch(_){ /* stop on error */ }
+              }
+              tick();
+            })(5000);
           } catch(_){ }
-        });
+        }
+        if (document.readyState === 'loading'){
+          document.addEventListener('DOMContentLoaded', initInject);
+        } else {
+          initInject();
+        }
+        // Handle BFCache / back-forward navigation and SPA-like transitions
+        try{ window.addEventListener('pageshow', ()=> setTimeout(()=> ensureButtons(), 0)); } catch(_){ }
       })();
     </script>
 
@@ -357,7 +437,7 @@
         });
       })();
     </script>
-    <script src="scripts/js/ui/distributeResult.js"></script>
+    <script src="scripts/js/ui/distributeResult.js?v=20251006"></script>
     <!-- Enhanced search and single-recipient notify (Select2 + AJAX) -->
     <script>
       (function(){

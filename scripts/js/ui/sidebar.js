@@ -147,6 +147,20 @@ document.addEventListener("DOMContentLoaded", () => {
   links.forEach((link) => {
     link.addEventListener("click", (e) => {
       hideTooltips();
+      try{
+        // Ensure DistributeResult.html is always loaded fresh (avoid stale cached HTML)
+        const hrefRaw = link.getAttribute('href') || '';
+        if (hrefRaw && /(^|\/)DistributeResult\.html(\?|$)/i.test(hrefRaw)){
+          // Build absolute URL and append cache-busting param if missing
+          const url = new URL(hrefRaw, window.location.href);
+          if (!url.searchParams.has('v')){
+            url.searchParams.set('v', String(Date.now()));
+            e.preventDefault();
+            window.location.href = url.toString();
+            return; // stop further handling
+          }
+        }
+      } catch(_){ /* ignore */ }
       if (!isMobile() && sidebar.classList.contains("collapsed")) {
         e.preventDefault();
         sidebar.classList.remove("collapsed");
