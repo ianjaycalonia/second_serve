@@ -98,6 +98,22 @@ function rl_month_and_index_from_period_key($periodKey){
     return [$m[1], (int)$m[2]];
 }
 
+/**
+ * Ensure an allocation run exists for period_key and return its run_id.
+ * Creates the run if missing.
+ */
+function rl_ensure_run_id_for_period(Database $db, string $periodKey, int $year, int $month, int $week, int $adminId = 0): int {
+    // Try existing
+    $row = $db->query('SELECT run_id FROM allocation_runs WHERE period_key = ? LIMIT 1', [ $periodKey ])->fetch();
+    if ($row && isset($row['run_id'])) return (int)$row['run_id'];
+    // Create minimal run
+    $db->query('INSERT INTO allocation_runs (period_key, year, month, week, created_by, created_at) VALUES (?,?,?,?,?, NOW())', [
+        $periodKey, $year, $month, $week, ($adminId>0?$adminId:null)
+    ]);
+    $row2 = $db->query('SELECT run_id FROM allocation_runs WHERE period_key = ? LIMIT 1', [ $periodKey ])->fetch();
+    return $row2 && isset($row2['run_id']) ? (int)$row2['run_id'] : 0;
+}
+
 setCorsHeaders();
 header('Content-Type: application/json');
 
@@ -118,11 +134,12 @@ try {
     switch ($action) {
         case 'get_plan':
             requireRole(['admin']);
-            // Month parameter retained for compatibility but not used for grouping anymore
+            // Month parameter now drives which W1..W4 weeks are returned
             $month = isset($_GET['month']) ? trim((string)$_GET['month']) : (new DateTime('now'))->format('Y-m');
+            // Respect client-provided week_start (monday|sunday); fallback to stored setting; default to sunday
             $weekStart = isset($_GET['week_start']) ? strtolower(trim((string)$_GET['week_start'])) : '';
             if (!in_array($weekStart, ['sunday','monday'], true)) {
-                $weekStart = strtolower((string)rl_get_setting('week_start', 'sunday'));
+                $weekStart = strtolower((string) rl_get_setting('week_start', 'sunday'));
                 if (!in_array($weekStart, ['sunday','monday'], true)) $weekStart = 'sunday';
             }
             $includeCarry = false;
@@ -131,44 +148,64 @@ try {
                 $includeCarry = in_array($v, ['1','true','yes','on'], true);
             }
             $db = Database::getInstance();
-            // Lazy rollover: if week stamp changed since last time, clear previous week's planned rows
-            $nowStarts = rl_upcoming_week_starts($weekStart);
-            $currentStart = $nowStarts[0];
-            $prevStart = (clone $currentStart)->modify('-7 day');
-            $stampKey = sprintf('rl_last_week_stamp');
-            $lastStamp = rl_get_setting($stampKey, '');
-            $currentStamp = sprintf('%04d-W%d', (int)$currentStart->format('Y'), rl_week_number_basis($currentStart, $weekStart));
-            if ($lastStamp !== $currentStamp && $lastStamp !== ''){
-                try {
-                    $db->query("DELETE FROM recipient_plans WHERE source='planned' AND week_start_date = ?", [$prevStart->format('Y-m-d')]);
-                } catch (Throwable $e) { /* ignore */ }
-            }
-            rl_set_setting($stampKey, $currentStamp);
+            // Disabled legacy auto-cleanup of recipient_plans on week rollover.
+            // Scheduling API is now the source of truth; do not delete historical/planned rows here.
 
-            // Build weeks from upcoming week_start_date values
+            // Build weeks from the provided month using the selected week basis
             $result = [];
+            $resultEx = [];
             $locks = [];
-            for ($i=0; $i<4; $i++){
-                $wStart = $nowStarts[$i];
+            // Support up to 5 weeks; the 5th will be included only if its start date is within the selected month
+            $selYear = (int)substr($month, 0, 4);
+            $selMonthNum = (int)substr($month, 5, 2);
+            for ($i=1; $i<=5; $i++){
+                $wStartStr = rl_week_start_date_from_month($month, $i, $weekStart);
+                // Derive lock key from computed start date
+                $wStart = new DateTime($wStartStr);
                 $wn = rl_week_number_basis($wStart, $weekStart);
                 $lockKey = sprintf('rl_lock_%04d-W%d', (int)$wStart->format('Y'), $wn);
-                $locks['W'.($i+1)] = rl_get_setting_bool($lockKey, false);
+                $locks['W'.$i] = rl_get_setting_bool($lockKey, false);
                 if ($includeCarry) {
                     $rows = $db->query(
                         "SELECT recipient_id FROM recipient_plans WHERE week_start_date = ? ORDER BY CASE WHEN source='carryover' THEN 0 ELSE 1 END, position ASC",
-                        [$wStart->format('Y-m-d')]
+                        [$wStartStr]
                     )->fetchAll();
                 } else {
                     $rows = $db->query(
                         "SELECT recipient_id FROM recipient_plans WHERE week_start_date = ? AND source='planned' ORDER BY position ASC",
-                        [$wStart->format('Y-m-d')]
+                        [$wStartStr]
                     )->fetchAll();
+                    // Fallback to legacy rows stored by period_key if none by week_start_date
+                    if (!$rows || count($rows) === 0) {
+                        $periodKey = $month . '-W' . $i;
+                        $rows = $db->query(
+                            "SELECT recipient_id FROM recipient_plans WHERE period_key = ? AND source='planned' ORDER BY position ASC",
+                            [$periodKey]
+                        )->fetchAll();
+                    }
                 }
-                $result['W'.($i+1)] = array_map(fn($r)=> (int)$r['recipient_id'], $rows ?: []);
+                $idsAll = array_map(fn($r)=> (int)$r['recipient_id'], $rows ?: []);
+                $inMonth = ((int)$wStart->format('n') === $selMonthNum && (int)$wStart->format('Y') === $selYear);
+                // Only populate IDs for W5 if in the selected month; always populate for W1..W4
+                if ($i <= 4 || ($i === 5 && $inMonth)) {
+                    $result['W'.$i] = $idsAll;
+                } else {
+                    $result['W'.$i] = [];
+                }
+                $resultEx[] = [
+                    'year' => (int)$wStart->format('Y'),
+                    'month' => (int)$wStart->format('n'),
+                    'week' => $i,
+                    'start_date' => $wStartStr,
+                    'ids' => $result['W'.$i],
+                    'locked' => $locks['W'.$i] ?? false,
+                    'in_month' => $inMonth,
+                ];
             }
             sendJson(['success' => true, 'data' => [
                 'month' => $month,
                 'weeks' => $result,
+                'weeks_ex' => $resultEx,
                 'week_start' => $weekStart,
                 'locks' => $locks,
             ]]);
@@ -181,28 +218,50 @@ try {
             if ($month === '' || !preg_match('/^\d{4}-\d{2}$/', $month)) {
                 $month = (new DateTime('now'))->format('Y-m');
             }
-            // Resolve week basis from settings
-            $weekBasis = strtolower((string) rl_get_setting('week_start', 'sunday')) === 'monday' ? 'monday' : 'sunday';
+            // Respect provided week_start in payload or stored setting; default to sunday
+            $weekBasis = isset($payload['week_start']) ? strtolower(trim((string)$payload['week_start'])) : '';
+            if (!in_array($weekBasis, ['sunday','monday'], true)) {
+                $weekBasis = strtolower((string) rl_get_setting('week_start', 'sunday'));
+                if (!in_array($weekBasis, ['sunday','monday'], true)) $weekBasis = 'sunday';
+            }
             $weeksData = $payload['weeks'] ?? [];
             if (!is_array($weeksData)) { sendJson(['success' => false, 'error' => 'weeks must be an object'], 400); }
             $db = Database::getInstance();
-            // Use upcoming week starts to persist planned rows and set lock flags
-            $starts = rl_upcoming_week_starts($weekBasis);
-            // Map week key to index for quick lookup
-            $wkIndex = ['W1'=>0,'W2'=>1,'W3'=>2,'W4'=>3];
+            // Parse selected month to fix year/month attribution
+            $yearParam = null; $monParam = null;
+            if (preg_match('/^(\d{4})-(\d{2})$/', $month, $mm)) { $yearParam = (int)$mm[1]; $monParam = (int)$mm[2]; }
+            // Map week key to index for quick lookup (support optional W5)
+            $wkIndex = ['W1'=>0,'W2'=>1,'W3'=>2,'W4'=>3,'W5'=>4];
             foreach ($weeksData as $wk => $list) {
                 if (!isset($wkIndex[$wk])) continue; // ignore unknown keys
-                $i = $wkIndex[$wk];
+                $i = $wkIndex[$wk]; // 0..3
                 $ids = is_array($list) ? array_values(array_filter(array_map('intval', $list), fn($v)=>$v>0)) : [];
-                $wStart = $starts[$i];
+                // Compute week_start_date from provided month and index (i+1)
+                $wStartStr = rl_week_start_date_from_month($month, $i+1, $weekBasis);
+                $wStart = new DateTime($wStartStr);
                 $periodKey = $month.'-'.$wk; // kept for compatibility
+                // Ensure allocation run exists and resolve run_id for this period
+                $yyForRun = ($yearParam !== null) ? $yearParam : (int)$wStart->format('Y');
+                $mnForRun = ($monParam !== null) ? $monParam : (int)$wStart->format('n');
+                $wkForRun = ($i+1);
+                $runId = rl_ensure_run_id_for_period($db, $periodKey, $yyForRun, $mnForRun, $wkForRun, $adminId);
                 // Replace planned rows for this week_start_date (only for this provided week)
-                $db->query("DELETE FROM recipient_plans WHERE week_start_date = ? AND source = 'planned'", [$wStart->format('Y-m-d')]);
+                // Also delete any legacy rows saved by period_key to ensure clearing works
+                $db->query("DELETE FROM recipient_plans WHERE week_start_date = ? AND source = 'planned'", [$wStartStr]);
+                $db->query("DELETE FROM recipient_plans WHERE period_key = ? AND source = 'planned'", [$periodKey]);
+                // If week is cleared (no ids), also remove carryover rows for this exact week to truly empty UI
+                if (count($ids) === 0) {
+                    $db->query("DELETE FROM recipient_plans WHERE week_start_date = ? AND source = 'carryover'", [$wStartStr]);
+                    $db->query("DELETE FROM recipient_plans WHERE period_key = ? AND source = 'carryover'", [$periodKey]);
+                }
                 $pos = 0;
                 foreach ($ids as $rid) {
+                    // Year/Month should reflect selected month (not the calendar month of week_start_date)
+                    $yy = ($yearParam !== null) ? $yearParam : (int)$wStart->format('Y');
+                    $mn = ($monParam !== null) ? $monParam : (int)$wStart->format('n');
                     $db->query(
-                        "INSERT INTO recipient_plans (period_key, recipient_id, source, position, week_start_date, week_basis) VALUES (?,?, 'planned', ?, ?, ?)",
-                        [ $periodKey, $rid, $pos++, $wStart->format('Y-m-d'), $weekBasis ]
+                        "INSERT INTO recipient_plans (period_key, year, month, week, recipient_id, source, position, week_start_date, week_basis, run_id) VALUES (?,?,?,?,?, 'planned', ?, ?, ?, ?)",
+                        [ $periodKey, $yy, $mn, ($i+1), $rid, $pos++, $wStartStr, $weekBasis, $runId ]
                     );
                 }
                 // Set or remove lock flag for this provided week only
@@ -293,9 +352,10 @@ try {
             $cCount = count($carryKeep);
             for ($i = 0; $i < $cCount; $i++) {
                 $rid = $carryKeep[$i];
+                // Derive y,m from monthStr and use week index from $wIndex
                 $db->query(
-                    "INSERT INTO recipient_plans (period_key, recipient_id, source, position, week_start_date, week_basis) VALUES (?,?, 'carryover', ?, ?, ?)",
-                    [ $periodKey, $rid, -$cCount + $i, $wkStartDate, $weekBasis ]
+                    "INSERT INTO recipient_plans (period_key, year, month, week, recipient_id, source, position, week_start_date, week_basis) VALUES (?,?,?,?,?, 'carryover', ?, ?, ?)",
+                    [ $periodKey, (int)$year, (int)$mon, (int)$wIndex, $rid, -$cCount + $i, $wkStartDate, $weekBasis ]
                 );
             }
 
@@ -326,17 +386,21 @@ try {
             $db->beginTransaction();
             try {
                 $row = $db->query("SELECT served_count, status FROM recipient_attendance WHERE period_key = ? AND recipient_id = ? LIMIT 1", [$pk, $rid])->fetch();
+                // Derive year,month,week from pk / wkStartDate
+                if (preg_match('/^(\d{4})-(\d{2})-W([1-4])$/', $pk, $pm)) {
+                    $py = (int)$pm[1]; $pmn = (int)$pm[2]; $pwi = (int)$pm[3];
+                } else { $py = (int)date('Y'); $pmn = (int)date('n'); $pwi = 1; }
                 if ($row) {
                     if ($statusVal === 'served') {
-                        $db->query("UPDATE recipient_attendance SET status='served', served_count = ?, last_served_at = NOW(), week_start_date = COALESCE(week_start_date, ?), week_basis = COALESCE(week_basis, ?) WHERE period_key = ? AND recipient_id = ?", [ max(1, (int)$row['served_count'] + 1), $wkStartDate, $weekBasis, $pk, $rid ]);
+                        $db->query("UPDATE recipient_attendance SET status='served', served_count = ?, last_served_at = NOW(), week_start_date = COALESCE(week_start_date, ?), week_basis = COALESCE(week_basis, ?), year = COALESCE(year, ?), month = COALESCE(month, ?), week = COALESCE(week, ?) WHERE period_key = ? AND recipient_id = ?", [ max(1, (int)$row['served_count'] + 1), $wkStartDate, $weekBasis, $py, $pmn, $pwi, $pk, $rid ]);
                     } else {
-                        $db->query("UPDATE recipient_attendance SET status='absent', week_start_date = COALESCE(week_start_date, ?), week_basis = COALESCE(week_basis, ?) WHERE period_key = ? AND recipient_id = ?", [ $wkStartDate, $weekBasis, $pk, $rid ]);
+                        $db->query("UPDATE recipient_attendance SET status='absent', week_start_date = COALESCE(week_start_date, ?), week_basis = COALESCE(week_basis, ?), year = COALESCE(year, ?), month = COALESCE(month, ?), week = COALESCE(week, ?) WHERE period_key = ? AND recipient_id = ?", [ $wkStartDate, $weekBasis, $py, $pmn, $pwi, $pk, $rid ]);
                     }
                 } else {
                     if ($statusVal === 'served') {
-                        $db->query("INSERT INTO recipient_attendance (period_key, recipient_id, status, served_count, last_served_at, week_start_date, week_basis) VALUES (?,?, 'served', 1, NOW(), ?, ?)", [$pk, $rid, $wkStartDate, $weekBasis]);
+                        $db->query("INSERT INTO recipient_attendance (period_key, year, month, week, recipient_id, status, served_count, last_served_at, week_start_date, week_basis) VALUES (?,?,?,?,?, 'served', 1, NOW(), ?, ?)", [$pk, $py, $pmn, $pwi, $rid, $wkStartDate, $weekBasis]);
                     } else {
-                        $db->query("INSERT INTO recipient_attendance (period_key, recipient_id, status, served_count, last_served_at, week_start_date, week_basis) VALUES (?,?, 'absent', 0, NULL, ?, ?)", [$pk, $rid, $wkStartDate, $weekBasis]);
+                        $db->query("INSERT INTO recipient_attendance (period_key, year, month, week, recipient_id, status, served_count, last_served_at, week_start_date, week_basis) VALUES (?,?,?,?,?, 'absent', 0, NULL, ?, ?)", [$pk, $py, $pmn, $pwi, $rid, $wkStartDate, $weekBasis]);
                     }
                 }
                 $db->commit();

@@ -100,6 +100,21 @@ try {
                      WHERE run_id = ? AND LOWER(COALESCE(status, "")) IN ("pending","allocated","acknowledged")'
                     , [$runId]
                 );
+                // Create per-recipient notifications so recipients are informed in their bell
+                try {
+                    $rows = $db->query('SELECT DISTINCT recipient_id FROM allocations WHERE run_id = ? AND LOWER(COALESCE(status, "")) = "notified"', [$runId])->fetchAll() ?: [];
+                    foreach ($rows as $r){
+                        $rid = (int)($r['recipient_id'] ?? 0);
+                        if ($rid <= 0) continue;
+                        // Insert minimal notification record
+                        $msg = 'You have been allocated items. Check your Received Items.';
+                        try {
+                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_ready", ?, NOW())', [$rid, $msg]);
+                        } catch (Exception $e) {
+                            // If table or schema differs, ignore to avoid breaking notify_run
+                        }
+                    }
+                } catch (Exception $e) { /* ignore notification failures */ }
                 sendJson(['success'=>true, 'data'=>['run_id'=>$runId]]);
             } catch (Exception $e) {
                 sendJson(['success'=>false,'error'=>'Failed to notify run: ' . $e->getMessage()], 500);
@@ -127,13 +142,75 @@ try {
             $code = isset($payload['allocation_code']) && $payload['allocation_code'] !== '' ? sanitize($payload['allocation_code']) : null;
             // Optional notify flag (default false). Allocate Now should NOT notify admins.
             $notify = isset($payload['notify_admin']) ? (bool)$payload['notify_admin'] : false;
-            $svc = new Allocation();
             try {
-                $id = $svc->createAllocation($recipientId, $items, $runId, $code, $notify);
-                if ($id <= 0) sendJson(['success'=>false,'error'=>'Failed to create allocation'], 400);
-                sendJson(['success'=>true, 'data'=>['allocation_id'=>$id]]);
+                $db = Database::getInstance();
+                // If run is provided, check for an existing allocation for this recipient in this run
+                $existing = null;
+                if ($runId !== null){
+                    $existing = $db->query('SELECT allocation_id FROM allocations WHERE recipient_id = ? AND run_id = ? ORDER BY allocation_id DESC LIMIT 1', [$recipientId, $runId])->fetch();
+                }
+                if ($existing && isset($existing['allocation_id'])){
+                    $allocId = (int)$existing['allocation_id'];
+                    // Replace items
+                    $db->query('DELETE FROM allocation_items WHERE allocation_id = ?', [$allocId]);
+                    $inserted = 0;
+                    foreach ($items as $it){
+                        $name = isset($it['item_name']) ? (string)$it['item_name'] : '';
+                        $qty  = isset($it['quantity']) ? (int)$it['quantity'] : 0;
+                        $invId = isset($it['inventory_id']) ? (int)$it['inventory_id'] : 0;
+                        if ($qty <= 0 || $name === '') continue;
+                        if ($invId > 0){
+                            $db->query('INSERT INTO allocation_items (allocation_id, inventory_id, quantity, created_at) VALUES (?, ?, ?, NOW())', [$allocId, $invId, $qty]);
+                            $inserted++;
+                        } else {
+                            // Resolve inventory record best-effort by name and optional category
+                            $cat = isset($it['category']) ? (string)$it['category'] : null;
+                            $row = $db->query('SELECT inventory_id FROM inventory WHERE product_name = ? AND (product_category = ? OR ? IS NULL) ORDER BY COALESCE(expiry_date, "9999-12-31") ASC, added_at ASC LIMIT 1', [$name, $cat, $cat])->fetch();
+                            $rid = $row ? (int)$row['inventory_id'] : 0;
+                            if ($rid > 0){ $db->query('INSERT INTO allocation_items (allocation_id, inventory_id, quantity, created_at) VALUES (?, ?, ?, NOW())', [$allocId, $rid, $qty]); $inserted++; }
+                        }
+                    }
+                    // If no items were inserted, remove the now-empty allocation to avoid dangling recipients
+                    if ($inserted === 0){
+                        $db->query('DELETE FROM allocations WHERE allocation_id = ?', [$allocId]);
+                        sendJson(['success'=>true, 'data'=>['allocation_id'=>null, 'deleted_allocation'=>$allocId, 'updated'=>false]]);
+                    }
+                    // Mark as Updated (fallback to Pending if enum lacks Updated)
+                    try {
+                        $db->query('UPDATE allocations SET status = "Updated", updated_at = NOW() WHERE allocation_id = ?', [$allocId]);
+                    } catch (Exception $e) {
+                        $db->query('UPDATE allocations SET status = "Pending", updated_at = NOW() WHERE allocation_id = ?', [$allocId]);
+                    }
+                    // Notify recipient that allocation contents were updated
+                    try {
+                        $rowR = $db->query('SELECT recipient_id FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocId])->fetch();
+                        $rid = $rowR ? (int)$rowR['recipient_id'] : 0;
+                        if ($rid>0){
+                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "status_updated", ?, NOW())', [
+                                $rid,
+                                'Your allocation has been updated.'
+                            ]);
+                        }
+                    } catch (Exception $e) { /* ignore */ }
+                    sendJson(['success'=>true, 'data'=>['allocation_id'=>$allocId, 'updated'=>true]]);
+                } else {
+                    // No existing allocation in this run: create new one
+                    // Require at least one valid item to prevent empty allocations
+                    $hasValid = false;
+                    foreach ($items as $it){
+                        $name = isset($it['item_name']) ? (string)$it['item_name'] : '';
+                        $qty  = isset($it['quantity']) ? (int)$it['quantity'] : 0;
+                        $invId = isset($it['inventory_id']) ? (int)$it['inventory_id'] : 0;
+                        if ($qty > 0 && ($name !== '' || $invId > 0)) { $hasValid = true; break; }
+                    }
+                    if (!$hasValid) { sendJson(['success'=>false,'error'=>'At least one item is required to create an allocation'], 400); }
+                    $svc = new Allocation();
+                    $id = $svc->createAllocation($recipientId, $items, $runId, $code, $notify);
+                    if ($id <= 0) sendJson(['success'=>false,'error'=>'Failed to create allocation'], 400);
+                    sendJson(['success'=>true, 'data'=>['allocation_id'=>$id, 'updated'=>false]]);
+                }
             } catch (Exception $e) {
-                sendJson(['success'=>false,'error'=>'Unable to create allocation: ' . $e->getMessage()], 400);
+                sendJson(['success'=>false,'error'=>'Unable to create/overwrite allocation: ' . $e->getMessage()], 400);
             }
             break;
 
@@ -244,6 +321,65 @@ try {
             }
             break;
 
+        case 'ensure_run':
+            // Ensure a run exists for the given period_key, return the run row
+            try { requireRole(['admin']); }
+            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            $periodKey = isset($payload['period_key']) ? trim((string)$payload['period_key']) : (isset($_GET['period_key']) ? trim((string)$_GET['period_key']) : '');
+            if ($periodKey === '' || !preg_match('/^\d{4}-\d{2}-W[1-4]$/', $periodKey)) { sendJson(['success'=>false,'error'=>'Invalid or missing period_key'], 400); }
+            $adminId = (int)(currentUserId() ?? 1);
+            $svc = new Allocation();
+            $row = $svc->ensureRun($periodKey, $adminId);
+            if (!$row) sendJson(['success'=>false, 'error'=>'Failed to ensure run for period'], 500);
+            sendJson(['success'=>true, 'data'=>$row]);
+            break;
+
+        case 'list_by_period':
+            // Return allocations for a given period_key, ensuring the run exists
+            try { requireRole(['admin']); }
+            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            $periodKey = isset($_GET['period_key']) ? trim((string)$_GET['period_key']) : '';
+            if ($periodKey === '' || !preg_match('/^\d{4}-\d{2}-W[1-4]$/', $periodKey)) { sendJson(['success'=>false,'error'=>'Invalid or missing period_key'], 400); }
+            $adminId = (int)(currentUserId() ?? 1);
+            $svc = new Allocation();
+            $run = $svc->ensureRun($periodKey, $adminId);
+            if (!$run || (int)($run['run_id'] ?? 0) <= 0) { sendJson(['success'=>false, 'error'=>'Failed to resolve run for period'], 500); }
+            // Reuse existing list_by_run logic via direct DB query to keep consistent output
+            $runId = (int)$run['run_id'];
+            try {
+                $db = Database::getInstance();
+                $rows = $db->query(
+                    'SELECT allocation_id, recipient_id, status, created_at, updated_at FROM allocations WHERE run_id = ? ORDER BY created_at DESC, allocation_id DESC',
+                    [$runId]
+                )->fetchAll() ?: [];
+                $out = [];
+                foreach ($rows as $r){
+                    $aid = (int)$r['allocation_id'];
+                    $items = $db->query('SELECT ai.id, ai.inventory_id, ai.quantity, i.product_name, i.product_category, i.unit FROM allocation_items ai LEFT JOIN inventory i ON ai.inventory_id = i.inventory_id WHERE ai.allocation_id = ? ORDER BY ai.id ASC', [$aid])->fetchAll() ?: [];
+                    $out[] = [
+                        'allocation_id' => $aid,
+                        'recipient_id'  => (int)$r['recipient_id'],
+                        'status'        => $r['status'] ?? 'Allocated',
+                        'created_at'    => $r['created_at'] ?? null,
+                        'updated_at'    => $r['updated_at'] ?? null,
+                        'items'         => array_map(function($it){
+                            return [
+                                'item_id'   => (int)$it['id'],
+                                'inventory_id' => (int)$it['inventory_id'],
+                                'item_name' => $it['product_name'] ?? 'Unknown Item',
+                                'category'  => $it['product_category'] ?? null,
+                                'quantity'  => (int)$it['quantity'],
+                                'unit'      => $it['unit'] ?? null,
+                            ];
+                        }, $items)
+                    ];
+                }
+                sendJson(['success'=>true, 'data'=>['run_id'=>$runId, 'items'=>$out]]);
+            } catch (Exception $e) {
+                sendJson(['success'=>false,'error'=>'Failed to list allocations by period: ' . $e->getMessage()], 500);
+            }
+            break;
+
         case 'run_by_period':
             // Admin required; if not present, fallback to admin session for robustness
             try { requireRole(['admin']); }
@@ -252,7 +388,12 @@ try {
             if ($periodKey === '') { sendJson(['success'=>false,'error'=>'period_key is required'], 400); }
             $svc = new Allocation();
             $row = $svc->getRunByPeriod($periodKey);
-            if (!$row) sendJson(['success'=>false, 'error'=>'Run not found for period'], 404);
+            if (!$row) {
+                // Auto-create run to make period_key the single source of truth
+                $adminId = (int)(currentUserId() ?? 1);
+                $row = $svc->ensureRun($periodKey, $adminId);
+                if (!$row) sendJson(['success'=>false, 'error'=>'Failed to ensure run for period'], 500);
+            }
             sendJson(['success'=>true, 'data'=>$row]);
             break;
 
@@ -282,12 +423,14 @@ try {
                                           LEFT JOIN inventory i ON ai.inventory_id = i.inventory_id
                                           WHERE ai.allocation_id = ?
                                           ORDER BY ai.id ASC', [$aid])->fetchAll() ?: [];
+                    $itemCount = is_array($items) ? count($items) : 0;
                     $out[] = [
                         'allocation_id' => $aid,
                         'recipient_id'  => (int)$r['recipient_id'],
                         'status'        => $r['status'] ?? 'Allocated',
                         'created_at'    => $r['created_at'] ?? null,
                         'updated_at'    => $r['updated_at'] ?? null,
+                        'item_count'    => $itemCount,
                         'items'         => array_map(function($it){
                             return [
                                 'item_id'   => (int)$it['id'],
@@ -328,7 +471,8 @@ try {
             if (!$row) { sendJson(['success'=>false,'error'=>'Allocation not found'], 404); }
             if ((int)$row['recipient_id'] !== $currentId) { sendJson(['success'=>false,'error'=>'Forbidden: allocation does not belong to this recipient'], 403); }
             $st = strtolower((string)($row['status'] ?? ''));
-            if (!in_array($st, ['allocated','notified'], true)) {
+            // Allow recipients to acknowledge when status is Pending, Allocated, Notified, or Updated
+            if (!in_array($st, ['pending','allocated','notified','updated'], true)) {
               // If already acknowledged or later, return success without changing
               if ($st === 'acknowledged' || $st === 'scheduled' || $st === 'picked up' || $st === 'completed') {
                 sendJson(['success'=>true]);
@@ -338,8 +482,52 @@ try {
             }
             $svc = new Allocation();
             $ok = $svc->acknowledge($allocationId, $currentId);
-            if (!$ok) sendJson(['success'=>false,'error'=>'Unable to acknowledge'], 400);
-            sendJson(['success'=>true]);
+            if (!$ok) {
+                // Fallback: perform direct update when current status is permissible
+                try {
+                    $db = Database::getInstance();
+                    $db->query(
+                        'UPDATE allocations SET status = "Acknowledged", updated_at = NOW()
+                         WHERE allocation_id = ? AND recipient_id = ?
+                           AND LOWER(COALESCE(status, "")) IN ("pending","allocated","notified","updated")',
+                        [$allocationId, $currentId]
+                    );
+                    // Notify admins that an allocation was acknowledged
+                    try {
+                        $db->query('/*noop*/SELECT 1'); // ensure $db defined
+                        $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
+                        foreach ($admins as $ad){
+                            $aid = (int)($ad['user_id'] ?? 0);
+                            if ($aid>0){
+                                $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_acknowledged", ?, NOW())', [
+                                    $aid,
+                                    'A recipient acknowledged their allocation.'
+                                ]);
+                            }
+                        }
+                    } catch (Exception $e) { /* ignore notification errors */ }
+                    // If no rows affected, still fail
+                    sendJson(['success'=>true]);
+                } catch (Exception $e) {
+                    sendJson(['success'=>false,'error'=>'Unable to acknowledge'], 400);
+                }
+            } else {
+                // Notify admins that an allocation was acknowledged
+                try {
+                    $db = Database::getInstance();
+                    $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
+                    foreach ($admins as $ad){
+                        $aid = (int)($ad['user_id'] ?? 0);
+                        if ($aid>0){
+                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_acknowledged", ?, NOW())', [
+                                $aid,
+                                'A recipient acknowledged their allocation.'
+                            ]);
+                        }
+                    }
+                } catch (Exception $e) { /* ignore notification errors */ }
+                sendJson(['success'=>true]);
+            }
             break;
 
         case 'acknowledge_admin':
@@ -349,6 +537,18 @@ try {
             $svc = new Allocation();
             $ok = $svc->acknowledgeByAdmin($allocationId, (int)(currentUserId() ?? 0));
             if (!$ok) sendJson(['success'=>false,'error'=>'Invalid state'], 400);
+            // Notify recipient that allocation was acknowledged by admin
+            try {
+                $db = Database::getInstance();
+                $row = $db->query('SELECT recipient_id FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocationId])->fetch();
+                $rid = $row ? (int)$row['recipient_id'] : 0;
+                if ($rid>0){
+                    $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_acknowledged", ?, NOW())', [
+                        $rid,
+                        'Your allocation has been acknowledged.'
+                    ]);
+                }
+            } catch (Exception $e) { /* ignore */ }
             sendJson(['success'=>true]);
             break;
 
@@ -362,7 +562,156 @@ try {
             $svc = new Allocation();
             $ok = $svc->cancel($allocationId, $currentId, $reason);
             if (!$ok) sendJson(['success'=>false,'error'=>'Not allowed or invalid state'], 400);
+            // Notify admins of cancellation
+            try {
+                $db = Database::getInstance();
+                $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
+                foreach ($admins as $ad){
+                    $aid = (int)($ad['user_id'] ?? 0);
+                    if ($aid>0){
+                        $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_cancelled", ?, NOW())', [
+                            $aid,
+                            'Recipient cancelled an allocation: '.$reason
+                        ]);
+                    }
+                }
+            } catch (Exception $e) { /* ignore */ }
             sendJson(['success'=>true]);
+            break;
+
+        case 'cancel_and_replace':
+            // Recipient cancelling their own OR admin doing it on behalf
+            requireRole(['recipient','admin']);
+            $role = (string)(currentUserRole() ?? '');
+            $actorId = (int)(currentUserId() ?? 0);
+            $allocationId = isset($payload['allocation_id']) ? (int)$payload['allocation_id'] : 0;
+            $reason = isset($payload['reason']) ? sanitize($payload['reason']) : '';
+            if ($allocationId <= 0) { sendJson(['success'=>false,'error'=>'allocation_id is required'], 400); }
+            if ($reason === '') { sendJson(['success'=>false,'error'=>'reason is required'], 400); }
+
+            $db = Database::getInstance();
+            // Load allocation details
+            $row = $db->query('SELECT allocation_id, recipient_id, run_id FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocationId])->fetch();
+            if (!$row) { sendJson(['success'=>false,'error'=>'Allocation not found'], 404); }
+            $recId = (int)$row['recipient_id'];
+            $runId = (int)($row['run_id'] ?? 0);
+            if ($role !== 'admin' && $recId !== $actorId) { sendJson(['success'=>false,'error'=>'Forbidden'], 403); }
+
+            // Cancel first (uses same validation as recipient cancel)
+            $svc = new Allocation();
+            $ok = $svc->cancel($allocationId, $recId, $reason);
+            if (!$ok) sendJson(['success'=>false,'error'=>'Not allowed or invalid state'], 400);
+
+            // If no run attached, nothing to replace in current week
+            if ($runId <= 0) { sendJson(['success'=>true, 'data'=>['cancelled_allocation_id'=>$allocationId, 'run_id'=>null, 'replacement'=>null]]); }
+
+            // Resolve period_key for run
+            $run = $db->query('SELECT period_key FROM allocation_runs WHERE run_id = ? LIMIT 1', [$runId])->fetch();
+            $periodKey = $run ? (string)$run['period_key'] : '';
+            // Derive monthly key used by Distribution for status tracking (YYYY-MM)
+            $monthlyKey = '';
+            if (preg_match('/^(\d{4})-(\d{2})-W[1-4]$/', $periodKey, $m)) {
+                $monthlyKey = sprintf('%04d-%02d', (int)$m[1], (int)$m[2]);
+            } else if (preg_match('/^(\d{4})-(\d{2})$/', $periodKey, $m)) {
+                $monthlyKey = sprintf('%04d-%02d', (int)$m[1], (int)$m[2]);
+            }
+
+            // Ensure distribution_period_status exists to avoid 500s on fresh DBs
+            try {
+                $db->query(<<<SQL
+CREATE TABLE IF NOT EXISTS `distribution_period_status` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `period_key` varchar(12) NOT NULL,
+  `recipient_id` int(11) NOT NULL,
+  `served_count` int(11) NOT NULL DEFAULT 0,
+  `last_served_at` timestamp NULL DEFAULT NULL,
+  `skipped_pending` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_period_recipient` (`period_key`,`recipient_id`),
+  KEY `dps_recipient_idx` (`recipient_id`),
+  CONSTRAINT `dps_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+SQL);
+            } catch (Exception $e) { /* ignore; next queries may still succeed if table exists */ }
+
+            // Mark cancelled recipient as skipped_pending for this month so they carry over
+            if ($monthlyKey !== ''){
+                try {
+                    // Ensure status row exists
+                    $db->query('INSERT INTO distribution_period_status (period_key, recipient_id, served_count, last_served_at, skipped_pending) VALUES (?,?,0,NULL,0) ON DUPLICATE KEY UPDATE period_key = period_key', [$monthlyKey, $recId]);
+                    $db->query('UPDATE distribution_period_status SET skipped_pending = 1 WHERE period_key = ? AND recipient_id = ?', [$monthlyKey, $recId]);
+                } catch (Exception $e) { /* best-effort */ }
+            }
+
+            // Determine specialty (organization_type) for better matching
+            $spec = null;
+            try {
+                $rpro = $db->query('SELECT organization_type FROM recipient_profiles WHERE user_id = ? LIMIT 1', [$recId])->fetch();
+                if ($rpro && isset($rpro['organization_type'])){ $spec = trim((string)$rpro['organization_type']); if ($spec==='') $spec = null; }
+            } catch (Exception $e) { $spec = null; }
+
+            // Build candidate list: approved recipients not already in this run, optional same specialty
+            $whereSpec = '';
+            $params = [];
+            if ($spec !== null) { $whereSpec = ' AND rp.organization_type = ?'; $params[] = $spec; }
+            $sql = 'SELECT u.user_id AS id, COALESCE(dps.served_count,0) AS served_count, COALESCE(dps.skipped_pending,0) AS skipped_pending, dps.last_served_at
+                    FROM users u
+                    LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
+                    LEFT JOIN distribution_period_status dps ON dps.recipient_id = u.user_id AND dps.period_key = ?
+                    WHERE u.role = "recipient" AND u.status = "approved"'.$whereSpec.'
+                      AND u.user_id NOT IN (SELECT recipient_id FROM allocations WHERE run_id = ?)';
+            // monthlyKey may be empty; if so, approximate with current Y-m
+            $keyForQuery = $monthlyKey !== '' ? $monthlyKey : date('Y-m');
+            // Order of params must match SQL placeholders: [period_key, (spec?), run_id]
+            $params = array_merge([$keyForQuery], $params, [$runId]);
+            $rows = $db->query($sql, $params)->fetchAll() ?: [];
+            if (!$rows) {
+                sendJson(['success'=>true, 'data'=>['cancelled_allocation_id'=>$allocationId, 'run_id'=>$runId, 'replacement'=>null]]);
+            }
+            // Order by skipped_pending desc, served_count asc, last_served_at asc, id asc
+            usort($rows, function($a,$b){
+                $sa = (int)($a['skipped_pending']??0); $sb=(int)($b['skipped_pending']??0);
+                if ($sa !== $sb) return $sb - $sa;
+                $ca = (int)($a['served_count']??0); $cb=(int)($b['served_count']??0);
+                if ($ca !== $cb) return $ca - $cb;
+                $la = (string)($a['last_served_at']??''); $lb=(string)($b['last_served_at']??'');
+                $cmp = strcmp($la,$lb); if ($cmp!==0) return $cmp;
+                return ((int)$a['id']) <=> ((int)$b['id']);
+            });
+            $rep = $rows[0];
+            $repId = (int)$rep['id'];
+
+            // Insert replacement allocation with a valid enum status (Pending)
+            $db->query('INSERT INTO allocations (recipient_id, run_id, status, created_at, updated_at) VALUES (?, ?, "Pending", NOW(), NOW())', [$repId, $runId]);
+            $newAllocId = (int)$db->lastInsertId();
+
+            // Remove replacement from next week pool (clear skipped_pending)
+            if ($monthlyKey !== ''){
+                try {
+                    $db->query('INSERT INTO distribution_period_status (period_key, recipient_id, served_count, last_served_at, skipped_pending) VALUES (?,?,0,NULL,0) ON DUPLICATE KEY UPDATE period_key = period_key', [$monthlyKey, $repId]);
+                    $db->query('UPDATE distribution_period_status SET skipped_pending = 0 WHERE period_key = ? AND recipient_id = ?', [$monthlyKey, $repId]);
+                } catch (Exception $e) { /* best-effort */ }
+            }
+
+            // Notify admins of cancellation and replacement selection
+            try {
+                $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
+                foreach ($admins as $ad){
+                    $aid = (int)($ad['user_id'] ?? 0);
+                    if ($aid>0){
+                        $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_cancelled", ?, NOW())', [
+                            $aid,
+                            'Allocation cancelled and replacement selected.'
+                        ]);
+                    }
+                }
+            } catch (Exception $e) { /* ignore */ }
+            sendJson(['success'=>true, 'data'=>[
+                'cancelled_allocation_id'=>$allocationId,
+                'cancelled_recipient_id'=>$recId,
+                'run_id'=>$runId,
+                'replacement'=>[ 'recipient_id'=>$repId, 'allocation_id'=>$newAllocId ]
+            ]]);
             break;
 
         case 'schedule':
@@ -374,6 +723,20 @@ try {
             try {
                 $ok = $svc->schedule($allocationId, $currentId);
                 if (!$ok) sendJson(['success'=>false,'error'=>'Unable to schedule pickup (invalid state or insufficient stock)'], 400);
+                // Notify admins that recipient scheduled a pickup
+                try {
+                    $db = Database::getInstance();
+                    $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
+                    foreach ($admins as $ad){
+                        $aid = (int)($ad['user_id'] ?? 0);
+                        if ($aid>0){
+                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "status_updated", ?, NOW())', [
+                                $aid,
+                                'Recipient scheduled a pickup.'
+                            ]);
+                        }
+                    }
+                } catch (Exception $e) { /* ignore */ }
                 sendJson(['success'=>true]);
             } catch (Exception $e) {
                 // Check if it's an inventory table issue
@@ -499,17 +862,8 @@ try {
                     $recipientId = (int)$row['user_id'];
                 }
 
-                // Ensure allocation run exists for provided period_key (optional)
+                // On-site issuances should never be attached to weekly runs
                 $runId = null;
-                if ($periodKey) {
-                    $row = $db->query('SELECT run_id FROM allocation_runs WHERE period_key = ? LIMIT 1', [$periodKey])->fetch();
-                    if ($row) { $runId = (int)$row['run_id']; }
-                    else {
-                        // Create run
-                        $db->query('INSERT INTO allocation_runs (period_key, created_by, created_at) VALUES (?, ?, NOW())', [$periodKey, (int)(currentUserId() ?? 0)]);
-                        $runId = (int)$db->lastInsertId();
-                    }
-                }
 
                 // Deduct stock FIFO: prefer earliest expiry, then earliest added_at
                 $remaining = $qty;
@@ -539,8 +893,8 @@ try {
                     throw new Exception('Insufficient stock to fulfill onsite issue');
                 }
 
-                // Create allocation (Completed) and items
-                $db->query('INSERT INTO allocations (recipient_id, run_id, status, delivered_at, created_at, updated_at) VALUES (?, ?, "Completed", NOW(), NOW(), NOW())', [$recipientId, $runId]);
+                // Create allocation (Completed) and items; ensure run_id is NULL
+                $db->query('INSERT INTO allocations (recipient_id, run_id, status, delivered_at, created_at, updated_at) VALUES (?, NULL, "Completed", NOW(), NOW(), NOW())', [$recipientId]);
                 $allocationId = (int)$db->lastInsertId();
                 foreach ($picked as $p) {
                     $db->query('INSERT INTO allocation_items (allocation_id, inventory_id, quantity, created_at) VALUES (?, ?, ?, NOW())', [$allocationId, (int)$p['inventory_id'], (int)$p['quantity']]);

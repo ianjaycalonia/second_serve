@@ -161,9 +161,224 @@
     <script src="scripts/js/charts/adminDashboard.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="scripts/js/ui/distributeResult.js"></script>
-  </body>
-</html>
-  </body>
-</html>
+    <!-- Pre-hook: if user reloaded without params, restore last run_id into URL so the list still loads -->
+    <script>
+      (function(){
+        try{
+          var url = new URL(window.location.href);
+          var hasRun = (url.searchParams.get('run_id')||'').trim()!=='';
+          var hasPk = (url.searchParams.get('period_key')||'').trim()!=='';
+          var hasIds = (url.searchParams.get('recipient_ids')||'').trim()!=='';
+          if (!hasRun && !hasPk && !hasIds){
+            var last = parseInt(localStorage.getItem('dr_last_run_id')||'0',10)||0;
+            if (last>0){
+              url.searchParams.set('run_id', String(last));
+              // Update URL without reload; subsequent scripts will read it
+              history.replaceState(null, '', url.toString());
+            }
+          }
+        } catch(_){ }
+      })();
+    </script>
 
+    <!-- Week badge injector to mirror Allocation badge from DistributeItems.html -->
+    <script>
+      (function(){
+        function computeWeekBadgeHTML(){
+          try{
+            var url = new URL(window.location.href);
+            var pk = (url.searchParams.get('period_key')||'').trim();
+            if (!/^\d{4}-\d{2}-W[1-4]$/i.test(pk)){
+              var rid = parseInt((url.searchParams.get('run_id')||'0'),10)||0;
+              var effRunId = rid || (window.__DR_RESOLVED_RUN_ID__||0);
+              if (effRunId){
+                var API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+                // NOTE: synchronous fetch is not available; return a placeholder and let async resolver update later
+              }
+            }
+            var m = /W([1-4])$/i.exec(pk||'');
+            if (m){
+              var n = parseInt(m[1],10)||1;
+              var color = (n===1?'primary':n===2?'danger':n===3?'warning':'info');
+              return " <span class='badge bg-"+color+" text-uppercase ms-2'>W"+n+"</span>";
+            }
+          } catch(_){ }
+          return '';
+        }
+        function applyWeekBadges(badgeHtml){
+          try{
+            if (!badgeHtml) return;
+            var container = document.getElementById('resultContainer'); if (!container) return;
+            var headers = container.querySelectorAll('.fw-semibold');
+            headers.forEach(function(el){
+              try{
+                if (el.dataset && el.dataset.weekBadgeApplied==='1') return;
+                var html = el.innerHTML || '';
+                if (html.indexOf('<span') >= 0){
+                  // Insert before the first existing span (before status/error badges)
+                  el.innerHTML = html.replace(/\s*<span/i, badgeHtml + ' <span');
+                } else {
+                  el.innerHTML = html + badgeHtml;
+                }
+                if (el.dataset) el.dataset.weekBadgeApplied = '1';
+              } catch(_){ }
+            });
+          } catch(_){ }
+        }
+        function resolvePeriodKeyAsyncAndApply(){
+          try{
+            var url = new URL(window.location.href);
+            var pk = (url.searchParams.get('period_key')||'').trim();
+            var badge = computeWeekBadgeHTML();
+            if (badge){ applyWeekBadges(badge); return; }
+            var rid = parseInt((url.searchParams.get('run_id')||'0'),10)||0;
+            var effRunId = rid || (window.__DR_RESOLVED_RUN_ID__||0);
+            if (!effRunId) return;
+            var API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+            fetch(API_BASE_URL + '/allocations/index.php?action=list_runs&limit=100&t=' + Date.now(), { credentials:'include', headers:{'Accept':'application/json'} })
+              .then(function(r){ return r.json().catch(function(){ return null; }); })
+              .then(function(j){
+                try{
+                  var rows = Array.isArray(j && j.data && j.data.items) ? j.data.items : [];
+                  var match = rows.find(function(x){ return parseInt(x.run_id,10) === effRunId; });
+                  var pk2 = match && match.period_key ? String(match.period_key) : '';
+                  if (pk2){
+                    var m = /W([1-4])$/i.exec(pk2);
+                    if (m){
+                      var n = parseInt(m[1],10)||1;
+                      var color = (n===1?'primary':n===2?'danger':n===3?'warning':'info');
+                      var b = " <span class='badge bg-"+color+" text-uppercase ms-2'>W"+n+"</span>";
+                      applyWeekBadges(b);
+                    }
+                  }
+                } catch(_){ }
+              }).catch(function(){ /* ignore */ });
+          } catch(_){ }
+        }
+        document.addEventListener('DOMContentLoaded', function(){
+          try{
+            var badge = computeWeekBadgeHTML();
+            // Apply once now
+            applyWeekBadges(badge);
+            // Observe for content rendered by distributeResult.js
+            var container = document.getElementById('resultContainer');
+            if (container && window.MutationObserver){
+              var obs = new MutationObserver(function(){ applyWeekBadges(badge); });
+              obs.observe(container, { childList:true, subtree:true });
+            }
+            // Also resolve asynchronously via list_runs if needed
+            if (!badge){ setTimeout(resolvePeriodKeyAsyncAndApply, 0); }
+          } catch(_){ }
+        });
+      })();
+    </script>
+    <script src="scripts/js/ui/distributeResult.js"></script>
+    <!-- Post-hook: persist resolved run_id for future reloads -->
+    <script>
+      (function(){
+        try{
+          // Give distributeResult.js a tick to set window.__DR_RESOLVED_RUN_ID__
+          setTimeout(function(){
+            try{
+              var url = new URL(window.location.href);
+              var rid = parseInt((url.searchParams.get('run_id')||'0'),10)||0;
+              var eff = rid || (window.__DR_RESOLVED_RUN_ID__||0);
+              if (eff>0){ localStorage.setItem('dr_last_run_id', String(eff)); }
+            } catch(_){ }
+          }, 0);
+        } catch(_){ }
+      })();
+    </script>
+    <script>
+      (function(){
+        document.addEventListener('DOMContentLoaded', function(){
+          try{
+            var btn = document.getElementById('notifyRunBtn');
+            if (!btn) return;
+            // Ensure visible and clickable
+            btn.classList.remove('d-none');
+            btn.disabled = false;
+            // Add a capturing handler to bypass any internal isLocked gating
+            btn.addEventListener('click', async function(e){
+              try{
+                e.stopImmediatePropagation();
+                e.preventDefault();
+                var API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+                var url = new URL(window.location.href);
+                var runIdRaw = (url.searchParams.get('run_id')||'').trim();
+                var runId = parseInt(runIdRaw||'0',10)||0;
+                if (!runId) runId = (window.__DR_RESOLVED_RUN_ID__||0);
+                if (!runId) {
+                  var fb = document.getElementById('resultFeedback');
+                  if (fb) fb.innerHTML = '<div class="alert alert-danger py-2 mb-0">Run not resolved. Load by week (Wxx) first.</div>';
+                  return;
+                }
+                // Build recipient_ids to notify: Pending/Allocated/Updated only; exclude Cancelled
+                var byRec = Array.isArray(window.__DR_BYREC__) ? window.__DR_BYREC__ : [];
+                var recipientsToNotify = byRec
+                  .filter(function(r){ return Array.isArray(r.items); })
+                  .filter(function(r){ return r.items.some(function(a){ var s=String(a.status||'').toLowerCase(); return s!=='cancelled' && (s==='pending'||s==='allocated'||s==='updated'); }); })
+                  .map(function(r){ return parseInt(r.rid,10)||0; })
+                  .filter(function(n){ return Number.isFinite(n) && n>0; });
+                var payload = { run_id: runId };
+                if (recipientsToNotify.length) payload.recipient_ids = recipientsToNotify;
+                var res = await fetch(API_BASE_URL + '/allocations/index.php?action=notify_run', {
+                  method: 'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
+                  body: JSON.stringify(payload)
+                });
+                var j = null; try { j = await res.json(); } catch(_) {}
+                if (res.ok && j && j.success){
+                  // Success feedback
+                  try{
+                    var bEl = document.getElementById('resultAlertBody'); if (bEl) bEl.textContent = 'Recipients notified.';
+                    var mEl = document.getElementById('resultAlertModal'); if (mEl && window.bootstrap && bootstrap.Modal){ bootstrap.Modal.getOrCreateInstance(mEl).show(); }
+                  } catch(_){ /* ignore */ }
+                  btn.classList.add('d-none');
+                  btn.disabled = true;
+                  // Also write notifications for each recipient so it reflects in their feed
+                  try{
+                    for (var i=0;i<recipientsToNotify.length;i++){
+                      var rid = recipientsToNotify[i];
+                      var parts = [];
+                      // Build a short items list from the page if present
+                      try{
+                        var tb = document.querySelector('tbody.dr-recipient[data-rec="'+rid+'"]');
+                        if (tb){
+                          tb.querySelectorAll('tr').forEach(function(tr){
+                            var nameEl = tr.querySelector('.dr-name');
+                            var qtyEl = tr.querySelector('.dr-qty');
+                            var name = nameEl ? (nameEl.value||'').trim() : '';
+                            var qty = qtyEl ? (qtyEl.value||'').trim() : '';
+                            if (name && qty){ parts.push(qty+'x '+name); }
+                          });
+                        }
+                      } catch(_){}
+                      var msg = parts.length ? ('You have been allocated items. Items: '+parts.slice(0,6).join(', ')+(parts.length>6?'…':'')) : 'You have been allocated items.';
+                      try{
+                        var res2 = await fetch(API_BASE_URL + '/communications/notifications.php?action=create', {
+                          method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
+                          body: JSON.stringify({ user_id: rid, type: 'allocation_ready', message: msg })
+                        });
+                        if (!res2.ok) throw new Error('HTTP ' + res2.status);
+                      } catch(err){
+                        var fb3 = document.getElementById('resultFeedback');
+                        if (fb3) fb3.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
+                      }
+                    }
+                  } catch(err){
+                    var fb3 = document.getElementById('resultFeedback');
+                    if (fb3) fb3.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
+                  }
+                } else {
+                  var fb2 = document.getElementById('resultFeedback');
+                  if (fb2) fb2.innerHTML = '<div class="alert alert-danger py-2 mb-0">'+ (j && j.error ? j.error : ('HTTP ' + res.status)) +'</div>';
+                }
+              } catch(err){
+                var fb3 = document.getElementById('resultFeedback');
+                if (fb3) fb3.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
+              }
+            }, true);
+          } catch(_){}
+        });
+      })();
+    </script>

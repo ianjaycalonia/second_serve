@@ -205,7 +205,7 @@
     });
   }
 
-  function clearWeek(dropId){
+  async function clearWeek(dropId, weekKey){
     const dz = qs('#'+dropId);
     const pool = qs('#pool');
     if (!dz || !pool) return;
@@ -220,6 +220,11 @@
       }
     });
     updateCounts();
+    // Persist empty list for this week if weekKey provided
+    if (weekKey){
+      try { await apiSavePlan({ [weekKey]: [] }, currentMonth()); await restoreFromServer(); }
+      catch(_){ /* ignore */ }
+    }
   }
 
   function collectWeekIds(dropId){ return qsa(`#${dropId} .rcard[data-user-id]`).map(el => parseInt(el.getAttribute('data-user-id')||'0',10)).filter(Boolean); }
@@ -252,11 +257,25 @@
     d.setHours(0,0,0,0);
     return d;
   }
+  // Base date helpers (user-entered exact start date)
+  function formatYMD(d){ const yyyy=d.getFullYear(); const mm=String(d.getMonth()+1).padStart(2,'0'); const dd=String(d.getDate()).padStart(2,'0'); return `${yyyy}-${mm}-${dd}`; }
+  function getBaseDate(){
+    try{
+      const el = document.getElementById('rlBaseDate');
+      let d = null;
+      if (el && el.value){ d = new Date(el.value + 'T00:00:00'); }
+      if (!d || isNaN(d)){ d = window.__RL_BASE_DATE instanceof Date ? window.__RL_BASE_DATE : new Date(); }
+      d.setHours(0,0,0,0);
+      window.__RL_BASE_DATE = d;
+      return d;
+    } catch(_) {
+      const d = new Date(); d.setHours(0,0,0,0); window.__RL_BASE_DATE = d; return d;
+    }
+  }
   function upcomingWeekStartDates(weekStart){
-    const ws = (weekStart === 'monday') ? 'monday' : 'sunday';
-    const now = new Date();
-    const first = startOfWeek(now, ws);
-    return [0,1,2,3].map(i => new Date(first.getFullYear(), first.getMonth(), first.getDate() + i*7));
+    // Ignore alignment; use exact base date + 7-day intervals
+    const base = getBaseDate();
+    return [0,1,2,3].map(i => new Date(base.getFullYear(), base.getMonth(), base.getDate() + i*7));
   }
   function isoWeekNumber(date){
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -352,25 +371,30 @@
   }
   function updateWeekLabels(){
     try{
-      const month = currentMonth();
       const basis = (window.__WEEK_START === 'monday') ? 'monday' : 'sunday';
       const starts = upcomingWeekStartDates(basis);
       const ids = ['w1Label','w2Label','w3Label','w4Label'];
       starts.forEach((dt, i) => {
-        const wn = weekNumber(dt, basis);
+        const end = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + 6);
         const el = qs('#'+ids[i]);
-        if (el) el.textContent = `Week W${wn}`;
+        if (el) el.textContent = `Week ${i+1} (${formatYMD(dt)} – ${formatYMD(end)})`;
       });
-      // Update aria-labels of dropzones and button titles for clarity (optional, non-breaking)
-      const dzMap = [['w1','W'+weekNumber(starts[0]||new Date(), basis)],['w2','W'+weekNumber(starts[1]||new Date(), basis)],['w3','W'+weekNumber(starts[2]||new Date(), basis)],['w4','W'+weekNumber(starts[3]||new Date(), basis)]];
-      dzMap.forEach(([id,w])=>{ const dz = qs('#'+id); if (dz) dz.setAttribute('aria-label', `Week ${w} assignments`); });
-      const btns = [
-        ['saveW1','Save '+('W'+weekNumber(starts[0]||new Date(), basis))],
-        ['saveW2','Save '+('W'+weekNumber(starts[1]||new Date(), basis))],
-        ['saveW3','Save '+('W'+weekNumber(starts[2]||new Date(), basis))],
-        ['saveW4','Save '+('W'+weekNumber(starts[3]||new Date(), basis))],
-      ];
-      btns.forEach(([id,title])=>{ const b = qs('#'+id); if (b) b.setAttribute('title', title); if (b) b.setAttribute('data-bs-original-title', title); });
+      // Update aria-labels of dropzones and button titles with date ranges
+      const dzIds = ['w1','w2','w3','w4'];
+      dzIds.forEach((id, i)=>{
+        const dz = qs('#'+id); if (!dz) return;
+        const dt = starts[i] || new Date();
+        const end = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + 6);
+        dz.setAttribute('aria-label', `Week ${i+1} assignments (${formatYMD(dt)} – ${formatYMD(end)})`);
+      });
+      const btns = [['saveW1',0],['saveW2',1],['saveW3',2],['saveW4',3]];
+      btns.forEach(([id, idx])=>{
+        const b = qs('#'+id); if (!b) return;
+        const dt = starts[idx] || new Date();
+        const end = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + 6);
+        const title = `Save Week ${idx+1} (${formatYMD(dt)} – ${formatYMD(end)})`;
+        b.setAttribute('title', title); b.setAttribute('data-bs-original-title', title);
+      });
       // Apply focus/highlight and button states after updating labels
       applyWeekFocusAndButtons();
     } catch(_){ }
@@ -424,6 +448,7 @@
     try{
       const max = 10;
       const pairs = [ ['w1','w1Label'], ['w2','w2Label'], ['w3','w3Label'], ['w4','w4Label'] ];
+      if (qs('#w5Col') && qs('#w5Col').style.display !== 'none') pairs.push(['w5','w5Label']);
       pairs.forEach(([dropId, labelId])=>{
         const dz = qs('#'+dropId);
         const lbl = qs('#'+labelId);
@@ -556,50 +581,11 @@
 
       // setup drag handlers
       setupDragSources(document);
-      ['w1','w2','w3','w4'].forEach(id => setupDropzone(qs('#'+id)));
+      ['w1','w2','w3','w4','w5'].forEach(id => { const el = qs('#'+id); if (el) setupDropzone(el); });
       setupPoolDnD();
 
-      // Load global week_start from settings and wire dropdown
-      try{
-        const sel = qs('#rlWeekStart');
-        if (sel){
-          console.info('Week start control found; initializing...');
-          const r = await fetch(`${API_BASE_URL}/system/settings.php?action=get&key=week_start`, { credentials:'include' });
-          const j = await r.json().catch(()=>null);
-          const val = (j && j.success && j.data && typeof j.data.value === 'string') ? j.data.value.toLowerCase() : 'sunday';
-          window.__WEEK_START = (val === 'monday') ? 'monday' : 'sunday';
-          sel.value = window.__WEEK_START;
-          // Set dynamic week-of-year labels initially
-          updateWeekLabels();
-          sel.addEventListener('change', async ()=>{
-            const v = sel.value === 'monday' ? 'monday' : 'sunday';
-            try{
-              console.info('Submitting week_start update...', { url: `${API_BASE_URL}/system/settings.php?action=update`, value: v });
-              const upd = await fetch(`${API_BASE_URL}/system/settings.php?action=update`, { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, credentials:'include', body: JSON.stringify({ key:'week_start', value: v }) });
-              const raw = await upd.text();
-              let uj = null;
-              try { uj = JSON.parse(raw); } catch(_) { uj = null; }
-              if (upd.ok && uj?.success){
-                window.__WEEK_START = v;
-                toast('Week start updated', 'success');
-                updateWeekLabels();
-                await restoreFromServer();
-      applyWeekFocusAndButtons();
-      await markStatuses();
-              } else {
-                // TEMP debug logging
-                console.error('Week start update failed', { status: upd.status, ok: upd.ok, response: uj, raw });
-                const msg = (uj && uj.error) ? uj.error : (`Failed to update setting (HTTP ${upd.status})` + (raw ? `: ${raw.slice(0,180)}` : ''));
-                toast(msg, 'danger');
-              }
-            } catch(e){
-              // TEMP debug logging
-              console.error('Week start update request error', e);
-              toast('Failed to update setting', 'danger');
-            }
-          });
-        }
-      } catch(_){ /* ignore */ }
+      // Set dynamic week-of-year labels initially (Sunday-only basis)
+      updateWeekLabels();
 
       // load recipients
       const items = await fetchRecipients();
@@ -618,23 +604,43 @@
 
       // wire search, clear and auto buttons
       qs('#poolSearch')?.addEventListener('input', (e)=> filterPool(e.target.value));
-      qs('#clearW1')?.addEventListener('click', ()=> clearWeek('w1'));
-      qs('#clearW2')?.addEventListener('click', ()=> clearWeek('w2'));
-      qs('#clearW3')?.addEventListener('click', ()=> clearWeek('w3'));
-      qs('#clearW4')?.addEventListener('click', ()=> clearWeek('w4'));
+      qs('#clearW1')?.addEventListener('click', ()=> { clearWeek('w1','W1'); saveWeekKey('W1','w1'); console.info('Cleared week 1'); });
+      qs('#clearW2')?.addEventListener('click', ()=> { clearWeek('w2','W2'); saveWeekKey('W2','w2'); console.info('Cleared week 2'); });
+      qs('#clearW3')?.addEventListener('click', ()=> { clearWeek('w3','W3'); saveWeekKey('W3','w3'); console.info('Cleared week 3'); });
+      qs('#clearW4')?.addEventListener('click', ()=> { clearWeek('w4','W4'); saveWeekKey('W4','w4'); console.info('Cleared week 4'); });
+      qs('#clearW5')?.addEventListener('click', ()=> { clearWeek('w5','W5'); saveWeekKey('W5','w5'); console.info('Cleared week 5'); });
       qs('#autoW1')?.addEventListener('click', ()=> autoFill('w1', 10));
       qs('#autoW2')?.addEventListener('click', ()=> autoFill('w2', 10));
       qs('#autoW3')?.addEventListener('click', ()=> autoFill('w3', 10));
       qs('#autoW4')?.addEventListener('click', ()=> autoFill('w4', 10));
+      qs('#autoW5')?.addEventListener('click', ()=> autoFill('w5', 10));
       qs('#reloadBtn')?.addEventListener('click', async ()=>{ try{ await init(); } catch(_){} });
-      // per-week saves
       qs('#saveW1')?.addEventListener('click', ()=> saveWeekKey('W1','w1'));
       qs('#saveW2')?.addEventListener('click', ()=> saveWeekKey('W2','w2'));
       qs('#saveW3')?.addEventListener('click', ()=> saveWeekKey('W3','w3'));
       qs('#saveW4')?.addEventListener('click', ()=> saveWeekKey('W4','w4'));
+      qs('#saveW5')?.addEventListener('click', ()=> saveWeekKey('W5','w5'));
+      // auto all: fill every week up to 10 (no save here)
+      qs('#autoAllBtn')?.addEventListener('click', async ()=>{
+        try {
+          toast('Auto-filling all weeks…', 'info');
+          const dzIds = ['w1','w2','w3','w4'];
+          if (qs('#w5Col') && qs('#w5Col').style.display !== 'none') dzIds.push('w5');
+          // Fill each week up to 10
+          dzIds.forEach(id => {
+            const dz = qs('#'+id);
+            if (!dz) return;
+            const cur = qsa('.rcard[data-user-id]', dz).length;
+            if (cur < 10) autoFill(id, 10);
+          });
+          updateCounts();
+          toast('Auto-filled all weeks. Click Save All to persist.', 'success');
+        } catch(e){ toast('Auto all failed', 'danger'); }
+      });
       // save all
       qs('#saveAllBtn')?.addEventListener('click', async ()=>{
         const raw = { W1: collectWeekIds('w1'), W2: collectWeekIds('w2'), W3: collectWeekIds('w3'), W4: collectWeekIds('w4') };
+        if (qs('#w5Col') && qs('#w5Col').style.display !== 'none') raw.W5 = collectWeekIds('w5');
         const weeks = {};
         const truncated = [];
         Object.entries(raw).forEach(([k, ids])=>{
@@ -650,7 +656,9 @@
         try {
           await apiSavePlan(weeks, currentMonth());
           // Lock all saved recipients across all weeks
-          ['W1','W2','W3','W4'].forEach(k => {
+          const allKeys = ['W1','W2','W3','W4'];
+          if ('W5' in weeks) allKeys.push('W5');
+          allKeys.forEach(k => {
             (weeks[k]||[]).forEach(id => {
               const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`);
               if (poolCard) { poolCard.dataset.locked='1'; poolCard.style.display='none'; }
@@ -669,10 +677,41 @@
       // Expose a placeholder unlock function for future allocation cancellation
       window.__rl_unlockRecipient = function(id){ try{ id=Number(id)||0; if(!id) return; lockedIds.delete(id); const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`); if (poolCard){ delete poolCard.dataset.locked; } }catch(_){ } };
 
-      // Enable Bootstrap tooltips for icon-only buttons
+      // Enable Bootstrap tooltips for icon-only buttons (robust: dispose/recreate and auto-hide on interactions)
       try {
+        // Dispose existing tooltip instances if any
+        if (Array.isArray(window.__rl_tooltips)){
+          window.__rl_tooltips.forEach(inst => { try{ inst.dispose(); }catch(_){ } });
+        }
         const ttEls = qsa('[data-bs-toggle="tooltip"]');
-        ttEls.forEach(el => new bootstrap.Tooltip(el));
+        const instances = [];
+        ttEls.forEach(el => {
+          try { instances.push(new bootstrap.Tooltip(el, { container: 'body' })); } catch(_){ }
+        });
+        window.__rl_tooltips = instances;
+
+        // Helper to hide all tooltips
+        function hideAllTooltips(){
+          try{
+            (window.__rl_tooltips||[]).forEach(inst => { try{ inst.hide(); }catch(_){ } });
+          } catch(_){ }
+        }
+        // Bind global listeners once to avoid stuck tooltips
+        if (!window.__rl_tt_bindings){
+          window.__rl_tt_bindings = true;
+          // Hide on any document click (capture to run early)
+          document.addEventListener('click', hideAllTooltips, true);
+          // Hide on scrolls within the page
+          document.addEventListener('scroll', hideAllTooltips, true);
+          // Hide when any Bootstrap modal is shown/hidden
+          document.addEventListener('shown.bs.modal', hideAllTooltips);
+          document.addEventListener('hide.bs.modal', hideAllTooltips);
+          // Cleanup on unload
+          window.addEventListener('beforeunload', () => {
+            try{ (window.__rl_tooltips||[]).forEach(inst => { try{ inst.dispose(); }catch(_){ } }); }catch(_){ }
+            window.__rl_tooltips = [];
+          });
+        }
       } catch(_) { /* bootstrap may not be defined yet */ }
       // Ensure labels are set even if settings endpoint had issues
       updateWeekLabels();
@@ -686,4 +725,78 @@
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', init);
   } else { init(); }
+})();
+
+/* === Label override: show Month name dd, yyyy for week starts === */
+(function(){
+  try {
+    if (typeof formatLongDate !== 'function') {
+      function formatLongDate(d){
+        try {
+          return d.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'2-digit' });
+        } catch(_) {
+          const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+          const mm = months[d.getMonth()] || '';
+          const dd = String(d.getDate()).padStart(2,'0');
+          const yyyy = d.getFullYear();
+          return `${mm} ${dd}, ${yyyy}`;
+        }
+      }
+      // expose globally in this scope
+      try { window.formatLongDate = formatLongDate; } catch(_){}
+    }
+
+    // Keep original for fallback, then override
+    var __oldUpdateWeekLabels = (typeof updateWeekLabels === 'function') ? updateWeekLabels : function(){};
+    updateWeekLabels = function(){
+      try {
+        const now = new Date();
+        const y = now.getFullYear(), m = now.getMonth();
+        const starts = [ new Date(y, m, 1), new Date(y, m, 8), new Date(y, m, 15), new Date(y, m, 22) ];
+
+        // Labels for W1..W4
+        const ids = ['w1Label','w2Label','w3Label','w4Label'];
+        for (let i=0; i<ids.length; i++){
+          const el = document.getElementById(ids[i]);
+          if (!el) continue;
+          const dt = starts[i] || new Date();
+          el.textContent = `Week ${i+1} (${formatLongDate(dt)})`;
+        }
+
+        // Aria labels
+        const dzIds = ['w1','w2','w3','w4'];
+        for (let i=0; i<dzIds.length; i++){
+          const dz = document.getElementById(dzIds[i]);
+          if (!dz) continue;
+          const dt = starts[i] || new Date();
+          dz.setAttribute('aria-label', `Week ${i+1} assignments (${formatLongDate(dt)})`);
+        }
+
+        // Button titles
+        const btns = [['saveW1',0],['saveW2',1],['saveW3',2],['saveW4',3]];
+        for (const [id, idx] of btns){
+          const b = document.getElementById(id); if (!b) continue;
+          const dt = starts[idx] || new Date();
+          const title = `Save Week ${idx+1} (${formatLongDate(dt)})`;
+          b.setAttribute('title', title);
+          b.setAttribute('data-bs-original-title', title);
+        }
+
+        // Optional W5 label on the 29th if visible
+        const w5Col = document.getElementById('w5Col');
+        if (w5Col && w5Col.style.display !== 'none'){
+          const w5Label = document.getElementById('w5Label');
+          if (w5Label){
+            const w5Start = new Date(y, m, 29);
+            w5Label.textContent = `Week 5 (${formatLongDate(w5Start)})`;
+          }
+        }
+
+        // Preserve existing focus/button state logic
+        try { applyWeekFocusAndButtons(); } catch(_){ }
+      } catch(e) {
+        try { __oldUpdateWeekLabels(); } catch(_){ }
+      }
+    };
+  } catch(_){ }
 })();

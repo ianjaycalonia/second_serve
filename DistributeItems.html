@@ -9,6 +9,33 @@
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link rel="stylesheet" href="scripts/css/adminDashboard.modal.css" />
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+      /* Ensure Allocation tab content is not collapsed by flex/grid overrides */
+      .card.card-accent { display: block; }
+      .card.card-accent .tab-content { display: block; }
+      /* Tab visibility rules: only active pane shows and has height */
+      .tab-content { position: relative; display: block !important; height: auto !important; }
+      .tab-content .tab-pane { display: none; height: 0; }
+      .tab-content .tab-pane.active.show { display: block !important; height: auto !important; min-height: 220px; }
+      /* Ensure carousel shows content */
+      #di-alloc { min-height: 220px; }
+      #diAllocCarousel { min-height: 180px; }
+      #diAllocCarousel .carousel-inner { display: block; min-height: 180px; overflow: visible; }
+      /* Restore Bootstrap behavior: only active item is visible to avoid stacking */
+      #diAllocCarousel .carousel-item { display: none !important; }
+      #diAllocCarousel .carousel-item.active { display: block !important; min-height: 140px; }
+      /* Make slide titles tidy on one line */
+      #diAllocCarouselInner h6 { margin-bottom: .25rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* Keep indicators in a single row with wrapping as needed */
+      #diAllocCarousel .carousel-indicators { position: static; bottom: auto; margin-top: .5rem; display: flex; flex-wrap: wrap; gap: .25rem; justify-content: center; }
+      #diAllocCarousel .carousel-indicators [data-bs-target] { background-color: #6c757d; }
+      #diAllocCarousel .carousel-indicators .active { background-color: #0d6efd; }
+      /* Hide indicators so only arrows are used */
+      #diAllocIndicators { display: none !important; }
+      /* Disable built-in overlay controls to avoid click-capture */
+      #diAllocCarousel .carousel-control-prev,
+      #diAllocCarousel .carousel-control-next { display:none !important; pointer-events: none !important; }
+    </style>
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -93,10 +120,9 @@
               <div class="d-flex align-items-center gap-2 flex-wrap">
                 <label class="form-label mb-0">Recipients</label>
                 <span id="diSelectedCount" class="badge text-bg-secondary">Selected: 0</span>
-                <span id="diCurrentWeek" class="badge bg-secondary">W1</span>
+                <span id="diCurrentWeek" class="badge text-bg-light"></span>
               </div>
-              <div class="d-flex align-items-center gap-2">
-                <input type="month" id="diMonth" class="form-control form-control-sm" style="width: 155px" />
+              <div class="d-flex align-items-center gap-3 flex-wrap">
                 <input id="diSearch" class="form-control form-control-sm" placeholder="Search recipients..." style="width: 200px" />
               </div>
             </div>
@@ -110,22 +136,20 @@
               <div class="col-12 col-md-5">
                 <div class="d-flex align-items-center justify-content-between mb-2">
                   <div class="fw-semibold">Selected</div>
-                  <button type="button" id="diClearSelected" class="btn btn-sm btn-outline-secondary">Clear</button>
+                  <button type="button" id="diNextTabBtn" class="btn btn-sm btn-primary" aria-label="Go to Allocation tab">Next</button>
                 </div>
                 <div class="border rounded p-2 di-scroll-panel">
                   <div id="diSelected" class="d-grid gap-2"></div>
                 </div>
               </div>
-            </div>
-            <div class="d-flex justify-content-end mt-3">
-              <button type="button" id="diNextBtn" class="btn btn-primary">Next</button>
-            </div>
             <div id="diFeedback" class="small mt-2"></div>
+          </div>
+          <!-- CLOSE Recipients tab-pane above, then open Allocation tab-pane below -->
           </div>
           <div class="tab-pane fade" id="di-alloc" role="tabpanel" aria-labelledby="di-alloc-tab">
             <div class="border rounded p-2 mb-2">
               <div class="row g-2 align-items-end">
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-5">
                   <label class="form-label mb-1">Category</label>
                   <select id="diGlobalCat" class="form-select form-select-sm" data-placeholder="Category"></select>
                 </div>
@@ -135,15 +159,14 @@
                 </div>
                 <div class="col-6 col-md-2">
                   <label class="form-label mb-1">Qty</label>
-                  <input id="diGlobalQty" type="number" min="0" step="1" value="0" class="form-control form-control-sm" />
+                  <input id="diGlobalQty" type="number" min="0" step="1" value="1" class="form-control form-control-sm" />
                 </div>
                 <div class="col-6 col-md-1 d-grid">
                   <button type="button" id="diGlobalAddBtn" class="btn btn-sm btn-primary">Add</button>
                 </div>
-                <div class="col-12 col-md-12 d-flex justify-content-end">
+                <div class="col-12 d-flex justify-content-end">
                   <button type="button" id="diGlobalAutoAllBtn" class="btn btn-sm btn-outline-primary">Auto for All</button>
                 </div>
-                
               </div>
             </div>
             <div id="diAllocCarousel" class="carousel slide" data-bs-ride="false" data-bs-touch="false">
@@ -210,8 +233,52 @@
     <script src="scripts/js/ui/messages.js?v=20250925"></script>
     <script src="scripts/js/ui/notifications.js?v=20250925"></script>
     <script src="scripts/js/charts/adminDashboard.js?v=20250925"></script>
-    <script src="scripts/js/ui/adminDistribute.js?v=20250925"></script>
+    <script src="scripts/js/algorithms/schedulingAlgorithm.js?v=20251008-2034"></script>
+    <script src="scripts/js/algorithms/allocationAlgorithm.js?v=20251003-2203"></script>
+    <!-- New: scheduling UI module must load before adminDistribute.js -->
+    <script src="scripts/js/algorithms/schedulingAlgorithmUI.js?v=20251005-1213"></script>
+    <script src="scripts/js/ui/adminDistribute.js?v=20251005-1219"></script>
     <script src="scripts/js/ui/sidebar.js?v=20250925"></script>
+    <script>
+      (function(){
+        function ensureAllocActive(){
+          try{
+            var allocPane = document.getElementById('di-alloc');
+            var recPane = document.getElementById('di-recipients');
+            var allocTab = document.getElementById('di-alloc-tab');
+            var recTab = document.getElementById('di-recipients-tab');
+            var active = allocPane && allocPane.classList.contains('active') && allocPane.classList.contains('show');
+            if (!active){
+              if (recPane){ recPane.classList.remove('active','show'); }
+              if (recTab){ recTab.classList.remove('active'); recTab.setAttribute('aria-selected','false'); }
+              if (allocPane){ allocPane.classList.add('active','show'); }
+              if (allocTab){ allocTab.classList.add('active'); allocTab.setAttribute('aria-selected','true'); }
+            }
+          } catch(_){ }
+        }
+        function onNext(){
+          try{ if (typeof buildAllocCarouselFromSelected === 'function') buildAllocCarouselFromSelected(); }catch(_){ }
+          try{
+            var allocTab = document.getElementById('di-alloc-tab');
+            if (allocTab && window.bootstrap && window.bootstrap.Tab){
+              var t = window.bootstrap.Tab.getOrCreateInstance(allocTab); t.show();
+            } else if (allocTab){ allocTab.click(); }
+          }catch(_){ }
+          ensureAllocActive();
+          try{ if (typeof attachAllocGlobalControls === 'function') attachAllocGlobalControls(); }catch(_){ }
+          try{ if (typeof initAllocSelects === 'function') initAllocSelects(); }catch(_){ }
+          try{ if (typeof attachAllocateNow === 'function') attachAllocateNow(); }catch(_){ }
+        }
+        function bind(){
+          var btn = document.getElementById('diNextTabBtn');
+          if (!btn || btn.__fallbackBound) return; btn.__fallbackBound = true;
+          btn.addEventListener('click', onNext);
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+      })();
+    </script>
+    <!-- Scheduling scripts removed on this page to avoid injected Weekly Schedule UI -->
   </body>
 </html>
+
 

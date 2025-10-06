@@ -112,8 +112,8 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <label for="cancelReason" class="form-label">Please provide a reason for cancellation</label>
-            <textarea id="cancelReason" class="form-control" rows="4" placeholder="Type your reason here..."></textarea>
+            <label for="cancelAllocationReason" class="form-label">Please provide a reason for cancellation</label>
+            <textarea id="cancelAllocationReason" class="form-control" rows="4" placeholder="Type your reason here..."></textarea>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -212,7 +212,7 @@
             <input type="hidden" id="cancelBatchId" />
             <div class="mb-3">
               <label class="form-label">Reason for cancellation</label>
-              <textarea id="cancelReason" class="form-control" rows="4" placeholder="Please provide a reason" required></textarea>
+              <textarea id="cancelDonationReason" class="form-control" rows="4" placeholder="Please provide a reason" required></textarea>
             </div>
           </div>
           <div class="modal-footer">
@@ -299,6 +299,20 @@
     <script src="scripts/js/ui/notifications.js"></script>
     <script src="scripts/js/ui/recipientReceivedItems.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
+    
+    <!-- Toast for feedback messages -->
+    <div aria-live="polite" aria-atomic="true" class="position-relative" style="z-index: 1080">
+      <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="feedbackToast" class="toast" role="status" aria-live="assertive" aria-atomic="true" data-bs-delay="2500">
+          <div class="toast-header">
+            <strong class="me-auto">Notice</strong>
+            <small>Just now</small>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+          <div class="toast-body" id="toastBody">Action completed.</div>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
 

@@ -132,7 +132,15 @@
         const chevron = 'bi-chevron-up';
         const itemsHtml = (Array.isArray(a.items) ? a.items : []).map(it => `• ${escapeHtml(`${it.quantity}x ${it.item_name}`)}`).join('<br/>');
         let actionsHtml = '';
-        if (status.toLowerCase() === 'allocated' || status.toLowerCase() === 'notified'){
+        if (status.toLowerCase() === 'allocated'){
+          actionsHtml = `
+            <button type="button" class="btn btn-sm btn-outline-success me-2 btn-ack" data-bs-toggle="tooltip" data-bs-placement="top" title="Acknowledge" aria-label="Acknowledge">
+              <i class="bi bi-check2-circle"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
+              <i class="bi bi-x-circle"></i>
+            </button>`;
+        } else if (status.toLowerCase() === 'notified' || status.toLowerCase() === 'updated'){
           actionsHtml = `
             <button type="button" class="btn btn-sm btn-outline-success me-2 btn-ack" data-bs-toggle="tooltip" data-bs-placement="top" title="Acknowledge" aria-label="Acknowledge">
               <i class="bi bi-check2-circle"></i>
@@ -153,9 +161,7 @@
             <button type="button" class="btn btn-sm btn-outline-success me-2 btn-complete" data-bs-toggle="tooltip" data-bs-placement="top" title="Complete" aria-label="Complete">
               <i class="bi bi-check2-circle"></i>
             </button>
-            <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
-              <i class="bi bi-x-circle"></i>
-            </button>`;
+            <span class="text-muted">&nbsp;</span>`;
         } else if (status.toLowerCase() === 'completed' || status.toLowerCase() === 'cancelled'){
           actionsHtml = `<span class="text-muted">No actions</span>`;
         } else {
@@ -227,7 +233,7 @@
     }
 
     const cancelModalEl = document.getElementById('cancelAllocationModal');
-    const reasonInput = document.getElementById('cancelReason');
+    const reasonInput = document.getElementById('cancelAllocationReason');
     const confirmCancelBtn = document.getElementById('confirmCancelAllocationBtn');
     const cancelModal = (cancelModalEl && window.bootstrap && bootstrap.Modal) ? bootstrap.Modal.getOrCreateInstance(cancelModalEl) : null;
     let pendingCancelAid = null;
@@ -396,6 +402,60 @@
         });
       }
     });
+
+    // Wire Confirm Cancel button once (avoid duplicate listeners across refreshes)
+    if (confirmCancelBtn && cancelModal){
+      const newBtn = confirmCancelBtn.cloneNode(true);
+      confirmCancelBtn.parentNode.replaceChild(newBtn, confirmCancelBtn);
+      newBtn.addEventListener('click', async ()=>{
+        try{
+          const user = getStoredUser();
+          const role = (user && user.role) ? String(user.role).toLowerCase() : '';
+          if (role !== 'recipient'){
+            showToast('Only recipients can cancel allocations here.');
+            return;
+          }
+          if (!pendingCancelAid || !Number.isFinite(pendingCancelAid)){
+            showToast('No allocation selected.');
+            return;
+          }
+          const reason = (reasonInput?.value || '').trim();
+          if (!reason){
+            showToast('Please provide a reason for cancellation.');
+            try { reasonInput?.focus(); } catch(_){}
+            return;
+          }
+
+          newBtn.disabled = true;
+          let ok=false, msg='';
+          try{
+            // Prefer cancel_and_replace so the admin side gets automatic replacement
+            if (window.AllocationsAPI && typeof window.AllocationsAPI.cancelAndReplace === 'function'){
+              await window.AllocationsAPI.cancelAndReplace(pendingCancelAid, reason); ok=true;
+            } else if (window.AllocationsAPI && typeof window.AllocationsAPI.cancel === 'function'){
+              await window.AllocationsAPI.cancel(pendingCancelAid, reason); ok=true;
+            } else {
+              // Fallback to direct POST cancel_and_replace, then cancel
+              let res = await fetch(`${API_BASE_URL}/allocations/index.php?action=cancel_and_replace`, { method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({ allocation_id: pendingCancelAid, reason }) });
+              let j = await res.json().catch(()=>null);
+              if (!(res.ok && j?.success)){
+                // Try simple cancel
+                res = await fetch(`${API_BASE_URL}/allocations/index.php?action=cancel`, { method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({ allocation_id: pendingCancelAid, reason }) });
+                j = await res.json().catch(()=>null);
+                ok = !!(res.ok && j?.success);
+                if (!ok) msg = j?.error || `HTTP ${res.status}`;
+              } else { ok = true; }
+            }
+          }catch(e){ ok=false; msg = e?.message || 'Failed'; }
+
+          if (!ok){ showToast(`Failed to cancel allocation. ${msg}`); newBtn.disabled=false; return; }
+          try { cancelModal.hide(); } catch(_){}
+          await refreshAllocations();
+          showToast('Allocation cancelled.');
+        } catch(e){ showToast('Failed to cancel allocation.'); }
+        finally { newBtn.disabled = false; }
+      });
+    }
   }
 
   async function loadAllocations(){

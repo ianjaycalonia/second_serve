@@ -36,7 +36,9 @@
     async acknowledgeByAdmin(allocation_id){ return post('acknowledge_admin', { allocation_id }); },
     async schedule(allocation_id){ return post('schedule', { allocation_id }); },
     async complete(allocation_id){ return post('complete', { allocation_id }); },
+    async cancel(allocation_id, reason){ return post('cancel', { allocation_id, reason }); },
     async finalize(allocation_id){ return post('finalize', { allocation_id }); },
+    async cancelAndReplace(allocation_id, reason){ return post('cancel_and_replace', { allocation_id, reason }); },
     async onsiteIssue(item_name, category, quantity, note, period_key, recipient_id){
       return post('onsite_issue', { item_name, category, quantity, note, period_key, recipient_id });
     },

@@ -143,138 +143,10 @@ class Allocation
 
     public function previewAllocation(string $periodKey, ?array $limitRecipientIds = null): array
     {
-        try {
-            // If a limit list is provided, use it exactly; otherwise use the computed final weekly list
-            if (is_array($limitRecipientIds) && !empty($limitRecipientIds)){
-                $finalList = array_values(array_unique(array_map('intval', array_filter($limitRecipientIds, fn($v)=>$v>0))));
-            } else {
-                $finalList = $this->getFinalWeekList($periodKey);
-            }
-            if (empty($finalList)) return ['period_key'=>$periodKey, 'allocations'=>[], 'summary'=>['recipients'=>0,'allocated'=>0,'total_qty'=>0]];
-            $inventory = $this->getInventoryCandidates();
-            // Preload recipient tags and populations
-            $recipientTagsMap = [];
-            foreach ($finalList as $rid){ $recipientTagsMap[$rid] = $this->getRecipientTags($rid); }
-            $popMap = $this->getRecipientPopulations($finalList);
-
-            $allocations = [];
-            $totalQtyAllocated = 0;
-
-            // Group all inventory by product (name/category/unit) regardless of specialty
-            $groups = [];
-            foreach ($inventory as $it){
-                $k = ($it['product_name'] ?? '') . "\u0001" . ($it['product_category'] ?? '') . "\u0001" . ($it['unit'] ?? '');
-                if (!isset($groups[$k])){
-                    $groups[$k] = [ 'rows' => [], 'name' => ($it['product_name'] ?? ''), 'category' => ($it['product_category'] ?? ''), 'unit' => ($it['unit'] ?? ''), 'tags' => ($it['tag_list'] ?? []) ];
-                }
-                $groups[$k]['rows'][] = $it;
-                // Combine tags (if any row has special tags, treat the product as special for eligibility purposes)
-                if (!empty($it['tag_list'])){
-                    $groups[$k]['tags'] = array_values(array_unique(array_merge($groups[$k]['tags'], $it['tag_list'])));
-                }
-            }
-
-            // Proportional allocation with largest remainder per grouped product
-            foreach ($groups as $g){
-                $rows = $g['rows'];
-                $totalAvail = 0;
-                foreach ($rows as $r){ $totalAvail += (int)($r['quantity'] ?? 0); }
-                if ($totalAvail <= 0) continue;
-                $A = (int)floor($totalAvail * 0.90); // hold back 10%
-                if ($A <= 0) continue;
-
-                // Determine eligible recipients: if product has specialty tags, filter; else all finalList
-                $isSpecial = !empty($g['tags']);
-                $eligible = $isSpecial ? $this->eligibleRecipientsForItem($finalList, ['tag_list'=>$g['tags']], $recipientTagsMap) : $finalList;
-                if (empty($eligible)) continue;
-                // If specialty item has only one eligible recipient, cap to half of the 90% pool
-                if ($isSpecial && count($eligible) === 1){
-                    $A = (int)floor($A * 0.5);
-                    if ($A <= 0) continue;
-                }
-
-                // Build population vector with missing replaced by average of known if any
-                $knownSum = 0; $knownCnt = 0;
-                $pvec = [];
-                foreach ($eligible as $rid){
-                    $p = (int)($popMap[$rid] ?? 0);
-                    if ($p > 0){ $knownSum += $p; $knownCnt++; }
-                    $pvec[$rid] = $p;
-                }
-                if ($knownCnt > 0){
-                    $avg = (float)$knownSum / (float)$knownCnt;
-                    foreach ($eligible as $rid){ if ($pvec[$rid] <= 0) $pvec[$rid] = $avg; }
-                }
-                // Compute S
-                $S = 0.0; foreach ($eligible as $rid){ $S += (float)$pvec[$rid]; }
-
-                $targets = [];
-                if ($S <= 0.0){
-                    // Equal split
-                    $n = count($eligible);
-                    $base = (int)floor($A / $n);
-                    $rem = $A - ($base * $n);
-                    foreach ($eligible as $rid){ $targets[$rid] = $base; }
-                    for ($i=0; $i<$rem; $i++){ $rid = $eligible[$i % $n]; $targets[$rid] += 1; }
-                } else {
-                    // Largest remainder method
-                    $floors = []; $fracs = []; $sumFloors = 0;
-                    foreach ($eligible as $rid){
-                        $real = ($pvec[$rid] / $S) * $A;
-                        $f = (int)floor($real);
-                        $floors[$rid] = $f; $fracs[$rid] = $real - $f; $sumFloors += $f;
-                    }
-                    $R = $A - $sumFloors;
-                    // sort recipients by fractional part desc, tie-breaker by population desc
-                    $order = $eligible;
-                    usort($order, function($a,$b) use ($fracs, $pvec){
-                        $dr = ($fracs[$b] <=> $fracs[$a]);
-                        if ($dr !== 0) return $dr;
-                        $dp = ($pvec[$b] <=> $pvec[$a]);
-                        if ($dp !== 0) return $dp;
-                        return $a <=> $b; // stable id tie-breaker
-                    });
-                    foreach ($eligible as $rid){ $targets[$rid] = $floors[$rid]; }
-                    $i=0; $n=count($order);
-                    while ($R > 0 && $n > 0){ $rid = $order[$i % $n]; $targets[$rid] += 1; $R--; $i++; }
-                }
-
-                // Map targets back to inventory rows FIFO
-                $rowIdx = 0; $rowRemain = [];
-                foreach ($rows as $idx => $r){ $rowRemain[$idx] = (int)($r['quantity'] ?? 0); }
-                foreach ($eligible as $rid){
-                    $need = (int)($targets[$rid] ?? 0);
-                    while ($need > 0 && $rowIdx < count($rows)){
-                        if ($rowRemain[$rowIdx] <= 0){ $rowIdx++; continue; }
-                        $take = min($need, $rowRemain[$rowIdx]);
-                        if ($take > 0){
-                            $allocations[] = [
-                                'recipient_id' => $rid,
-                                'inventory_id' => (int)$rows[$rowIdx]['inventory_id'],
-                                'product_name' => $rows[$rowIdx]['product_name'],
-                                'product_category' => $rows[$rowIdx]['product_category'],
-                                'unit' => $rows[$rowIdx]['unit'],
-                                'quantity' => $take,
-                                'tags_match' => $isSpecial ? ($g['tags'] ?? []) : [],
-                            ];
-                            $rowRemain[$rowIdx] -= $take;
-                            $need -= $take;
-                            $totalQtyAllocated += $take;
-                        }
-                        if ($rowRemain[$rowIdx] <= 0){ $rowIdx++; }
-                    }
-                }
-            }
-            unset($item);
-
-            // Summary: number of recipients touched and total quantity
-            $recTouched = [];
-            foreach ($allocations as $a){ $recTouched[$a['recipient_id']] = true; }
-            return [ 'period_key'=>$periodKey, 'allocations'=>$allocations, 'summary'=>['recipients'=>count($finalList),'recipients_touched'=>count($recTouched),'total_qty'=>$totalQtyAllocated] ];
-        } catch (Exception $e) {
-            error_log("previewAllocation error: " . $e->getMessage());
-            return ['period_key'=>$periodKey, 'allocations'=>[], 'summary'=>['recipients'=>0,'allocated'=>0,'total_qty'=>0, 'error'=>$e->getMessage()]];
-        }
+        // Delegate to consolidated algorithm for maintainability
+        require_once __DIR__ . '/AllocationAlgorithm.php';
+        $alg = new AllocationAlgorithm();
+        return $alg->previewAllocation($periodKey, $limitRecipientIds);
     }
 
     public function allocateWeek(string $periodKey, int $adminId = 0): array
@@ -287,7 +159,11 @@ class Allocation
         try {
             // Create allocation run (idempotent per period_key)
             try {
-                $this->db->query('INSERT INTO allocation_runs (period_key, created_by, created_at) VALUES (?,?, NOW())', [$periodKey, $adminId ?: null]);
+                $y = 0; $m = 0; $w = 0;
+                if (preg_match('/^(\d{4})-(\d{2})-W([1-4])$/', $periodKey, $mm)){
+                    $y = (int)$mm[1]; $m = (int)$mm[2]; $w = (int)$mm[3];
+                }
+                $this->db->query('INSERT INTO allocation_runs (period_key, year, month, week, created_by, created_at) VALUES (?,?,?,?,?, NOW())', [$periodKey, $y, $m, $w, $adminId ?: null]);
             } catch (Exception $e) {
                 // Duplicate means already allocated for this period
                 if ($this->db->inTransaction()) $this->db->rollBack();
@@ -416,13 +292,18 @@ class Allocation
                 if (!$urow) { $insAdmin = null; }
             } catch (Exception $e) { $insAdmin = null; }
 
-            // Idempotent insert: on duplicate, DO NOT update created_by (avoid FK issues). Just return existing run_id.
+            // Derive Y/M/W from period_key (YYYY-MM-Wn)
+            $yy = 0; $mm = 0; $ww = 0;
+            if (preg_match('/^(\d{4})-(\d{2})-W([1-4])$/', $periodKey, $m)){
+                $yy = (int)$m[1]; $mm = (int)$m[2]; $ww = (int)$m[3];
+            }
+            // Idempotent insert: on duplicate, preserve run_id
             $this->db->query(
-                'INSERT INTO allocation_runs (period_key, created_by, created_at)
-                 VALUES (?, ?, NOW())
+                'INSERT INTO allocation_runs (period_key, year, month, week, created_by, created_at)
+                 VALUES (?, ?, ?, ?, ?, NOW())
                  ON DUPLICATE KEY UPDATE
                    run_id = LAST_INSERT_ID(run_id)'
-                , [$periodKey, $insAdmin]
+                , [$periodKey, $yy, $mm, $ww, $insAdmin]
             );
 
             $runId = (int)$this->db->lastInsertId();
@@ -731,6 +612,24 @@ class Allocation
         return $row ?: null;
     }
 
+    // Ensure a run exists for the given period_key; create it idempotently if missing
+    public function ensureRun(string $periodKey, int $adminId): ?array
+    {
+        $periodKey = trim($periodKey);
+        if ($periodKey === '' || !preg_match('/^\d{4}-\d{2}-W[1-4]$/', $periodKey)) return null;
+        $row = $this->getRunByPeriod($periodKey);
+        if ($row) return $row;
+        // Create and re-fetch
+        $runId = $this->createRun(max(1, (int)$adminId), null, $periodKey);
+        if ($runId > 0){
+            $row2 = $this->getRunByPeriod($periodKey);
+            if ($row2) return $row2;
+            // Fallback shape if immediate read not visible yet
+            return [ 'run_id'=>$runId, 'period_key'=>$periodKey, 'created_by'=>$adminId, 'created_at'=>date('Y-m-d H:i:s') ];
+        }
+        return null;
+    }
+
     // List allocations and their items for a given run
     public function listByRun(int $runId): array
     {
@@ -850,7 +749,8 @@ class Allocation
         $row = $this->db->query('SELECT status, recipient_id FROM allocations WHERE allocation_id = ?', [$allocationId])->fetch();
         if (!$row || (int)$row['recipient_id'] !== $recipientId) return false;
         $st = strtolower((string)$row['status']);
-        if (!in_array($st, ['allocated','acknowledged'], true)) return false;
+        // Allow cancellation before inventory is deducted: Allocated, Notified, or Acknowledged
+        if (!in_array($st, ['allocated','notified','acknowledged'], true)) return false;
         $this->db->query('UPDATE allocations SET status = "Cancelled", cancel_reason = ?, cancelled_at = NOW(), updated_at = NOW() WHERE allocation_id = ?', [$reason, $allocationId]);
         // Notify admins
         try {

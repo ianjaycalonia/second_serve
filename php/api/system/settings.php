@@ -28,7 +28,7 @@ try {
             requireRole(['admin']);
             $key = isset($_GET['key']) ? trim((string)$_GET['key']) : '';
             if ($key === '') { echo json_encode(['success'=>false,'error'=>'key required']); exit; }
-            $default = ($key === 'week_start') ? 'sunday' : null;
+            $default = ($key === 'week_start') ? 'sunday' : (($key === 'di_auto_open_alloc') ? '0' : null);
             $val = getSetting($key, $default);
             echo json_encode(['success'=>true, 'data'=>['key'=>$key,'value'=>$val]]);
             break;
@@ -44,10 +44,13 @@ try {
             $value = isset($payload['value']) ? trim((string)$payload['value']) : '';
             if ($key === '') { echo json_encode(['success'=>false,'error'=>'key required']); exit; }
             // Restrict known keys for now (security)
-            $allowed = ['week_start'];
+            $allowed = ['week_start', 'di_auto_open_alloc'];
             if (!in_array($key, $allowed, true)) { echo json_encode(['success'=>false,'error'=>'unsupported key']); exit; }
             if ($key === 'week_start' && !in_array(strtolower($value), ['sunday','monday'], true)){
                 echo json_encode(['success'=>false,'error'=>'invalid week_start']); exit;
+            }
+            if ($key === 'di_auto_open_alloc'){
+                $value = ($value === '1') ? '1' : '0';
             }
             $db = Database::getInstance();
             try {

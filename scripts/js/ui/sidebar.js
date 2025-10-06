@@ -37,27 +37,62 @@ document.addEventListener("DOMContentLoaded", () => {
   // Re-query links after potential re-render
   const links = document.querySelectorAll("aside .nav-link");
 
-  const tooltipTriggerList = document.querySelectorAll(
-    '[data-bs-toggle="tooltip"]'
-  );
-
-  const tooltipList = [...tooltipTriggerList].map(
-    (el) =>
-      new bootstrap.Tooltip(el, {
-        customClass: "custom-tooltip",
-      })
-  );
+  // Initialize robust tooltips for sidebar links
+  function initSidebarTooltips(){
+    try{
+      // Dispose previous instances to prevent duplicates/sticky tooltips
+      if (Array.isArray(window.__sidebar_tooltips)){
+        window.__sidebar_tooltips.forEach(inst => { try{ inst.dispose(); }catch(_){ } });
+      }
+      const triggers = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+      const list = [];
+      triggers.forEach(el => {
+        try{
+          list.push(new bootstrap.Tooltip(el, {
+            customClass: 'custom-tooltip',
+            container: 'body',
+            boundary: 'viewport',
+            fallbackPlacements: ['right','left','bottom','top'],
+            trigger: 'hover focus',
+            delay: { show: 150, hide: 50 }
+          }));
+        } catch(_){ }
+      });
+      window.__sidebar_tooltips = list;
+      // Bind global one-time listeners to hide all tooltips on interactions
+      if (!window.__sidebar_tt_bound){
+        window.__sidebar_tt_bound = true;
+        const hideAll = ()=>{ try{ (window.__sidebar_tooltips||[]).forEach(t=>{ try{ t.hide(); }catch(_){ } }); }catch(_){ } };
+        document.addEventListener('click', hideAll, true);
+        document.addEventListener('scroll', hideAll, true);
+        document.addEventListener('shown.bs.modal', hideAll);
+        document.addEventListener('hide.bs.modal', hideAll);
+        // When any tooltip is about to show, hide all others first
+        document.addEventListener('show.bs.tooltip', (ev)=>{
+          try{
+            (window.__sidebar_tooltips||[]).forEach(t=>{ try{ if (t._element !== ev.target) t.hide(); }catch(_){ } });
+          } catch(_){ }
+        });
+        // Also hide on mouse leaving the sidebar region
+        try{
+          sidebar?.addEventListener('mouseleave', hideAll);
+        } catch(_){ }
+        window.addEventListener('beforeunload', ()=>{
+          try{ (window.__sidebar_tooltips||[]).forEach(t=>{ try{ t.dispose(); }catch(_){ } }); }catch(_){ }
+          window.__sidebar_tooltips = [];
+        });
+      }
+    } catch(_){ }
+  }
 
   function showTooltips() {
-    tooltipList.forEach((t) => {
-      t.enable();
-    });
+    initSidebarTooltips();
+    (window.__sidebar_tooltips||[]).forEach(t => { try{ t.enable(); }catch(_){ } });
   }
 
   function hideTooltips() {
-    tooltipList.forEach((t) => {
-      t.hide();
-      t.disable();
+    (window.__sidebar_tooltips||[]).forEach((t) => {
+      try{ t.hide(); t.disable(); }catch(_){ }
     });
   }
 
@@ -124,9 +159,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  if (sidebar.classList.contains("collapsed")) {
-    showTooltips();
-  } else {
-    hideTooltips();
-  }
+  // Initial tooltip state
+  if (sidebar.classList.contains("collapsed")) { showTooltips(); } else { hideTooltips(); }
 });

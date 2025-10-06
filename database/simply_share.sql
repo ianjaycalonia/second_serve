@@ -10,6 +10,40 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 SET FOREIGN_KEY_CHECKS=0;
 
+-- =========================
+-- Weeks and Week Recipients
+-- =========================
+-- Model monthly weeks (1..5) and per-recipient weekly states with carryover/replacement tracking
+CREATE TABLE IF NOT EXISTS `weeks` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `year` INT NOT NULL,
+  `month` INT NOT NULL,
+  `week_number` TINYINT NOT NULL, -- 1..5 within the selected month
+  `capacity` INT NOT NULL DEFAULT 10, -- guideline minimum; admins may overfill manually
+  `start_date` DATE NOT NULL,
+  `end_date` DATE NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_weeks_ymw` (`year`,`month`,`week_number`),
+  KEY `ix_weeks_start` (`start_date`),
+  KEY `ix_weeks_end` (`end_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `week_recipients` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `week_id` INT NOT NULL,
+  `recipient_id` INT NOT NULL,
+  `status` ENUM('Scheduled','Served','Absent','Cancelled','CarriedOver','RolledOver','Replacement') NOT NULL DEFAULT 'Scheduled',
+  `replacement_for` INT NULL,
+  `rationale` VARCHAR(255) NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `ix_wr_week` (`week_id`),
+  KEY `ix_wr_recipient` (`recipient_id`),
+  KEY `ix_wr_status` (`status`),
+  CONSTRAINT `fk_wr_week` FOREIGN KEY (`week_id`) REFERENCES `weeks`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- users (must be created first for FK references)
 CREATE TABLE `users` (
   `user_id` int(11) NOT NULL AUTO_INCREMENT,
@@ -55,29 +89,39 @@ CREATE TABLE `batches` (
 -- recipient_plans (weekly planning; normalized order and source)
 CREATE TABLE `recipient_plans` (
   `period_key` char(10) NOT NULL COMMENT 'YYYY-MM-Wn',
+  `year` smallint NOT NULL,
+  `month` tinyint NOT NULL,
+  `week` tinyint NOT NULL,
   `recipient_id` int(11) NOT NULL,
   `source` enum('planned','carryover') NOT NULL,
   `position` int(11) NOT NULL DEFAULT 0,
-  `week_start_date` date DEFAULT NULL COMMENT 'Calculated start date of the week based on settings',
-  `week_basis` enum('sunday','monday') DEFAULT NULL COMMENT 'Week computation basis at time of save',
+  `week_start_date` date NOT NULL COMMENT 'Start date of the 7-day window',
+  `week_basis` enum('sunday','monday') DEFAULT NULL COMMENT 'Deprecated: retained for backward compatibility',
+  `run_id` bigint(20) unsigned NOT NULL COMMENT 'FK to allocation_runs.run_id',
   PRIMARY KEY (`period_key`, `recipient_id`),
   KEY `rp_period_position_idx` (`period_key`, `position`),
   KEY `rp_week_start_idx` (`week_start_date`),
+  KEY `rp_ymw_idx` (`year`, `month`, `week`),
+  KEY `rp_run_idx` (`run_id`),
   CONSTRAINT `rp_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- recipient_attendance (weekly served vs absent)
 CREATE TABLE `recipient_attendance` (
   `period_key` char(10) NOT NULL COMMENT 'YYYY-MM-Wn',
+  `year` smallint NOT NULL,
+  `month` tinyint NOT NULL,
+  `week` tinyint NOT NULL,
   `recipient_id` int(11) NOT NULL,
   `status` enum('served','absent') NOT NULL,
   `served_count` int(11) NOT NULL DEFAULT 0,
   `last_served_at` timestamp NULL DEFAULT NULL,
-  `week_start_date` date DEFAULT NULL COMMENT 'Calculated start date of the week based on settings',
-  `week_basis` enum('sunday','monday') DEFAULT NULL COMMENT 'Week computation basis at time of mark',
+  `week_start_date` date NOT NULL COMMENT 'Start date of the 7-day window',
+  `week_basis` enum('sunday','monday') DEFAULT NULL COMMENT 'Deprecated: retained for backward compatibility',
   PRIMARY KEY (`period_key`, `recipient_id`),
   KEY `ra_recipient_idx` (`recipient_id`),
   KEY `ra_week_start_idx` (`week_start_date`),
+  KEY `ra_ymw_idx` (`year`, `month`, `week`),
   CONSTRAINT `ra_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -85,13 +129,23 @@ CREATE TABLE `recipient_attendance` (
 CREATE TABLE `allocation_runs` (
   `run_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `period_key` char(10) NOT NULL COMMENT 'YYYY-MM-Wn',
+  `year` smallint NOT NULL,
+  `month` tinyint NOT NULL,
+  `week` tinyint NOT NULL,
   `created_by` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`run_id`),
   UNIQUE KEY `uniq_ar_period` (`period_key`),
+  UNIQUE KEY `uniq_ar_ymw` (`year`,`month`,`week`),
   KEY `ar_created_by_idx` (`created_by`),
   CONSTRAINT `ar_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Link recipient_plans to allocation_runs via run_id (created after both tables exist)
+ALTER TABLE `recipient_plans`
+  ADD CONSTRAINT `rp_run_fk`
+  FOREIGN KEY (`run_id`) REFERENCES `allocation_runs`(`run_id`)
+  ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- donations
 CREATE TABLE `donations` (
@@ -366,7 +420,7 @@ CREATE TABLE `allocations` (
   `allocation_id` int(11) NOT NULL AUTO_INCREMENT,
   `recipient_id` int(11) NOT NULL,
   `run_id` bigint(20) unsigned DEFAULT NULL COMMENT 'optional link to allocation_runs.period_key',
-  `status` enum('Pending','Notified','Acknowledged','Picked Up','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
+  `status` enum('Pending','Notified','Acknowledged','Updated','Picked Up','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
   `scheduled_pickup_at` datetime DEFAULT NULL,
   `acknowledged_at` datetime DEFAULT NULL,
   `cancelled_at` datetime DEFAULT NULL,
@@ -395,5 +449,36 @@ CREATE TABLE `allocation_items` (
   CONSTRAINT `ai_allocation_fk` FOREIGN KEY (`allocation_id`) REFERENCES `allocations`(`allocation_id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `ai_inventory_fk` FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- distribution_period_status (weekly/monthly/quarterly fairness tracking; uses period_key for compatibility)
+CREATE TABLE `distribution_period_status` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `period_key` varchar(12) NOT NULL,
+  `recipient_id` int(11) NOT NULL,
+  `served_count` int(11) NOT NULL DEFAULT 0,
+  `last_served_at` timestamp NULL DEFAULT NULL,
+  `skipped_pending` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_period_recipient` (`period_key`,`recipient_id`),
+  KEY `dps_recipient_idx` (`recipient_id`),
+  CONSTRAINT `dps_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- distribution_selection_logs (audit log for suggestion results)
+CREATE TABLE `distribution_selection_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `period_key` varchar(12) NOT NULL,
+  `period_type` enum('weekly','monthly','quarterly') NOT NULL,
+  `pool_type` enum('general','specialty') NOT NULL,
+  `specialty_key` varchar(64) DEFAULT NULL,
+  `round_size` int(11) NOT NULL,
+  `selected_ids_json` text NOT NULL,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `dsl_period_idx` (`period_key`,`period_type`),
+  KEY `dsl_created_by_idx` (`created_by`),
+  CONSTRAINT `dsl_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

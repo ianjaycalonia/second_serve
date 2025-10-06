@@ -81,6 +81,18 @@ function handleUpdateProfile(array $payload) {
 function handleList(array $filters) {
     $svc = new User();
     $list = $svc->listUsers($filters);
+    // Hide internal recipient from listings used by Distribute Items UI
+    $role = strtolower((string)($filters['role'] ?? ''));
+    if ($role === 'recipient') {
+        $list = array_values(array_filter($list, function($u){
+            $name = isset($u['organization_name']) && trim((string)$u['organization_name']) !== ''
+                ? (string)$u['organization_name']
+                : (string)($u['name'] ?? '');
+            $nm = strtolower(trim($name));
+            // Exclude any recipient that looks like the internal foodbank account
+            return ($nm === '' || strpos($nm, 'foodbank') === false);
+        }));
+    }
     sendJson(['success' => true, 'data' => ['items' => $list]]);
 }
 

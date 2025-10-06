@@ -304,7 +304,7 @@
           const meta = recMeta.get(rid) || {};
           const base = (meta.organization_name && String(meta.organization_name).trim()) ? String(meta.organization_name).trim() : (meta.name || `Recipient ${rid}`);
           const card = document.createElement('div'); card.className = 'mb-3';
-          // Determine highest status badge to show per recipient
+          // Determine highest status badge to show per recipient (now includes Cancelled and Updated)
           let badgeHtml = '';
           try{
             const statuses = Array.isArray(items) ? items.map(a => String(a.status||'').toLowerCase()) : [];
@@ -314,6 +314,10 @@
               badgeHtml = " <span class='badge bg-secondary ms-2'>Picked Up</span>";
             } else if (statuses.some(s => s === 'acknowledged')){
               badgeHtml = " <span class='badge bg-success ms-2'>Acknowledged</span>";
+            } else if (statuses.some(s => s === 'updated')){
+              badgeHtml = " <span class='badge bg-warning text-dark ms-2'>Updated</span>";
+            } else if (statuses.some(s => s === 'cancelled')){
+              badgeHtml = " <span class='badge bg-danger ms-2'>Cancelled</span>";
             }
           } catch(_){ }
           const header = `${base}${badgeHtml} ${error?`<span class='badge bg-danger ms-2'>${error}</span>`:''}`;
@@ -341,13 +345,24 @@
               const created = a.created_at ? new Date(a.created_at) : null;
               const dt = created ? `${String(created.getDate()).padStart(2,'0')}/${String(created.getMonth()+1).padStart(2,'0')}/${created.getFullYear()} ${String(created.getHours()).padStart(2,'0')}:${String(created.getMinutes()).padStart(2,'0')}` : '';
               const status = a.status || 'Allocated';
+              function statusBadge(s){
+                const t = String(s||'').toLowerCase();
+                if (t === 'cancelled') return "<span class='badge bg-danger'>Cancelled</span>";
+                if (t === 'acknowledged') return "<span class='badge bg-success'>Acknowledged</span>";
+                if (t === 'picked up') return "<span class='badge bg-secondary'>Picked Up</span>";
+                if (t === 'scheduled') return "<span class='badge bg-warning text-dark'>Scheduled</span>";
+                if (t === 'completed') return "<span class='badge bg-primary'>Completed</span>";
+                if (t === 'notified') return "<span class='badge bg-info text-dark'>Notified</span>";
+                if (t === 'updated') return "<span class='badge bg-warning text-dark'>Updated</span>";
+                return "<span class='badge bg-info'>Allocated</span>";
+              }
               if (Array.isArray(a.items)){
                 a.items.forEach(it => {
                   const tr = document.createElement('tr');
                   tr.setAttribute('data-allocation-id', String(a.allocation_id||''));
                   tr.setAttribute('data-item-id', String(it.item_id||''));
                   tr.innerHTML = `
-                    <td>${status}</td>
+                    <td>${statusBadge(status)}</td>
                     <td>${dt}</td>
                     <td><input type="text" class="form-control form-control-sm dr-name" value="${(it.item_name||'').replace(/"/g,'&quot;')}" placeholder="Item name"></td>
                     <td><input type="number" class="form-control form-control-sm dr-qty" value="${it.quantity}" min="0" step="1"></td>
@@ -693,36 +708,7 @@
             } catch(_){ /* ignore per-recipient failure */ }
           }
         }
-
-        document.getElementById('notifyRunBtn')?.addEventListener('click', async ()=>{
-          if (isLocked) return;
-          const effectiveRunId = (runId || window.__DR_RESOLVED_RUN_ID__ || 0);
-          if (__DR_DIRTY__){
-            try{ const m = new bootstrap.Modal(document.getElementById('dirtyModal')); m.show(); }catch(_){ /* fallback ignored */ }
-            return;
-          }
-          if (!effectiveRunId){ showMsg(feedback, 'Run not resolved. Load by Week (Wxx) first.', 'danger'); return; }
-          try{
-            const res = await fetch(`${API_BASE_URL}/allocations/index.php?action=notify_run`, {
-              method: 'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
-              body: JSON.stringify({ run_id: effectiveRunId })
-            });
-            const j = await res.json().catch(()=>null);
-            if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
-            await sendNotificationsForRun();
-            // Success feedback via modal
-            try {
-              const mEl = document.getElementById('resultAlertModal');
-              const bEl = document.getElementById('resultAlertBody');
-              if (bEl) bEl.textContent = 'Recipients notified.';
-              if (mEl){ const m = new bootstrap.Modal(mEl); m.show(); }
-            } catch(_){ /* ignore */ }
-            document.getElementById('notifyRunBtn')?.classList.add('d-none');
-            // Lock everything (UI-only; DB should be the source of truth on reload)
-            isLocked = true;
-            applyLock();
-          } catch(e){ showMsg(feedback, e?.message || 'Failed to notify', 'danger'); }
-        });
+        // (duplicate notifyRunBtn listener removed)
 
         // (Cancel Run listener removed by request)
         // Dirty modal actions
