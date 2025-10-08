@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -142,15 +142,12 @@
 
     <!-- Main Content -->
     <main>
-      <div aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item">
-            <a href="AdminDashboard.html">Dashboard</a>
-          </li>
-          <li class="breadcrumb-item active" aria-current="page">
-            Reports & Analytics
-          </li>
+      <div aria-label="breadcrumb" class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <ol class="breadcrumb mb-0">
+          <li class="breadcrumb-item"><a href="AdminDashboard.html">Dashboard</a></li>
+          <li class="breadcrumb-item active" aria-current="page">Reports & Analytics</li>
         </ol>
+        <div class="d-flex align-items-center gap-2"></div>
       </div>
 
       <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
@@ -286,10 +283,13 @@
           <div class="card card-accent p-3">
             <div class="d-flex justify-content-between mb-3">
               <h6>Reports Log</h6>
-              <div class="d-flex gap-2">
-                <button class="btn btn-warning btn-sm">Generate Report</button>
-                <button class="btn btn-secondary btn-sm">Export</button>
-                <button class="btn btn-secondary btn-sm">Print</button>
+              <div class="d-flex gap-2 align-items-center">
+                <button class="btn btn-warning btn-sm" id="generateReportBtn">Generate Report</button>
+                <label for="reportMonth" class="form-label mb-0">Month:</label>
+                <input type="month" id="reportMonth" class="form-control form-control-sm" style="width: 170px;" />
+                <button class="btn btn-outline-success btn-sm" id="exportInBtn" title="Export Product In (Excel)"><i class="bi bi-file-earmark-excel"></i> Export In</button>
+                <button class="btn btn-outline-primary btn-sm" id="exportOutBtn" title="Export Product Out (Excel)"><i class="bi bi-file-earmark-spreadsheet"></i> Export Out</button>
+                <button class="btn btn-secondary btn-sm" id="printReportBtn">Print</button>
               </div>
             </div>
 
@@ -427,6 +427,8 @@
     <script src="scripts/js/ui/messages.js"></script>
     <script src="scripts/js/ui/notifications.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="scripts/js/ui/reports.js"></script>
   </body>
 </html>
 

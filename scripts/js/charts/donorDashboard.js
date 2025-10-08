@@ -310,6 +310,19 @@
             <div class="invalid-feedback">Min 1</div>
           </div>
           <div class="col-6 col-lg-2">
+            <label class="form-label mb-1">Unit</label>
+            <select class="form-select item-unit">
+              <option value="">Select unit (optional)</option>
+              <option value="can">can</option>
+              <option value="pack">pack</option>
+              <option value="box">box</option>
+              <option value="piece">piece</option>
+              <option value="bottle">bottle</option>
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+            </select>
+          </div>
+          <div class="col-6 col-lg-2">
             <label class="form-label mb-1">Expiry Date</label>
             <input type="date" class="form-control item-expiry" required>
             <div class="invalid-feedback">Expiry date is required.</div>
@@ -420,6 +433,8 @@
           String($row.find(".item-name-select").val() || "").trim()
         );
         fd.append("quantity[]", $row.find(".item-qty").val());
+        const unit = String($row.find('.item-unit').val() || '').trim();
+        fd.append('unit[]', unit);
         const expiry = $row.find(".item-expiry").val();
         fd.append("expiry_date[]", expiry);
         // per-item fields

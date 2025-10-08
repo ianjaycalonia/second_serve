@@ -131,6 +131,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 /(^|\/)recipient\.html$/i,
                 /(^|\/)reportandanalytics\.html$/i,
                 /(^|\/)scheduling\.html$/i,
+                // Protect Inventory page for admins only
+                /(^|\/)inventory\.html$/i,
             ]},
             // Donor pages
             { role: 'donor', patterns: [

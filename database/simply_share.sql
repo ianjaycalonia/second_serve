@@ -58,6 +58,68 @@ CREATE TABLE `users` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
+-- donor_categories (lookup for donor org categories)
+CREATE TABLE `donor_categories` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(128) NOT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_donor_category_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- beneficiary_categories (lookup for recipient/agency categories)
+CREATE TABLE `beneficiary_categories` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(128) NOT NULL,
+  `description` VARCHAR(255) DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_beneficiary_category_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- Seed donor & beneficiary category lookups (idempotent via UNIQUE name)
+INSERT IGNORE INTO donor_categories (`name`) VALUES
+ ('Manufacturer/Processor'),
+ ('Retailer'),
+ ('Supply Chain Intermediaries'),
+ ('Packer/Shipper/Wholesaler'),
+ ('Agriculture'),
+ ('Food Donation Drive'),
+ ('Others');
+
+INSERT IGNORE INTO beneficiary_categories (`name`,`description`) VALUES
+ ('Child-specific programs/school, daycare, group home, orphanage', NULL),
+ ('Congregate meal site/organizations that offer meals to be eaten on site', NULL),
+ ('Food pantry/food/shelter/grocery distributor/organization', NULL),
+ ('Health/Medical: clinics, hospitals, nutrition hubs', NULL),
+ ('Mixed: offering a combination of multiple services/programs', NULL),
+ ('Shelter: temporary housing/shelter, homeless shelter, abuse shelter', NULL),
+ ('Food Donation Drive', NULL),
+ ('Others', NULL);
+
+-- donation_items (line items per donation)
+CREATE TABLE `donation_items` (
+  `donation_item_id` INT NOT NULL AUTO_INCREMENT,
+  `donation_id` INT NOT NULL,
+  `product_name` VARCHAR(255) NOT NULL,
+  `product_category` VARCHAR(100) DEFAULT NULL,
+  `category_id` INT(11) DEFAULT NULL,
+  `quantity` INT NOT NULL,
+  `unit` VARCHAR(50) DEFAULT NULL,
+  `total_weight` DECIMAL(14,3) DEFAULT NULL,
+  `total_cost` DECIMAL(16,2) DEFAULT NULL,
+  `expiry_date` DATE DEFAULT NULL,
+  `tags` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`donation_item_id`),
+  KEY `di_donation_idx` (`donation_id`),
+  KEY `di_category_idx` (`category_id`),
+  CONSTRAINT `di_donation_fk` FOREIGN KEY (`donation_id`) REFERENCES `donations`(`donation_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `di_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
 -- admin_profiles
 CREATE TABLE `admin_profiles` (
   `user_id` int(11) NOT NULL,
@@ -147,36 +209,26 @@ ALTER TABLE `recipient_plans`
   FOREIGN KEY (`run_id`) REFERENCES `allocation_runs`(`run_id`)
   ON DELETE CASCADE ON UPDATE CASCADE;
 
--- donations
+-- donations (header-only)
 CREATE TABLE `donations` (
   `donation_id` int(11) NOT NULL AUTO_INCREMENT,
   `batch_id` varchar(36) DEFAULT NULL,
   `donor_id` int(11) DEFAULT NULL,
-  `entry_date` timestamp NULL DEFAULT NULL,
+  `admin_in_charge` int(11) DEFAULT NULL,
   `procurement_type` enum('purchased','donated') NOT NULL DEFAULT 'donated',
   `donor_name` varchar(150) DEFAULT NULL,
-  `product_name` varchar(255) NOT NULL,
-  `product_category` varchar(100) DEFAULT NULL,
-  `quantity` int(11) NOT NULL,
-  `unit` varchar(50) DEFAULT NULL,
-  `pack_by` int(11) DEFAULT NULL,
-  `total_weight` decimal(14,3) DEFAULT NULL,
-  `total_cost` decimal(16,2) DEFAULT NULL,
-  `expiry_date` date DEFAULT NULL,
+  `entry_date` timestamp NULL DEFAULT NULL,
   `remarks` text DEFAULT NULL,
-  `admin_in_charge` int(11) DEFAULT NULL,
   `status` enum('Pending','Acknowledged','Picked Up','Failed Safety','Cancelled','Completed') NOT NULL DEFAULT 'Pending',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`donation_id`),
   KEY `donations_batch_idx` (`batch_id`),
   KEY `donations_donor_idx` (`donor_id`),
-  KEY `donations_pack_by_idx` (`pack_by`),
   KEY `donations_admin_idx` (`admin_in_charge`),
   CONSTRAINT `donations_admin_fk` FOREIGN KEY (`admin_in_charge`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `donations_batch_fk` FOREIGN KEY (`batch_id`) REFERENCES `batches`(`batch_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `donations_donor_fk` FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `donations_pack_by_fk` FOREIGN KEY (`pack_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+  CONSTRAINT `donations_donor_fk` FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 -- donation_cancellations
@@ -196,16 +248,18 @@ CREATE TABLE `donation_cancellations` (
   CONSTRAINT `dc_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- donor_profiles
+-- donor_profiles (normalized donor_category via FK)
 CREATE TABLE `donor_profiles` (
   `user_id` int(11) NOT NULL,
   `organization_name` varchar(150) DEFAULT NULL,
-  `donor_category` varchar(100) DEFAULT NULL,
+  `donor_category_id` INT(11) DEFAULT NULL,
   `contact_number` varchar(20) DEFAULT NULL,
   `address` text DEFAULT NULL,
   `notes` text DEFAULT NULL,
   PRIMARY KEY (`user_id`),
-  CONSTRAINT `dp_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+  KEY `dp_donor_category_idx` (`donor_category_id`),
+  CONSTRAINT `dp_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `dp_donor_category_fk` FOREIGN KEY (`donor_category_id`) REFERENCES `donor_categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 -- food_safety_checks
@@ -232,78 +286,76 @@ CREATE TABLE `food_safety_checks` (
   CONSTRAINT `fsc_donation_fk` FOREIGN KEY (`donation_id`) REFERENCES `donations`(`donation_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
+-- categories (taxonomy for products/inventory/donations)
+CREATE TABLE `categories` (
+  `category_id` int(11) NOT NULL AUTO_INCREMENT,
+  `primary_name` varchar(128) NOT NULL,
+  `secondary_name` varchar(128) DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`category_id`),
+  UNIQUE KEY `uq_categories_primary_secondary` (`primary_name`, `secondary_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- category_aliases: maps messy/raw labels from files to canonical categories
+CREATE TABLE `category_aliases` (
+  `alias_id` INT NOT NULL AUTO_INCREMENT,
+  `category_id` INT NOT NULL,
+  `raw_label` VARCHAR(255) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`alias_id`),
+  UNIQUE KEY `uq_alias_label` (`raw_label`),
+  KEY `ca_category_idx` (`category_id`),
+  CONSTRAINT `ca_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- Attach FK now that categories exists
+-- (donations no longer references categories at header level)
+
 -- products (must be created before inventory)
 CREATE TABLE `products` (
   `product_id` int(11) NOT NULL AUTO_INCREMENT,
   `product_name` varchar(255) NOT NULL,
   `product_category` varchar(100) DEFAULT NULL,
+  `category_id` int(11) DEFAULT NULL,
   `default_unit` varchar(50) DEFAULT NULL,
   `tags` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`product_id`),
-  UNIQUE KEY `uniq_product_name` (`product_name`)
+  UNIQUE KEY `uniq_product_name` (`product_name`),
+  KEY `products_category_idx` (`category_id`),
+  CONSTRAINT `products_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- inventory
+-- inventory (lot-level, normalized)
 CREATE TABLE `inventory` (
   `inventory_id` int(11) NOT NULL AUTO_INCREMENT,
-  `donation_id` int(11) DEFAULT NULL,
-  `product_id` int(11) DEFAULT NULL,
-  `product_name` varchar(255) NOT NULL,
-  `product_category` varchar(100) DEFAULT NULL,
-  `tags` varchar(255) DEFAULT NULL,
+  `donation_item_id` int(11) NOT NULL,
   `quantity` int(11) NOT NULL DEFAULT 0,
-  `unit` varchar(50) DEFAULT NULL,
-  `total_weight` decimal(14,3) DEFAULT NULL,
-  `total_cost` decimal(16,2) DEFAULT NULL,
-  `expiry_date` date DEFAULT NULL,
-  `donor_id` int(11) DEFAULT NULL,
-  `source_batch_id` varchar(36) DEFAULT NULL,
-  `admin_in_charge` int(11) DEFAULT NULL,
-  `pack_by` int(11) DEFAULT NULL,
   `added_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`inventory_id`),
-  KEY `inventory_donation_idx` (`donation_id`),
-  KEY `inventory_product_idx` (`product_id`),
-  KEY `inventory_donor_idx` (`donor_id`),
-  KEY `inventory_batch_idx` (`source_batch_id`),
-  KEY `inventory_admin_fk` (`admin_in_charge`),
-  KEY `inventory_pack_by_fk` (`pack_by`),
-  CONSTRAINT `inventory_admin_fk` FOREIGN KEY (`admin_in_charge`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `inventory_batch_fk` FOREIGN KEY (`source_batch_id`) REFERENCES `batches`(`batch_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `inventory_donation_fk` FOREIGN KEY (`donation_id`) REFERENCES `donations`(`donation_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `inventory_donor_fk` FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `inventory_pack_by_fk` FOREIGN KEY (`pack_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `inventory_product_fk` FOREIGN KEY (`product_id`) REFERENCES `products`(`product_id`) ON DELETE SET NULL ON UPDATE CASCADE
+  KEY `inventory_donation_item_idx` (`donation_item_id`),
+  CONSTRAINT `inventory_donation_item_fk` FOREIGN KEY (`donation_item_id`) REFERENCES `donation_items`(`donation_item_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
-
--- Seed initial inventory items
-INSERT INTO `inventory`
-  (`donation_id`, `product_id`, `product_name`, `product_category`, `tags`, `quantity`, `unit`, `total_weight`, `total_cost`, `expiry_date`, `donor_id`, `source_batch_id`, `admin_in_charge`, `pack_by`, `added_at`)
-VALUES
-  (NULL, NULL, 'Infant Formula',      'Dairy',        'infant',   30,  NULL, NULL, NULL, '2025-11-17', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Elderly Milk',         'Dairy',        'elderly',  50,  NULL, NULL, NULL, '2025-12-17', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Rice',                 'Grains/Grain Products',       '',            100,  NULL, NULL, NULL, '2026-03-17', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Canned Sardines',      'Canned Goods', '',           200,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Instant Noodles',      'Dry Goods',    '',         300,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Paracetamol 500mg',    'Medicine',     'medicine',100,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW()),
-  (NULL, NULL, 'Vitamin C 500mg',      'Medicine',     'medicine',120,  NULL, NULL, NULL, '2026-09-18', NULL, NULL, NULL, NULL, NOW());
-
 -- inventory_movements (aligned with Inventory::ensureTables)
 CREATE TABLE `inventory_movements` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `inventory_id` int(11) NOT NULL,
+  `donation_item_id` int(11) DEFAULT NULL,
   `direction` enum('in','out') NOT NULL,
   `quantity` int(11) NOT NULL,
-  `mode` enum('recipient','onsite') NOT NULL,
+  `mode` varchar(32) NOT NULL,
   `recipient_id` int(11) DEFAULT NULL,
   `note` text DEFAULT NULL,
   `performed_by` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `im_inventory_idx` (`inventory_id`),
+  KEY `im_donation_item_idx` (`donation_item_id`),
   KEY `im_recipient_idx` (`recipient_id`),
   KEY `im_performed_by_idx` (`performed_by`),
   CONSTRAINT `im_inventory_fk` FOREIGN KEY (`inventory_id`) REFERENCES `inventory` (`inventory_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `im_donation_item_fk` FOREIGN KEY (`donation_item_id`) REFERENCES `donation_items` (`donation_item_id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `im_performed_by_fk` FOREIGN KEY (`performed_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `im_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
@@ -353,11 +405,11 @@ CREATE TABLE `recipient_contacts` (
   CONSTRAINT `rc_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- recipient_profiles (normalized; no contact fields; FK to primary contact)
+-- recipient_profiles (normalized; FK to beneficiary_categories)
 CREATE TABLE `recipient_profiles` (
   `user_id` int(11) NOT NULL,
   `organization_name` varchar(150) DEFAULT NULL,
-  `organization_type` varchar(100) DEFAULT NULL,
+  `beneficiary_category_id` INT(11) DEFAULT NULL,
   `tags` varchar(255) DEFAULT NULL,
   `address` text DEFAULT NULL,
   `total_residents` int(11) DEFAULT NULL,
@@ -367,10 +419,11 @@ CREATE TABLE `recipient_profiles` (
   `external_id` varchar(100) DEFAULT NULL,
   `primary_contact_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`user_id`),
-  KEY `rp_org_type_idx` (`organization_type`),
+  KEY `rp_beneficiary_category_idx` (`beneficiary_category_id`),
   KEY `rp_primary_contact_idx` (`primary_contact_id`),
   CONSTRAINT `rp_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `rp_primary_contact_fk` FOREIGN KEY (`primary_contact_id`) REFERENCES `recipient_contacts`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+  CONSTRAINT `rp_primary_contact_fk` FOREIGN KEY (`primary_contact_id`) REFERENCES `recipient_contacts`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `rp_beneficiary_category_fk` FOREIGN KEY (`beneficiary_category_id`) REFERENCES `beneficiary_categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 
@@ -387,11 +440,11 @@ INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, 
 (3, 'Simply Share', '09910071272', 'Subangdaku, Mandaue City');
 
 -- Recipient profile for Foodbank (On-site)
-INSERT INTO `recipient_profiles` (`user_id`, `organization_name`, `organization_type`, `tags`, `address`, `total_residents`, `age_group`, `male_count`, `female_count`, `external_id`, `primary_contact_id`) VALUES
-(4, 'Foodbank (On-site)', 'Foodbank', 'onsite', 'Subangdaku, Mandaue City', NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO `recipient_profiles` (`user_id`, `organization_name`, `beneficiary_category_id`, `tags`, `address`, `total_residents`, `age_group`, `male_count`, `female_count`, `external_id`, `primary_contact_id`) VALUES
+(4, 'Foodbank (On-site)', NULL, 'onsite', 'Subangdaku, Mandaue City', NULL, NULL, NULL, NULL, NULL, NULL);
 
 -- Donor profile for TestDonor
-INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category`, `contact_number`, `address`, `notes`) VALUES
+INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category_id`, `contact_number`, `address`, `notes`) VALUES
 (5, 'TestDonor', NULL, '09910071273', 'Tabok, Mandaue City', NULL);
 
 -- settings (key-value store for global app settings)
@@ -480,5 +533,24 @@ CREATE TABLE `distribution_selection_logs` (
   KEY `dsl_created_by_idx` (`created_by`),
   CONSTRAINT `dsl_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- =========================
+-- Seed: minimal inventory sample so UI has data on fresh import
+-- =========================
+-- Create a donation header (donated, picked up)
+INSERT INTO `donations` (`donor_id`, `admin_in_charge`, `procurement_type`, `donor_name`, `entry_date`, `remarks`, `status`, `created_at`)
+VALUES (NULL, 1, 'donated', 'Sample Donor', NOW(), NULL, 'Picked Up', NOW());
+SET @seed_donation_id := LAST_INSERT_ID();
+
+-- Create a donation item
+INSERT INTO `donation_items` (
+  `donation_id`, `product_name`, `product_category`, `category_id`, `quantity`, `unit`, `total_weight`, `total_cost`, `expiry_date`, `tags`, `created_at`
+) VALUES (
+  @seed_donation_id, 'Bottled Water', 'Beverage - Water', NULL, 10, 'bottle', NULL, NULL, DATE_ADD(CURDATE(), INTERVAL 365 DAY), NULL, NOW()
+);
+SET @seed_donation_item_id := LAST_INSERT_ID();
+
+-- Create the inventory lot referencing the donation item
+INSERT INTO `inventory` (`donation_item_id`, `quantity`, `added_at`) VALUES (@seed_donation_item_id, 10, NOW());
 
 SET FOREIGN_KEY_CHECKS=1;

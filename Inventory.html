@@ -288,7 +288,21 @@
                 <option>This Month</option>
               </select>
             </div>
-            <div class="ms-2">
+            <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hideExpiredToggle" checked>
+                <label class="form-check-label" for="hideExpiredToggle">Hide expired</label>
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 160px">
+              <label class="form-label mb-0" for="pageSizeSelect">Page size:</label>
+              <select id="pageSizeSelect" class="form-select form-select-sm">
+                <option value="20" selected>20</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+            <div class="ms-2 d-flex gap-2">
               <button
                 type="button"
                 class="btn btn-sm btn-secondary"
@@ -309,6 +323,7 @@
                 <th>Category</th>
                 <th>Quantity</th>
                 <th>Soonest to Expire</th>
+                <th>Tags</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>

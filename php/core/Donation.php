@@ -9,86 +9,85 @@ class Donation
     {
         $this->db = Database::getInstance();
     }
-    // Create a donation record, returns new id
-
-    // Create a donation record, returns new id
+    // Create a donation header and a single item, returns donation_id
     public function create(array $payload): int
     {
-        // First try the new schema with batch_id
         $this->db->beginTransaction();
         try {
-            // Snapshot donor name/org at time of creation (org from donor_profiles)
-            $donorName = null;
-            try {
-                $row = $this->db->query(
-                    "SELECT COALESCE(dp.organization_name, '') AS org, u.name
-                     FROM users u LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
-                     WHERE u.user_id = ?",
-                    [(int)$payload['donor_id']]
-                )->fetch();
-                if ($row) { $donorName = ($row['org'] !== '') ? $row['org'] : (!empty($row['name']) ? $row['name'] : null); }
-            } catch (Exception $e) { /* ignore */ }
-            $this->db->query(
-                "INSERT INTO donations (donor_id, batch_id, product_category, product_name, quantity, expiry_date, remarks, total_weight, total_cost, donor_name, entry_date, status, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'Pending', NOW())",
-                [
-                    (int)$payload['donor_id'],
-                    $payload['batch_id'] ?? null,
-                    $payload['type'],
-                    $payload['name'],
-                    (int)$payload['quantity'],
-                    !empty($payload['expiry_date']) ? $payload['expiry_date'] : null,
-                    isset($payload['remarks']) && $payload['remarks'] !== '' ? sanitize((string)$payload['remarks']) : null,
-                    isset($payload['total_weight']) && $payload['total_weight'] !== '' ? (float)$payload['total_weight'] : null,
-                    isset($payload['total_cost']) && $payload['total_cost'] !== '' ? (float)$payload['total_cost'] : null,
-                    $donorName,
-                ]
-            );
-            $id = (int)$this->db->lastInsertId();
+            $donationId = $this->createHeader([
+                'donor_id' => (int)$payload['donor_id'],
+                'batch_id' => $payload['batch_id'] ?? null,
+                'remarks' => isset($payload['remarks']) ? (string)$payload['remarks'] : null,
+                'procurement_type' => isset($payload['procurement_type']) && in_array($payload['procurement_type'], ['donated','purchased'], true) ? $payload['procurement_type'] : 'donated',
+            ]);
+            $this->addItem($donationId, [
+                'product_category' => $payload['type'] ?? null,
+                'product_name' => $payload['name'] ?? null,
+                'quantity' => (int)($payload['quantity'] ?? 0),
+                'unit' => isset($payload['unit']) && $payload['unit'] !== '' ? sanitize((string)$payload['unit']) : null,
+                'expiry_date' => (!empty($payload['expiry_date']) ? $payload['expiry_date'] : null),
+                'total_weight' => isset($payload['total_weight']) && $payload['total_weight'] !== '' ? (float)$payload['total_weight'] : null,
+                'total_cost' => isset($payload['total_cost']) && $payload['total_cost'] !== '' ? (float)$payload['total_cost'] : null,
+                'category_id' => null,
+                'tags' => null,
+            ]);
             $this->db->commit();
-            return $id;
+            return (int)$donationId;
         } catch (Exception $e) {
             $this->db->rollBack();
-            // If the DB doesn't yet have batch_id, retry insert without it for backward compatibility
-            if (stripos($e->getMessage(), "Unknown column 'batch_id'") !== false) {
-                $this->db->beginTransaction();
-                try {
-                    // Fallback path (old schema without batch_id) still snapshots donor_name and sets entry_date
-                    $donorName = null;
-                    try {
-                        $row = $this->db->query(
-                            "SELECT COALESCE(dp.organization_name, '') AS org, u.name
-                             FROM users u LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
-                             WHERE u.user_id = ?",
-                            [(int)$payload['donor_id']]
-                        )->fetch();
-                        if ($row) { $donorName = ($row['org'] !== '') ? $row['org'] : (!empty($row['name']) ? $row['name'] : null); }
-                    } catch (Exception $e3) { /* ignore */ }
-                    $this->db->query(
-                        "INSERT INTO donations (donor_id, product_category, product_name, quantity, expiry_date, remarks, total_weight, total_cost, donor_name, entry_date, status, created_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'Pending', NOW())",
-                        [
-                            (int)$payload['donor_id'],
-                            $payload['type'],
-                            $payload['name'],
-                            (int)$payload['quantity'],
-                            !empty($payload['expiry_date']) ? $payload['expiry_date'] : null,
-                            isset($payload['remarks']) && $payload['remarks'] !== '' ? sanitize((string)$payload['remarks']) : null,
-                            isset($payload['total_weight']) && $payload['total_weight'] !== '' ? (float)$payload['total_weight'] : null,
-                            isset($payload['total_cost']) && $payload['total_cost'] !== '' ? (float)$payload['total_cost'] : null,
-                            $donorName,
-                        ]
-                    );
-                    $id = (int)$this->db->lastInsertId();
-                    $this->db->commit();
-                    return $id;
-                } catch (Exception $e2) {
-                    $this->db->rollBack();
-                    throw $e2;
-                }
-            }
             throw $e;
         }
+    }
+
+    // Create only the header; returns donation_id
+    public function createHeader(array $hdr): int
+    {
+        // Snapshot donor name/org at time of creation (org from donor_profiles)
+        $donorName = null;
+        try {
+            $row = $this->db->query(
+                "SELECT COALESCE(dp.organization_name, '') AS org, u.name
+                 FROM users u LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                 WHERE u.user_id = ?",
+                [(int)$hdr['donor_id']]
+            )->fetch();
+            if ($row) { $donorName = ($row['org'] !== '') ? $row['org'] : (!empty($row['name']) ? $row['name'] : null); }
+        } catch (Exception $e) { /* ignore */ }
+        $procType = isset($hdr['procurement_type']) && in_array($hdr['procurement_type'], ['donated','purchased'], true) ? $hdr['procurement_type'] : 'donated';
+        $this->db->query(
+            "INSERT INTO donations (donor_id, batch_id, admin_in_charge, procurement_type, donor_name, entry_date, remarks, status, created_at)
+             VALUES (?, ?, NULL, ?, ?, NOW(), ?, 'Pending', NOW())",
+            [
+                (int)$hdr['donor_id'],
+                $hdr['batch_id'] ?? null,
+                $procType,
+                $donorName,
+                isset($hdr['remarks']) && $hdr['remarks'] !== '' ? sanitize((string)$hdr['remarks']) : null,
+            ]
+        );
+        return (int)$this->db->lastInsertId();
+    }
+
+    // Add an item to an existing donation header; returns donation_item_id
+    public function addItem(int $donationId, array $it): int
+    {
+        $this->db->query(
+            "INSERT INTO donation_items (donation_id, product_name, product_category, category_id, quantity, unit, total_weight, total_cost, expiry_date, tags)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (int)$donationId,
+                isset($it['product_name']) ? sanitize((string)$it['product_name']) : null,
+                isset($it['product_category']) ? sanitize((string)$it['product_category']) : null,
+                isset($it['category_id']) ? ($it['category_id'] ?: null) : null,
+                (int)($it['quantity'] ?? 0),
+                isset($it['unit']) && $it['unit'] !== '' ? sanitize((string)$it['unit']) : null,
+                isset($it['total_weight']) && $it['total_weight'] !== '' ? (float)$it['total_weight'] : null,
+                isset($it['total_cost']) && $it['total_cost'] !== '' ? (float)$it['total_cost'] : null,
+                (!empty($it['expiry_date']) ? $it['expiry_date'] : null),
+                isset($it['tags']) ? sanitize((string)$it['tags']) : null,
+            ]
+        );
+        return (int)$this->db->lastInsertId();
     }
 
     // List donations, optionally by status
@@ -113,9 +112,9 @@ class Donation
                             d.donor_id,
                             u.name AS donor_name,
                             dp.organization_name AS donor_org,
-                            CONCAT('Batch (', COUNT(*), ' items)') AS name,
+                            CONCAT('Batch (', COUNT(di.donation_item_id), ' items)') AS name,
                             NULL AS type,
-                            SUM(d.quantity) AS quantity,
+                            SUM(di.quantity) AS quantity,
                             NULL AS expiry_date,
                             CASE WHEN MIN(d.status) = MAX(d.status) THEN MIN(d.status) ELSE 'Mixed' END AS status,
                             MAX(d.created_at) AS created_at,
@@ -123,7 +122,8 @@ class Donation
                             1 AS is_group
                         FROM donations d
                         LEFT JOIN users u ON u.user_id = d.donor_id
-                        LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id" . $whereSqlGrouped . "
+                        LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                        LEFT JOIN donation_items di ON di.donation_id = d.donation_id" . $whereSqlGrouped . "
                         GROUP BY d.donor_id, u.name, dp.organization_name, d.batch_id";
 
             // Ungrouped singles: rows with batch_id NULL are returned as-is
@@ -132,17 +132,18 @@ class Donation
                             d.donor_id,
                             u.name AS donor_name,
                             dp.organization_name AS donor_org,
-                            d.product_name AS name,
-                            d.product_category AS type,
-                            d.quantity,
-                            d.expiry_date,
+                            di.product_name AS name,
+                            di.product_category AS type,
+                            di.quantity,
+                            di.expiry_date,
                             d.status,
                             d.created_at,
                             NULL AS batch_id,
                             0 AS is_group
                         FROM donations d
                         LEFT JOIN users u ON u.user_id = d.donor_id
-                        LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id" . $whereSqlSingles . "";
+                        LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                        INNER JOIN donation_items di ON di.donation_id = d.donation_id" . $whereSqlSingles . "";
 
             $sql = "SELECT * FROM (" . $sqlGrouped . ") g
                     UNION ALL
@@ -152,12 +153,13 @@ class Donation
             return $this->db->query($sql, $params)->fetchAll();
         } else {
             $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
-                           d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at,
+                           di.product_category AS type, di.product_name AS name, di.quantity, di.expiry_date, d.status, d.created_at,
                            d.batch_id AS batch_id,
                            0 AS is_group
                     FROM donations d
                     LEFT JOIN users u ON u.user_id = d.donor_id
-                    LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id";
+                    LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                    INNER JOIN donation_items di ON di.donation_id = d.donation_id";
             if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
             $sql .= ' ORDER BY d.created_at DESC LIMIT 500';
             return $this->db->query($sql, $params)->fetchAll();
@@ -169,10 +171,11 @@ class Donation
     {
         $row = $this->db->query(
             "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
-                    d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at
+                    di.product_category AS type, di.product_name AS name, di.quantity, di.expiry_date, d.status, d.created_at
              FROM donations d
              LEFT JOIN users u ON u.user_id = d.donor_id
              LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+             LEFT JOIN donation_items di ON di.donation_id = d.donation_id
              WHERE d.donation_id = ? AND d.deleted_at IS NULL",
             [$id]
         )->fetch();
@@ -199,10 +202,11 @@ class Donation
     public function listByBatch(string $batchId): array
     {
         $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
-                       d.product_category AS type, d.product_name AS name, d.quantity, d.expiry_date, d.status, d.created_at
+                       di.product_category AS type, di.product_name AS name, di.quantity, di.expiry_date, d.status, d.created_at
                 FROM donations d
                 LEFT JOIN users u ON u.user_id = d.donor_id
                 LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                INNER JOIN donation_items di ON di.donation_id = d.donation_id
                 WHERE d.deleted_at IS NULL AND d.batch_id = ?
                 ORDER BY d.created_at ASC";
         return $this->db->query($sql, [$batchId])->fetchAll();
@@ -228,17 +232,17 @@ class Donation
     {
         $limit = max(1, min(100, (int)$limit));
         $params = [];
-        $where = ['deleted_at IS NULL'];
-        if ($category !== null && $category !== '') { $where[] = 'product_category = ?'; $params[] = $category; }
+        $where = ['d.deleted_at IS NULL'];
+        if ($category !== null && $category !== '') { $where[] = 'di.product_category = ?'; $params[] = $category; }
         if ($q !== '') {
             $like = '%' . $q . '%';
-            $where[] = 'product_name LIKE ?';
+            $where[] = 'di.product_name LIKE ?';
             $params[] = $like;
-            $sql = "SELECT DISTINCT product_name AS name FROM donations WHERE " . implode(' AND ', $where) . " ORDER BY product_name ASC LIMIT $limit";
+            $sql = "SELECT DISTINCT di.product_name AS name FROM donation_items di INNER JOIN donations d ON d.donation_id = di.donation_id WHERE " . implode(' AND ', $where) . " ORDER BY di.product_name ASC LIMIT $limit";
             $rows = $this->db->query($sql, $params)->fetchAll();
         } else {
             // Return most frequent names when no query provided
-            $sql = "SELECT product_name AS name FROM donations WHERE " . implode(' AND ', $where) . " AND product_name IS NOT NULL AND product_name<>'' GROUP BY product_name ORDER BY COUNT(*) DESC, product_name ASC LIMIT $limit";
+            $sql = "SELECT di.product_name AS name FROM donation_items di INNER JOIN donations d ON d.donation_id = di.donation_id WHERE " . implode(' AND ', $where) . " AND di.product_name IS NOT NULL AND di.product_name<>'' GROUP BY di.product_name ORDER BY COUNT(*) DESC, di.product_name ASC LIMIT $limit";
             $rows = $this->db->query($sql, $params)->fetchAll();
         }
         return array_values(array_filter(array_map(function($r){ return $r['name'] ?? null; }, $rows), function($v){ return $v !== null && $v !== ''; }));

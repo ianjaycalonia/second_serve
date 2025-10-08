@@ -82,18 +82,21 @@ class User
         if (!$u) { throw new Exception('User not found'); }
         $profile = [];
         if ($u['role'] === 'recipient') {
-            // Read normalized profile and join primary contact directly
+            // Read normalized profile and join primary contact directly (and map category)
             $p = $this->db->query(
-                "SELECT rp.organization_name, rp.organization_type, rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count, rp.external_id,
+                "SELECT rp.organization_name, rp.beneficiary_category_id, bc.name AS beneficiary_category,
+                        rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count, rp.external_id,
                         pc.position_designation, pc.contact_number, pc.email
                  FROM recipient_profiles rp
+                 LEFT JOIN beneficiary_categories bc ON bc.id = rp.beneficiary_category_id
                  LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
                  WHERE rp.user_id = ?",
                 [$userId]
             )->fetch();
             $profile = $p ?: [];
         } elseif ($u['role'] === 'donor') {
-            $p = $this->db->query("SELECT organization_name, donor_category, contact_number, address, notes FROM donor_profiles WHERE user_id = ?", [$userId])->fetch();
+            // Expose donor_category_id; UI may map it to a name via donor_categories table
+            $p = $this->db->query("SELECT organization_name, donor_category_id, contact_number, address, notes FROM donor_profiles WHERE user_id = ?", [$userId])->fetch();
             $profile = $p ?: [];
         } elseif ($u['role'] === 'admin') {
             $p = $this->db->query("SELECT organization_name, contact_number, address FROM admin_profiles WHERE user_id = ?", [$userId])->fetch();
@@ -116,7 +119,7 @@ class User
             // Upsert recipient_profiles (no contact fields here; contacts are normalized into recipient_contacts)
             $this->db->query('INSERT IGNORE INTO recipient_profiles (user_id) VALUES (?)', [$userId]);
             $fields = [];$params=[];
-            foreach (['organization_name','organization_type','address','total_residents','age_group','male_count','female_count','external_id'] as $col){
+            foreach (['organization_name','beneficiary_category_id','address','total_residents','age_group','male_count','female_count','external_id'] as $col){
                 if (array_key_exists($col,$data)){ $fields[] = "$col = ?"; $params[] = $data[$col]; }
             }
             if ($fields){ $params[]=$userId; $this->db->query('UPDATE recipient_profiles SET '.implode(', ',$fields).' WHERE user_id = ?', $params); }
@@ -154,7 +157,11 @@ class User
         } elseif ($role === 'donor') {
             $this->db->query('INSERT IGNORE INTO donor_profiles (user_id) VALUES (?)', [$userId]);
             $fields=[];$params=[];
-            foreach (['organization_name','donor_category','contact_number','address','notes'] as $col){ if(array_key_exists($col,$data)){ $fields[]="$col = ?"; $params[]=$data[$col]; } }
+            // Map legacy key donor_category -> donor_category_id if present
+            if (array_key_exists('donor_category', $data) && !array_key_exists('donor_category_id', $data)) {
+                $data['donor_category_id'] = $data['donor_category'];
+            }
+            foreach (['organization_name','donor_category_id','contact_number','address','notes'] as $col){ if(array_key_exists($col,$data)){ $fields[]="$col = ?"; $params[]=$data[$col]; } }
             if ($fields){ $params[]=$userId; $this->db->query('UPDATE donor_profiles SET '.implode(', ',$fields).' WHERE user_id = ?', $params); }
         } elseif ($role === 'admin') {
             $this->db->query('INSERT IGNORE INTO admin_profiles (user_id) VALUES (?)', [$userId]);
@@ -172,20 +179,24 @@ class User
         if (!empty($filters['role'])){ $where[]='u.role = ?'; $params[]=$filters['role']; }
         $role = $filters['role'] ?? null;
         if ($role === 'recipient') {
-            // Join recipient_profiles and primary contact; expose tags and age_group for allocation logic
+            // Join recipient_profiles with primary contact and category lookup; expose tags and age_group
             $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at,
-                           rp.organization_name, rp.organization_type, rp.address,
+                           rp.organization_name, rp.beneficiary_category_id, bc.name AS beneficiary_category, rp.address,
                            rp.tags, rp.age_group, rp.male_count, rp.female_count, rp.total_residents,
                            pc.position_designation, pc.contact_number
                     FROM users u
                     LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
+                    LEFT JOIN beneficiary_categories bc ON bc.id = rp.beneficiary_category_id
                     LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id";
             if (!empty($filters['q'])){ $where[]='(u.name LIKE ? OR u.email LIKE ? OR rp.organization_name LIKE ?)'; $q='%'.$filters['q'].'%'; array_push($params,$q,$q,$q); }
         } elseif ($role === 'donor') {
             $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at,
-                           dp.organization_name, dp.donor_category, dp.contact_number, dp.address
+                           dp.organization_name, dp.donor_category_id,
+                           dc.name AS donor_category,
+                           dp.contact_number, dp.address
                     FROM users u
-                    LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id";
+                    LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                    LEFT JOIN donor_categories dc ON dc.id = dp.donor_category_id";
             if (!empty($filters['q'])){ $where[]='(u.name LIKE ? OR u.email LIKE ? OR dp.organization_name LIKE ?)'; $q='%'.$filters['q'].'%'; array_push($params,$q,$q,$q); }
         } elseif ($role === 'admin') {
             $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at,
@@ -257,7 +268,7 @@ class User
         // Prefer explicit name; if missing, fall back to contact_person; else organization_name
         $name = $data['name'] ?? ($data['contact_person'] ?? ($data['organization_name'] ?? 'Recipient'));
         $organization = $data['organization_name'] ?? ($data['agency_name'] ?? null);
-        $organizationType = $data['organization_type'] ?? ($data['agency_type'] ?? null);
+        $organizationType = $data['organization_type'] ?? ($data['agency_type'] ?? null); // used for tags derivation only
         $contactNumber = $data['contact_number'] ?? null;
         $address = $data['address'] ?? null;
 
@@ -299,8 +310,8 @@ class User
             'tags' => $data['tags'] ?? null,
         ]);
         $this->db->query(
-            "INSERT INTO recipient_profiles (user_id, organization_name, organization_type, tags, address, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [$userId, $organization, $organizationType, $derivedTags, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
+            "INSERT INTO recipient_profiles (user_id, organization_name, beneficiary_category_id, tags, address, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            [$userId, $organization, null, $derivedTags, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
         );
 
         // Create a primary contact if contact info is provided and set as primary

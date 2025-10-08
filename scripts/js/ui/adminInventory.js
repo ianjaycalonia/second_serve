@@ -20,6 +20,30 @@
     );
   }
 
+  async function loadCategoriesIntoSelect(id, items) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const current = sel.value;
+    const opts = ["<option>All</option>"];
+    const names = Array.from(new Set((items || []).map((c) => String(c.name || "").trim()).filter(Boolean))).sort();
+    for (const n of names) { opts.push(`<option>${escapeHtml(n)}</option>`); }
+    sel.innerHTML = opts.join("");
+    if (names.includes(current)) { sel.value = current; }
+  }
+
+  async function loadCategories() {
+    try {
+      const url = `${API_BASE_URL}/categories/index.php?action=list&active=1&debug=1&t=${Date.now()}`;
+      const res = await fetch(url, { credentials: "include", headers: { Accept: "application/json" } });
+      const j = await res.json().catch(() => null);
+      const items = Array.isArray(j?.data?.items) ? j.data.items : [];
+      await loadCategoriesIntoSelect("categorySelectDesktop", items);
+      await loadCategoriesIntoSelect("categorySelectMobile", items);
+    } catch (_) {
+      // leave existing options
+    }
+  }
+
   function bindActions() {
     document.addEventListener("click", async function (e) {
       const btnOn = e.target.closest(".inv-issue-onsite");
@@ -121,6 +145,8 @@
     if (params.limit) qp.set("limit", params.limit);
     // Cache-buster to ensure freshest data
     qp.set("t", String(Date.now()));
+    // Enable backend debug messages during development
+    qp.set("debug", "1");
     url.search = qp.toString();
     const res = await fetch(url.toString(), {
       method: "GET",
@@ -152,12 +178,20 @@
   function renderTable(items) {
     const tbody = document.querySelector("main .table tbody");
     if (!tbody) return;
-    if (!Array.isArray(items) || items.length === 0) {
+    // Apply Hide Expired filter if toggle is on
+    let filtered = Array.isArray(items) ? [...items] : [];
+    try {
+      const hide = document.getElementById("hideExpiredToggle");
+      if (hide && hide.checked) {
+        filtered = filtered.filter((r) => String(r.derived_status || "In Stock") !== "Expired");
+      }
+    } catch (_) {}
+    if (!Array.isArray(filtered) || filtered.length === 0) {
       tbody.innerHTML =
         '<tr><td colspan="7" class="text-center py-4">No inventory items match the current filters.</td></tr>';
       return;
     }
-    const rows = items.map((r) => {
+    const rows = filtered.map((r) => {
       const item = escapeHtml(r.item_name || "");
       const cat = escapeHtml(r.category || "");
       const qty = (r.total_quantity ?? r.quantity ?? 0) + "";
@@ -186,13 +220,58 @@
     tbody.innerHTML = rows.join("");
   }
 
+  function getPageSize() {
+    const sel = document.getElementById("pageSizeSelect");
+    const stored = parseInt(localStorage.getItem("inventory_page_size") || "0", 10) || 0;
+    let val = stored || 20;
+    if (sel) {
+      const s = parseInt(sel.value || "0", 10) || 0;
+      if (s) val = s;
+    }
+    return Math.max(1, Math.min(100, val));
+  }
+
   async function loadAndRender(page = 1) {
     try {
       const filters = getFilters();
-      const data = await fetchInventory({ ...filters, page, limit: 25 });
-      window.__inventoryLast = data;
-      renderTable(data.items || []);
-      renderPagination(data.pagination || { page: 1, pages: 1 });
+      const limit = getPageSize();
+      const hideExpired = !!document.getElementById("hideExpiredToggle")?.checked;
+      if (!hideExpired) {
+        // Normal server-side pagination
+        const data = await fetchInventory({ ...filters, page, limit });
+        window.__inventoryLast = data;
+        renderTable(data.items || []);
+        renderPagination(data.pagination || { page: 1, pages: 1 });
+        return;
+      }
+
+      // Hide expired ON: build a client-side non-expired collection across all server pages
+      const key = JSON.stringify({ k: 'inv', ...filters });
+      const cache = window.__invNonExpiredCache || (window.__invNonExpiredCache = {});
+      let items = Array.isArray(cache[key]?.items) ? cache[key].items : null;
+      if (!items) {
+        // Fetch page 1 with max chunk (100)
+        const first = await fetchInventory({ ...filters, page: 1, limit: 100 });
+        const totalPages = Math.max(1, first?.pagination?.pages || 1);
+        const collected = [];
+        const filterFn = (arr) => (arr || []).filter(r => String(r.derived_status || 'In Stock') !== 'Expired');
+        collected.push(...filterFn(first.items));
+        for (let p = 2; p <= totalPages; p++) {
+          const next = await fetchInventory({ ...filters, page: p, limit: 100 });
+          collected.push(...filterFn(next.items));
+        }
+        items = collected;
+        cache[key] = { items, ts: Date.now() };
+      }
+      // Client-side paginate non-expired
+      const total = items.length;
+      const pages = Math.max(1, Math.ceil(total / limit));
+      const cur = Math.min(Math.max(1, page), pages);
+      const start = (cur - 1) * limit;
+      const slice = items.slice(start, start + limit);
+      window.__inventoryLast = { items: slice, pagination: { page: cur, pages, total } };
+      renderTable(slice);
+      renderPagination({ page: cur, pages });
     } catch (err) {
       console.error("Failed to load inventory:", err);
       const tbody = document.querySelector("main .table tbody");
@@ -244,6 +323,27 @@
         if (!btn || btn.disabled) return;
         const p = parseInt(btn.getAttribute("data-page") || "1", 10) || 1;
         loadAndRender(p);
+      });
+    }
+    // Hide expired toggle reloads list
+    const hide = document.getElementById("hideExpiredToggle");
+    if (hide) {
+      hide.addEventListener("change", () => loadAndRender(1));
+    }
+    // Page size select
+    const pageSize = document.getElementById("pageSizeSelect");
+    if (pageSize) {
+      // Initialize from localStorage if available
+      try {
+        const stored = parseInt(localStorage.getItem("inventory_page_size") || "0", 10) || 0;
+        if (stored && [20,30,50].includes(stored)) {
+          pageSize.value = String(stored);
+        }
+      } catch (_) {}
+      pageSize.addEventListener("change", () => {
+        const v = parseInt(pageSize.value || "0", 10) || 20;
+        try { localStorage.setItem("inventory_page_size", String(v)); } catch (_) {}
+        loadAndRender(1);
       });
     }
   }
@@ -520,7 +620,9 @@
   }
 
   function normalizeHeader(h) {
-    return (h || "").toLowerCase().trim().replace(/\s+/g, "_");
+    const s = (h || "").toLowerCase().trim();
+    // Replace any non-alphanumeric with underscores, collapse repeats
+    return s.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   }
 
   function bindImportModal() {
@@ -598,18 +700,127 @@
       }
     });
 
-    submitBtn.addEventListener("click", () => {
-      // Half-functional: simulate sending data and close modal
-      const count = previewData.rows.length;
-      alert(
-        `Import ready: ${count} rows parsed. Server endpoint not yet wired.`
-      );
+    submitBtn.addEventListener("click", async () => {
       try {
-        const modalEl = document.getElementById("importInventoryModal");
-        if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-          bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        submitBtn.disabled = true;
+        // Map preview rows to expected payload fields
+        const header = Array.isArray(previewData.header) ? previewData.header : [];
+        const rows = Array.isArray(previewData.rows) ? previewData.rows : [];
+        if (!header.length || !rows.length) {
+          alert("No parsed rows to import.");
+          return;
         }
-      } catch (_) {}
+        const ix = (name) => header.indexOf(String(name || "").toLowerCase());
+        const pick = (...keys) => {
+          for (const k of keys) { const i = ix(k); if (i >= 0) return i; }
+          return -1;
+        };
+        const iItem = pick("item_name","name","product_name");
+        const iCat = pick("category","product_category");
+        const iQty = ix("quantity");
+        const iExpiry = ix("expiry_date");
+        const iTags = ix("tags");
+        const iUnit = pick("unit","packed_by");
+        const iTW = pick("total_weight","total_weight_kg");
+        const iTC = pick("total_cost","total_cost_p");
+        const iBatch = ix("source_batch_id");
+        const iEntryDate = pick("entry_date","added_at");
+        const iDonEmail = ix("donor_email");
+        const iDonOrg = pick("donor_org","donor_organization","donor_name");
+        const iDonCategory = ix("donor_category");
+        const iDonName = ix("donor_name");
+        const iEntryBy = ix("entry_by");
+        const payloadRows = [];
+        for (const r of rows) {
+          const item = (r[iItem] ?? r[0] ?? "").toString().trim();
+          const qtyRaw = (r[iQty] ?? "").toString().trim();
+          // Always try to extract a leading integer from quantity (e.g., '2 can' -> 2)
+          let qty = 0;
+          let tailUnitFromQty = "";
+          if (qtyRaw !== "") {
+            const m = qtyRaw.match(/^(\d+)/);
+            if (m) {
+              qty = parseInt(m[1], 10) || 0;
+              // Also capture text after the number to possibly use as unit if none provided
+              const tail = qtyRaw.slice(m[0].length).trim();
+              if (tail) tailUnitFromQty = tail;
+            } else {
+              // Fallback to direct int parse
+              qty = parseInt(qtyRaw, 10) || 0;
+            }
+          }
+          let derivedUnit = tailUnitFromQty;
+          if (!item || qty <= 0) continue; // skip invalid rows
+          const rowObj = {
+            item_name: item,
+            category: (iCat >= 0 ? (r[iCat] || "") : "").toString().trim(),
+            quantity: qty,
+            expiry_date: (iExpiry >= 0 ? (r[iExpiry] || "") : "").toString().trim(),
+            tags: (iTags >= 0 ? (r[iTags] || "") : "").toString().trim(),
+          };
+          // Prefer explicit unit column when present and non-empty; otherwise use unit derived from QUANTITY tail
+          if (iUnit >= 0) {
+            const unitVal = (r[iUnit] || "").toString().trim();
+            if (unitVal) rowObj.unit = unitVal; else if (derivedUnit) rowObj.unit = derivedUnit;
+          } else if (derivedUnit) {
+            rowObj.unit = derivedUnit;
+          }
+          if (iTW >= 0) rowObj.total_weight = (r[iTW] || "").toString().trim();
+          if (iTC >= 0) rowObj.total_cost = (r[iTC] || "").toString().trim();
+          if (iBatch >= 0) rowObj.source_batch_id = (r[iBatch] || "").toString().trim();
+          if (iDonEmail >= 0) rowObj.donor_email = (r[iDonEmail] || "").toString().trim();
+          if (iDonOrg >= 0) {
+            const val = (r[iDonOrg] || "").toString().trim();
+            // Use as donor_org; also send donor_name if absent to help matching
+            rowObj.donor_org = val;
+            if (!("donor_name" in rowObj) && iDonName < 0) rowObj.donor_name = val;
+          }
+          if (iDonName >= 0) rowObj.donor_name = (r[iDonName] || "").toString().trim();
+          if (iDonCategory >= 0) rowObj.donor_category = (r[iDonCategory] || "").toString().trim();
+          if (iEntryBy >= 0) rowObj.entry_by = (r[iEntryBy] || "").toString().trim();
+          if (iEntryDate >= 0) rowObj.entry_date = (r[iEntryDate] || "").toString().trim();
+          payloadRows.push(rowObj);
+        }
+        if (!payloadRows.length) {
+          alert("No valid rows (need item_name and quantity>=1).");
+          return;
+        }
+        const url = `${API_BASE_URL}/inventory/index.php/import`;
+        const res = await fetch(url, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ rows: payloadRows }),
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j || j.success !== true) {
+          throw new Error(j?.error || `HTTP ${res.status}`);
+        }
+        const inserted = j?.data?.inserted ?? 0;
+        const errs = Array.isArray(j?.data?.errors) ? j.data.errors : [];
+        // Close modal
+        try {
+          const modalEl = document.getElementById("importInventoryModal");
+          if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+          }
+        } catch (_) {}
+        // Refresh table
+        const p = window.__inventoryLast?.pagination?.page || 1;
+        await loadAndRender(p);
+        // Report summary (show first few error reasons if any)
+        if (errs.length) {
+          try { console.error("Inventory import errors:", errs); } catch (_) {}
+        }
+        const firstErrors = errs.slice(0, 5).map(e => `#${e?.row ?? "?"}: ${e?.error ?? "unknown error"}`).join("\n");
+        const msg = `Imported ${inserted} row(s).${errs.length ? ` Skipped ${errs.length} invalid.` : ""}${firstErrors ? `\n\nSample errors:\n${firstErrors}` : ""}`;
+        alert(msg);
+      } catch (err) {
+        console.error("Import failed:", err);
+        alert("Import failed: " + (err?.message || "Unknown error"));
+      } finally {
+        submitBtn.disabled = false;
+      }
     });
   }
 
@@ -618,8 +829,10 @@
     ensureSearchBox();
     bindFilters();
     bindActions();
+    await loadCategories();
     loadAndRender(1);
     bindImportModal();
+    // No export bindings here; exports will live in ReportAndAnalytics.html
     // Bind modal submit
     const submit = document.getElementById("onsiteIssueSubmitBtn");
     if (submit) {

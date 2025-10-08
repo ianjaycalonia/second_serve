@@ -130,6 +130,7 @@ try {
         $names = isset($_POST['name']) ? (array)$_POST['name'] : [];
         $quantities = isset($_POST['quantity']) ? (array)$_POST['quantity'] : [];
         $expiries = isset($_POST['expiry_date']) ? (array)$_POST['expiry_date'] : [];
+        $units = isset($_POST['unit']) ? (array)$_POST['unit'] : [];
         $weights = isset($_POST['total_weight']) ? (array)$_POST['total_weight'] : [];
         $costs = isset($_POST['total_cost']) ? (array)$_POST['total_cost'] : [];
         $remarksItems = isset($_POST['remarks']) && is_array($_POST['remarks']) ? (array)$_POST['remarks'] : [];
@@ -150,12 +151,19 @@ try {
                 [$batchId, $donorId, ($remarks !== null && $remarks !== '') ? $remarks : null]
             );
         } catch (Exception $e) {
-            // If batch already exists, ignore; otherwise bubble up
             if (stripos($e->getMessage(), 'Duplicate') === false) { throw $e; }
         }
 
-        // Insert items sequentially
-        $ids = [];
+        // Create header once
+        $donationId = $service->createHeader([
+            'donor_id' => $donorId,
+            'batch_id' => $batchId,
+            'remarks' => $remarks,
+            'procurement_type' => 'donated',
+        ]);
+
+        // Insert items sequentially under this header
+        $itemIds = [];
         for ($i = 0; $i < $count; $i++) {
             $name = isset($names[$i]) ? sanitize($names[$i]) : null;
             $qty = isset($quantities[$i]) ? (int)$quantities[$i] : null;
@@ -165,22 +173,20 @@ try {
             $wVal = isset($weights[$i]) && $weights[$i] !== '' ? (float)$weights[$i] : null;
             $cVal = isset($costs[$i]) && $costs[$i] !== '' ? (float)$costs[$i] : null;
             $remarksVal = isset($remarksItems[$i]) ? sanitize((string)$remarksItems[$i]) : null;
+            $unitVal = isset($units[$i]) ? sanitize((string)$units[$i]) : (isset($_POST['unit']) && !is_array($_POST['unit']) ? sanitize((string)$_POST['unit']) : '');
             if (!$name || !$qty || $qty < 1 || !$expiry || $typeVal === '') {
                 sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, category, quantity (>=1), and expiry_date are required'], 400);
             }
-
-            $payload = [
-                'donor_id' => $donorId,
-                'batch_id' => $batchId,
-                'type' => $typeVal,
-                'name' => $name,
+            $itemIds[] = $service->addItem($donationId, [
+                'product_category' => $typeVal,
+                'product_name' => $name,
                 'quantity' => $qty,
+                'unit' => ($unitVal !== '' ? $unitVal : null),
                 'expiry_date' => $expiry,
-                'remarks' => $remarksVal,
                 'total_weight' => $wVal,
                 'total_cost' => $cVal,
-            ];
-            $ids[] = $service->create($payload);
+                'tags' => $remarksVal,
+            ]);
         }
 
         // Notify all approved admins once for the batch submission
@@ -212,7 +218,7 @@ try {
             error_log('Failed to create admin notifications for donation batch: ' . $e->getMessage());
         }
 
-        sendJson(['success' => true, 'created_ids' => $ids, 'created_count' => count($ids), 'batch_id' => $batchId]);
+        sendJson(['success' => true, 'donation_id' => (int)$donationId, 'item_ids' => $itemIds, 'created_count' => count($itemIds), 'batch_id' => $batchId]);
     }
 
     // GET /api/donations/list?status=pending&donor_id=12

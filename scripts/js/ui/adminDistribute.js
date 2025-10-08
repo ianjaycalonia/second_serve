@@ -147,11 +147,23 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
             const name = (it.item_name ?? it.product_name ?? '').trim();
             const category = (it.category ?? it.product_category ?? '').trim();
             const totalQty = parseInt(it.total_quantity ?? it.quantity ?? 0, 10) || 0;
-            if (!name || totalQty <= 0) return;
+            // Enforce minimum available quantity for auto-allocation
+            if (!name || totalQty < 20) return;
+            // Skip expired goods based on earliest_expiry/expiry_date or derived_status
+            try {
+              const status = String(it.derived_status || '').toLowerCase();
+              const expRaw = (it.earliest_expiry || it.expiry_date || '').trim();
+              if (status === 'expired') return;
+              if (expRaw) {
+                const exp = new Date(expRaw + 'T00:00:00');
+                const today = new Date(); today.setHours(0,0,0,0);
+                if (exp < today) return;
+              }
+            } catch(_) { /* ignore date parse errors */ }
             const allocs = window.Allocation.allocateItems(totalQty, recipients);
             if (!Array.isArray(allocs) || !allocs.length) return;
             let itemUnits = 0;
-            allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, category, name, n); itemUnits += n; } });
+            allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, category, name, n, (it.unit||''), (it.unit||'')); itemUnits += n; } });
             if (itemUnits>0){ totalUnits += itemUnits; itemsProcessed++; }
           });
           resolve({ applied: itemsProcessed>0 && totalUnits>0, totalUnits, itemsProcessed });
@@ -191,7 +203,14 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         const label = (qs('.di-card-label', cards[idx])?.textContent||`Recipient ${id}`);
         const item = document.createElement('div');
         item.className = 'carousel-item' + (idx===0?' active':'');
-        item.innerHTML = `<div class="p-3"><h6 class="mb-2">${label}</h6><div id="alloc-items-${id}"></div></div>`;
+        item.innerHTML = `<div class="p-3"><h6 class="mb-2">${label}</h6>
+          <div class="border-bottom small text-muted d-flex px-2 py-1" style="gap:12px">
+            <div class="flex-grow-1">Item</div>
+            <div style="width:90px" class="text-end">Qty</div>
+            <div style="width:120px" class="text-center">Unit</div>
+          </div>
+          <div id="alloc-items-${id}"></div>
+        </div>`;
         inner.appendChild(item);
         const li = document.createElement('button');
         li.type = 'button';
@@ -237,7 +256,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
     const ids = Array.isArray(window.__diAllocIds)?window.__diAllocIds:[];
     return ids[idx] || null;
   }
-  function addAllocItemToRecipient(recipientId, cat, name, qty){
+  function addAllocItemToRecipient(recipientId, cat, name, qty, unit){
     try{
       if (!recipientId) return;
       const host = document.getElementById('alloc-items-' + recipientId);
@@ -245,23 +264,27 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       let list = host.querySelector('ul');
       if (!list){ list = document.createElement('ul'); list.className = 'list-unstyled mb-0'; host.appendChild(list); }
       const li = document.createElement('li');
-      li.className = 'd-flex align-items-center justify-content-between border-bottom py-1 small';
+      li.className = 'd-flex align-items-center border-bottom py-1 small px-2';
       const label = [cat||'', name||''].filter(Boolean).join(' • ');
       const q = Math.max(1, parseInt(qty||1,10)||1);
-      li.innerHTML = `<span class="alloc-label">${label}</span>
-        <div class="d-flex align-items-center gap-2">
+      const u = (unit||'') || '';
+      li.innerHTML = `
+        <span class="alloc-label flex-grow-1">${label}</span>
+        <div class="d-flex align-items-center gap-2" style="width:90px; justify-content:flex-end">
           <input type="number" class="form-control form-control-sm alloc-qty-input" min="1" value="${q}" style="width:80px" />
-          <button type="button" class="btn btn-sm p-0 alloc-del-btn" aria-label="Remove">
-            <i class="bi bi-x-lg text-danger"></i>
-          </button>
-        </div>`;
+        </div>
+        <span class="alloc-unit text-center" style="width:120px">${u}</span>
+        <button type="button" class="btn btn-sm p-0 alloc-del-btn ms-2" aria-label="Remove">
+          <i class="bi bi-x-lg text-danger"></i>
+        </button>`;
       list.appendChild(li);
       // Bind edit/delete handlers and prevent carousel from sliding on interaction
       const qtyInput = li.querySelector('.alloc-qty-input');
       if (qtyInput){
-        const stopAll = (e)=>{ try{ e.stopImmediatePropagation(); }catch(_){} try{ e.stopPropagation(); }catch(_){} try{ e.preventDefault(); }catch(_){} };
+        // Allow normal input focus/editing; only stop propagation so carousel doesn't slide
+        const stopBubble = (e)=>{ try{ e.stopImmediatePropagation(); }catch(_){} try{ e.stopPropagation(); }catch(_){} };
         qtyInput.addEventListener('input', (e)=>{ const v = Math.max(1, parseInt(e.target.value||'1',10)||1); e.target.value = String(v); });
-        ['click','mousedown','pointerdown','touchstart'].forEach(ev=> qtyInput.addEventListener(ev, stopAll, { capture: true }));
+        ['click','mousedown','pointerdown','touchstart'].forEach(ev=> qtyInput.addEventListener(ev, stopBubble));
       }
       const delBtn = li.querySelector('.alloc-del-btn');
       if (delBtn){
@@ -307,7 +330,13 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           const meta = qs('#diAllocMeta'); if (meta) meta.textContent = 'Please select an item name.';
           return;
         }
-        addAllocItemToRecipient(rid, cat, name, qty);
+        // Try to get unit from Select2 result metadata stored as __unit
+        let unit = '';
+        try {
+          const sel2Data = (window.jQuery && jQuery.fn && jQuery('#diGlobalName').select2) ? jQuery('#diGlobalName').select2('data') : [];
+          if (Array.isArray(sel2Data) && sel2Data[0] && sel2Data[0].__unit) unit = sel2Data[0].__unit;
+        } catch(_){ }
+        addAllocItemToRecipient(rid, cat, name, qty, unit, unit);
       });
     }
     if (autoAllBtn){
@@ -351,7 +380,19 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           const items = data?.data?.items || [];
           const it = items[0] || {};
           const totalQty = parseInt(it?.total_quantity||it?.quantity||0,10)||0;
-          if (totalQty <= 0){ resolve({ applied:false }); return; }
+          // Enforce minimum available quantity for auto-allocation (single-item)
+          if (totalQty < 20){ resolve({ applied:false }); return; }
+          // Skip expired goods
+          try {
+            const status = String(it?.derived_status || '').toLowerCase();
+            const expRaw = String(it?.earliest_expiry || it?.expiry_date || '').trim();
+            if (status === 'expired') { resolve({ applied:false }); return; }
+            if (expRaw) {
+              const exp = new Date(expRaw + 'T00:00:00');
+              const today = new Date(); today.setHours(0,0,0,0);
+              if (exp < today) { resolve({ applied:false }); return; }
+            }
+          } catch(_) { }
           // Tag filter: if item has tags, restrict recipients to those sharing at least one tag
           const itemTags = normalizeTags(it?.tags_concat || it?.tags || '');
           let eligibleIds = ids.slice();
@@ -369,7 +410,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
             const allocs = window.Allocation.allocateItems(allocatableTotal/0.9, recipients);
             if (!Array.isArray(allocs) || !allocs.length){ resolve({ applied:false }); return; }
             let sum = 0;
-            allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, cat, name, n); sum += n; } });
+            allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, cat, name, n, (it.unit||''), (it.unit||'')); sum += n; } });
             resolve({ applied:true, sum });
           });
         }).catch(()=> resolve({ applied:false }));
@@ -414,17 +455,29 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
               const name = (it.item_name ?? it.product_name ?? '').trim();
               const category = (it.category ?? it.product_category ?? '').trim();
               const totalQty = parseInt(it.total_quantity ?? it.quantity ?? 0, 10) || 0;
-              if (!name || totalQty <= 0) return;
+              // Enforce minimum available quantity for auto-allocation (all-items)
+              if (!name || totalQty < 20) return;
+              // Skip expired goods
+              try {
+                const status = String(it.derived_status || '').toLowerCase();
+                const expRaw = (it.earliest_expiry || it.expiry_date || '').trim();
+                if (status === 'expired') return;
+                if (expRaw) {
+                  const exp = new Date(expRaw + 'T00:00:00');
+                  const today = new Date(); today.setHours(0,0,0,0);
+                  if (exp < today) return;
+                }
+              } catch(_) { }
               // Determine eligible recipients by tag intersection
               const itemTags = normalizeTags(it?.tags_concat || it?.tags || '');
               const eligible = (itemTags.size)
-                ? recipients.filter(r => hasTagIntersect(itemTags, tagMap.get(Number(r.id))))
+                ? recipients.filter(r => hasTagIntersect(itemTags, tagMap.get(Number(r.id))) )
                 : recipients.slice();
               if (!eligible.length && itemTags.size) return; // specialty item with no matching recipients
               const allocs = window.Allocation.allocateItems(totalQty, eligible);
               if (!Array.isArray(allocs) || !allocs.length) return;
               let itemUnits = 0;
-              allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, category, name, n); itemUnits += n; } });
+              allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, category, name, n, (it.unit||''), (it.unit||'')); itemUnits += n; } });
               if (itemUnits>0){ totalUnits += itemUnits; itemsProcessed++; }
             });
             resolve({ applied: itemsProcessed>0 && totalUnits>0, totalUnits, itemsProcessed });
@@ -446,13 +499,19 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         const ids = Array.isArray(window.__diAllocIds)?window.__diAllocIds:[];
         if (!ids.length){ return; }
         // 1) Create a run
-        const runRes = await fetch(`${API_BASE_URL}/allocations/index.php?action=create_run`, {
+        const apiBase = (typeof API_BASE_URL === 'string' && API_BASE_URL) ? API_BASE_URL : '/Capstone%20Project/php/api';
+        const runRes = await fetch(`${apiBase}/allocations/index.php?action=create_run`, {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ note: 'Allocate Now from DistributeItems', period_key: null })
         });
         const runJ = await runRes.json().catch(()=>null);
         const runId = (runRes.ok && runJ?.success && runJ?.data?.run_id) ? parseInt(runJ.data.run_id,10)||0 : 0;
-        if (!runId){ throw new Error(runJ?.error || 'Failed to create run'); }
+        if (!runId){
+          const meta = qs('#diAllocMeta');
+          if (meta) meta.innerHTML = `<div class="alert alert-danger py-2 mb-2">Failed to create run: ${runJ?.error || ('HTTP '+runRes.status)}</div>`;
+          try { console.error('[DI][AllocateNow] create_run failed', runRes.status, runJ); } catch(_){ }
+          return;
+        }
         // 2) Build items per recipient from DOM
         const perRecipient = new Map();
         ids.forEach(rid => {
@@ -470,21 +529,29 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           if (items.length) perRecipient.set(Number(rid), items);
         });
         // 3) Create results per recipient
+        let failures = 0;
         for (const [rid, items] of perRecipient.entries()){
           const payload = { recipient_id: rid, items, run_id: runId, allocation_code: null, notify_admin: false };
-          const res = await fetch(`${API_BASE_URL}/allocations/index.php?action=create_result`, {
+          const res = await fetch(`${apiBase}/allocations/index.php?action=create_result`, {
             method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(payload)
           });
           const j = await res.json().catch(()=>null);
-          // continue loop regardless of per-recipient errors
+          if (!res.ok || !j?.success){
+            failures++;
+            try { console.error('[DI][AllocateNow] create_result failed', { rid, status: res.status, j, payload }); } catch(_){ }
+          }
         }
-        // 4) Redirect to result page for this run
-        // Cache-bust to ensure latest DistributeResult.html and scripts load on first navigation
+        if (failures > 0){
+          const meta = qs('#diAllocMeta');
+          if (meta) meta.innerHTML = `<div class="alert alert-warning py-2 mb-2">Saved with ${failures} error(s). Open console → Network tab for details.</div>`;
+        }
+        // 4) Auto-redirect to result page for this run (with debug + cache-bust)
         const v = Date.now();
-        window.location.href = `DistributeResult.html?run_id=${encodeURIComponent(String(runId))}&v=${v}`;
+        window.location.href = `DistributeResult.html?run_id=${encodeURIComponent(String(runId))}&debug=1&v=${v}`;
       } catch(_){
         // If anything fails, keep button enabled for retry
+        const meta = qs('#diAllocMeta'); if (meta) meta.innerHTML = '<div class="alert alert-danger py-2 mb-2">Allocate Now failed. See console for details.</div>';
       } finally {
         try { btn.disabled = false; } catch(_){ }
       }
@@ -623,16 +690,51 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
               processResults: d => {
                 try {
                   const items = d?.data?.items || [];
-                  const seen = new Set();
-                  const names = [];
+                  const seen = new Map(); // name -> meta
+                  const today = new Date(); today.setHours(0,0,0,0);
                   items.forEach(it => {
-                    const n = (it.item_name ?? it.product_name ?? '').trim();
-                    if (n && !seen.has(n)) { seen.add(n); names.push({ id: n, text: n }); }
+                    const name = (it.item_name ?? it.product_name ?? '').trim();
+                    if (!name) return;
+                    // Exclude expired in search results
+                    const status = String(it?.derived_status || '').toLowerCase();
+                    const expRaw = String(it?.earliest_expiry || it?.expiry_date || '').trim();
+                    if (status === 'expired') return;
+                    if (expRaw){
+                      const exp = new Date(expRaw + 'T00:00:00');
+                      if (exp < today) return;
+                    }
+                    const totalQty = parseInt(it?.total_quantity ?? it?.quantity ?? 0, 10) || 0;
+                    if (!seen.has(name)){
+                      seen.set(name, { id: name, text: name, __qty: totalQty, __lowQty: totalQty < 20, __unit: (it?.unit||'') });
+                    } else {
+                      // Accumulate quantity if same name appears multiple times (safety)
+                      const cur = seen.get(name);
+                      const sum = (parseInt(cur.__qty,10)||0) + totalQty;
+                      cur.__qty = sum; cur.__lowQty = sum < 20; if (!cur.__unit && it?.unit) cur.__unit = it.unit;
+                      seen.set(name, cur);
+                    }
                   });
-                  return { results: names };
+                  return { results: Array.from(seen.values()) };
                 } catch(_){ return { results: [] }; }
               }
-            }
+            },
+            templateResult: (data) => {
+              try {
+                if (!data || !data.text) return data?.text || '';
+                const el = document.createElement('div');
+                el.className = 'd-flex align-items-center justify-content-between';
+                const left = document.createElement('span'); left.textContent = data.text;
+                el.appendChild(left);
+                if (data.__lowQty) {
+                  const b = document.createElement('span');
+                  b.className = 'badge bg-warning text-dark ms-2';
+                  b.textContent = '<20 qty';
+                  el.appendChild(b);
+                }
+                return $(el);
+              } catch(_) { return data?.text || ''; }
+            },
+            templateSelection: (data) => data?.text || ''
           });
         }
       }

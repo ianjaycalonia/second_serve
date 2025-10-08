@@ -58,7 +58,9 @@ try {
     }
 } catch (Exception $e) {
     error_log('User API error: ' . $e->getMessage());
-    sendJson(['success' => false, 'error' => 'Server error'], 500);
+    $debug = isset($_GET['debug']) ? (int)$_GET['debug'] : 0;
+    $msg = $debug ? $e->getMessage() : 'Server error';
+    sendJson(['success' => false, 'error' => $msg], 500);
 }
 
 function handleGetProfile() {

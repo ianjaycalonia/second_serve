@@ -25,6 +25,124 @@ try {
     // Only admins can view inventory for now
     requireRole(['admin']);
 
+    // GET /api/inventory/report-in - JSON rows shaped like Product In sample (one row per movement-in)
+    if ($method === 'GET' && preg_match('#^/(report-in|report-in/)\z#', $sub)) {
+        $db = Database::getInstance();
+        $start = isset($_GET['start']) ? trim($_GET['start']) : '';
+        $end   = isset($_GET['end']) ? trim($_GET['end']) : '';
+        $now = new DateTime('now');
+        if ($start === '') { $start = $now->format('Y-m-01'); }
+        if ($end === '') { $end = $now->format('Y-m-t'); }
+        $startTs = strtotime($start . ' 00:00:00');
+        $endTs   = strtotime($end . ' 23:59:59');
+        if ($startTs === false || $endTs === false) { sendJson(['success'=>false,'error'=>'Invalid start or end date'], 400); }
+        $startDt = date('Y-m-d H:i:s', $startTs);
+        $endDt   = date('Y-m-d H:i:s', $endTs);
+
+        $sql = "SELECT 
+                    DATE(im.created_at) AS entry_date,
+                    COALESCE(NULLIF(d.procurement_type, ''), NULLIF(im.mode, '')) AS donated_or_purchased,
+                    COALESCE(dp.organization_name, du.name) AS donor_name,
+                    dc.name AS donor_category,
+                    di.product_name,
+                    di.product_category,
+                    im.quantity,
+                    di.unit AS packed_by,
+                    di.total_weight,
+                    di.total_cost,
+                    di.expiry_date,
+                    up.name AS entry_by
+                FROM inventory_movements im
+                LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
+                LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
+                LEFT JOIN donations d ON d.donation_id = di.donation_id
+                LEFT JOIN users du ON du.user_id = d.donor_id
+                LEFT JOIN donor_profiles dprof ON dprof.user_id = du.user_id
+                LEFT JOIN donor_categories dc ON dc.id = dprof.donor_category_id
+                LEFT JOIN users up ON up.user_id = im.performed_by
+                WHERE im.direction = 'in' AND im.created_at BETWEEN ? AND ?
+                ORDER BY im.created_at ASC, im.id ASC";
+        $rows = $db->query($sql, [$startDt, $endDt])->fetchAll();
+        // Fallback: use current admin's name when entry_by is missing
+        $currentAdminName = '';
+        try {
+            $me = $db->query('SELECT name FROM users WHERE user_id = ?', [(int)currentUserId()])->fetch();
+            if ($me && isset($me['name'])) { $currentAdminName = (string)$me['name']; }
+        } catch (Exception $e) { /* ignore */ }
+        $data = [];
+        foreach ($rows as $r) {
+            $data[] = [
+                'ENTRY DATE' => $r['entry_date'] ?? '',
+                'DONATED/PURCHASED' => ($r['donated_or_purchased'] ?? 'donated'),
+                'DONOR NAME' => $r['donor_name'] ?? '',
+                'DONOR CATEGORY' => $r['donor_category'] ?? '',
+                'PRODUCT NAME' => $r['product_name'] ?? '',
+                'PRODUCT CATEGORY' => $r['product_category'] ?? '',
+                'QUANTITY' => (int)($r['quantity'] ?? 0),
+                'PACKED BY' => $r['packed_by'] ?? '',
+                'TOTAL WEIGHT(KG)' => ($r['total_weight'] !== null ? (float)$r['total_weight'] : null),
+                'TOTAL COST(P)' => ($r['total_cost'] !== null ? (float)$r['total_cost'] : null),
+                'EXPIRY DATE' => $r['expiry_date'] ?? '',
+                'ENTRY BY' => (isset($r['entry_by']) && $r['entry_by'] !== '' ? $r['entry_by'] : $currentAdminName),
+            ];
+        }
+        sendJson(['success'=>true,'data'=>['rows'=>$data,'start'=>$start,'end'=>$end]]);
+    }
+
+    // GET /api/inventory/report-out - JSON rows for Product Out (one row per movement)
+    if ($method === 'GET' && preg_match('#^/(report-out|report-out/)\z#', $sub)) {
+        $db = Database::getInstance();
+        $start = isset($_GET['start']) ? trim($_GET['start']) : '';
+        $end   = isset($_GET['end']) ? trim($_GET['end']) : '';
+        $now = new DateTime('now');
+        if ($start === '') { $start = $now->format('Y-m-01'); }
+        if ($end === '') { $end = $now->format('Y-m-t'); }
+        $startTs = strtotime($start . ' 00:00:00');
+        $endTs   = strtotime($end . ' 23:59:59');
+        if ($startTs === false || $endTs === false) { sendJson(['success'=>false,'error'=>'Invalid start or end date'], 400); }
+        $startDt = date('Y-m-d H:i:s', $startTs);
+        $endDt   = date('Y-m-d H:i:s', $endTs);
+
+        $sql = "SELECT 
+                    im.created_at AS date_out,
+                    di.product_name AS item,
+                    di.product_category AS category,
+                    im.quantity,
+                    im.mode,
+                    im.note,
+                    up.name AS performed_by
+                FROM inventory_movements im
+                LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
+                LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
+                LEFT JOIN users up ON up.user_id = im.performed_by
+                WHERE im.direction = 'out' AND im.created_at BETWEEN ? AND ?
+                ORDER BY im.created_at ASC, im.id ASC";
+        $rows = $db->query($sql, [$startDt, $endDt])->fetchAll();
+        $data = [];
+        foreach ($rows as $r) {
+            $data[] = [
+                'DATE OUT' => $r['date_out'] ?? '',
+                'ITEM' => $r['item'] ?? '',
+                'CATEGORY' => $r['category'] ?? '',
+                'QUANTITY' => (int)($r['quantity'] ?? 0),
+                'MODE' => $r['mode'] ?? '',
+                'NOTE' => $r['note'] ?? '',
+                'PERFORMED BY' => $r['performed_by'] ?? '',
+            ];
+        }
+        sendJson(['success'=>true,'data'=>['rows'=>$data,'start'=>$start,'end'=>$end]]);
+    }
+
+    // POST /api/inventory/import - bulk import rows parsed client-side (placed before GET list)
+    if ($method === 'POST' && preg_match('#^/(import|import/)\z#', $sub)) {
+        $data = getJsonInput();
+        $rows = isset($data['rows']) && is_array($data['rows']) ? $data['rows'] : [];
+        if (!$rows) { sendJson(['success'=>false,'error'=>'rows array is required'], 400); }
+        $inv = new Inventory();
+        $summary = $inv->importRows($rows, (int)currentUserId());
+        sendJson(['success'=>true, 'data'=> $summary]);
+    }
+
     // GET /api/inventory/list
     if ($method === 'GET' && preg_match('#^/(list|list/)\z#', $sub)) {
         $db = Database::getInstance();
@@ -44,76 +162,26 @@ try {
         $where = [];
         $params = [];
         if ($q !== '') {
-            $where[] = '(i.product_name LIKE ? OR i.product_category LIKE ?)';
+            $where[] = '(di.product_name LIKE ? OR di.product_category LIKE ?)';
             $params[] = '%' . $q . '%';
             $params[] = '%' . $q . '%';
         }
-
-    // POST /api/inventory/update-tags
-    if ($method === 'POST' && preg_match('#^/(update-tags|update-tags/)\z#', $sub)) {
-        $data = getJsonInput();
-        $scope = isset($data['scope']) ? sanitize($data['scope']) : '';
-        $tags = isset($data['tags']) ? trim((string)$data['tags']) : '';
-        if ($tags === '') { $tags = null; }
-        $inv = new Inventory();
-        try {
-            if ($scope === 'group'){
-                $item = isset($data['item_name']) ? sanitize($data['item_name']) : '';
-                $cat = isset($data['category']) ? sanitize($data['category']) : '';
-                if ($item === '' || $cat === '') { sendJson(['success'=>false,'error'=>'item_name and category are required'],400); }
-                $inv->updateTagsGroup($item, $cat, $tags);
-                sendJson(['success'=>true, 'message'=>'Tags updated']);
-            } else if ($scope === 'lot'){
-                $id = isset($data['inventory_id']) ? (int)$data['inventory_id'] : 0;
-                if ($id <= 0) { sendJson(['success'=>false,'error'=>'inventory_id is required'],400); }
-                $inv->updateTagsLot($id, $tags);
-                sendJson(['success'=>true, 'message'=>'Tags updated']);
-            } else {
-                sendJson(['success'=>false,'error'=>'scope must be group or lot'],400);
-            }
-        } catch (Exception $e){
-            sendJson(['success'=>false,'error'=>'Failed to update tags'],500);
-        }
-    }
-
-    // POST /api/inventory/backfill - scan donations with status 'Picked Up' and add missing inventory lots
-    if ($method === 'POST' && preg_match('#^/(backfill|backfill/)\z#', $sub)) {
-        // Admin only (already enforced above)
-        $db = Database::getInstance();
-        $inv = new Inventory();
-        $added = 0; $skipped = 0;
-        // Fetch donations that are Picked Up or Completed and not deleted
-        $rows = $db->query(
-            "SELECT donation_id FROM donations WHERE deleted_at IS NULL AND status IN ('Picked Up','Completed') ORDER BY donation_id ASC"
-        )->fetchAll();
-        foreach ($rows as $r) {
-            try {
-                // Inventory::addFromDonationRow is idempotent via source_donation_id unique check
-                $inv->addFromDonationId((int)$r['donation_id']);
-                $added++;
-            } catch (Exception $e) {
-                // If already exists, skip
-                $skipped++;
-            }
-        }
-        sendJson(['success' => true, 'data' => ['processed' => count($rows), 'added' => $added, 'skipped' => $skipped]]);
-    }
         if ($category !== '' && strtolower($category) !== 'all') {
-            $where[] = 'i.product_category = ?';
+            $where[] = 'di.product_category = ?';
             $params[] = $category;
         }
         if ($donorId) {
-            $where[] = 'i.donor_id = ?';
+            $where[] = 'd.donor_id = ?';
             $params[] = $donorId;
         }
         if ($dateRange && strtolower($dateRange) !== 'all') {
             // Filter by added_at relative ranges
             if ($dateRange === 'Today') {
-                $where[] = 'DATE(i.added_at) = CURDATE()';
+                $where[] = 'DATE(inv.added_at) = CURDATE()';
             } elseif ($dateRange === 'This Week') {
-                $where[] = 'YEARWEEK(i.added_at, 1) = YEARWEEK(CURDATE(), 1)';
+                $where[] = 'YEARWEEK(inv.added_at, 1) = YEARWEEK(CURDATE(), 1)';
             } elseif ($dateRange === 'This Month') {
-                $where[] = 'DATE_FORMAT(i.added_at, "%Y-%m") = DATE_FORMAT(CURDATE(), "%Y-%m")';
+                $where[] = 'DATE_FORMAT(inv.added_at, "%Y-%m") = DATE_FORMAT(CURDATE(), "%Y-%m")';
             }
         }
         $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
@@ -121,23 +189,26 @@ try {
         if ($groupMode === 'merge') {
             // Group by item_name + category
             $countSql = "SELECT COUNT(*) AS n FROM (
-                SELECT 1 FROM inventory i $whereSql GROUP BY i.product_name, i.product_category
+                SELECT 1 FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id INNER JOIN donations d ON d.donation_id = di.donation_id $whereSql GROUP BY di.product_name, di.product_category
             ) x";
             $total = (int)($db->query($countSql, $params)->fetch()['n'] ?? 0);
 
             $sql = "SELECT 
-                        i.product_name AS item_name,
-                        i.product_category AS category,
-                        SUM(i.quantity) AS total_quantity,
-                        MIN(i.expiry_date) AS earliest_expiry,
-                        MIN(i.added_at) AS first_added_at,
-                        MAX(i.added_at) AS last_added_at,
-                        GROUP_CONCAT(DISTINCT NULLIF(i.tags, '') ORDER BY i.tags SEPARATOR ',') AS tags_concat,
+                        di.product_name AS item_name,
+                        di.product_category AS category,
+                        SUM(inv.quantity) AS total_quantity,
+                        MIN(di.expiry_date) AS earliest_expiry,
+                        MIN(inv.added_at) AS first_added_at,
+                        MAX(inv.added_at) AS last_added_at,
+                        MIN(di.unit) AS unit,
+                        GROUP_CONCAT(DISTINCT NULLIF(di.tags, '') ORDER BY di.tags SEPARATOR ',') AS tags_concat,
                         COUNT(*) AS lots
-                    FROM inventory i
+                    FROM inventory inv
+                    INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                    INNER JOIN donations d ON d.donation_id = di.donation_id
                     $whereSql
-                    GROUP BY i.product_name, i.product_category
-                    ORDER BY COALESCE(MIN(i.expiry_date), '9999-12-31') ASC, i.product_name ASC
+                    GROUP BY di.product_name, di.product_category
+                    ORDER BY COALESCE(MIN(di.expiry_date), '9999-12-31') ASC, di.product_name ASC
                     LIMIT $limit OFFSET $offset";
             $rows = $db->query($sql, $params)->fetchAll();
             // Derive status using earliest_expiry
@@ -158,26 +229,29 @@ try {
                 $r['derived_status'] = $status;
             }
         } else {
-            $countSql = "SELECT COUNT(*) AS n FROM inventory i $whereSql";
+            $countSql = "SELECT COUNT(*) AS n FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id INNER JOIN donations d ON d.donation_id = di.donation_id $whereSql";
             $total = (int)($db->query($countSql, $params)->fetch()['n'] ?? 0);
 
             $sql = "SELECT 
-                        i.inventory_id AS id,
-                        i.product_name AS item_name,
-                        i.product_category AS category,
-                        i.quantity,
-                        i.expiry_date,
-                        i.added_at,
-                        i.donation_id AS source_donation_id,
-                        i.source_batch_id,
-                        i.donor_id,
+                        inv.inventory_id AS id,
+                        di.product_name AS item_name,
+                        di.product_category AS category,
+                        inv.quantity,
+                        di.expiry_date,
+                        inv.added_at,
+                        di.unit AS unit,
+                        d.donation_id AS source_donation_id,
+                        d.batch_id AS source_batch_id,
+                        d.donor_id,
                         dp.organization_name AS donor_org,
                         u.name AS donor_name
-                    FROM inventory i
-                    LEFT JOIN users u ON u.user_id = i.donor_id
+                    FROM inventory inv
+                    INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                    INNER JOIN donations d ON d.donation_id = di.donation_id
+                    LEFT JOIN users u ON u.user_id = d.donor_id
                     LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
                     $whereSql
-                    ORDER BY i.added_at DESC
+                    ORDER BY inv.added_at DESC
                     LIMIT $limit OFFSET $offset";
             $rows = $db->query($sql, $params)->fetchAll();
 
@@ -255,10 +329,11 @@ try {
                     im.performed_by,
                     up.name AS performed_by_name,
                     im.created_at,
-                    i.product_name AS item_name,
-                    i.product_category AS category
+                    di.product_name AS item_name,
+                    di.product_category AS category
                 FROM inventory_movements im
-                LEFT JOIN inventory i ON i.inventory_id = im.inventory_id
+                LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
+                LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
                 LEFT JOIN users ur ON ur.user_id = im.recipient_id
                 LEFT JOIN users up ON up.user_id = im.performed_by
                 $whereSql
@@ -330,5 +405,7 @@ try {
     echo json_encode(['success' => false, 'error' => 'Endpoint not found']);
 } catch (Exception $e) {
     error_log('Inventory API error: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'error' => 'Internal server error']);
+    $debug = isset($_GET['debug']) ? (int)$_GET['debug'] : 0;
+    $msg = $debug ? $e->getMessage() : 'Internal server error';
+    echo json_encode(['success' => false, 'error' => $msg]);
 }

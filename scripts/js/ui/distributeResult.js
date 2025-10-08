@@ -551,6 +551,56 @@
           window.location.href = `DistributeResult.html?period_key=${encodeURIComponent(String(raw))}`;
         });
 
+        // Hide Save Changes button per request (edits stay local unless other actions persist them)
+        try{ document.getElementById('saveChangesBtn')?.classList.add('d-none'); } catch(_){ }
+
+        // Utility: ensure a reusable delete-confirm modal exists
+        function ensureDeleteConfirmModal(){
+          let modal = document.getElementById('drDeleteConfirmModal');
+          if (modal) return modal;
+          modal = document.createElement('div');
+          modal.id = 'drDeleteConfirmModal';
+          modal.className = 'modal fade';
+          modal.tabIndex = -1;
+          modal.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title">Remove item</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                  <p>Are you sure you want to remove this item from the allocation?</p>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                  <button type="button" class="btn btn-danger" id="drDeleteConfirmBtn">Remove</button>
+                </div>
+              </div>
+            </div>`;
+          document.body.appendChild(modal);
+          return modal;
+        }
+
+        function confirmDelete(){
+          return new Promise(resolve => {
+            try{
+              const modalEl = ensureDeleteConfirmModal();
+              const bsModal = new bootstrap.Modal(modalEl);
+              const btn = modalEl.querySelector('#drDeleteConfirmBtn');
+              const cleanup = ()=>{
+                try{ btn?.removeEventListener('click', onYes); }catch(_){ }
+                try{ modalEl?.removeEventListener('hidden.bs.modal', onHide); }catch(_){ }
+              };
+              const onYes = ()=>{ cleanup(); bsModal.hide(); resolve(true); };
+              const onHide = ()=>{ cleanup(); resolve(false); };
+              btn?.addEventListener('click', onYes, { once:true });
+              modalEl.addEventListener('hidden.bs.modal', onHide, { once:true });
+              bsModal.show();
+            } catch(_){ resolve(false); }
+          });
+        }
+
         // Dirty tracking
         let __DR_DIRTY__ = false;
         function markDirty(){ __DR_DIRTY__ = true; }
@@ -570,12 +620,117 @@
           if (isLocked && (e.target.classList?.contains('dr-name') || e.target.classList?.contains('dr-qty'))){
             e.preventDefault();
           }
+          // Save on Enter key for convenience
+          if (!isLocked && (e.target.classList?.contains('dr-name') || e.target.classList?.contains('dr-qty'))){
+            if (e.key === 'Enter'){
+              e.preventDefault();
+              try { e.target.blur(); } catch(_){}
+            }
+          }
         });
+
+        // Toast helpers
+        function ensureToastContainer(){
+          let el = document.getElementById('drToastContainer');
+          if (el) return el;
+          el = document.createElement('div');
+          el.id = 'drToastContainer';
+          el.className = 'toast-container position-fixed top-0 end-0 p-3';
+          document.body.appendChild(el);
+          return el;
+        }
+        function showToast(message, type = 'success', delayMs = 1800){
+          try{
+            const cont = ensureToastContainer();
+            const toast = document.createElement('div');
+            const bg = type === 'success' ? 'text-bg-success' : type === 'danger' ? 'text-bg-danger' : type === 'warning' ? 'text-bg-warning' : 'text-bg-info';
+            toast.className = `toast align-items-center ${bg} border-0`;
+            toast.setAttribute('role', 'status');
+            toast.setAttribute('aria-live', 'polite');
+            toast.setAttribute('aria-atomic', 'true');
+            toast.innerHTML = `
+              <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+              </div>`;
+            cont.appendChild(toast);
+            const t = new bootstrap.Toast(toast, { delay: delayMs, autohide: true });
+            toast.addEventListener('hidden.bs.toast', ()=>{ try{ toast.remove(); }catch(_){ } }, { once:true });
+            t.show();
+          } catch(_){ /* ignore toast failures */ }
+        }
+        // Notify saver via toast
+        function notifySaved(msg='Edits saved.', type='success'){
+          showToast(msg, type);
+        }
+
+        // Auto-save on blur for name/qty edits
+        async function saveRowIfNeeded(tr){
+          if (!tr) return;
+          const itemId = parseInt(tr.getAttribute('data-item-id')||'0',10)||0;
+          const allocId = parseInt(tr.getAttribute('data-allocation-id')||'0',10)||0;
+          const name = tr.querySelector('.dr-name')?.value?.trim() || '';
+          const qty = Math.max(0, parseInt(tr.querySelector('.dr-qty')?.value||'0',10)||0);
+          // If locked or no meaningful data, skip
+          if (isLocked) return;
+          try{
+            if (itemId > 0){
+              // Existing item: update
+              let ok=false;
+              if (window.AllocationsAPI && typeof window.AllocationsAPI.updateItem==='function'){
+                await window.AllocationsAPI.updateItem(itemId, name, qty); ok=true;
+              } else {
+                const res = await fetch(`${API_BASE_URL}/allocations/index.php?action=update_item`, {
+                  method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
+                  body: JSON.stringify({ item_id: itemId, item_name: name, quantity: qty })
+                });
+                const j = await res.json().catch(()=>null);
+                ok = !!(res.ok && j?.success);
+                if (!ok) throw new Error(j?.error || `HTTP ${res.status}`);
+              }
+              if (ok){ __DR_DIRTY__ = false; notifySaved('Item updated.'); }
+            } else if (allocId && name && qty>0){
+              // New row: add
+              let newId = 0; let ok=false;
+              if (window.AllocationsAPI && typeof window.AllocationsAPI.addItem==='function'){
+                await window.AllocationsAPI.addItem(allocId, name, null, qty); ok=true; // category null here
+              } else {
+                const res = await fetch(`${API_BASE_URL}/allocations/index.php?action=add_item`, {
+                  method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
+                  body: JSON.stringify({ allocation_id: allocId, item_name: name, quantity: qty })
+                });
+                const j = await res.json().catch(()=>null);
+                ok = !!(res.ok && j?.success);
+                if (ok){ newId = parseInt(j?.data?.item_id || j?.data?.id || '0',10)||0; }
+                if (!ok) throw new Error(j?.error || `HTTP ${res.status}`);
+              }
+              if (ok){
+                if (newId) tr.setAttribute('data-item-id', String(newId));
+                __DR_DIRTY__ = false; notifySaved('Item added.');
+              }
+            }
+          } catch(err){
+            const em = err?.message || 'Failed to save edit';
+            showMsg(feedback, em, 'danger');
+            showToast(em, 'danger', 2500);
+          }
+        }
+
+        // Delegate blur handling to container (use capture so it fires reliably)
+        container.addEventListener('blur', (e)=>{
+          const t = e.target;
+          if (!(t && (t.classList?.contains('dr-name') || t.classList?.contains('dr-qty')))) return;
+          const tr = t.closest('tr');
+          if (!tr) return;
+          saveRowIfNeeded(tr);
+        }, true);
         container.addEventListener('click', async (e)=>{
           if (isLocked) return;
           const btn = e.target?.closest?.('.dr-del');
           if (!btn) return;
           const tr = btn.closest('tr'); if (!tr) return;
+          const confirmed = await confirmDelete();
+          if (!confirmed) return;
           const itemId = parseInt(tr.getAttribute('data-item-id')||'0',10)||0;
           if (itemId > 0){
             try{
@@ -590,7 +745,11 @@
                 if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
               }
               tr.remove();
-            } catch(err){ showMsg(feedback, err?.message || 'Failed to delete item', 'danger'); }
+            } catch(err){
+              const em = err?.message || 'Failed to delete item';
+              showMsg(feedback, em, 'danger');
+              showToast(em, 'danger', 2500);
+            }
           } else {
             // Unsaved row, just remove from DOM
             tr.remove();

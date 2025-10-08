@@ -212,8 +212,8 @@ class Allocation
             throw new Exception('Items array cannot be empty');
         }
 
-        // Verify recipient exists
-        $recipientRow = $this->db->query('SELECT user_id FROM users WHERE user_id = ? AND role = "recipient"', [$recipientId])->fetch();
+        // Verify recipient exists (do not over-constrain by role label; roles may vary per deployment)
+        $recipientRow = $this->db->query('SELECT user_id FROM users WHERE user_id = ? LIMIT 1', [$recipientId])->fetch();
         if (!$recipientRow) {
             throw new Exception('Recipient not found or not a valid recipient');
         }
@@ -233,6 +233,15 @@ class Allocation
 
             // Create allocation items
             $this->addAllocationItems($allocationId, $items);
+
+            // Ensure at least one item was saved to satisfy FK and business rules
+            $rowCnt = $this->db->query('SELECT COUNT(*) AS c FROM allocation_items WHERE allocation_id = ?', [$allocationId])->fetch();
+            $cnt = (int)($rowCnt['c'] ?? 0);
+            if ($cnt <= 0) {
+                // Remove empty header and report a clear message
+                $this->db->query('DELETE FROM allocations WHERE allocation_id = ?', [$allocationId]);
+                throw new Exception('No items were resolved to real inventory. Check item names/categories against donation_items/inventory.');
+            }
 
             $this->db->commit();
 
@@ -412,17 +421,48 @@ class Allocation
             // Support both old format (item_name, category, quantity) and new format (inventory_id, quantity)
             $inventoryId = (int)($it['inventory_id'] ?? $it['inventoryId'] ?? 0);
 
-            // If no inventory_id provided, try to find inventory item by name and category
+            // If no inventory_id provided, resolve via donation_items join (normalized schema)
             if ($inventoryId <= 0) {
                 $name = trim((string)($it['item_name'] ?? $it['name'] ?? ''));
                 $category = trim((string)($it['category'] ?? $it['product_category'] ?? ''));
 
                 if ($name !== '') {
-                    // Find inventory item by name and category
+                    // 1) Try exact by name + category
                     $invRow = $this->db->query(
-                        'SELECT inventory_id FROM inventory WHERE product_name = ? AND (product_category = ? OR (? = "" AND product_category IS NULL)) LIMIT 1',
+                        'SELECT inv.inventory_id
+                           FROM inventory inv
+                           INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                          WHERE di.product_name = ?
+                            AND (di.product_category = ? OR ? = "")
+                          ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
+                          LIMIT 1',
                         [$name, $category, $category]
                     )->fetch();
+                    // 2) Fallback: exact by name only
+                    if (!$invRow){
+                        $invRow = $this->db->query(
+                            'SELECT inv.inventory_id
+                               FROM inventory inv
+                               INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                              WHERE di.product_name = ?
+                              ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
+                              LIMIT 1',
+                            [$name]
+                        )->fetch();
+                    }
+                    // 3) Fallback: LIKE by name when name long enough
+                    if (!$invRow && strlen($name) >= 3){
+                        $pattern = '%' . $name . '%';
+                        $invRow = $this->db->query(
+                            'SELECT inv.inventory_id
+                               FROM inventory inv
+                               INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                              WHERE di.product_name LIKE ?
+                              ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
+                              LIMIT 1',
+                            [$pattern]
+                        )->fetch();
+                    }
                     if ($invRow) {
                         $inventoryId = (int)$invRow['inventory_id'];
                     }
@@ -450,17 +490,18 @@ class Allocation
         foreach ($rows as $r){
             $aid = (int)$r['allocation_id'];
 
-            // Use new schema (inventory-linked)
+            // Use normalized schema: inventory -> donation_items for product fields
             $items = $this->db->query('
                 SELECT
                     ai.id,
                     ai.inventory_id,
                     ai.quantity,
-                    i.product_name,
-                    i.product_category,
-                    i.unit
+                    di.product_name,
+                    di.product_category,
+                    di.unit
                 FROM allocation_items ai
-                LEFT JOIN inventory i ON ai.inventory_id = i.inventory_id
+                LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
+                LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
                 WHERE ai.allocation_id = ?
                 ORDER BY ai.id ASC
             ', [$aid])->fetchAll();
@@ -534,13 +575,50 @@ class Allocation
     }
 
     // === Item CRUD ===
-    public function addItem(int $allocationId, int $inventoryId, int $quantity): int
+    public function addItem($allocationId, $arg2, $arg3 = null, $arg4 = null, $unit = null): int
     {
         $allocationId = (int)$allocationId;
-        $inventoryId = (int)$inventoryId;
-        $quantity = (int)$quantity;
-
-        if ($allocationId <= 0 || $inventoryId <= 0 || $quantity <= 0) return 0;
+        if ($allocationId <= 0) return 0;
+        // Overloaded:
+        // - addItem(allocationId, inventoryId:int, quantity:int)
+        // - addItem(allocationId, item_name:string, category:?string, quantity:int, unit:?string)
+        $inventoryId = 0; $quantity = 0; $name = null; $category = null;
+        if (is_int($arg2) || ctype_digit((string)$arg2)){
+            $inventoryId = (int)$arg2;
+            $quantity = (int)$arg3;
+            if ($inventoryId <= 0 || $quantity <= 0) return 0;
+        } else {
+            $name = trim((string)$arg2);
+            $category = $arg3 !== null ? (string)$arg3 : null;
+            $quantity = (int)$arg4;
+            if ($name === '' || $quantity <= 0) return 0;
+            // Resolve inventory by donation_items
+            $row = $this->db->query(
+                'SELECT inv.inventory_id
+                   FROM inventory inv
+                   INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                  WHERE di.product_name = ?
+                    AND (di.product_category = ? OR ? IS NULL OR ? = "")
+                  ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
+                  LIMIT 1',
+                [$name, $category, $category, $category]
+            )->fetch();
+            if (!$row){
+                $row = $this->db->query(
+                    'SELECT inv.inventory_id FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id WHERE di.product_name = ? ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC LIMIT 1',
+                    [$name]
+                )->fetch();
+            }
+            if (!$row && strlen($name) >= 3){
+                $pattern = '%'.$name.'%';
+                $row = $this->db->query(
+                    'SELECT inv.inventory_id FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id WHERE di.product_name LIKE ? ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC LIMIT 1',
+                    [$pattern]
+                )->fetch();
+            }
+            $inventoryId = $row ? (int)$row['inventory_id'] : 0;
+            if ($inventoryId <= 0) return 0;
+        }
 
         // Verify inventory item exists
         $invRow = $this->db->query('SELECT inventory_id FROM inventory WHERE inventory_id = ?', [$inventoryId])->fetch();
@@ -554,29 +632,41 @@ class Allocation
         return (int)($row['id'] ?? 0);
     }
 
-    public function updateItem(int $itemId, ?int $inventoryId = null, ?int $quantity = null): bool
+    public function updateItem(int $itemId, ?string $itemName = null, ?string $category = null, ?int $quantity = null, ?string $unit = null): bool
     {
         $itemId = (int)$itemId;
         if ($itemId <= 0) return false;
-
         $sets = []; $vals = [];
 
-        if ($inventoryId !== null){
-            if ($inventoryId <= 0) return false;
-            // Verify inventory item exists
-            $invRow = $this->db->query('SELECT inventory_id FROM inventory WHERE inventory_id = ?', [$inventoryId])->fetch();
-            if (!$invRow) return false;
-            $sets[] = 'inventory_id = ?';
-            $vals[] = $inventoryId;
+        // If a name/category provided, resolve inventory_id
+        if ($itemName !== null){
+            $name = trim((string)$itemName);
+            $cat  = $category !== null ? (string)$category : null;
+            if ($name !== ''){
+                $row = $this->db->query(
+                    'SELECT inv.inventory_id
+                       FROM inventory inv
+                       INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                      WHERE di.product_name = ?
+                        AND (di.product_category = ? OR ? IS NULL OR ? = "")
+                      ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
+                      LIMIT 1',
+                    [$name, $cat, $cat, $cat]
+                )->fetch();
+                if (!$row){
+                    $row = $this->db->query('SELECT inv.inventory_id FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id WHERE di.product_name = ? ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC LIMIT 1', [$name])->fetch();
+                }
+                if (!$row && strlen($name) >= 3){
+                    $pattern = '%'.$name.'%';
+                    $row = $this->db->query('SELECT inv.inventory_id FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id WHERE di.product_name LIKE ? ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC LIMIT 1', [$pattern])->fetch();
+                }
+                if ($row){ $sets[] = 'inventory_id = ?'; $vals[] = (int)$row['inventory_id']; }
+            }
         }
 
-        if ($quantity !== null){
-            $sets[] = 'quantity = ?';
-            $vals[] = max(0, (int)$quantity);
-        }
+        if ($quantity !== null){ $sets[] = 'quantity = ?'; $vals[] = max(0, (int)$quantity); }
 
         if (empty($sets)) return true;
-
         $sql = 'UPDATE allocation_items SET ' . implode(', ', $sets) . ' WHERE id = ?';
         $vals[] = $itemId;
         $this->db->query($sql, $vals);

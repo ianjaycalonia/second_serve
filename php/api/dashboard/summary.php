@@ -20,9 +20,13 @@ try {
 
     $db = Database::getInstance();
 
-    // Total meals donated (sum of quantities of completed/picked up donations)
+    // Total meals donated: sum of donation_items.quantity for donations that are Picked Up/Completed
     $row = $db->query(
-        "SELECT COALESCE(SUM(quantity), 0) AS total_meals FROM donations WHERE status IN ('Picked Up','Completed') AND deleted_at IS NULL"
+        "SELECT COALESCE(SUM(di.quantity), 0) AS total_meals
+           FROM donation_items di
+           INNER JOIN donations d ON d.donation_id = di.donation_id
+          WHERE d.status IN ('Picked Up','Completed')
+            AND d.deleted_at IS NULL"
     )->fetch();
     $totalMeals = (int)($row['total_meals'] ?? 0);
 

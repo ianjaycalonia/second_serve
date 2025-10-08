@@ -88,21 +88,43 @@ class Auth {
         // Merge profile fields according to role for convenience
         $profile = [];
         if ($user['role'] === 'recipient') {
-            // Join profile with primary contact directly (no view dependency)
-            $p = $this->db->query(
-                'SELECT rp.organization_name, rp.organization_type, rp.address,
-                        pc.position_designation, pc.contact_number, pc.email
-                 FROM recipient_profiles rp
-                 LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
-                 WHERE rp.user_id = ?',
-                [$user['user_id']]
-            )->fetch();
+            // Some schemas may not include organization_type or primary_contact_id; be resilient
+            try {
+                $p = $this->db->query(
+                    'SELECT rp.organization_name, rp.organization_type, rp.address,
+                            pc.position_designation, pc.contact_number, pc.email
+                     FROM recipient_profiles rp
+                     LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
+                     WHERE rp.user_id = ?',
+                    [$user['user_id']]
+                )->fetch();
+            } catch (Exception $e) {
+                // Fallback without optional columns/join
+                $p = $this->db->query(
+                    'SELECT organization_name, address FROM recipient_profiles WHERE user_id = ?',
+                    [$user['user_id']]
+                )->fetch();
+                if ($p && !array_key_exists('organization_type', $p)) { $p['organization_type'] = null; }
+                $p['position_designation'] = $p['position_designation'] ?? null;
+                $p['contact_number'] = $p['contact_number'] ?? null;
+                $p['email'] = $p['email'] ?? null;
+            }
             $profile = $p ?: [];
         } elseif ($user['role'] === 'donor') {
-            $p = $this->db->query(
-                'SELECT organization_name, donor_category, contact_number, address FROM donor_profiles WHERE user_id = ?',
-                [$user['user_id']]
-            )->fetch();
+            // Some schemas may not include donor_category; attempt with it, then fallback
+            try {
+                $p = $this->db->query(
+                    'SELECT organization_name, donor_category, contact_number, address FROM donor_profiles WHERE user_id = ?',
+                    [$user['user_id']]
+                )->fetch();
+            } catch (Exception $e) {
+                // Fallback without donor_category
+                $p = $this->db->query(
+                    'SELECT organization_name, contact_number, address FROM donor_profiles WHERE user_id = ?',
+                    [$user['user_id']]
+                )->fetch();
+                if ($p && !array_key_exists('donor_category', $p)) { $p['donor_category'] = null; }
+            }
             $profile = $p ?: [];
         } elseif ($user['role'] === 'admin') {
             $p = $this->db->query(
