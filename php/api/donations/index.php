@@ -203,7 +203,7 @@ try {
                         $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : '');
                     }
                 } catch (Exception $e) { /* ignore */ }
-                $countItems = count($ids);
+                $countItems = count($itemIds);
                 foreach ($admins as $admin) {
                     $notif->create([
                         'user_id' => (int)$admin['user_id'],
@@ -370,11 +370,17 @@ try {
         $items = [];
         try {
             $db = Database::getInstance();
+            // Prefer normalized schema: inventory -> donation_items
             $params = [];
-            $where = "WHERE product_name IS NOT NULL AND product_name <> ''";
-            if ($category !== '') { $where .= " AND product_category = ?"; $params[] = $category; }
-            if ($q !== '') { $where .= " AND product_name LIKE ?"; $params[] = ('%'.$q.'%'); }
-            $sql = "SELECT DISTINCT product_name AS name FROM inventory $where ORDER BY name ASC LIMIT ".$limit;
+            $where = "WHERE di.product_name IS NOT NULL AND di.product_name <> ''";
+            if ($category !== '') { $where .= " AND di.product_category = ?"; $params[] = $category; }
+            if ($q !== '') { $where .= " AND di.product_name LIKE ?"; $params[] = ('%'.$q.'%'); }
+            $sql = "SELECT DISTINCT di.product_name AS name
+                      FROM inventory inv
+                      INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                      $where
+                      ORDER BY name ASC
+                      LIMIT $limit";
             $rows = $db->query($sql, $params)->fetchAll();
             foreach ($rows as $r) {
                 $n = isset($r['name']) ? trim((string)$r['name']) : '';
@@ -386,7 +392,14 @@ try {
         // Fallback to donations-based search if inventory is empty
         if (empty($items)) {
             try {
-                $names = $service->searchItemNames(sanitize($q), $limit, ($category!==''?sanitize($category):null));
+                // Fallback to donation_items directly when service is unavailable or returns none
+                $db = Database::getInstance();
+                $params = [];
+                $where = "WHERE di.product_name IS NOT NULL AND di.product_name <> ''";
+                if ($category !== '') { $where .= " AND di.product_category = ?"; $params[] = $category; }
+                if ($q !== '') { $where .= " AND di.product_name LIKE ?"; $params[] = ('%'.$q.'%'); }
+                $rows = $db->query("SELECT DISTINCT di.product_name AS name FROM donation_items di $where ORDER BY name ASC LIMIT $limit", $params)->fetchAll();
+                $names = array_map(function($r){ return trim((string)($r['name'] ?? '')); }, $rows ?: []);
                 if (is_array($names)) { $items = $names; }
             } catch (Exception $e) {
                 error_log('items endpoint donations fallback failed: ' . $e->getMessage());
@@ -396,7 +409,7 @@ try {
         sendJson(['success' => true, 'items' => $items]);
     }
 
-    // GET /api/donations/categories - list distinct categories primarily from inventory, fallback to donations
+    // GET /api/donations/categories - list distinct categories from normalized schema; fallback to donations
     if ($method === 'GET' && preg_match('#^/(categories|categories/)\z#', $sub)) {
         requireRole(['donor','admin']);
         $cats = [];
@@ -404,18 +417,18 @@ try {
             $db = Database::getInstance();
             // Optional client search term (Select2 may send 'term' or we pass 'q')
             $term = isset($_GET['q']) ? trim((string)$_GET['q']) : (isset($_GET['term']) ? trim((string)$_GET['term']) : '');
-            // First try inventory categories
+            // Prefer categories from donation_items (normalized)
             if ($term !== '') {
                 $like = '%' . $term . '%';
-                $rows = $db->query("SELECT DISTINCT product_category AS category FROM inventory WHERE product_category IS NOT NULL AND product_category <> '' AND product_category LIKE ? ORDER BY category ASC", [$like])->fetchAll();
+                $rows = $db->query("SELECT DISTINCT di.product_category AS category FROM donation_items di WHERE di.product_category IS NOT NULL AND di.product_category <> '' AND di.product_category LIKE ? ORDER BY category ASC", [$like])->fetchAll();
             } else {
-                $rows = $db->query("SELECT DISTINCT product_category AS category FROM inventory WHERE product_category IS NOT NULL AND product_category <> '' ORDER BY category ASC")->fetchAll();
+                $rows = $db->query("SELECT DISTINCT di.product_category AS category FROM donation_items di WHERE di.product_category IS NOT NULL AND di.product_category <> '' ORDER BY category ASC")->fetchAll();
             }
             foreach ($rows as $r) {
                 $t = isset($r['category']) ? trim((string)$r['category']) : '';
                 if ($t !== '') { $cats[] = $t; }
             }
-            // If none in inventory, fallback to donations.type
+            // If none, fallback to donations.type
             if (empty($cats)) {
                 if ($term !== '') {
                     $like = '%' . $term . '%';

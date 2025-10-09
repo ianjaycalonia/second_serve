@@ -111,7 +111,7 @@ class Donation
                             MIN(d.donation_id) AS id,
                             d.donor_id,
                             u.name AS donor_name,
-                            dp.organization_name AS donor_org,
+                            COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
                             CONCAT('Batch (', COUNT(di.donation_item_id), ' items)') AS name,
                             NULL AS type,
                             SUM(di.quantity) AS quantity,
@@ -131,7 +131,7 @@ class Donation
                             d.donation_id AS id,
                             d.donor_id,
                             u.name AS donor_name,
-                            dp.organization_name AS donor_org,
+                            COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
                             di.product_name AS name,
                             di.product_category AS type,
                             di.quantity,
@@ -152,7 +152,7 @@ class Donation
                     LIMIT 500";
             return $this->db->query($sql, $params)->fetchAll();
         } else {
-            $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
+            $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
                            di.product_category AS type, di.product_name AS name, di.quantity, di.expiry_date, d.status, d.created_at,
                            d.batch_id AS batch_id,
                            0 AS is_group
@@ -170,7 +170,7 @@ class Donation
     public function getById(int $id): ?array
     {
         $row = $this->db->query(
-            "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
+            "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
                     di.product_category AS type, di.product_name AS name, di.quantity, di.expiry_date, d.status, d.created_at
              FROM donations d
              LEFT JOIN users u ON u.user_id = d.donor_id
@@ -201,7 +201,7 @@ class Donation
     // List items by batch id (non-archived)
     public function listByBatch(string $batchId): array
     {
-        $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, dp.organization_name AS donor_org,
+        $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
                        di.product_category AS type, di.product_name AS name, di.quantity, di.expiry_date, d.status, d.created_at
                 FROM donations d
                 LEFT JOIN users u ON u.user_id = d.donor_id

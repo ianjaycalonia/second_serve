@@ -9,6 +9,28 @@
 
   // Helpers
   function getEl(id){ return document.getElementById(id); }
+  function cleanupModals(){
+    try{
+      document.querySelectorAll('.modal-backdrop').forEach(n=>n.remove());
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+    }catch(_){ }
+  }
+  // Ensure cleanup runs whenever any Bootstrap modal finishes hiding
+  try{
+    document.addEventListener('hidden.bs.modal', function(){
+      cleanupModals();
+    }, true);
+    // When a modal is shown, ensure we don't accumulate multiple backdrops
+    document.addEventListener('shown.bs.modal', function(){
+      try{
+        const backs = Array.from(document.querySelectorAll('.modal-backdrop'));
+        // Keep only the last backdrop if multiples exist
+        if (backs.length > 1){ backs.slice(0, backs.length - 1).forEach(n=>n.remove()); }
+      }catch(_){ }
+    }, true);
+  }catch(_){ }
   function badge(status){
     switch(status){
       case 'Pending': return '<span class="badge bg-warning text-dark">Pending</span>';
@@ -258,7 +280,7 @@
     if(zreset) zreset.addEventListener('click',()=>{ scale=1; apply(); });
   }
   function bindGroupToggle(){ document.addEventListener('click',e=>{ const btn=e.target.closest('.batch-toggle'); if(!btn) return; const bid=btn.closest('.group-row').getAttribute('data-batch-id'); const child=document.querySelector(`.child-container[data-batch-id="${bid}"]`); if(child){ child.classList.toggle('d-none'); btn.textContent=child.classList.contains('d-none')?'Show':'Hide'; } }); }
-  function bindDeleteConfirm(){ const modal=getEl('deleteConfirmModal'), confirm=getEl('deleteConfirmBtn'); if(!(modal&&confirm)) return; confirm.addEventListener('click',async function(){ const id=this.getAttribute('data-id')||'', batch=this.getAttribute('data-batch')||''; try{ if(batch && !id) await Api.deleteDonationBatch(batch); else if(id) await Api.deleteDonation(id); else return; try{ bootstrap.Modal.getOrCreateInstance(modal).hide(); }catch(_){ } const items=await Api.fetchAdminList(); window.__adminDonationRaw=Array.isArray(items)?items.slice():[]; renderTable(applyFilters(window.__adminDonationRaw)); }catch(err){ console.error('Delete failed:',err); try{ const body=modal.querySelector('.modal-body'); if(body) body.innerHTML=`<div class="text-danger">Failed to delete: ${escapeHtml(err.message||'Unknown error')}</div>`; }catch(_){ } } }); }
+  function bindDeleteConfirm(){ const modal=getEl('deleteConfirmModal'), confirm=getEl('deleteConfirmBtn'); if(!(modal&&confirm)) return; confirm.addEventListener('click',async function(){ const id=this.getAttribute('data-id')||'', batch=this.getAttribute('data-batch')||''; try{ if(batch && !id) await Api.deleteDonationBatch(batch); else if(id) await Api.deleteDonation(id); else return; try{ bootstrap.Modal.getOrCreateInstance(modal).hide(); cleanupModals(); }catch(_){ cleanupModals(); } const items=await Api.fetchAdminList(); window.__adminDonationRaw=Array.isArray(items)?items.slice():[]; renderTable(applyFilters(window.__adminDonationRaw)); }catch(err){ console.error('Delete failed:',err); try{ const body=modal.querySelector('.modal-body'); if(body) body.innerHTML=`<div class="text-danger">Failed to delete: ${escapeHtml(err.message||'Unknown error')}</div>`; }catch(_){ } } }); }
   function bindFoodSafetySubmit(){
     async function handle(result){
       const form=getEl('foodSafetyForm'); if(!form) return;
@@ -270,7 +292,7 @@
       if(btnSubmit) btnSubmit.disabled=true; if(btnFail) btnFail.disabled=true;
       try{
         await Api.submitFoodSafetyCheck(fd);
-        if(modal&&bootstrap?.Modal) bootstrap.Modal.getOrCreateInstance(modal).hide();
+        if(modal&&bootstrap?.Modal) { try{ bootstrap.Modal.getOrCreateInstance(modal).hide(); } finally { cleanupModals(); } }
         try{ const fm=getEl('fsFailReasonModal'); if(fm&&bootstrap?.Modal) bootstrap.Modal.getOrCreateInstance(fm).hide(); }catch(_){ }
         try{ const msg=getEl('fsSuccessMessage'); if(msg) msg.textContent=(result==='passed')?'Items updated. Status set to Picked Up.':'Food safety recorded as Failed.'; const sm=getEl('fsSuccessModal'); if(sm&&bootstrap?.Modal) bootstrap.Modal.getOrCreateInstance(sm).show(); }catch(_){ }
         const newStatus=(result==='passed')?'Picked Up':'Failed Safety', failVal=(result==='failed')?(getEl('fsFailReasonHidden')?.value||'').trim():'', batchId=getEl('fsBatchId')?.value||'', donationId=getEl('fsDonationId')?.value||'';
@@ -282,7 +304,7 @@
       finally{ if(btnSubmit) btnSubmit.disabled=false; if(btnFail) btnFail.disabled=false; const h=getEl('fsFailReasonHidden'); if(h) h.value=''; }
     }
     const ok=getEl('foodSafetySubmitBtn'); if(ok) ok.addEventListener('click',()=>handle('passed'));
-    const fail=getEl('foodSafetyFailBtn'); if(fail) fail.addEventListener('click',()=>{ const fm=getEl('fsFailReasonModal'), fin=getEl('fsFailReasonInput'), cfm=getEl('fsFailReasonConfirmBtn'), hid=getEl('fsFailReasonHidden'), base=getEl('foodSafetyModal'); if(!(fm&&cfm)) return; try{ let baseModal=null; if(base) try{ baseModal=bootstrap.Modal.getOrCreateInstance(base); baseModal.hide(); }catch(_){ } const m=bootstrap.Modal.getOrCreateInstance(fm); if(fin){ fin.value=''; setTimeout(()=>fin.focus(),200); } cfm.replaceWith(cfm.cloneNode(true)); const btn=getEl('fsFailReasonConfirmBtn'), cancel=fm.querySelector('[data-bs-dismiss="modal"]'); if(cancel){ cancel.addEventListener('click',()=>{ try{ if(baseModal) baseModal.show(); }catch(_){ } },{once:true}); } btn.addEventListener('click',async()=>{ const reason=(fin?.value||'').trim(); if(!reason){ alert('Failure reason is required.'); return; } if(hid) hid.value=reason; try{ m.hide(); }catch(_){ } await handle('failed'); }); m.show(); }catch(_){ } });
+    const fail=getEl('foodSafetyFailBtn'); if(fail) fail.addEventListener('click',()=>{ const fm=getEl('fsFailReasonModal'), fin=getEl('fsFailReasonInput'), cfm=getEl('fsFailReasonConfirmBtn'), hid=getEl('fsFailReasonHidden'), base=getEl('foodSafetyModal'); if(!(fm&&cfm)) return; try{ let baseModal=null; if(base) try{ baseModal=bootstrap.Modal.getOrCreateInstance(base); baseModal.hide(); cleanupModals(); }catch(_){ cleanupModals(); } const m=bootstrap.Modal.getOrCreateInstance(fm); if(fin){ fin.value=''; setTimeout(()=>fin.focus(),200); } cfm.replaceWith(cfm.cloneNode(true)); const btn=getEl('fsFailReasonConfirmBtn'), cancel=fm.querySelector('[data-bs-dismiss="modal"]'); if(cancel){ cancel.addEventListener('click',()=>{ try{ if(baseModal) baseModal.show(); }catch(_){ } },{once:true}); } btn.addEventListener('click',async()=>{ const reason=(fin?.value||'').trim(); if(!reason){ alert('Failure reason is required.'); return; } if(hid) hid.value=reason; try{ m.hide(); cleanupModals(); }catch(_){ cleanupModals(); } await handle('failed'); }); m.show(); }catch(_){ } });
   }
   function bindActions(){
     document.addEventListener('click',async e=>{

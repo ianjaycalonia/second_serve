@@ -444,7 +444,7 @@ class Inventory
                 $donorDisplay = ($donOrg !== '' ? $donOrg : $donName);
                 $this->db->query(
                     "INSERT INTO donations (donor_id, admin_in_charge, procurement_type, donor_name, entry_date, remarks, status, created_at)
-                     VALUES (?, ?, ?, ?, NOW(), NULL, 'Picked Up', NOW())",
+                     VALUES (?, ?, ?, ?, NOW(), NULL, 'Completed', NOW())",
                     [ $donorId, $adminInCharge, $procType, ($donorDisplay !== '' ? $donorDisplay : NULL) ]
                 );
                 $donationId = (int)$this->db->lastInsertId();
