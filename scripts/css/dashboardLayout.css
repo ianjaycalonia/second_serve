@@ -23,18 +23,8 @@ body.sidebar-collapsed {
 }
 
 body::-webkit-scrollbar {
-  /* width: 8px; */
   width: 0;
 }
-
-/* body::-webkit-scrollbar-thumb {
-  background-color: #888;
-  border-radius: 4px;
-}
-
-body::-webkit-scrollbar-thumb:hover {
-  background-color: #555;
-} */
 
 nav {
   position: sticky;
@@ -166,12 +156,10 @@ main {
   transition: all 0.3s ease;
 
   /* Breadcrumbs */
-
   .breadcrumb {
     --bs-breadcrumb-divider: ">";
     --bs-breadcrumb-padding-x: 0;
     --bs-breadcrumb-divider-color: var(--primary-color);
-
     font-weight: bold;
 
     & .breadcrumb-item:not(:last-child) a {
@@ -189,7 +177,6 @@ main {
   }
 
   /* End of Breadcrumbs */
-
   .card {
     border: none;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
@@ -208,10 +195,10 @@ main {
         border-radius: 0.5em;
         background: linear-gradient(
           120deg,
-          var(--primary-color),
-          rgba(0, 160, 176, 0.65)
+          var(--primary-background),
+          rgb(255, 255, 255)
         );
-        color: var(--highlight-color);
+        color: var(--primary-background);
         margin-right: 20px;
 
         i {
@@ -234,21 +221,127 @@ main {
       }
     }
   }
+}
+.card-hovered {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  cursor: pointer;
+}
 
-  .card-accent {
-    position: relative;
+.card-hovered:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+.card-hovered .login-icon {
+  opacity: 1;
+}
+
+/* Create a "paused" overlay using the first frame */
+.card-hovered .login-icon::before {
+  content: "";
+  display: block;
+}
+
+/* Smooth transition (optional aesthetic) */
+.card-hovered .login-icon {
+  transition: opacity 0.3s ease;
+}
+.bell-icon {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 50%;
+  transition: filter 0.3s ease;
+}
+
+/* When no notification: freeze the animation by replacing with static frame */
+.bell-icon.paused {
+  /* trick: draw the GIF as a background image instead of playing <img> */
+  content: "";
+  background-image: url('images/bell.gif');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  filter: grayscale(0.3);
+}
+
+/* hide the original gif frame when paused */
+.bell-icon.paused[src] {
+  opacity: 0;
+}
+
+
+/* Hide submenu when sidebar is collapsed */
+.sidebar.collapsed .collapse {
+  display: none !important;
+}
+
+/* Optional: rotate the chevron when expanded */
+.nav-link[aria-expanded="true"] .chevron-icon {
+  transform: rotate(180deg);
+  transition: transform 0.3s;
+}
+.dashboard-icon {
+  border-radius: 50%; /* makes the image circular */
+  object-fit: cover;   /* ensures the GIF fills the circle without distortion */
+}
+
+/* ✅ Animated glowing accent - Red & Orange only */
+.card-accent {
+  position: relative;
+}
+/* Normal sidebar: icon and text aligned horizontally */
+.dashboard-link {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* space between icon and text */
+}
+
+/* When sidebar is collapsed */
+.sidebar.collapsed .dashboard-link {
+  justify-content: center; /* centers content horizontally */
+}
+
+.sidebar.collapsed .dashboard-link .sidebar-text {
+  display: none; /* hide the text when collapsed */
+}
+.dashboard-link {
+  transition: all 0.3s ease;
+}
+.card-accent::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+
+  /* Animated gradient - only red & orange */
+  background: linear-gradient(
+    90deg,
+    #ff0000, /* red */
+    #ffaa00, /* orange */
+    #ff0000,
+    #ffbb00,
+    #ff0000
+  );
+  background-size: 400% 100%;
+  animation: accentColorChange 8s infinite linear;
+}
+
+@keyframes accentColorChange {
+  0% {
+    background-position: 0% 50%;
   }
-
-  .card-accent::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 6px;
-    background: var(--secondary-color);
-    border-top-left-radius: 0.5rem;
-    border-top-right-radius: 0.5rem;
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
   }
 }
+
 
 @media (max-width: 768px) {
   body {

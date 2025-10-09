@@ -46,7 +46,7 @@
             data-bs-target="#notificationsModal"
             aria-label="Open notifications"
           >
-            <i class="bi bi-bell-fill fs-5"></i>
+            <img src="images/bell.gif" alt="Login Icon" class="bell-icon" width="20" height="20" />
             <span
               id="notificationsBadge"
               class="position-absolute translate-middle badge rounded-pill bg-danger"
@@ -95,63 +95,150 @@
       </div>
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
-    <aside class="collapsed">
+    <aside class="sidebar collapsed">
       <a
-        href="AdminDashboard.html"
-        class="nav-link active"
-        data-bs-toggle="tooltip"
-        data-bs-placement="right"
-        data-bs-custom-class="custom-tooltip"
-        data-bs-title="Dashboard"
-        ><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a
+      href="AdminDashboard.html"
+      class="nav-link active d-flex align-items-center dashboard-link"
+      data-bs-toggle="tooltip"
+      data-bs-placement="right"
+      data-bs-custom-class="custom-tooltip"
+      data-bs-title="Dashboard"
       >
+      <img src="images/home.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/>
+      <span class="sidebar-text">Dashboard</span>
+      </a>
       <a
         href="Donation.html"
-        class="nav-link"
+        class="nav-link d-flex align-items-center dashboard-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Donations"
-        ><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a
       >
+         <img src="images/values.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/>
+      <span class="sidebar-text">Donation</span>
+      </a>
+
+     <div class="nav-item position-relative">
       <a
-        href="Donors.html"
-        class="nav-link"
-        data-bs-toggle="tooltip"
-        data-bs-placement="right"
-        data-bs-custom-class="custom-tooltip"
-        data-bs-title="Donors"
-        ><i class="bi bi-person-fill me-2"></i><span>Donors</span></a
-      >
-      <a
-        href="Recipient.html"
-        class="nav-link"
-        data-bs-toggle="tooltip"
-        data-bs-placement="right"
-        data-bs-custom-class="custom-tooltip"
-        data-bs-title="Recipients"
-        ><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a
-      >
-      <a
-        href="ReportAndAnalytics.html"
-        class="nav-link"
-        data-bs-toggle="tooltip"
-        data-bs-placement="right"
-        data-bs-custom-class="custom-tooltip"
-        data-bs-title="Reports & Analytics"
-        ><i class="bi bi-bar-chart-fill me-2"></i
-        ><span>Reports & Analytics</span></a
-      >
-      <a
-        href="Inventory.html"
-        class="nav-link"
-        data-bs-toggle="tooltip"
-        data-bs-placement="right"
-        data-bs-custom-class="custom-tooltip"
-        data-bs-title="Inventory"
-        ><i class="bi bi-box2-fill me-2"></i><span>Inventory</span></a
-      >
-    </aside>
+      href="#distributionMenu"
+      class="nav-link d-flex align-items-center sidebar-tooltip dashboard-link"
+      data-bs-toggle="collapse"
+      aria-expanded="false"
+      aria-controls="distributionMenu"
+      data-bs-placement="right"
+      data-bs-custom-class="custom-tooltip"
+      data-bs-title="Distribution"
+      data-tooltip="true"
+    >
+      <span class="d-flex align-items-center">
+         <img src="images/diagram.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/>
+      <span class="sidebar-text">Distribution</span>
+      </span>
+    </a>
+    <div class="collapse" id="distributionMenu">
+      <ul class="nav flex-column ms-3">
+        <li class="nav-item">
+          <a class="nav-link" href="RecipientsList.html">
+          <img src="images/checklist.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/></i> Recipients List
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="DistributeItems.html">
+          <img src="images/diagram.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/> Allocation
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="DistributeResult.html">
+          <img src="images/business (1).gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/> Result
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="Schedule.html">
+          <img src="images/calendar.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/> Schedule
+          </a>
+        </li>
+      </ul>
+
+    </div>
+  </div>
+  <a
+    href="Donors.html"
+    class="nav-link d-flex align-items-center dashboard-link"
+    data-bs-toggle="tooltip"
+    data-bs-placement="right"
+    ata-bs-custom-class="custom-tooltip"
+    data-bs-title="Donors"
+    >
+    <img src="images/employee.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/>
+      <span class="sidebar-text">Donors</span>
+
+    <a
+    href="Recipient.html"
+    class="nav-link d-flex align-items-center dashboard-link"
+    data-bs-toggle="tooltip"
+    data-bs-placement="right"
+    data-bs-custom-class="custom-tooltip"
+    data-bs-title="Recipients"
+    >
+    <img src="images/leader.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/>
+      <span class="sidebar-text">Recipient</span>
+    <a
+    href="ReportAndAnalytics.html"
+    class="nav-link d-flex align-items-center dashboard-link"
+    data-bs-toggle="tooltip"
+    data-bs-placement="right"
+    ata-bs-custom-class="custom-tooltip"
+    data-bs-title="Reports & Analytics"
+    >
+    <img src="images/business.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/>
+      <span class="sidebar-text">Reports & Analytics</span>
+    <a
+    href="Inventory.html"
+    class="nav-link d-flex align-items-center dashboard-link"
+    data-bs-toggle="tooltip"
+    data-bs-placement="right"
+    data-bs-custom-class="custom-tooltip"
+    data-bs-title="Inventory"
+    >
+    <img src="images/available.gif" 
+          alt="Dashboard Icon" 
+          class="dashboard-icon" 
+          width="35" height="35"/>
+      <span class="sidebar-text">Inventory</span>
+    </a>
+</aside>
+
     <main>
       <div aria-label="breadcrumb">
         <ol class="breadcrumb">
@@ -180,16 +267,18 @@
 
       <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
         <div class="col">
+          <div class="card-hovered">
           <div class="card card-accent h-100">
-            <div class="card-body">
-              <h6 class="card-title">Successful Donations</h6>
-              <div class="card-elements">
+              <div class="card-body">
+                <h6 class="card-title">Successful Donations</h6>
+                <div class="card-elements">
                 <div class="card-icon">
-                  <i class="bi bi-bucket-fill"></i>
+                  <img src="images/food.gif" alt="Login Icon" class="login-icon" width="50" height="50" />
                 </div>
                 <div class="card-text">
                   <h3 class="metric-number" id="totalDonations">0</h3>
                   <small class="text-muted">Donated</small>
+                  </div>
                 </div>
               </div>
             </div>
@@ -197,12 +286,13 @@
         </div>
 
         <div class="col">
+          <div class="card-hovered">
           <div class="card card-accent h-100">
             <div class="card-body">
               <h6 class="card-title">Upcoming Donations</h6>
               <div class="card-elements">
                 <div class="card-icon">
-                  <i class="bi bi-truck"></i>
+                  <img src="images/delivery-truck.gif" alt="Login Icon" class="login-icon" width="50" height="50" />
                 </div>
                 <div class="card-text">
                   <h3 class="metric-number" id="upcomingDonations">0</h3>
@@ -210,16 +300,18 @@
                 </div>
               </div>
             </div>
+            </div>
           </div>
         </div>
 
         <div class="col">
+          <div class="card-hovered">
           <div class="card card-accent h-100">
             <div class="card-body">
               <h6 class="card-title">Active Donors</h6>
               <div class="card-elements">
                 <div class="card-icon">
-                  <i class="bi bi-people-fill"></i>
+                  <img src="images/to-do-list.gif" alt="Login Icon" class="login-icon" width="50" height="50" />
                 </div>
                 <div class="card-text">
                   <h3 class="metric-number" id="activeDonors">0</h3>
@@ -228,20 +320,23 @@
               </div>
             </div>
           </div>
+          </div>
         </div>
 
         <div class="col">
+          <div class="card-hovered">
           <div class="card card-accent h-100">
             <div class="card-body">
               <h6 class="card-title">Active Recipients</h6>
               <div class="card-elements">
                 <div class="card-icon">
-                  <i class="bi bi-building-check"></i>
+                  <img src="images/clipboard.gif" alt="Login Icon" class="login-icon" width="50" height="50"/>
                 </div>
                 <div class="card-text">
                   <h3 class="metric-number" id="activeRecipients">0</h3>
                   <small class="text-muted">All Time</small>
                 </div>
+              </div>
               </div>
             </div>
           </div>
@@ -597,5 +692,8 @@
     <script src="scripts/js/charts/adminDashboard.js"></script>
     <script src="scripts/js/ui/adminDistribute.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
-  </body>
+    <script src="scripts/js/ui/animation.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    
+</body>
 </html>
