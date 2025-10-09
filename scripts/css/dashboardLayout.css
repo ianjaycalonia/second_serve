@@ -23,6 +23,7 @@ body.sidebar-collapsed {
 }
 
 body::-webkit-scrollbar {
+
   width: 0;
 }
 
@@ -153,13 +154,16 @@ main {
   grid-area: main;
   padding: 20px;
   background-color: var(--secondary-background);
-  transition: all 0.3s ease;
+  transition: all 0.3s ease; 
+
 
   /* Breadcrumbs */
+  
   .breadcrumb {
     --bs-breadcrumb-divider: ">";
     --bs-breadcrumb-padding-x: 0;
     --bs-breadcrumb-divider-color: var(--primary-color);
+
     font-weight: bold;
 
     & .breadcrumb-item:not(:last-child) a {
@@ -176,7 +180,8 @@ main {
     }
   }
 
-  /* End of Breadcrumbs */
+  /* End of Breadcrumbs 123*/
+  
   .card {
     border: none;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
