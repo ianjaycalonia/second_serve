@@ -1,0 +1,110 @@
+@import url(globals.css);
+
+.profile-elements {
+  .profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    div {
+      label {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+    }
+  }
+
+  .profile-photo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    img {
+      width: 150px;
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-bottom: 1rem;
+      border: 4px solid var(--primary-color);
+    }
+  }
+
+  .profile-security {
+    .d-flex {
+      gap: 1.2rem;
+
+      div {
+        label {
+          font-weight: 600;
+          font-size: 0.95rem;
+        }
+      }
+    }
+  }
+}
+
+#myTab {
+  .nav-link {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--header-text-color);
+    border: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+
+    &:hover {
+      color: var(--primary-color);
+      border-bottom: 2px solid var(--primary-color);
+      cursor: pointer;
+    }
+
+    &.active {
+      color: var(--primary-color);
+      background-color: transparent;
+      border-bottom: 2px solid var(--primary-color);
+    }
+  }
+}
+
+#myTabContent {
+  #general-tab-pane {
+    .general-settings {
+      margin-top: 1rem;
+      .general-settings-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+
+        div {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+
+          label {
+            font-weight: 600;
+            font-size: 0.95rem;
+          }
+
+          input {
+            width: 100%;
+          }
+        }
+      }
+
+      .system-photo {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+
+        img {
+          width: 300px;
+          aspect-ratio: 1 / 1;
+          border-radius: 50%;
+          object-fit: cover;
+          margin-bottom: 1rem;
+          border: 4px solid var(--primary-color);
+        }
+      }
+    }
+  }
+}

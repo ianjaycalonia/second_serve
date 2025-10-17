@@ -25,16 +25,27 @@
     if (!sel) return;
     const current = sel.value;
     const opts = ["<option>All</option>"];
-    const names = Array.from(new Set((items || []).map((c) => String(c.name || "").trim()).filter(Boolean))).sort();
-    for (const n of names) { opts.push(`<option>${escapeHtml(n)}</option>`); }
+    const names = Array.from(
+      new Set(
+        (items || []).map((c) => String(c.name || "").trim()).filter(Boolean)
+      )
+    ).sort();
+    for (const n of names) {
+      opts.push(`<option>${escapeHtml(n)}</option>`);
+    }
     sel.innerHTML = opts.join("");
-    if (names.includes(current)) { sel.value = current; }
+    if (names.includes(current)) {
+      sel.value = current;
+    }
   }
 
   async function loadCategories() {
     try {
       const url = `${API_BASE_URL}/categories/index.php?action=list&active=1&debug=1&t=${Date.now()}`;
-      const res = await fetch(url, { credentials: "include", headers: { Accept: "application/json" } });
+      const res = await fetch(url, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
       const j = await res.json().catch(() => null);
       const items = Array.isArray(j?.data?.items) ? j.data.items : [];
       await loadCategoriesIntoSelect("categorySelectDesktop", items);
@@ -183,7 +194,9 @@
     try {
       const hide = document.getElementById("hideExpiredToggle");
       if (hide && hide.checked) {
-        filtered = filtered.filter((r) => String(r.derived_status || "In Stock") !== "Expired");
+        filtered = filtered.filter(
+          (r) => String(r.derived_status || "In Stock") !== "Expired"
+        );
       }
     } catch (_) {}
     if (!Array.isArray(filtered) || filtered.length === 0) {
@@ -222,7 +235,8 @@
 
   function getPageSize() {
     const sel = document.getElementById("pageSizeSelect");
-    const stored = parseInt(localStorage.getItem("inventory_page_size") || "0", 10) || 0;
+    const stored =
+      parseInt(localStorage.getItem("inventory_page_size") || "0", 10) || 0;
     let val = stored || 20;
     if (sel) {
       const s = parseInt(sel.value || "0", 10) || 0;
@@ -235,7 +249,8 @@
     try {
       const filters = getFilters();
       const limit = getPageSize();
-      const hideExpired = !!document.getElementById("hideExpiredToggle")?.checked;
+      const hideExpired =
+        !!document.getElementById("hideExpiredToggle")?.checked;
       if (!hideExpired) {
         // Normal server-side pagination
         const data = await fetchInventory({ ...filters, page, limit });
@@ -246,18 +261,26 @@
       }
 
       // Hide expired ON: build a client-side non-expired collection across all server pages
-      const key = JSON.stringify({ k: 'inv', ...filters });
-      const cache = window.__invNonExpiredCache || (window.__invNonExpiredCache = {});
+      const key = JSON.stringify({ k: "inv", ...filters });
+      const cache =
+        window.__invNonExpiredCache || (window.__invNonExpiredCache = {});
       let items = Array.isArray(cache[key]?.items) ? cache[key].items : null;
       if (!items) {
         // Fetch page 1 with max chunk (100)
         const first = await fetchInventory({ ...filters, page: 1, limit: 100 });
         const totalPages = Math.max(1, first?.pagination?.pages || 1);
         const collected = [];
-        const filterFn = (arr) => (arr || []).filter(r => String(r.derived_status || 'In Stock') !== 'Expired');
+        const filterFn = (arr) =>
+          (arr || []).filter(
+            (r) => String(r.derived_status || "In Stock") !== "Expired"
+          );
         collected.push(...filterFn(first.items));
         for (let p = 2; p <= totalPages; p++) {
-          const next = await fetchInventory({ ...filters, page: p, limit: 100 });
+          const next = await fetchInventory({
+            ...filters,
+            page: p,
+            limit: 100,
+          });
           collected.push(...filterFn(next.items));
         }
         items = collected;
@@ -269,7 +292,10 @@
       const cur = Math.min(Math.max(1, page), pages);
       const start = (cur - 1) * limit;
       const slice = items.slice(start, start + limit);
-      window.__inventoryLast = { items: slice, pagination: { page: cur, pages, total } };
+      window.__inventoryLast = {
+        items: slice,
+        pagination: { page: cur, pages, total },
+      };
       renderTable(slice);
       renderPagination({ page: cur, pages });
     } catch (err) {
@@ -335,29 +361,20 @@
     if (pageSize) {
       // Initialize from localStorage if available
       try {
-        const stored = parseInt(localStorage.getItem("inventory_page_size") || "0", 10) || 0;
-        if (stored && [20,30,50].includes(stored)) {
+        const stored =
+          parseInt(localStorage.getItem("inventory_page_size") || "0", 10) || 0;
+        if (stored && [20, 30, 50].includes(stored)) {
           pageSize.value = String(stored);
         }
       } catch (_) {}
       pageSize.addEventListener("change", () => {
         const v = parseInt(pageSize.value || "0", 10) || 20;
-        try { localStorage.setItem("inventory_page_size", String(v)); } catch (_) {}
+        try {
+          localStorage.setItem("inventory_page_size", String(v));
+        } catch (_) {}
         loadAndRender(1);
       });
     }
-  }
-
-  function ensureSearchBox() {
-    // Add a search input next to the title bar if not present
-    const bar = document.querySelector("main > .d-flex");
-    if (!bar) return;
-    if (document.getElementById("searchInventoryInput")) return;
-    const wrapper = document.createElement("div");
-    wrapper.className = "ms-auto";
-    wrapper.innerHTML =
-      '<input id="searchInventoryInput" class="form-control form-control-sm" placeholder="Search items or category">';
-    bar.appendChild(wrapper);
   }
 
   // Compute current week's period key (YYYY-MM-Wn) using Sunday as week start
@@ -704,7 +721,9 @@
       try {
         submitBtn.disabled = true;
         // Map preview rows to expected payload fields
-        const header = Array.isArray(previewData.header) ? previewData.header : [];
+        const header = Array.isArray(previewData.header)
+          ? previewData.header
+          : [];
         const rows = Array.isArray(previewData.rows) ? previewData.rows : [];
         if (!header.length || !rows.length) {
           alert("No parsed rows to import.");
@@ -712,21 +731,24 @@
         }
         const ix = (name) => header.indexOf(String(name || "").toLowerCase());
         const pick = (...keys) => {
-          for (const k of keys) { const i = ix(k); if (i >= 0) return i; }
+          for (const k of keys) {
+            const i = ix(k);
+            if (i >= 0) return i;
+          }
           return -1;
         };
-        const iItem = pick("item_name","name","product_name");
-        const iCat = pick("category","product_category");
+        const iItem = pick("item_name", "name", "product_name");
+        const iCat = pick("category", "product_category");
         const iQty = ix("quantity");
         const iExpiry = ix("expiry_date");
         const iTags = ix("tags");
-        const iUnit = pick("unit","packed_by");
-        const iTW = pick("total_weight","total_weight_kg");
-        const iTC = pick("total_cost","total_cost_p");
+        const iUnit = pick("unit", "packed_by");
+        const iTW = pick("total_weight", "total_weight_kg");
+        const iTC = pick("total_cost", "total_cost_p");
         const iBatch = ix("source_batch_id");
-        const iEntryDate = pick("entry_date","added_at");
+        const iEntryDate = pick("entry_date", "added_at");
         const iDonEmail = ix("donor_email");
-        const iDonOrg = pick("donor_org","donor_organization","donor_name");
+        const iDonOrg = pick("donor_org", "donor_organization", "donor_name");
         const iDonCategory = ix("donor_category");
         const iDonName = ix("donor_name");
         const iEntryBy = ix("entry_by");
@@ -753,32 +775,42 @@
           if (!item || qty <= 0) continue; // skip invalid rows
           const rowObj = {
             item_name: item,
-            category: (iCat >= 0 ? (r[iCat] || "") : "").toString().trim(),
+            category: (iCat >= 0 ? r[iCat] || "" : "").toString().trim(),
             quantity: qty,
-            expiry_date: (iExpiry >= 0 ? (r[iExpiry] || "") : "").toString().trim(),
-            tags: (iTags >= 0 ? (r[iTags] || "") : "").toString().trim(),
+            expiry_date: (iExpiry >= 0 ? r[iExpiry] || "" : "")
+              .toString()
+              .trim(),
+            tags: (iTags >= 0 ? r[iTags] || "" : "").toString().trim(),
           };
           // Prefer explicit unit column when present and non-empty; otherwise use unit derived from QUANTITY tail
           if (iUnit >= 0) {
             const unitVal = (r[iUnit] || "").toString().trim();
-            if (unitVal) rowObj.unit = unitVal; else if (derivedUnit) rowObj.unit = derivedUnit;
+            if (unitVal) rowObj.unit = unitVal;
+            else if (derivedUnit) rowObj.unit = derivedUnit;
           } else if (derivedUnit) {
             rowObj.unit = derivedUnit;
           }
           if (iTW >= 0) rowObj.total_weight = (r[iTW] || "").toString().trim();
           if (iTC >= 0) rowObj.total_cost = (r[iTC] || "").toString().trim();
-          if (iBatch >= 0) rowObj.source_batch_id = (r[iBatch] || "").toString().trim();
-          if (iDonEmail >= 0) rowObj.donor_email = (r[iDonEmail] || "").toString().trim();
+          if (iBatch >= 0)
+            rowObj.source_batch_id = (r[iBatch] || "").toString().trim();
+          if (iDonEmail >= 0)
+            rowObj.donor_email = (r[iDonEmail] || "").toString().trim();
           if (iDonOrg >= 0) {
             const val = (r[iDonOrg] || "").toString().trim();
             // Use as donor_org; also send donor_name if absent to help matching
             rowObj.donor_org = val;
-            if (!("donor_name" in rowObj) && iDonName < 0) rowObj.donor_name = val;
+            if (!("donor_name" in rowObj) && iDonName < 0)
+              rowObj.donor_name = val;
           }
-          if (iDonName >= 0) rowObj.donor_name = (r[iDonName] || "").toString().trim();
-          if (iDonCategory >= 0) rowObj.donor_category = (r[iDonCategory] || "").toString().trim();
-          if (iEntryBy >= 0) rowObj.entry_by = (r[iEntryBy] || "").toString().trim();
-          if (iEntryDate >= 0) rowObj.entry_date = (r[iEntryDate] || "").toString().trim();
+          if (iDonName >= 0)
+            rowObj.donor_name = (r[iDonName] || "").toString().trim();
+          if (iDonCategory >= 0)
+            rowObj.donor_category = (r[iDonCategory] || "").toString().trim();
+          if (iEntryBy >= 0)
+            rowObj.entry_by = (r[iEntryBy] || "").toString().trim();
+          if (iEntryDate >= 0)
+            rowObj.entry_date = (r[iEntryDate] || "").toString().trim();
           payloadRows.push(rowObj);
         }
         if (!payloadRows.length) {
@@ -789,7 +821,10 @@
         const res = await fetch(url, {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
           body: JSON.stringify({ rows: payloadRows }),
         });
         const j = await res.json().catch(() => null);
@@ -810,10 +845,17 @@
         await loadAndRender(p);
         // Report summary (show first few error reasons if any)
         if (errs.length) {
-          try { console.error("Inventory import errors:", errs); } catch (_) {}
+          try {
+            console.error("Inventory import errors:", errs);
+          } catch (_) {}
         }
-        const firstErrors = errs.slice(0, 5).map(e => `#${e?.row ?? "?"}: ${e?.error ?? "unknown error"}`).join("\n");
-        const msg = `Imported ${inserted} row(s).${errs.length ? ` Skipped ${errs.length} invalid.` : ""}${firstErrors ? `\n\nSample errors:\n${firstErrors}` : ""}`;
+        const firstErrors = errs
+          .slice(0, 5)
+          .map((e) => `#${e?.row ?? "?"}: ${e?.error ?? "unknown error"}`)
+          .join("\n");
+        const msg = `Imported ${inserted} row(s).${
+          errs.length ? ` Skipped ${errs.length} invalid.` : ""
+        }${firstErrors ? `\n\nSample errors:\n${firstErrors}` : ""}`;
         alert(msg);
       } catch (err) {
         console.error("Import failed:", err);
@@ -826,7 +868,6 @@
 
   async function init() {
     // init
-    ensureSearchBox();
     bindFilters();
     bindActions();
     await loadCategories();

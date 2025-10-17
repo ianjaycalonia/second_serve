@@ -4,38 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Distribute Items</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
+    />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link rel="stylesheet" href="scripts/css/adminDashboard.modal.css" />
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <style>
-      /* Ensure Allocation tab content is not collapsed by flex/grid overrides */
-      .card.card-accent { display: block; }
-      .card.card-accent .tab-content { display: block; }
-      /* Tab visibility rules: only active pane shows and has height */
-      .tab-content { position: relative; display: block !important; height: auto !important; }
-      .tab-content .tab-pane { display: none; height: 0; }
-      .tab-content .tab-pane.active.show { display: block !important; height: auto !important; min-height: 220px; }
-      /* Ensure carousel shows content */
-      #di-alloc { min-height: 220px; }
-      #diAllocCarousel { min-height: 180px; }
-      #diAllocCarousel .carousel-inner { display: block; min-height: 180px; overflow: visible; }
-      /* Restore Bootstrap behavior: only active item is visible to avoid stacking */
-      #diAllocCarousel .carousel-item { display: none !important; }
-      #diAllocCarousel .carousel-item.active { display: block !important; min-height: 140px; }
-      /* Make slide titles tidy on one line */
-      #diAllocCarouselInner h6 { margin-bottom: .25rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      /* Keep indicators in a single row with wrapping as needed */
-      #diAllocCarousel .carousel-indicators { position: static; bottom: auto; margin-top: .5rem; display: flex; flex-wrap: wrap; gap: .25rem; justify-content: center; }
-      #diAllocCarousel .carousel-indicators [data-bs-target] { background-color: #6c757d; }
-      #diAllocCarousel .carousel-indicators .active { background-color: #0d6efd; }
-      /* Hide indicators so only arrows are used */
-      #diAllocIndicators { display: none !important; }
-      /* Disable built-in overlay controls to avoid click-capture */
-      #diAllocCarousel .carousel-control-prev,
-      #diAllocCarousel .carousel-control-next { display:none !important; pointer-events: none !important; }
-    </style>
+    <link rel="stylesheet" href="scripts/css/distributeItems.css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -44,60 +27,255 @@
           <button id="sidebarToggle" class="btn">
             <i class="bi bi-list fs-4"></i>
           </button>
-          <img src="images/simply_share.png" alt="Simply Share Logo" class="logo" />
-          <div class="brand d-none d-md-block">Second Serve by <span>Simply</span><span>Share</span></div>
-        </div>
-
-      <!-- Generic Alert Modal for Allocation Messages -->
-      <div class="modal fade" id="diAlertModal" tabindex="-1" aria-labelledby="diAlertModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title" id="diAlertModalLabel">Notice</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="diAlertBody">Done.</div>
-            <div class="modal-footer">
-              <a id="diAlertPrimaryLink" href="#" class="btn btn-primary d-none">Open</a>
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
+          <div class="brand d-none d-md-block">
+            Second Serve by <span>Simply</span><span>Share</span>
           </div>
         </div>
-      </div>
         <div class="nav-icons">
-          <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
-            <i class="bi bi-bell-fill fs-5"></i>
-            <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: 0.6rem"></span>
+          <a
+            class="nav-link position-relative"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <img src="images/bell.gif" alt="Login Icon" class="bell-icon" />
+            <span
+              id="notificationsBadge"
+              class="position-absolute translate-middle badge rounded-pill bg-danger"
+              style="top: 6px; right: 2px; display: none; font-size: 0.6rem"
+            ></span>
           </a>
-          <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
+          <a
+            class="nav-link"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
             <i class="bi bi-envelope-fill fs-5"></i>
           </a>
           <div class="dropdown">
-            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <a
+              class="nav-link dropdown-toggle d-flex align-items-center justify-content-start"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
               <i class="bi bi-person-circle fs-5"></i>
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Profile</a></li>
-              <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
+              <li>
+                <a class="dropdown-item" href="adminProfile.html"
+                  ><i class="bi bi-person-fill"></i>Profile</a
+                >
+              </li>
+              <li>
+                <a class="dropdown-item" href="adminSettings.html"
+                  ><i class="bi bi-gear-fill"></i>Settings</a
+                >
+              </li>
               <li><hr class="dropdown-divider" /></li>
-              <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#"
+                  ><i class="bi bi-box-arrow-right"></i>Logout</a
+                >
+              </li>
             </ul>
           </div>
         </div>
       </div>
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
-    <aside class="collapsed">
-      <a href="AdminDashboard.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Dashboard"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
-      <a href="RecipientsList.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Recipients List"><i class="bi bi-clipboard-plus-fill me-2"></i><span>Distribution: Recipients</span></a>
-      <a href="DistributeItems.html" class="nav-link active" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Allocation"><i class="bi bi-diagram-3-fill me-2"></i><span>Distribution: Allocation</span></a>
-      <a href="DistributeResult.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Result"><i class="bi bi-box2-heart-fill me-2"></i><span>Distribution: Result</span></a>
-      <a href="Schedule.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Schedule"><i class="bi bi-calendar2-week-fill me-2"></i><span>Schedule</span></a>
+    <aside class="sidebar collapsed">
+      <a
+        href="AdminDashboard.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Dashboard"
+      >
+        <img
+          src="images/home.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+
+        <span class="sidebar-text">Dashboard</span>
+      </a>
+      <a
+        href="Donation.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donations"
+      >
+        <img
+          src="images/values.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donation</span>
+      </a>
+
+      <div class="nav-item position-relative">
+        <a
+          href="#distributionMenu"
+          class="nav-link active d-flex align-items-center sidebar-tooltip dashboard-link"
+          data-bs-toggle="collapse"
+          aria-expanded="false"
+          aria-controls="distributionMenu"
+          data-bs-placement="right"
+          data-bs-custom-class="custom-tooltip"
+          data-bs-title="Distribution"
+        >
+          <span class="d-flex align-items-center">
+            <img
+              src="images/diagram.gif"
+              alt="Dashboard Icon"
+              class="dashboard-icon"
+              width="35"
+              height="35"
+            />
+            <span class="sidebar-text">Distribution</span>
+          </span>
+        </a>
+        <div class="collapse" id="distributionMenu">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
+            <li class="nav-item">
+              <a class="nav-link" href="RecipientsList.html">
+                <img
+                  src="images/checklist.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Recipients List
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link active" href="DistributeItems.html">
+                <img
+                  src="images/diagram.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Allocation
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="DistributeResult.html">
+                <img
+                  src="images/business (1).gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Result
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="Schedule.html">
+                <img
+                  src="images/calendar.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Schedule
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <a
+        href="Donors.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Donors"
+      >
+        <img
+          src="images/employee.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donors</span>
+      </a>
+      <a
+        href="Recipient.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Recipients"
+      >
+        <img
+          src="images/leader.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Recipient</span>
+      </a>
+      <a
+        href="ReportAndAnalytics.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Reports & Analytics"
+      >
+        <img
+          src="images/business.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Reports & Analytics</span>
+      </a>
+      <a
+        href="Inventory.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Inventory"
+      >
+        <img
+          src="images/available.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Inventory</span>
+      </a>
     </aside>
     <main>
       <div aria-label="breadcrumb">
         <ol class="breadcrumb">
-          <li class="breadcrumb-item"><a href="AdminDashboard.html">Dashboard</a></li>
+          <li class="breadcrumb-item">
+            <a href="AdminDashboard.html">Dashboard</a>
+          </li>
           <li class="breadcrumb-item">Distribution</li>
           <li class="breadcrumb-item active" aria-current="page">Allocation</li>
         </ol>
@@ -105,112 +283,255 @@
       <!-- Top feedback banner -->
       <div id="diTopFeedback" class="mb-2"></div>
 
-      <div class="card card-accent p-3 w-100">
-        <ul class="nav nav-tabs" role="tablist">
-          <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="di-recipients-tab" data-bs-toggle="tab" data-bs-target="#di-recipients" type="button" role="tab">Recipients</button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" id="di-alloc-tab" data-bs-toggle="tab" data-bs-target="#di-alloc" type="button" role="tab">Allocation</button>
-          </li>
-        </ul>
-        <div class="tab-content pt-0">
-          <div class="tab-pane fade show active" id="di-recipients" role="tabpanel" aria-labelledby="di-recipients-tab">
-            <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mt-3">
-              <div class="d-flex align-items-center gap-2 flex-wrap">
+      <ul class="nav nav-tabs" id="distributeItemsTab" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link active"
+            id="di-recipients-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#di-recipients"
+            type="button"
+            role="tab"
+          >
+            Recipients
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="di-alloc-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#di-alloc"
+            type="button"
+            role="tab"
+          >
+            Allocation
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content" id="distributeItemsTabContent">
+        <div
+          class="tab-pane fade show active"
+          id="di-recipients"
+          role="tabpanel"
+          aria-labelledby="di-recipients-tab"
+        >
+          <div class="di-content-wrapper d-flex flex-column gap-2">
+            <div class="d-flex align-items-center justify-content-between mt-2">
+              <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0">Recipients</label>
-                <span id="diSelectedCount" class="badge text-bg-secondary">Selected: 0</span>
+                <span id="diSelectedCount" class="badge text-bg-secondary"
+                  >Selected: 0</span
+                >
                 <span id="diCurrentWeek" class="badge text-bg-light"></span>
               </div>
-              <div class="d-flex align-items-center gap-3 flex-wrap">
-                <input id="diSearch" class="form-control form-control-sm" placeholder="Search recipients..." style="width: 200px" />
+
+              <div class="d-flex align-items-center gap-2">
+                <input
+                  id="diSearch"
+                  class="form-control form-control-sm"
+                  placeholder="Search recipients..."
+                  style="width: 200px"
+                />
+
+                <button
+                  type="button"
+                  id="diNextTabBtn"
+                  class="btn btn-sm btn-primary"
+                  aria-label="Go to Allocation tab"
+                >
+                  Next
+                </button>
               </div>
             </div>
-            <div class="row g-2 mt-2">
-              <div class="col-12 col-md-7">
-                <div class="fw-semibold mb-2">Pool</div>
-                <div class="border rounded p-2 di-scroll-panel">
-                  <div id="diPool" class="d-grid gap-2"></div>
+
+            <div class="card card-accent h-100">
+              <div class="row g-3 p-3">
+                <div class="col-6">
+                  <div class="fw-semibold mb-2">Pool</div>
+                  <div class="border rounded p-2 di-scroll-panel">
+                    <div id="diPool" class="d-flex flex-column gap-2"></div>
+                  </div>
+                </div>
+
+                <div class="col-6">
+                  <div class="fw-semibold mb-2">Selected</div>
+                  <div class="border rounded p-2 di-scroll-panel">
+                    <div id="diSelected" class="d-flex flex-column gap-2"></div>
+                  </div>
+                </div>
+              </div>
+              <div id="diFeedback" class="small"></div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="tab-pane fade"
+          id="di-alloc"
+          role="tabpanel"
+          aria-labelledby="di-alloc-tab"
+        >
+          <div class="card card-accent h-100 mt-2">
+            <div class="row g-3 p-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <h6>Allocation Log</h6>
+                <div class="d-flex align-items-center gap-2">
+                  <button
+                    type="button"
+                    id="diGlobalAddBtn"
+                    class="btn btn-sm btn-primary"
+                  >
+                    Add
+                  </button>
+
+                  <button
+                    type="button"
+                    id="diGlobalAutoAllBtn"
+                    class="btn btn-sm btn-outline-primary"
+                  >
+                    Auto for All
+                  </button>
                 </div>
               </div>
               <div class="col-12 col-md-5">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <div class="fw-semibold">Selected</div>
-                  <button type="button" id="diNextTabBtn" class="btn btn-sm btn-primary" aria-label="Go to Allocation tab">Next</button>
-                </div>
-                <div class="border rounded p-2 di-scroll-panel">
-                  <div id="diSelected" class="d-grid gap-2"></div>
-                </div>
+                <label class="form-label mb-1">Category</label>
+                <select
+                  id="diGlobalCat"
+                  class="form-select form-select-sm"
+                  data-placeholder="Category"
+                ></select>
               </div>
-            <div id="diFeedback" class="small mt-2"></div>
-          </div>
-          <!-- CLOSE Recipients tab-pane above, then open Allocation tab-pane below -->
-          </div>
-          <div class="tab-pane fade" id="di-alloc" role="tabpanel" aria-labelledby="di-alloc-tab">
-            <div class="border rounded p-2 mb-2">
-              <div class="row g-2 align-items-end">
-                <div class="col-12 col-md-5">
-                  <label class="form-label mb-1">Category</label>
-                  <select id="diGlobalCat" class="form-select form-select-sm" data-placeholder="Category"></select>
-                </div>
-                <div class="col-12 col-md-5">
-                  <label class="form-label mb-1">Item Name</label>
-                  <select id="diGlobalName" class="form-select form-select-sm" data-placeholder="Item name"></select>
-                </div>
-                <div class="col-6 col-md-2">
-                  <label class="form-label mb-1">Qty</label>
-                  <input id="diGlobalQty" type="number" min="0" step="1" value="1" class="form-control form-control-sm" />
-                </div>
-                <div class="col-6 col-md-1 d-grid">
-                  <button type="button" id="diGlobalAddBtn" class="btn btn-sm btn-primary">Add</button>
-                </div>
-                <div class="col-12 d-flex justify-content-end">
-                  <button type="button" id="diGlobalAutoAllBtn" class="btn btn-sm btn-outline-primary">Auto for All</button>
-                </div>
+              <div class="col-12 col-md-5">
+                <label class="form-label mb-1">Item Name</label>
+                <select
+                  id="diGlobalName"
+                  class="form-select form-select-sm"
+                  data-placeholder="Item name"
+                ></select>
               </div>
+              <div class="col-6 col-md-2">
+                <label class="form-label mb-1">Qty</label>
+                <input
+                  id="diGlobalQty"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value="1"
+                  class="form-control form-control-sm"
+                />
+              </div>
+
+              <hr />
+
+              <div
+                id="diAllocCarousel"
+                class="carousel slide"
+                data-bs-ride="false"
+                data-bs-touch="false"
+              >
+                <div class="carousel-inner" id="diAllocCarouselInner"></div>
+                <button
+                  class="carousel-control-prev d-none"
+                  type="button"
+                  data-bs-target="#diAllocCarousel"
+                  data-bs-slide="prev"
+                ></button>
+                <button
+                  class="carousel-control-next d-none"
+                  type="button"
+                  data-bs-target="#diAllocCarousel"
+                  data-bs-slide="next"
+                ></button>
+              </div>
+              <div class="carousel-indicators" id="diAllocIndicators"></div>
+              <div
+                id="diAllocNav"
+                class="d-flex align-items-center justify-content-center gap-2 mt-2"
+              >
+                <button
+                  type="button"
+                  id="diAllocPrevBtn"
+                  class="btn btn-sm btn-outline-secondary"
+                  aria-label="Previous recipient"
+                >
+                  <i class="bi bi-chevron-left"></i>
+                </button>
+                <div
+                  class="text-center small text-muted"
+                  id="diAllocCounter"
+                ></div>
+                <button
+                  type="button"
+                  id="diAllocNextBtn"
+                  class="btn btn-sm btn-outline-secondary"
+                  aria-label="Next recipient"
+                >
+                  <i class="bi bi-chevron-right"></i>
+                </button>
+              </div>
+              <div class="d-flex justify-content-end mt-3">
+                <button
+                  type="button"
+                  id="diAllocateWeek"
+                  class="btn btn-primary btn-sm"
+                >
+                  Allocate Now
+                </button>
+              </div>
+              <div id="diAllocMeta" class="small text-muted mt-2"></div>
             </div>
-            <div id="diAllocCarousel" class="carousel slide" data-bs-ride="false" data-bs-touch="false">
-              <div class="carousel-inner" id="diAllocCarouselInner"></div>
-              <button class="carousel-control-prev d-none" type="button" data-bs-target="#diAllocCarousel" data-bs-slide="prev"></button>
-              <button class="carousel-control-next d-none" type="button" data-bs-target="#diAllocCarousel" data-bs-slide="next"></button>
-            </div>
-            <div class="carousel-indicators" id="diAllocIndicators"></div>
-            <div id="diAllocNav" class="d-flex align-items-center justify-content-center gap-2 mt-2">
-              <button type="button" id="diAllocPrevBtn" class="btn btn-sm btn-outline-secondary" aria-label="Previous recipient">
-                <i class="bi bi-chevron-left"></i>
-              </button>
-              <div class="text-center small text-muted" id="diAllocCounter"></div>
-              <button type="button" id="diAllocNextBtn" class="btn btn-sm btn-outline-secondary" aria-label="Next recipient">
-                <i class="bi bi-chevron-right"></i>
-              </button>
-            </div>
-            <div class="d-flex justify-content-end mt-3">
-              <button type="button" id="diAllocateWeek" class="btn btn-primary btn-sm">Allocate Now</button>
-            </div>
-            <div id="diAllocMeta" class="small text-muted mt-2"></div>
           </div>
         </div>
       </div>
 
       <!-- Notifications Modal -->
-      <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+      <div
+        class="modal fade"
+        id="notificationsModal"
+        tabindex="-1"
+        aria-labelledby="notificationsModalLabel"
+        aria-hidden="true"
+      >
         <div class="modal-dialog modal-dialog-scrollable modal-lg">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              <h5 class="modal-title" id="notificationsModalLabel">
+                Notifications
+              </h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              ></button>
             </div>
             <div class="modal-body p-0">
               <ul id="notificationsList" class="list-group list-group-flush">
                 <li class="list-group-item text-center text-muted py-4">
-                  <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>
+                  <div class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                  </div>
                   <span class="ms-2">Loading notifications...</span>
                 </li>
               </ul>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">Mark all as read</button>
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                id="markAllReadBtn"
+              >
+                Mark all as read
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -239,46 +560,75 @@
     <script src="scripts/js/algorithms/schedulingAlgorithmUI.js?v=20251005-1213"></script>
     <script src="scripts/js/ui/adminDistribute.js?v=20251005-1219"></script>
     <script src="scripts/js/ui/sidebar.js?v=20250925"></script>
+    <script src="scripts/js/ui/animation.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
     <script>
-      (function(){
-        function ensureAllocActive(){
-          try{
-            var allocPane = document.getElementById('di-alloc');
-            var recPane = document.getElementById('di-recipients');
-            var allocTab = document.getElementById('di-alloc-tab');
-            var recTab = document.getElementById('di-recipients-tab');
-            var active = allocPane && allocPane.classList.contains('active') && allocPane.classList.contains('show');
-            if (!active){
-              if (recPane){ recPane.classList.remove('active','show'); }
-              if (recTab){ recTab.classList.remove('active'); recTab.setAttribute('aria-selected','false'); }
-              if (allocPane){ allocPane.classList.add('active','show'); }
-              if (allocTab){ allocTab.classList.add('active'); allocTab.setAttribute('aria-selected','true'); }
+      (function () {
+        function ensureAllocActive() {
+          try {
+            var allocPane = document.getElementById("di-alloc");
+            var recPane = document.getElementById("di-recipients");
+            var allocTab = document.getElementById("di-alloc-tab");
+            var recTab = document.getElementById("di-recipients-tab");
+            var active =
+              allocPane &&
+              allocPane.classList.contains("active") &&
+              allocPane.classList.contains("show");
+            if (!active) {
+              if (recPane) {
+                recPane.classList.remove("active", "show");
+              }
+              if (recTab) {
+                recTab.classList.remove("active");
+                recTab.setAttribute("aria-selected", "false");
+              }
+              if (allocPane) {
+                allocPane.classList.add("active", "show");
+              }
+              if (allocTab) {
+                allocTab.classList.add("active");
+                allocTab.setAttribute("aria-selected", "true");
+              }
             }
-          } catch(_){ }
+          } catch (_) {}
         }
-        function onNext(){
-          try{ if (typeof buildAllocCarouselFromSelected === 'function') buildAllocCarouselFromSelected(); }catch(_){ }
-          try{
-            var allocTab = document.getElementById('di-alloc-tab');
-            if (allocTab && window.bootstrap && window.bootstrap.Tab){
-              var t = window.bootstrap.Tab.getOrCreateInstance(allocTab); t.show();
-            } else if (allocTab){ allocTab.click(); }
-          }catch(_){ }
+        function onNext() {
+          try {
+            if (typeof buildAllocCarouselFromSelected === "function")
+              buildAllocCarouselFromSelected();
+          } catch (_) {}
+          try {
+            var allocTab = document.getElementById("di-alloc-tab");
+            if (allocTab && window.bootstrap && window.bootstrap.Tab) {
+              var t = window.bootstrap.Tab.getOrCreateInstance(allocTab);
+              t.show();
+            } else if (allocTab) {
+              allocTab.click();
+            }
+          } catch (_) {}
           ensureAllocActive();
-          try{ if (typeof attachAllocGlobalControls === 'function') attachAllocGlobalControls(); }catch(_){ }
-          try{ if (typeof initAllocSelects === 'function') initAllocSelects(); }catch(_){ }
-          try{ if (typeof attachAllocateNow === 'function') attachAllocateNow(); }catch(_){ }
+          try {
+            if (typeof attachAllocGlobalControls === "function")
+              attachAllocGlobalControls();
+          } catch (_) {}
+          try {
+            if (typeof initAllocSelects === "function") initAllocSelects();
+          } catch (_) {}
+          try {
+            if (typeof attachAllocateNow === "function") attachAllocateNow();
+          } catch (_) {}
         }
-        function bind(){
-          var btn = document.getElementById('diNextTabBtn');
-          if (!btn || btn.__fallbackBound) return; btn.__fallbackBound = true;
-          btn.addEventListener('click', onNext);
+        function bind() {
+          var btn = document.getElementById("diNextTabBtn");
+          if (!btn || btn.__fallbackBound) return;
+          btn.__fallbackBound = true;
+          btn.addEventListener("click", onNext);
         }
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+        if (document.readyState === "loading")
+          document.addEventListener("DOMContentLoaded", bind);
+        else bind();
       })();
     </script>
     <!-- Scheduling scripts removed on this page to avoid injected Weekly Schedule UI -->
   </body>
 </html>
-
-

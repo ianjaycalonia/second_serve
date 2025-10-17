@@ -769,9 +769,9 @@ function showImportModal(title, html) {
             email || "—"
           )}</td>
           <td data-label="Status">${status}</td>
-          <td data-label="Actions"><a href="#" data-user-id="${
+          <td data-label="Actions"><a href="#" class="d-flex align-items-center justify-content-center fs-4" data-user-id="${
             u.user_id
-          }">View / Edit</a></td>
+          }"><i class="bi bi-eye-fill btn btn-outline-primary"></i><i class="bi bi-three-dots-vertical"></i></a></td>
         </tr>
       `;
     });

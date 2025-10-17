@@ -1,0 +1,80 @@
+@import url(globals.css);
+
+#filtersDropdownBtn + .dropdown-menu,
+#sortsDropdownBtn + .dropdown-menu {
+  width: 500px;
+  max-height: auto;
+  overflow-y: auto;
+}
+
+.dropdown-toggle::after {
+  display: none !important;
+}
+
+button#filtersDropdownBtn,
+button#sortsDropdownBtn {
+  border: none;
+  background: transparent;
+}
+
+.search-box {
+  position: relative;
+  display: inline-block;
+
+  input {
+    padding-left: 2rem;
+    border-radius: 20px;
+    width: 200px;
+  }
+
+  input:focus {
+    box-shadow: 0 0 5px rgba(var(--primary-color), 0.5);
+    border-color: var(--primary-color);
+    outline: none;
+  }
+}
+
+.search-box::before {
+  content: "\f52a";
+  font-family: "bootstrap-icons";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+  color: #6c757d;
+  pointer-events: none;
+}
+
+#filterForm {
+  h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .date-range-inputs {
+    .form-label {
+      font-size: 0.85rem;
+      color: #666;
+    }
+  }
+}
+
+#sortForm {
+  h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+}

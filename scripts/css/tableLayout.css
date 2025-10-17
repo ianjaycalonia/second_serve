@@ -1,0 +1,19 @@
+table {
+  line-height: 1.4;
+
+  th,
+  td {
+    text-overflow: ellipsis;
+    padding: 0.75rem 0.5rem;
+    vertical-align: middle;
+  }
+
+  td {
+    font-size: 0.875rem;
+  }
+
+  th {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+}

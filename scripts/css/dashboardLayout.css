@@ -23,7 +23,6 @@ body.sidebar-collapsed {
 }
 
 body::-webkit-scrollbar {
-
   width: 0;
 }
 
@@ -75,9 +74,33 @@ nav {
 
     .nav-icons {
       display: flex;
-      gap: 10px;
+      gap: 20px;
       align-items: center;
-      font-size: 1.2em;
+
+      a > i {
+        font-size: 1.5em;
+        aspect-ratio: 1 / 1;
+        object-fit: contain;
+        transition: filter 0.3s ease;
+      }
+
+      a > img {
+        width: 1.8em;
+        aspect-ratio: 1 / 1;
+        object-fit: contain;
+        transition: filter 0.3s ease;
+      }
+
+      .dropdown {
+        .dropdown-menu {
+          li > a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+          }
+        }
+      }
 
       .nav-link.dropdown-toggle::after {
         display: none !important;
@@ -154,11 +177,10 @@ main {
   grid-area: main;
   padding: 20px;
   background-color: var(--secondary-background);
-  transition: all 0.3s ease; 
-
+  transition: all 0.3s ease;
 
   /* Breadcrumbs */
-  
+
   .breadcrumb {
     --bs-breadcrumb-divider: ">";
     --bs-breadcrumb-padding-x: 0;
@@ -181,7 +203,7 @@ main {
   }
 
   /* End of Breadcrumbs 123*/
-  
+
   .card {
     border: none;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
@@ -250,19 +272,12 @@ main {
 .card-hovered .login-icon {
   transition: opacity 0.3s ease;
 }
-.bell-icon {
-  width: 50px;
-  height: 50px;
-  object-fit: cover;
-  border-radius: 50%;
-  transition: filter 0.3s ease;
-}
 
 /* When no notification: freeze the animation by replacing with static frame */
 .bell-icon.paused {
   /* trick: draw the GIF as a background image instead of playing <img> */
   content: "";
-  background-image: url('images/bell.gif');
+  background-image: url("images/bell.gif");
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -273,7 +288,6 @@ main {
 .bell-icon.paused[src] {
   opacity: 0;
 }
-
 
 /* Hide submenu when sidebar is collapsed */
 .sidebar.collapsed .collapse {
@@ -287,7 +301,7 @@ main {
 }
 .dashboard-icon {
   border-radius: 50%; /* makes the image circular */
-  object-fit: cover;   /* ensures the GIF fills the circle without distortion */
+  object-fit: cover; /* ensures the GIF fills the circle without distortion */
 }
 
 /* ✅ Animated glowing accent - Red & Orange only */
@@ -325,9 +339,9 @@ main {
   /* Animated gradient - only red & orange */
   background: linear-gradient(
     90deg,
-    #ff0000, /* red */
-    #ffaa00, /* orange */
     #ff0000,
+    /* red */ #ffaa00,
+    /* orange */ #ff0000,
     #ffbb00,
     #ff0000
   );
@@ -346,7 +360,6 @@ main {
     background-position: 0% 50%;
   }
 }
-
 
 @media (max-width: 768px) {
   body {

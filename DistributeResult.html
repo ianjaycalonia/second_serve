@@ -4,16 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Prevent caching to ensure latest inline scripts and markup always load -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>Distribution Result</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
+    />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
   </head>
-{{ ... }}
+  {{ ... }}
   <body class="sidebar-collapsed">
     <nav>
       <div class="nav-items">
@@ -21,53 +33,271 @@
           <button id="sidebarToggle" class="btn">
             <i class="bi bi-list fs-4"></i>
           </button>
-          <img src="images/simply_share.png" alt="Simply Share Logo" class="logo" />
-          <div class="brand d-none d-md-block">Second Serve by <span>Simply</span><span>Share</span></div>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
+          <div class="brand d-none d-md-block">
+            Second Serve by <span>Simply</span><span>Share</span>
+          </div>
         </div>
         <div class="nav-icons">
-          <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
-            <i class="bi bi-bell-fill fs-5"></i>
-            <span id="notificationsBadge" class="position-absolute translate-middle badge rounded-pill bg-danger" style="top: 6px; right: 2px; display: none; font-size: 0.6rem"></span>
+          <a
+            class="nav-link position-relative"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <img src="images/bell.gif" alt="Login Icon" class="bell-icon" />
+            <span
+              id="notificationsBadge"
+              class="position-absolute translate-middle badge rounded-pill bg-danger"
+              style="top: 6px; right: 2px; display: none; font-size: 0.6rem"
+            ></span>
           </a>
-          <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
+          <a
+            class="nav-link"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
             <i class="bi bi-envelope-fill fs-5"></i>
           </a>
           <div class="dropdown">
-            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <a
+              class="nav-link dropdown-toggle d-flex align-items-center justify-content-start"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
               <i class="bi bi-person-circle fs-5"></i>
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Profile</a></li>
-              <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
+              <li>
+                <a class="dropdown-item" href="adminProfile.html"
+                  ><i class="bi bi-person-fill"></i>Profile</a
+                >
+              </li>
+              <li>
+                <a class="dropdown-item" href="adminSettings.html"
+                  ><i class="bi bi-gear-fill"></i>Settings</a
+                >
+              </li>
               <li><hr class="dropdown-divider" /></li>
-              <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#"
+                  ><i class="bi bi-box-arrow-right"></i>Logout</a
+                >
+              </li>
             </ul>
           </div>
         </div>
       </div>
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
-    <aside class="collapsed">
-      <a href="AdminDashboard.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Dashboard"><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a>
-      <a href="RecipientsList.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Recipients List"><i class="bi bi-clipboard-plus-fill me-2"></i><span>Distribution: Recipients</span></a>
-      <a href="DistributeItems.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Allocation"><i class="bi bi-diagram-3-fill me-2"></i><span>Distribution: Allocation</span></a>
-      <a href="DistributeResult.html" class="nav-link active" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Distribution - Result"><i class="bi bi-box2-heart-fill me-2"></i><span>Distribution: Result</span></a>
-      <a href="Schedule.html" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Schedule"><i class="bi bi-calendar2-week-fill me-2"></i><span>Schedule</span></a>
+    <aside class="sidebar collapsed">
+      <a
+        href="AdminDashboard.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Dashboard"
+      >
+        <img
+          src="images/home.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+
+        <span class="sidebar-text">Dashboard</span>
+      </a>
+      <a
+        href="Donation.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donations"
+      >
+        <img
+          src="images/values.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donation</span>
+      </a>
+
+      <div class="nav-item position-relative">
+        <a
+          href="#distributionMenu"
+          class="nav-link active d-flex align-items-center sidebar-tooltip dashboard-link"
+          data-bs-toggle="collapse"
+          aria-expanded="false"
+          aria-controls="distributionMenu"
+          data-bs-placement="right"
+          data-bs-custom-class="custom-tooltip"
+          data-bs-title="Distribution"
+        >
+          <span class="d-flex align-items-center">
+            <img
+              src="images/diagram.gif"
+              alt="Dashboard Icon"
+              class="dashboard-icon"
+              width="35"
+              height="35"
+            />
+            <span class="sidebar-text">Distribution</span>
+          </span>
+        </a>
+        <div class="collapse" id="distributionMenu">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
+            <li class="nav-item">
+              <a class="nav-link" href="RecipientsList.html">
+                <img
+                  src="images/checklist.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Recipients List
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="DistributeItems.html">
+                <img
+                  src="images/diagram.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Allocation
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link active" href="DistributeResult.html">
+                <img
+                  src="images/business (1).gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Result
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="Schedule.html">
+                <img
+                  src="images/calendar.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Schedule
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <a
+        href="Donors.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Donors"
+      >
+        <img
+          src="images/employee.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donors</span>
+      </a>
+      <a
+        href="Recipient.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Recipients"
+      >
+        <img
+          src="images/leader.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Recipient</span>
+      </a>
+      <a
+        href="ReportAndAnalytics.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Reports & Analytics"
+      >
+        <img
+          src="images/business.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Reports & Analytics</span>
+      </a>
+      <a
+        href="Inventory.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Inventory"
+      >
+        <img
+          src="images/available.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Inventory</span>
+      </a>
     </aside>
     <main>
       <div aria-label="breadcrumb">
         <ol class="breadcrumb">
-          <li class="breadcrumb-item"><a href="AdminDashboard.html">Dashboard</a></li>
+          <li class="breadcrumb-item">
+            <a href="AdminDashboard.html">Dashboard</a>
+          </li>
           <li class="breadcrumb-item">Distribution</li>
           <li class="breadcrumb-item active" aria-current="page">Result</li>
         </ol>
       </div>
 
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <div
+        class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3"
+      >
         <h5 class="mb-0">Distribution Result</h5>
         <div class="d-flex gap-2">
-          <button class="btn btn-sm btn-primary" id="saveChangesBtn"><i class="bi bi-save"></i> Save Changes</button>
-          <button class="btn btn-sm btn-warning" id="notifyRunBtn"><i class="bi bi-megaphone"></i> Notify All</button>
+          <button class="btn btn-sm btn-primary" id="saveChangesBtn">
+            <i class="bi bi-save"></i> Save Changes
+          </button>
+          <button class="btn btn-sm btn-warning" id="notifyRunBtn">
+            <i class="bi bi-megaphone"></i> Notify All
+          </button>
         </div>
       </div>
 
@@ -77,7 +307,7 @@
         <div class="row g-2 align-items-center">
           <div class="col-auto small text-muted">Search Week</div>
           <div class="col-12 col-sm-4">
-            <select id="drWeekSelect" style="width:100%"></select>
+            <select id="drWeekSelect" style="width: 100%"></select>
           </div>
         </div>
       </div>
@@ -89,59 +319,123 @@
     </main>
 
     <!-- Result Alert Modal -->
-    <div class="modal fade" id="resultAlertModal" tabindex="-1" aria-labelledby="resultAlertModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="resultAlertModal"
+      tabindex="-1"
+      aria-labelledby="resultAlertModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="resultAlertModalLabel">Notice</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body" id="resultAlertBody">Done.</div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Unsaved Changes Modal -->
-    <div class="modal fade" id="dirtyModal" tabindex="-1" aria-labelledby="dirtyModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="dirtyModal"
+      tabindex="-1"
+      aria-labelledby="dirtyModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="dirtyModalLabel">Unsaved changes</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body">
-            You have unsaved changes. Please save them before notifying recipients.
+            You have unsaved changes. Please save them before notifying
+            recipients.
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary" id="dirtySaveNowBtn">Save Now</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+            <button type="button" class="btn btn-primary" id="dirtySaveNowBtn">
+              Save Now
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Notifications Modal -->
-    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-dialog-scrollable modal-lg">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body p-0">
             <ul id="notificationsList" class="list-group list-group-flush">
               <li class="list-group-item text-center text-muted py-4">
-                <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>
+                <div class="spinner-border spinner-border-sm" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
                 <span class="ms-2">Loading notifications...</span>
               </li>
             </ul>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">Mark all as read</button>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              id="markAllReadBtn"
+            >
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
@@ -162,64 +456,84 @@
     <script src="scripts/js/charts/adminDashboard.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
     <!-- Pre-hook: if user reloaded without params, restore last run_id into URL so the list still loads -->
     <script>
-      (function(){
-        try{
+      (function () {
+        try {
           var url = new URL(window.location.href);
           // Ensure a cache-busting param is present so this HTML isn't served stale
-          if (!url.searchParams.get('v')){
-            url.searchParams.set('v', String(Date.now()));
+          if (!url.searchParams.get("v")) {
+            url.searchParams.set("v", String(Date.now()));
             // Use location.replace to avoid history clutter
             window.location.replace(url.toString());
             return; // stop further execution on this old document
           }
-          var hasRun = (url.searchParams.get('run_id')||'').trim()!=='';
-          var hasPk = (url.searchParams.get('period_key')||'').trim()!=='';
-          var hasIds = (url.searchParams.get('recipient_ids')||'').trim()!=='';
-          if (!hasRun && !hasPk && !hasIds){
-            var last = parseInt(localStorage.getItem('dr_last_run_id')||'0',10)||0;
-            if (last>0){
-              url.searchParams.set('run_id', String(last));
+          var hasRun = (url.searchParams.get("run_id") || "").trim() !== "";
+          var hasPk = (url.searchParams.get("period_key") || "").trim() !== "";
+          var hasIds =
+            (url.searchParams.get("recipient_ids") || "").trim() !== "";
+          if (!hasRun && !hasPk && !hasIds) {
+            var last =
+              parseInt(localStorage.getItem("dr_last_run_id") || "0", 10) || 0;
+            if (last > 0) {
+              url.searchParams.set("run_id", String(last));
               // Update URL without reload; subsequent scripts will read it
-              history.replaceState(null, '', url.toString());
+              history.replaceState(null, "", url.toString());
             }
           }
-        } catch(_){ }
+        } catch (_) {}
       })();
     </script>
     <!-- Cleanup: remove legacy week input UI if present (old periodKeyInput/periodKeyGo) -->
     <script>
-      (function(){
-        function removeLegacyWeekUI(){
-          try{
-            var input = document.getElementById('periodKeyInput');
-            var btn = document.getElementById('periodKeyGo');
-            if (btn) { try{ btn.remove(); }catch(_){ } }
-            if (input){
+      (function () {
+        function removeLegacyWeekUI() {
+          try {
+            var input = document.getElementById("periodKeyInput");
+            var btn = document.getElementById("periodKeyGo");
+            if (btn) {
+              try {
+                btn.remove();
+              } catch (_) {}
+            }
+            if (input) {
               // Remove tip near the input if it starts with "Tip:"
-              try{
+              try {
                 var parent = input.parentElement;
-                if (parent){
-                  var sibs = Array.from(parent.querySelectorAll('*'));
-                  sibs.forEach(function(n){ try{ if ((n.textContent||'').trim().startsWith('Tip:')) n.remove(); }catch(_){ } });
+                if (parent) {
+                  var sibs = Array.from(parent.querySelectorAll("*"));
+                  sibs.forEach(function (n) {
+                    try {
+                      if ((n.textContent || "").trim().startsWith("Tip:"))
+                        n.remove();
+                    } catch (_) {}
+                  });
                 }
-              } catch(_){ }
-              try{ input.remove(); }catch(_){ }
+              } catch (_) {}
+              try {
+                input.remove();
+              } catch (_) {}
             }
             // Also remove any row that contains these legacy controls
-            try{
-              var rows = document.querySelectorAll('.card .row, .row');
-              rows.forEach(function(r){
-                try{
-                  if (r.querySelector('#periodKeyInput') || r.querySelector('#periodKeyGo')){ r.remove(); }
-                } catch(_){ }
+            try {
+              var rows = document.querySelectorAll(".card .row, .row");
+              rows.forEach(function (r) {
+                try {
+                  if (
+                    r.querySelector("#periodKeyInput") ||
+                    r.querySelector("#periodKeyGo")
+                  ) {
+                    r.remove();
+                  }
+                } catch (_) {}
               });
-            } catch(_){ }
-          } catch(_){ }
+            } catch (_) {}
+          } catch (_) {}
         }
-        if (document.readyState === 'loading'){
-          document.addEventListener('DOMContentLoaded', removeLegacyWeekUI);
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", removeLegacyWeekUI);
         } else {
           removeLegacyWeekUI();
         }
@@ -227,407 +541,668 @@
     </script>
     <!-- Per-recipient Notify button beside Add Item (post-render injection) -->
     <script>
-      (function(){
-        function getAPI(){ return (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api'; }
-        function lockRecipientUI(rid){
-          try{
-            const container = document.getElementById('resultContainer'); if (!container) return;
+      (function () {
+        function getAPI() {
+          return typeof window.API_BASE_URL === "string" && window.API_BASE_URL
+            ? window.API_BASE_URL
+            : "/Capstone%20Project/php/api";
+        }
+        function lockRecipientUI(rid) {
+          try {
+            const container = document.getElementById("resultContainer");
+            if (!container) return;
             // Disable inputs in this recipient's table
-            const tb = container.querySelector('tbody.dr-recipient[data-rec="'+rid+'"]');
-            if (tb){
-              tb.querySelectorAll('.dr-name, .dr-qty').forEach(el=>{ el.disabled = true; el.readOnly = true; });
+            const tb = container.querySelector(
+              'tbody.dr-recipient[data-rec="' + rid + '"]'
+            );
+            if (tb) {
+              tb.querySelectorAll(".dr-name, .dr-qty").forEach((el) => {
+                el.disabled = true;
+                el.readOnly = true;
+              });
               // Hide delete buttons in this tbody
-              tb.querySelectorAll('.dr-del').forEach(btn=>{ const cell = btn.parentElement; if (cell) cell.style.display='none'; });
+              tb.querySelectorAll(".dr-del").forEach((btn) => {
+                const cell = btn.parentElement;
+                if (cell) cell.style.display = "none";
+              });
             }
             // Hide Add Item button for this recipient
-            const addBtn = container.querySelector('.dr-add-item[data-rec="'+rid+'"]');
-            if (addBtn){ addBtn.classList.add('d-none'); addBtn.parentElement && (addBtn.parentElement.style.display=''); }
+            const addBtn = container.querySelector(
+              '.dr-add-item[data-rec="' + rid + '"]'
+            );
+            if (addBtn) {
+              addBtn.classList.add("d-none");
+              addBtn.parentElement && (addBtn.parentElement.style.display = "");
+            }
             // Hide Notify button itself
-            const notifyBtn = container.querySelector('.dr-notify-one[data-rec="'+rid+'"]');
-            if (notifyBtn){ notifyBtn.classList.add('d-none'); }
-          } catch(_){ }
+            const notifyBtn = container.querySelector(
+              '.dr-notify-one[data-rec="' + rid + '"]'
+            );
+            if (notifyBtn) {
+              notifyBtn.classList.add("d-none");
+            }
+          } catch (_) {}
         }
-        async function notifyOne(rid){
-          try{
-            const container = document.getElementById('resultContainer'); if (!container) return;
-            const tb = container.querySelector('tbody.dr-recipient[data-rec="'+rid+'"]');
-            let msg = 'You have been allocated items.';
-            try{
+        async function notifyOne(rid) {
+          try {
+            const container = document.getElementById("resultContainer");
+            if (!container) return;
+            const tb = container.querySelector(
+              'tbody.dr-recipient[data-rec="' + rid + '"]'
+            );
+            let msg = "You have been allocated items.";
+            try {
               const parts = [];
-              if (tb){
-                tb.querySelectorAll('tr').forEach(tr=>{
-                  const name = tr.querySelector('.dr-name')?.value?.trim() || '';
-                  const qty = tr.querySelector('.dr-qty')?.value?.trim() || '';
-                  if (name && qty){ parts.push(qty+'x '+name); }
+              if (tb) {
+                tb.querySelectorAll("tr").forEach((tr) => {
+                  const name =
+                    tr.querySelector(".dr-name")?.value?.trim() || "";
+                  const qty = tr.querySelector(".dr-qty")?.value?.trim() || "";
+                  if (name && qty) {
+                    parts.push(qty + "x " + name);
+                  }
                 });
               }
-              if (parts.length){ msg = 'You have been allocated items. Items: '+parts.slice(0,6).join(', ')+(parts.length>6?'…':''); }
-            } catch(_){ }
+              if (parts.length) {
+                msg =
+                  "You have been allocated items. Items: " +
+                  parts.slice(0, 6).join(", ") +
+                  (parts.length > 6 ? "…" : "");
+              }
+            } catch (_) {}
             const API = getAPI();
-            const res = await fetch(API + '/communications/notifications.php?action=create', {
-              method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
-              body: JSON.stringify({ user_id: rid, type: 'allocation_ready', message: msg })
-            });
-            if (!res.ok) throw new Error('HTTP '+res.status);
+            const res = await fetch(
+              API + "/communications/notifications.php?action=create",
+              {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({
+                  user_id: rid,
+                  type: "allocation_ready",
+                  message: msg,
+                }),
+              }
+            );
+            if (!res.ok) throw new Error("HTTP " + res.status);
             // UI lock for this recipient only
             lockRecipientUI(rid);
             // Feedback modal
-            try{
-              const mEl = document.getElementById('resultAlertModal');
-              const bEl = document.getElementById('resultAlertBody');
-              if (bEl) bEl.textContent = 'Recipient notified and locked.';
-              if (mEl && window.bootstrap){ window.bootstrap.Modal.getOrCreateInstance(mEl).show(); }
-            } catch(_){ }
-          } catch(err){
-            const fb = document.getElementById('resultFeedback');
-            if (fb) fb.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to notify recipient.</div>';
+            try {
+              const mEl = document.getElementById("resultAlertModal");
+              const bEl = document.getElementById("resultAlertBody");
+              if (bEl) bEl.textContent = "Recipient notified and locked.";
+              if (mEl && window.bootstrap) {
+                window.bootstrap.Modal.getOrCreateInstance(mEl).show();
+              }
+            } catch (_) {}
+          } catch (err) {
+            const fb = document.getElementById("resultFeedback");
+            if (fb)
+              fb.innerHTML =
+                '<div class="alert alert-danger py-2 mb-0">Failed to notify recipient.</div>';
           }
         }
-        function ensureButtons(){
-          try{
-            const container = document.getElementById('resultContainer'); if (!container) return;
-            container.querySelectorAll('tbody.dr-recipient[data-rec]').forEach(tb=>{
-              try{
-                const rid = parseInt(tb.getAttribute('data-rec')||'0',10)||0; if (!rid) return;
-                // Find header row for this card: go up to parent card div then query its header flex row
-                const card = tb.closest('div.mb-3') || tb.closest('div');
-                if (!card) return;
-                const headerRow = card.querySelector('div.d-flex.align-items-center.justify-content-between.mb-1');
-                if (!headerRow) return;
-                // Target actions container where Add Item lives and append Notify beside it
-                const actions = headerRow.querySelector('.d-flex.gap-2');
-                if (!actions){ setTimeout(()=> ensureButtons(), 100); return; }
-                // Avoid duplicates per recipient
-                if (actions.querySelector(`.dr-notify-one[data-rec="${rid}"]`)) return;
-                const n = document.createElement('button');
-                n.className = 'btn btn-sm btn-outline-primary dr-notify-one';
-                n.setAttribute('data-rec', String(rid));
-                n.innerHTML = '<i class="bi bi-megaphone"></i> Notify';
-                n.addEventListener('click', ()=> notifyOne(rid));
-                actions.appendChild(n);
-              } catch(_){ }
-            });
-          } catch(_){ }
+        function ensureButtons() {
+          try {
+            const container = document.getElementById("resultContainer");
+            if (!container) return;
+            container
+              .querySelectorAll("tbody.dr-recipient[data-rec]")
+              .forEach((tb) => {
+                try {
+                  const rid =
+                    parseInt(tb.getAttribute("data-rec") || "0", 10) || 0;
+                  if (!rid) return;
+                  // Find header row for this card: go up to parent card div then query its header flex row
+                  const card = tb.closest("div.mb-3") || tb.closest("div");
+                  if (!card) return;
+                  const headerRow = card.querySelector(
+                    "div.d-flex.align-items-center.justify-content-between.mb-1"
+                  );
+                  if (!headerRow) return;
+                  // Target actions container where Add Item lives and append Notify beside it
+                  const actions = headerRow.querySelector(".d-flex.gap-2");
+                  if (!actions) {
+                    setTimeout(() => ensureButtons(), 100);
+                    return;
+                  }
+                  // Avoid duplicates per recipient
+                  if (
+                    actions.querySelector(`.dr-notify-one[data-rec="${rid}"]`)
+                  )
+                    return;
+                  const n = document.createElement("button");
+                  n.className = "btn btn-sm btn-outline-primary dr-notify-one";
+                  n.setAttribute("data-rec", String(rid));
+                  n.innerHTML = '<i class="bi bi-megaphone"></i> Notify';
+                  n.addEventListener("click", () => notifyOne(rid));
+                  actions.appendChild(n);
+                } catch (_) {}
+              });
+          } catch (_) {}
         }
-        function initInject(){
-          try{
+        function initInject() {
+          try {
             ensureButtons();
-            const container = document.getElementById('resultContainer');
-            if (container && window.MutationObserver){
-              const obs = new MutationObserver(()=> ensureButtons());
-              obs.observe(container, { childList:true, subtree:true });
+            const container = document.getElementById("resultContainer");
+            if (container && window.MutationObserver) {
+              const obs = new MutationObserver(() => ensureButtons());
+              obs.observe(container, { childList: true, subtree: true });
             }
             // Extra: schedule a couple of retries to cover late async renders on first navigation
             setTimeout(ensureButtons, 50);
             setTimeout(ensureButtons, 150);
             // Render-wait loop: poll for cards rendered (via __DR_BYREC__ or .dr-add-item)
-            (function waitForRender(maxMs){
-              let waited = 0; let delay = 100;
-              function tick(){
-                try{
-                  const hasFlag = typeof window.__DR_BYREC__ !== 'undefined' && Array.isArray(window.__DR_BYREC__);
-                  const hasBtn = !!document.querySelector('#resultContainer .dr-add-item');
-                  if (hasFlag || hasBtn){ ensureButtons(); return; }
-                  waited += delay; if (waited >= maxMs) return;
-                  setTimeout(tick, delay); delay = Math.min(800, Math.floor(delay*1.6));
-                } catch(_){ /* stop on error */ }
+            (function waitForRender(maxMs) {
+              let waited = 0;
+              let delay = 100;
+              function tick() {
+                try {
+                  const hasFlag =
+                    typeof window.__DR_BYREC__ !== "undefined" &&
+                    Array.isArray(window.__DR_BYREC__);
+                  const hasBtn = !!document.querySelector(
+                    "#resultContainer .dr-add-item"
+                  );
+                  if (hasFlag || hasBtn) {
+                    ensureButtons();
+                    return;
+                  }
+                  waited += delay;
+                  if (waited >= maxMs) return;
+                  setTimeout(tick, delay);
+                  delay = Math.min(800, Math.floor(delay * 1.6));
+                } catch (_) {
+                  /* stop on error */
+                }
               }
               tick();
             })(5000);
-          } catch(_){ }
+          } catch (_) {}
         }
-        if (document.readyState === 'loading'){
-          document.addEventListener('DOMContentLoaded', initInject);
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", initInject);
         } else {
           initInject();
         }
         // Handle BFCache / back-forward navigation and SPA-like transitions
-        try{ window.addEventListener('pageshow', ()=> setTimeout(()=> ensureButtons(), 0)); } catch(_){ }
+        try {
+          window.addEventListener("pageshow", () =>
+            setTimeout(() => ensureButtons(), 0)
+          );
+        } catch (_) {}
       })();
     </script>
 
     <!-- Week badge injector to mirror Allocation badge from DistributeItems.html -->
     <script>
-      (function(){
-        function computeWeekBadgeHTML(){
-          try{
+      (function () {
+        function computeWeekBadgeHTML() {
+          try {
             var url = new URL(window.location.href);
-            var pk = (url.searchParams.get('period_key')||'').trim();
-            if (!/^\d{4}-\d{2}-W[1-4]$/i.test(pk)){
-              var rid = parseInt((url.searchParams.get('run_id')||'0'),10)||0;
-              var effRunId = rid || (window.__DR_RESOLVED_RUN_ID__||0);
-              if (effRunId){
-                var API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+            var pk = (url.searchParams.get("period_key") || "").trim();
+            if (!/^\d{4}-\d{2}-W[1-4]$/i.test(pk)) {
+              var rid =
+                parseInt(url.searchParams.get("run_id") || "0", 10) || 0;
+              var effRunId = rid || window.__DR_RESOLVED_RUN_ID__ || 0;
+              if (effRunId) {
+                var API_BASE_URL =
+                  typeof window.API_BASE_URL === "string" && window.API_BASE_URL
+                    ? window.API_BASE_URL
+                    : "/Capstone%20Project/php/api";
                 // NOTE: synchronous fetch is not available; return a placeholder and let async resolver update later
               }
             }
-            var m = /W([1-4])$/i.exec(pk||'');
-            if (m){
-              var n = parseInt(m[1],10)||1;
-              var color = (n===1?'primary':n===2?'danger':n===3?'warning':'info');
-              return " <span class='badge bg-"+color+" text-uppercase ms-2'>W"+n+"</span>";
+            var m = /W([1-4])$/i.exec(pk || "");
+            if (m) {
+              var n = parseInt(m[1], 10) || 1;
+              var color =
+                n === 1
+                  ? "primary"
+                  : n === 2
+                  ? "danger"
+                  : n === 3
+                  ? "warning"
+                  : "info";
+              return (
+                " <span class='badge bg-" +
+                color +
+                " text-uppercase ms-2'>W" +
+                n +
+                "</span>"
+              );
             }
-          } catch(_){ }
-          return '';
+          } catch (_) {}
+          return "";
         }
-        function applyWeekBadges(badgeHtml){
-          try{
+        function applyWeekBadges(badgeHtml) {
+          try {
             if (!badgeHtml) return;
-            var container = document.getElementById('resultContainer'); if (!container) return;
-            var headers = container.querySelectorAll('.fw-semibold');
-            headers.forEach(function(el){
-              try{
-                if (el.dataset && el.dataset.weekBadgeApplied==='1') return;
-                var html = el.innerHTML || '';
-                if (html.indexOf('<span') >= 0){
+            var container = document.getElementById("resultContainer");
+            if (!container) return;
+            var headers = container.querySelectorAll(".fw-semibold");
+            headers.forEach(function (el) {
+              try {
+                if (el.dataset && el.dataset.weekBadgeApplied === "1") return;
+                var html = el.innerHTML || "";
+                if (html.indexOf("<span") >= 0) {
                   // Insert before the first existing span (before status/error badges)
-                  el.innerHTML = html.replace(/\s*<span/i, badgeHtml + ' <span');
+                  el.innerHTML = html.replace(
+                    /\s*<span/i,
+                    badgeHtml + " <span"
+                  );
                 } else {
                   el.innerHTML = html + badgeHtml;
                 }
-                if (el.dataset) el.dataset.weekBadgeApplied = '1';
-              } catch(_){ }
+                if (el.dataset) el.dataset.weekBadgeApplied = "1";
+              } catch (_) {}
             });
-          } catch(_){ }
+          } catch (_) {}
         }
-        function resolvePeriodKeyAsyncAndApply(){
-          try{
+        function resolvePeriodKeyAsyncAndApply() {
+          try {
             var url = new URL(window.location.href);
-            var pk = (url.searchParams.get('period_key')||'').trim();
+            var pk = (url.searchParams.get("period_key") || "").trim();
             var badge = computeWeekBadgeHTML();
-            if (badge){ applyWeekBadges(badge); return; }
-            var rid = parseInt((url.searchParams.get('run_id')||'0'),10)||0;
-            var effRunId = rid || (window.__DR_RESOLVED_RUN_ID__||0);
+            if (badge) {
+              applyWeekBadges(badge);
+              return;
+            }
+            var rid = parseInt(url.searchParams.get("run_id") || "0", 10) || 0;
+            var effRunId = rid || window.__DR_RESOLVED_RUN_ID__ || 0;
             if (!effRunId) return;
-            var API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
-            fetch(API_BASE_URL + '/allocations/index.php?action=list_runs&limit=100&t=' + Date.now(), { credentials:'include', headers:{'Accept':'application/json'} })
-              .then(function(r){ return r.json().catch(function(){ return null; }); })
-              .then(function(j){
-                try{
-                  var rows = Array.isArray(j && j.data && j.data.items) ? j.data.items : [];
-                  var match = rows.find(function(x){ return parseInt(x.run_id,10) === effRunId; });
-                  var pk2 = match && match.period_key ? String(match.period_key) : '';
-                  if (pk2){
+            var API_BASE_URL =
+              typeof window.API_BASE_URL === "string" && window.API_BASE_URL
+                ? window.API_BASE_URL
+                : "/Capstone%20Project/php/api";
+            fetch(
+              API_BASE_URL +
+                "/allocations/index.php?action=list_runs&limit=100&t=" +
+                Date.now(),
+              {
+                credentials: "include",
+                headers: { Accept: "application/json" },
+              }
+            )
+              .then(function (r) {
+                return r.json().catch(function () {
+                  return null;
+                });
+              })
+              .then(function (j) {
+                try {
+                  var rows = Array.isArray(j && j.data && j.data.items)
+                    ? j.data.items
+                    : [];
+                  var match = rows.find(function (x) {
+                    return parseInt(x.run_id, 10) === effRunId;
+                  });
+                  var pk2 =
+                    match && match.period_key ? String(match.period_key) : "";
+                  if (pk2) {
                     var m = /W([1-4])$/i.exec(pk2);
-                    if (m){
-                      var n = parseInt(m[1],10)||1;
-                      var color = (n===1?'primary':n===2?'danger':n===3?'warning':'info');
-                      var b = " <span class='badge bg-"+color+" text-uppercase ms-2'>W"+n+"</span>";
+                    if (m) {
+                      var n = parseInt(m[1], 10) || 1;
+                      var color =
+                        n === 1
+                          ? "primary"
+                          : n === 2
+                          ? "danger"
+                          : n === 3
+                          ? "warning"
+                          : "info";
+                      var b =
+                        " <span class='badge bg-" +
+                        color +
+                        " text-uppercase ms-2'>W" +
+                        n +
+                        "</span>";
                       applyWeekBadges(b);
                     }
                   }
-                } catch(_){ }
-              }).catch(function(){ /* ignore */ });
-          } catch(_){ }
+                } catch (_) {}
+              })
+              .catch(function () {
+                /* ignore */
+              });
+          } catch (_) {}
         }
-        document.addEventListener('DOMContentLoaded', function(){
-          try{
+        document.addEventListener("DOMContentLoaded", function () {
+          try {
             var badge = computeWeekBadgeHTML();
             // Apply once now
             applyWeekBadges(badge);
             // Observe for content rendered by distributeResult.js
-            var container = document.getElementById('resultContainer');
-            if (container && window.MutationObserver){
-              var obs = new MutationObserver(function(){ applyWeekBadges(badge); });
-              obs.observe(container, { childList:true, subtree:true });
+            var container = document.getElementById("resultContainer");
+            if (container && window.MutationObserver) {
+              var obs = new MutationObserver(function () {
+                applyWeekBadges(badge);
+              });
+              obs.observe(container, { childList: true, subtree: true });
             }
             // Also resolve asynchronously via list_runs if needed
-            if (!badge){ setTimeout(resolvePeriodKeyAsyncAndApply, 0); }
-          } catch(_){ }
+            if (!badge) {
+              setTimeout(resolvePeriodKeyAsyncAndApply, 0);
+            }
+          } catch (_) {}
         });
       })();
     </script>
     <script src="scripts/js/ui/distributeResult.js?v=20251006"></script>
     <!-- Enhanced search and single-recipient notify (Select2 + AJAX) -->
     <script>
-      (function(){
-        function fmtMDY(d){
-          const mm = String(d.getMonth()+1).padStart(2,'0');
-          const dd = String(d.getDate()).padStart(2,'0');
+      (function () {
+        function fmtMDY(d) {
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const dd = String(d.getDate()).padStart(2, "0");
           const yyyy = d.getFullYear();
-          return mm+'-'+dd+'-'+yyyy;
+          return mm + "-" + dd + "-" + yyyy;
         }
-        function computeRangeFromPeriodKey(pk){
+        function computeRangeFromPeriodKey(pk) {
           // pk: YYYY-MM-Wn, fixed buckets: 1-7, 8-14, 15-21, 22-end
-          try{
-            const m = /^(\d{4})-(\d{2})-W([1-4])$/i.exec(String(pk||''));
+          try {
+            const m = /^(\d{4})-(\d{2})-W([1-4])$/i.exec(String(pk || ""));
             if (!m) return null;
-            const y = parseInt(m[1],10), mo = parseInt(m[2],10)-1, w = parseInt(m[3],10);
-            const startDay = (w===1?1:(w===2?8:(w===3?15:22)));
-            const start = new Date(y, mo, startDay); start.setHours(0,0,0,0);
-            const end = new Date(y, mo+1, 0); // last day of month
-            const endDay = (w===1?7:(w===2?14:(w===3?21:end.getDate())));
-            const endDate = new Date(y, mo, endDay); endDate.setHours(0,0,0,0);
+            const y = parseInt(m[1], 10),
+              mo = parseInt(m[2], 10) - 1,
+              w = parseInt(m[3], 10);
+            const startDay = w === 1 ? 1 : w === 2 ? 8 : w === 3 ? 15 : 22;
+            const start = new Date(y, mo, startDay);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(y, mo + 1, 0); // last day of month
+            const endDay =
+              w === 1 ? 7 : w === 2 ? 14 : w === 3 ? 21 : end.getDate();
+            const endDate = new Date(y, mo, endDay);
+            endDate.setHours(0, 0, 0, 0);
             return { start: start, end: endDate };
-          } catch(_){ return null; }
+          } catch (_) {
+            return null;
+          }
         }
-        function getAPI(){ return (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api'; }
-        function resolvedRunId(){
-          try{ const u=new URL(location.href); const rid=parseInt(u.searchParams.get('run_id')||'0',10)||0; return rid|| (window.__DR_RESOLVED_RUN_ID__||0); }catch(_){ return (window.__DR_RESOLVED_RUN_ID__||0); }
+        function getAPI() {
+          return typeof window.API_BASE_URL === "string" && window.API_BASE_URL
+            ? window.API_BASE_URL
+            : "/Capstone%20Project/php/api";
+        }
+        function resolvedRunId() {
+          try {
+            const u = new URL(location.href);
+            const rid = parseInt(u.searchParams.get("run_id") || "0", 10) || 0;
+            return rid || window.__DR_RESOLVED_RUN_ID__ || 0;
+          } catch (_) {
+            return window.__DR_RESOLVED_RUN_ID__ || 0;
+          }
         }
 
-        document.addEventListener('DOMContentLoaded', function(){
-          try{
+        document.addEventListener("DOMContentLoaded", function () {
+          try {
             // Week Select2 (AJAX via list_runs), formats label with MM-DD-YYYY
-            if (window.jQuery && jQuery.fn.select2){
-              const $week = jQuery('#drWeekSelect');
-              $week.select2({
-                theme: 'bootstrap-5',
-                placeholder: 'Search run…',
-                allowClear: true,
-                ajax: {
-                  transport: function (params, success, failure){
-                    const API = getAPI();
-                    const url = API + '/allocations/index.php?action=list_runs&limit=50&t=' + Date.now();
-                    fetch(url, { credentials:'include', headers:{'Accept':'application/json'} })
-                      .then(r=>r.json()).then(j=> success(j)).catch(failure);
+            if (window.jQuery && jQuery.fn.select2) {
+              const $week = jQuery("#drWeekSelect");
+              $week
+                .select2({
+                  theme: "bootstrap-5",
+                  placeholder: "Search run…",
+                  allowClear: true,
+                  ajax: {
+                    transport: function (params, success, failure) {
+                      const API = getAPI();
+                      const url =
+                        API +
+                        "/allocations/index.php?action=list_runs&limit=50&t=" +
+                        Date.now();
+                      fetch(url, {
+                        credentials: "include",
+                        headers: { Accept: "application/json" },
+                      })
+                        .then((r) => r.json())
+                        .then((j) => success(j))
+                        .catch(failure);
+                    },
+                    processResults: function (data) {
+                      const rows = Array.isArray(data?.data?.items)
+                        ? data.data.items
+                        : [];
+                      const out = rows.map((r) => {
+                        const pk = String(r.period_key || "");
+                        const range = computeRangeFromPeriodKey(pk);
+                        const rid = parseInt(r.run_id || 0, 10) || 0;
+                        const labelCore = range
+                          ? pk +
+                            " • " +
+                            fmtMDY(range.start) +
+                            " to " +
+                            fmtMDY(range.end)
+                          : pk;
+                        const label =
+                          (rid ? "Run #" + rid + " • " : "") + labelCore;
+                        return { id: rid || pk, text: label, pk, rid };
+                      });
+                      return { results: out };
+                    },
                   },
-                  processResults: function(data){
-                    const rows = Array.isArray(data?.data?.items) ? data.data.items : [];
-                    const out = rows.map(r=>{
-                      const pk = String(r.period_key||'');
-                      const range = computeRangeFromPeriodKey(pk);
-                      const rid = parseInt(r.run_id||0,10)||0;
-                      const labelCore = range ? (pk + ' • ' + fmtMDY(range.start) + ' to ' + fmtMDY(range.end)) : pk;
-                      const label = (rid?('Run #'+rid+' • '):'') + labelCore;
-                      return { id: rid || pk, text: label, pk, rid };
-                    });
-                    return { results: out };
-                  }
-                },
-                width: 'resolve'
-              }).on('select2:select', function(e){
-                try{
-                  const data = e.params.data;
-                  const rid = parseInt(data?.rid||data?.id||0,10)||0;
-                  if (rid){
-                    const url = new URL(location.href);
-                    url.searchParams.set('run_id', String(rid));
-                    url.searchParams.delete('period_key');
-                    location.href = url.toString();
-                  } else if (data?.pk){
-                    // Fallback: if no run_id, use period_key path
-                    const pk = data.pk;
-                    const inp = document.getElementById('periodKeyInput');
-                    if (inp) inp.value = pk;
-                    const btn = document.getElementById('periodKeyGo');
-                    if (btn) btn.click();
-                  }
-                } catch(_){ }
-              });
+                  width: "resolve",
+                })
+                .on("select2:select", function (e) {
+                  try {
+                    const data = e.params.data;
+                    const rid = parseInt(data?.rid || data?.id || 0, 10) || 0;
+                    if (rid) {
+                      const url = new URL(location.href);
+                      url.searchParams.set("run_id", String(rid));
+                      url.searchParams.delete("period_key");
+                      location.href = url.toString();
+                    } else if (data?.pk) {
+                      // Fallback: if no run_id, use period_key path
+                      const pk = data.pk;
+                      const inp = document.getElementById("periodKeyInput");
+                      if (inp) inp.value = pk;
+                      const btn = document.getElementById("periodKeyGo");
+                      if (btn) btn.click();
+                    }
+                  } catch (_) {}
+                });
 
               // Removed top-bar single-recipient controls; per-recipient Notify button remains injected below
             }
-          } catch(_){ }
+          } catch (_) {}
         });
       })();
     </script>
     <!-- Post-hook: persist resolved run_id for future reloads -->
     <script>
-      (function(){
-        try{
+      (function () {
+        try {
           // Give distributeResult.js a tick to set window.__DR_RESOLVED_RUN_ID__
-          setTimeout(function(){
-            try{
+          setTimeout(function () {
+            try {
               var url = new URL(window.location.href);
-              var rid = parseInt((url.searchParams.get('run_id')||'0'),10)||0;
-              var eff = rid || (window.__DR_RESOLVED_RUN_ID__||0);
-              if (eff>0){ localStorage.setItem('dr_last_run_id', String(eff)); }
-            } catch(_){ }
+              var rid =
+                parseInt(url.searchParams.get("run_id") || "0", 10) || 0;
+              var eff = rid || window.__DR_RESOLVED_RUN_ID__ || 0;
+              if (eff > 0) {
+                localStorage.setItem("dr_last_run_id", String(eff));
+              }
+            } catch (_) {}
           }, 0);
-        } catch(_){ }
+        } catch (_) {}
       })();
     </script>
     <script>
-      (function(){
-        document.addEventListener('DOMContentLoaded', function(){
-          try{
-            var btn = document.getElementById('notifyRunBtn');
+      (function () {
+        document.addEventListener("DOMContentLoaded", function () {
+          try {
+            var btn = document.getElementById("notifyRunBtn");
             if (!btn) return;
             // Ensure visible and clickable
-            btn.classList.remove('d-none');
+            btn.classList.remove("d-none");
             btn.disabled = false;
             // Add a capturing handler to bypass any internal isLocked gating
-            btn.addEventListener('click', async function(e){
-              try{
-                e.stopImmediatePropagation();
-                e.preventDefault();
-                var API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
-                var url = new URL(window.location.href);
-                var runIdRaw = (url.searchParams.get('run_id')||'').trim();
-                var runId = parseInt(runIdRaw||'0',10)||0;
-                if (!runId) runId = (window.__DR_RESOLVED_RUN_ID__||0);
-                if (!runId) {
-                  var fb = document.getElementById('resultFeedback');
-                  if (fb) fb.innerHTML = '<div class="alert alert-danger py-2 mb-0">Run not resolved. Load by week (Wxx) first.</div>';
-                  return;
-                }
-                // Build recipient_ids to notify: Pending/Allocated/Updated only; exclude Cancelled
-                var byRec = Array.isArray(window.__DR_BYREC__) ? window.__DR_BYREC__ : [];
-                var recipientsToNotify = byRec
-                  .filter(function(r){ return Array.isArray(r.items); })
-                  .filter(function(r){ return r.items.some(function(a){ var s=String(a.status||'').toLowerCase(); return s!=='cancelled' && (s==='pending'||s==='allocated'||s==='updated'); }); })
-                  .map(function(r){ return parseInt(r.rid,10)||0; })
-                  .filter(function(n){ return Number.isFinite(n) && n>0; });
-                var payload = { run_id: runId };
-                if (recipientsToNotify.length) payload.recipient_ids = recipientsToNotify;
-                var res = await fetch(API_BASE_URL + '/allocations/index.php?action=notify_run', {
-                  method: 'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
-                  body: JSON.stringify(payload)
-                });
-                var j = null; try { j = await res.json(); } catch(_) {}
-                if (res.ok && j && j.success){
-                  // Success feedback
-                  try{
-                    var bEl = document.getElementById('resultAlertBody'); if (bEl) bEl.textContent = 'Recipients notified.';
-                    var mEl = document.getElementById('resultAlertModal'); if (mEl && window.bootstrap && bootstrap.Modal){ bootstrap.Modal.getOrCreateInstance(mEl).show(); }
-                  } catch(_){ /* ignore */ }
-                  btn.classList.add('d-none');
-                  btn.disabled = true;
-                  // Also write notifications for each recipient so it reflects in their feed
-                  try{
-                    for (var i=0;i<recipientsToNotify.length;i++){
-                      var rid = recipientsToNotify[i];
-                      var parts = [];
-                      // Build a short items list from the page if present
-                      try{
-                        var tb = document.querySelector('tbody.dr-recipient[data-rec="'+rid+'"]');
-                        if (tb){
-                          tb.querySelectorAll('tr').forEach(function(tr){
-                            var nameEl = tr.querySelector('.dr-name');
-                            var qtyEl = tr.querySelector('.dr-qty');
-                            var name = nameEl ? (nameEl.value||'').trim() : '';
-                            var qty = qtyEl ? (qtyEl.value||'').trim() : '';
-                            if (name && qty){ parts.push(qty+'x '+name); }
-                          });
-                        }
-                      } catch(_){}
-                      var msg = parts.length ? ('You have been allocated items. Items: '+parts.slice(0,6).join(', ')+(parts.length>6?'…':'')) : 'You have been allocated items.';
-                      try{
-                        var res2 = await fetch(API_BASE_URL + '/communications/notifications.php?action=create', {
-                          method:'POST', credentials:'include', headers:{'Content-Type':'application/json','Accept':'application/json'},
-                          body: JSON.stringify({ user_id: rid, type: 'allocation_ready', message: msg })
-                        });
-                        if (!res2.ok) throw new Error('HTTP ' + res2.status);
-                      } catch(err){
-                        var fb3 = document.getElementById('resultFeedback');
-                        if (fb3) fb3.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
-                      }
-                    }
-                  } catch(err){
-                    var fb3 = document.getElementById('resultFeedback');
-                    if (fb3) fb3.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
+            btn.addEventListener(
+              "click",
+              async function (e) {
+                try {
+                  e.stopImmediatePropagation();
+                  e.preventDefault();
+                  var API_BASE_URL =
+                    typeof window.API_BASE_URL === "string" &&
+                    window.API_BASE_URL
+                      ? window.API_BASE_URL
+                      : "/Capstone%20Project/php/api";
+                  var url = new URL(window.location.href);
+                  var runIdRaw = (url.searchParams.get("run_id") || "").trim();
+                  var runId = parseInt(runIdRaw || "0", 10) || 0;
+                  if (!runId) runId = window.__DR_RESOLVED_RUN_ID__ || 0;
+                  if (!runId) {
+                    var fb = document.getElementById("resultFeedback");
+                    if (fb)
+                      fb.innerHTML =
+                        '<div class="alert alert-danger py-2 mb-0">Run not resolved. Load by week (Wxx) first.</div>';
+                    return;
                   }
-                } else {
-                  var fb2 = document.getElementById('resultFeedback');
-                  if (fb2) fb2.innerHTML = '<div class="alert alert-danger py-2 mb-0">'+ (j && j.error ? j.error : ('HTTP ' + res.status)) +'</div>';
+                  // Build recipient_ids to notify: Pending/Allocated/Updated only; exclude Cancelled
+                  var byRec = Array.isArray(window.__DR_BYREC__)
+                    ? window.__DR_BYREC__
+                    : [];
+                  var recipientsToNotify = byRec
+                    .filter(function (r) {
+                      return Array.isArray(r.items);
+                    })
+                    .filter(function (r) {
+                      return r.items.some(function (a) {
+                        var s = String(a.status || "").toLowerCase();
+                        return (
+                          s !== "cancelled" &&
+                          (s === "pending" ||
+                            s === "allocated" ||
+                            s === "updated")
+                        );
+                      });
+                    })
+                    .map(function (r) {
+                      return parseInt(r.rid, 10) || 0;
+                    })
+                    .filter(function (n) {
+                      return Number.isFinite(n) && n > 0;
+                    });
+                  var payload = { run_id: runId };
+                  if (recipientsToNotify.length)
+                    payload.recipient_ids = recipientsToNotify;
+                  var res = await fetch(
+                    API_BASE_URL + "/allocations/index.php?action=notify_run",
+                    {
+                      method: "POST",
+                      credentials: "include",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                      },
+                      body: JSON.stringify(payload),
+                    }
+                  );
+                  var j = null;
+                  try {
+                    j = await res.json();
+                  } catch (_) {}
+                  if (res.ok && j && j.success) {
+                    // Success feedback
+                    try {
+                      var bEl = document.getElementById("resultAlertBody");
+                      if (bEl) bEl.textContent = "Recipients notified.";
+                      var mEl = document.getElementById("resultAlertModal");
+                      if (mEl && window.bootstrap && bootstrap.Modal) {
+                        bootstrap.Modal.getOrCreateInstance(mEl).show();
+                      }
+                    } catch (_) {
+                      /* ignore */
+                    }
+                    btn.classList.add("d-none");
+                    btn.disabled = true;
+                    // Also write notifications for each recipient so it reflects in their feed
+                    try {
+                      for (var i = 0; i < recipientsToNotify.length; i++) {
+                        var rid = recipientsToNotify[i];
+                        var parts = [];
+                        // Build a short items list from the page if present
+                        try {
+                          var tb = document.querySelector(
+                            'tbody.dr-recipient[data-rec="' + rid + '"]'
+                          );
+                          if (tb) {
+                            tb.querySelectorAll("tr").forEach(function (tr) {
+                              var nameEl = tr.querySelector(".dr-name");
+                              var qtyEl = tr.querySelector(".dr-qty");
+                              var name = nameEl
+                                ? (nameEl.value || "").trim()
+                                : "";
+                              var qty = qtyEl ? (qtyEl.value || "").trim() : "";
+                              if (name && qty) {
+                                parts.push(qty + "x " + name);
+                              }
+                            });
+                          }
+                        } catch (_) {}
+                        var msg = parts.length
+                          ? "You have been allocated items. Items: " +
+                            parts.slice(0, 6).join(", ") +
+                            (parts.length > 6 ? "…" : "")
+                          : "You have been allocated items.";
+                        try {
+                          var res2 = await fetch(
+                            API_BASE_URL +
+                              "/communications/notifications.php?action=create",
+                            {
+                              method: "POST",
+                              credentials: "include",
+                              headers: {
+                                "Content-Type": "application/json",
+                                Accept: "application/json",
+                              },
+                              body: JSON.stringify({
+                                user_id: rid,
+                                type: "allocation_ready",
+                                message: msg,
+                              }),
+                            }
+                          );
+                          if (!res2.ok) throw new Error("HTTP " + res2.status);
+                        } catch (err) {
+                          var fb3 = document.getElementById("resultFeedback");
+                          if (fb3)
+                            fb3.innerHTML =
+                              '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
+                        }
+                      }
+                    } catch (err) {
+                      var fb3 = document.getElementById("resultFeedback");
+                      if (fb3)
+                        fb3.innerHTML =
+                          '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
+                    }
+                  } else {
+                    var fb2 = document.getElementById("resultFeedback");
+                    if (fb2)
+                      fb2.innerHTML =
+                        '<div class="alert alert-danger py-2 mb-0">' +
+                        (j && j.error ? j.error : "HTTP " + res.status) +
+                        "</div>";
+                  }
+                } catch (err) {
+                  var fb3 = document.getElementById("resultFeedback");
+                  if (fb3)
+                    fb3.innerHTML =
+                      '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
                 }
-              } catch(err){
-                var fb3 = document.getElementById('resultFeedback');
-                if (fb3) fb3.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
-              }
-            }, true);
-          } catch(_){}
+              },
+              true
+            );
+          } catch (_) {}
         });
       })();
     </script>
+  </body>
+</html>

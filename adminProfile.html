@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Schedule</title>
+    <title>Admin Dashboard</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -13,33 +13,15 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
-    <link
-      href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css"
-      rel="stylesheet"
-    />
+    <link rel="stylesheet" href="scripts/css/adminProfileAndSettings.css" />
+    <!-- Select2 CSS -->
     <link
       href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
       rel="stylesheet"
     />
-    <style>
-      .fc-toolbar-title {
-        font-size: 1.1rem;
-      }
-      .fc .fc-button {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.875rem;
-      }
-      .event-owned {
-        border-left: 4px solid #0d6efd;
-      }
-      .event-assigned {
-        border-left: 4px solid #198754;
-      }
-      /* Show past dates but make them unclickable */
-      .fc-day-past {
-        pointer-events: none;
-      }
-    </style>
+    <!-- Distribute Items modal styles -->
+    <link rel="stylesheet" href="scripts/css/adminDashboard.modal.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -154,7 +136,7 @@
       <div class="nav-item position-relative">
         <a
           href="#distributionMenu"
-          class="nav-link active d-flex align-items-center sidebar-tooltip dashboard-link"
+          class="nav-link d-flex align-items-center sidebar-tooltip dashboard-link"
           data-bs-toggle="collapse"
           aria-expanded="false"
           aria-controls="distributionMenu"
@@ -174,7 +156,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column mt-2 ms-4 gap-2">
+          <ul class="nav flex-column ms-3">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html">
                 <img
@@ -209,7 +191,7 @@
               </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link active" href="Schedule.html">
+              <a class="nav-link" href="Schedule.html">
                 <img
                   src="images/calendar.gif"
                   alt="Dashboard Icon"
@@ -291,244 +273,187 @@
         <span class="sidebar-text">Inventory</span>
       </a>
     </aside>
-    <main>
-      <div aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item">
-            <a href="AdminDashboard.html">Dashboard</a>
-          </li>
-          <li class="breadcrumb-item active" aria-current="page">Schedule</li>
-        </ol>
-      </div>
 
-      <!-- Day Events Modal -->
-      <div
-        class="modal fade"
-        id="dayEventsModal"
-        tabindex="-1"
-        aria-hidden="true"
-      >
-        <div class="modal-dialog modal-dialog-scrollable">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Scheduled Events</h5>
-              <button
-                type="button"
-                class="btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Close"
-              ></button>
+    <main>
+      <div class="profile-tab">
+        <div aria-label="breadcrumb">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+              <a href="AdminDashboard.html">Dashboard</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">Profile</li>
+          </ol>
+        </div>
+
+        <div class="profile-elements">
+          <h4>Admin Profile</h4>
+
+          <hr />
+
+          <div class="row g-4">
+            <div class="col-6">
+              <h5>Personal Information</h5>
+              <div class="row g-3 align-items-center">
+                <div class="col-6 profile-info">
+                  <div>
+                    <label for="adminName" class="form-label">Name</label>
+                    <input
+                      type="text"
+                      id="adminName"
+                      value="John Doe"
+                      class="form-control form-control-sm"
+                    />
+                  </div>
+                  <div>
+                    <label for="adminEmail" class="form-label">Email</label>
+                    <input
+                      type="email"
+                      id="adminEmail"
+                      value="john.doe@example.com"
+                      class="form-control form-control-sm"
+                    />
+                  </div>
+                  <div>
+                    <label for="adminUsername" class="form-label"
+                      >Username</label
+                    >
+                    <input
+                      type="text"
+                      id="adminUsername"
+                      value="johndoe"
+                      class="form-control form-control-sm"
+                    />
+                  </div>
+                  <div>
+                    <label for="adminPhone" class="form-label">Phone</label>
+                    <input
+                      type="tel"
+                      id="adminPhone"
+                      value="(123) 456-7890"
+                      class="form-control form-control-sm"
+                    />
+                  </div>
+                  <div>
+                    <label for="adminRole" class="form-label">Role</label>
+                    <input
+                      readonly
+                      id="adminRole"
+                      value="Administrator"
+                      class="form-control form-control-sm"
+                    />
+                  </div>
+                </div>
+                <div class="col-6 profile-photo">
+                  <img
+                    src="images/uploads/food_safety/food_safety_20251007_194916_30d43576.jpg"
+                    alt="Profile Photo"
+                  />
+                  <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-primary">Change</button>
+                    <button class="btn btn-sm btn-danger">Remove</button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="modal-body">
-              <div class="small text-muted mb-2" id="dayEventsDate"></div>
-              <ul class="list-group" id="dayEventsList">
-                <li class="list-group-item text-center text-muted">
-                  No events
-                </li>
+            <div class="col-6">
+              <div class="profile-security">
+                <h5>Change Password</h5>
+
+                <div class="d-flex flex-column gap-2">
+                  <div>
+                    <label for="currentPassword" class="form-label"
+                      >Current Password</label
+                    >
+                    <input
+                      type="password"
+                      id="currentPassword"
+                      class="form-control form-control-sm"
+                      placeholder="Enter current password"
+                    />
+                  </div>
+                  <div>
+                    <label for="newPassword" class="form-label"
+                      >New Password</label
+                    >
+                    <input
+                      type="password"
+                      id="newPassword"
+                      class="form-control form-control-sm"
+                      placeholder="Enter new password"
+                    />
+                  </div>
+                  <div>
+                    <label for="confirmPassword" class="form-label"
+                      >Confirm New Password</label
+                    >
+                    <input
+                      type="password"
+                      id="confirmPassword"
+                      class="form-control form-control-sm"
+                      placeholder="Confirm new password"
+                    />
+                  </div>
+                  <div>
+                    <div class="form-check">
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="showPassword"
+                      />
+                      <label for="showPassword" class="form-check-label"
+                        >Show Password</label
+                      >
+                    </div>
+                  </div>
+                  <button class="btn btn-sm btn-success mt-2 align-self-end">
+                    Update Password
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card card-accent mt-4 p-3 border rounded">
+            <h5>Activity Overview</h5>
+
+            <hr />
+
+            <div class="activity-overview">
+              <p><strong>Last Login:</strong> October 7, 2025</p>
+              <p><strong>Recent Activities:</strong></p>
+
+              <ul>
+                <li>Edited profile information</li>
+                <li>Changed password</li>
+                <li>Reviewed donation reports</li>
+                <li>Managed recipient allocations</li>
               </ul>
+
+              <p><strong>IP Address:</strong> 192.168.1.1</p>
             </div>
-            <div class="modal-footer">
-              <button
-                type="button"
-                class="btn btn-secondary"
-                data-bs-dismiss="modal"
-              >
-                Close
+          </div>
+
+          <div class="card card-accent mt-4 p-3 border rounded">
+            <h5>Profile Management Controls</h5>
+            <hr />
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-primary">Save Changes</button>
+              <button class="btn btn-sm btn-secondary">Cancel</button>
+            </div>
+
+            <div class="mt-3 border-top pt-3">
+              <h6 class="text-danger">⚠️ Danger Zone</h6>
+              <button class="btn btn-sm btn-warning me-2">
+                Deactivate Account
               </button>
+              <button class="btn btn-sm btn-danger">Delete Account</button>
             </div>
           </div>
         </div>
-      </div>
-
-      <div
-        class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3"
-      >
-        <h5 class="mb-0">Schedule</h5>
-        <div class="d-flex gap-2">
-          <button class="btn btn-sm btn-outline-primary" id="newEventBtn">
-            <i class="bi bi-plus-lg"></i> New Event
-          </button>
-          <button class="btn btn-sm btn-outline-secondary" id="refreshCalBtn">
-            <i class="bi bi-arrow-clockwise"></i> Refresh
-          </button>
-        </div>
-      </div>
-
-      <div id="calFeedback" class="small mb-2"></div>
-      <div class="card card-accent p-3">
-        <div id="calendar"></div>
       </div>
     </main>
 
-    <!-- Calendar Alert Modal -->
-    <div
-      class="modal fade"
-      id="calAlertModal"
-      tabindex="-1"
-      aria-labelledby="calAlertModalLabel"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="calAlertModalLabel">Notice</h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            ></button>
-          </div>
-          <div class="modal-body" id="calAlertBody">Done.</div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              data-bs-dismiss="modal"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Event Modal -->
-    <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Schedule Event</h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <form id="eventForm">
-              <input type="hidden" id="evId" />
-              <div class="mb-2">
-                <label class="form-label mb-1">Event Type</label>
-                <select id="evType" class="form-select form-select-sm">
-                  <option value="admin">Admin event</option>
-                  <option value="donor">Pickup</option>
-                  <option value="recipient">
-                    Recipient availability / pickup
-                  </option>
-                </select>
-              </div>
-              <div class="mb-2">
-                <label class="form-label mb-1">Title</label>
-                <input
-                  type="text"
-                  id="evTitle"
-                  class="form-control form-control-sm"
-                  required
-                />
-              </div>
-              <div class="row g-2" id="wrapDateTimeDefault">
-                <div class="col-6">
-                  <label class="form-label mb-1">Start</label>
-                  <input
-                    type="datetime-local"
-                    id="evStart"
-                    class="form-control form-control-sm"
-                    required
-                  />
-                </div>
-                <div class="col-6">
-                  <label class="form-label mb-1">End</label>
-                  <input
-                    type="datetime-local"
-                    id="evEnd"
-                    class="form-control form-control-sm"
-                  />
-                </div>
-              </div>
-              <!-- Admin Pickup date+time (no end) -->
-              <div class="row g-2" id="wrapDateTimeAdmin" style="display: none">
-                <div class="col-6">
-                  <label class="form-label mb-1">Date</label>
-                  <input
-                    type="date"
-                    id="evDate"
-                    class="form-control form-control-sm"
-                  />
-                </div>
-                <div class="col-6">
-                  <label class="form-label mb-1">Time</label>
-                  <input
-                    type="time"
-                    id="evTime"
-                    class="form-control form-control-sm"
-                  />
-                </div>
-              </div>
-              <div class="row g-2 mt-2">
-                <div class="col-6" id="wrapRecipient">
-                  <label class="form-label mb-1">Recipient ID</label>
-                  <input
-                    type="number"
-                    id="evRecipient"
-                    class="form-control form-control-sm"
-                    placeholder="optional"
-                  />
-                </div>
-                <div class="col-6" id="wrapDonor">
-                  <label class="form-label mb-1">Donor</label>
-                  <select
-                    id="evDonorSelect"
-                    class="form-select form-select-sm"
-                    style="width: 100%"
-                  ></select>
-                  <input
-                    type="number"
-                    id="evDonor"
-                    class="form-control form-control-sm"
-                    placeholder="optional"
-                    style="display: none"
-                  />
-                </div>
-              </div>
-              <div class="mt-2">
-                <label class="form-label mb-1">Location</label>
-                <input
-                  type="text"
-                  id="evLocation"
-                  class="form-control form-control-sm"
-                  placeholder="e.g., pickup address"
-                />
-              </div>
-              <div class="mt-2">
-                <label class="form-label mb-1">Notes</label>
-                <textarea
-                  id="evNotes"
-                  class="form-control form-control-sm"
-                  rows="3"
-                  placeholder="Include batch/donation details, contact person, etc."
-                ></textarea>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-outline-danger"
-              id="deleteEventBtn"
-            >
-              Delete
-            </button>
-            <button type="button" class="btn btn-primary" id="saveEventBtn">
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Notifications Modal (existing shared) -->
+    <!-- Notifications Modal -->
     <div
       class="modal fade"
       id="notificationsModal"
@@ -551,6 +476,7 @@
           </div>
           <div class="modal-body p-0">
             <ul id="notificationsList" class="list-group list-group-flush">
+              <!-- Notifications will be inserted here by notifications.js -->
               <li class="list-group-item text-center text-muted py-4">
                 <div class="spinner-border spinner-border-sm" role="status">
                   <span class="visually-hidden">Loading...</span>
@@ -579,21 +505,19 @@
       </div>
     </div>
 
+    <!-- Messages Modal is injected by scripts/js/ui/messages.js on demand -->
+
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <!-- Shared config and API helpers (Phase 1) -->
+    <!-- Shared config and API modules -->
     <script src="scripts/js/config/constants.js?v=20250925"></script>
     <script src="scripts/js/api/http.js?v=20250925"></script>
     <script src="scripts/js/api/communications.js?v=20250925"></script>
+    <!-- Custom scripts -->
     <script src="scripts/js/utils/auth.js"></script>
     <script src="scripts/js/ui/messages.js"></script>
     <script src="scripts/js/ui/notifications.js"></script>
-    <script src="scripts/js/charts/adminDashboard.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
-    <script src="scripts/js/api/schedule.js?v=20250925"></script>
-    <script src="scripts/js/utils/calendar.js"></script>
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedNotification.js"></script>
   </body>

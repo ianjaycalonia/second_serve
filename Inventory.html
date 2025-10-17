@@ -13,8 +13,9 @@
       rel="stylesheet"
     />
     <!-- Use the shared admin layout styling for consistent logo/sidebar UI -->
-    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="scripts/css/inventory.css" />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -31,51 +32,16 @@
           <div class="brand d-none d-md-block">
             Second Serve by <span>Simply</span><span>Share</span>
           </div>
-
-          <!-- On-site Success Modal (moved to end of body for proper stacking) -->
-          <div
-            class="modal fade"
-            id="onsiteSuccessModal"
-            tabindex="-1"
-            aria-labelledby="onsiteSuccessModalLabel"
-            aria-hidden="true"
-          >
-            <div class="modal-dialog">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title" id="onsiteSuccessModalLabel">
-                    On-site Giveaway Completed
-                  </h5>
-                  <button
-                    type="button"
-                    class="btn-close"
-                    data-bs-dismiss="modal"
-                    aria-label="Close"
-                  ></button>
-                </div>
-                <div class="modal-body" id="onsiteSuccessBody">Done.</div>
-                <div class="modal-footer">
-                  <button
-                    type="button"
-                    class="btn btn-primary"
-                    data-bs-dismiss="modal"
-                  >
-                    OK
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
         <div class="nav-icons">
           <a
-            class="nav-link me-3 position-relative"
+            class="nav-link position-relative"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#notificationsModal"
             aria-label="Open notifications"
           >
-            <i class="bi bi-bell-fill fs-5"></i>
+            <img src="images/bell.gif" alt="Login Icon" class="bell-icon" />
             <span
               id="notificationsBadge"
               class="position-absolute translate-middle badge rounded-pill bg-danger"
@@ -83,7 +49,7 @@
             ></span>
           </a>
           <a
-            class="nav-link me-3"
+            class="nav-link"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#messagesModal"
@@ -93,7 +59,7 @@
           </a>
           <div class="dropdown">
             <a
-              class="nav-link dropdown-toggle d-flex align-items-center"
+              class="nav-link dropdown-toggle d-flex align-items-center justify-content-start"
               href="#"
               role="button"
               data-bs-toggle="dropdown"
@@ -103,19 +69,19 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
-                <a class="dropdown-item" href="#"
-                  ><i class="bi bi-person me-2"></i>Profile</a
+                <a class="dropdown-item" href="adminProfile.html"
+                  ><i class="bi bi-person-fill"></i>Profile</a
                 >
               </li>
               <li>
-                <a class="dropdown-item" href="#"
-                  ><i class="bi bi-gear me-2"></i>Settings</a
+                <a class="dropdown-item" href="adminSettings.html"
+                  ><i class="bi bi-gear-fill"></i>Settings</a
                 >
               </li>
               <li><hr class="dropdown-divider" /></li>
               <li>
                 <a class="dropdown-item text-danger logout-btn" href="#"
-                  ><i class="bi bi-box-arrow-right me-2"></i>Logout</a
+                  ><i class="bi bi-box-arrow-right"></i>Logout</a
                 >
               </li>
             </ul>
@@ -124,199 +90,445 @@
       </div>
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
-    <aside class="collapsed">
+    <aside class="sidebar collapsed">
       <a
         href="AdminDashboard.html"
-        class="nav-link"
+        class="nav-link d-flex align-items-center dashboard-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Dashboard"
-        ><i class="bi bi-house-door-fill me-2"></i><span>Dashboard</span></a
       >
+        <img
+          src="images/home.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+
+        <span class="sidebar-text">Dashboard</span>
+      </a>
       <a
         href="Donation.html"
-        class="nav-link"
+        class="nav-link d-flex align-items-center dashboard-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Donations"
-        ><i class="bi bi-box-seam-fill me-2"></i><span>Donations</span></a
       >
+        <img
+          src="images/values.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donation</span>
+      </a>
+
+      <div class="nav-item position-relative">
+        <a
+          href="#distributionMenu"
+          class="nav-link d-flex align-items-center sidebar-tooltip dashboard-link"
+          data-bs-toggle="collapse"
+          aria-expanded="false"
+          aria-controls="distributionMenu"
+          data-bs-placement="right"
+          data-bs-custom-class="custom-tooltip"
+          data-bs-title="Distribution"
+        >
+          <span class="d-flex align-items-center">
+            <img
+              src="images/diagram.gif"
+              alt="Dashboard Icon"
+              class="dashboard-icon"
+              width="35"
+              height="35"
+            />
+            <span class="sidebar-text">Distribution</span>
+          </span>
+        </a>
+        <div class="collapse" id="distributionMenu">
+          <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+              <a class="nav-link" href="RecipientsList.html">
+                <img
+                  src="images/checklist.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Recipients List
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="DistributeItems.html">
+                <img
+                  src="images/diagram.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Allocation
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="DistributeResult.html">
+                <img
+                  src="images/business (1).gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Result
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="Schedule.html">
+                <img
+                  src="images/calendar.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Schedule
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
       <a
         href="Donors.html"
-        class="nav-link"
+        class="nav-link d-flex align-items-center dashboard-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
-        data-bs-custom-class="custom-tooltip"
+        ata-bs-custom-class="custom-tooltip"
         data-bs-title="Donors"
-        ><i class="bi bi-person-fill me-2"></i><span>Donors</span></a
       >
+        <img
+          src="images/employee.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donors</span>
+      </a>
       <a
         href="Recipient.html"
-        class="nav-link"
+        class="nav-link d-flex align-items-center dashboard-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Recipients"
-        ><i class="bi bi-people-fill me-2"></i><span>Recipients</span></a
       >
+        <img
+          src="images/leader.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Recipient</span>
+      </a>
       <a
         href="ReportAndAnalytics.html"
-        class="nav-link"
+        class="nav-link d-flex align-items-center dashboard-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
-        data-bs-custom-class="custom-tooltip"
+        ata-bs-custom-class="custom-tooltip"
         data-bs-title="Reports & Analytics"
-        ><i class="bi bi-bar-chart-fill me-2"></i
-        ><span>Reports & Analytics</span></a
       >
-      <!-- Inventory link for this page -->
+        <img
+          src="images/business.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Reports & Analytics</span>
+      </a>
       <a
         href="Inventory.html"
-        class="nav-link active"
+        class="nav-link active d-flex align-items-center dashboard-link"
         data-bs-toggle="tooltip"
         data-bs-placement="right"
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Inventory"
-        ><i class="bi bi-box2-fill me-2"></i><span>Inventory</span></a
       >
+        <img
+          src="images/available.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Inventory</span>
+      </a>
     </aside>
 
     <main>
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <div aria-label="breadcrumb">
-          <ol class="breadcrumb">
-            <li class="breadcrumb-item">
-              <a href="AdminDashboard.html">Dashboard</a>
-            </li>
-            <li class="breadcrumb-item active" aria-current="page">
-              Inventory
-            </li>
-          </ol>
-        </div>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="AdminDashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">Inventory</li>
+        </ol>
       </div>
 
-      <div class="card card-accent p-3">
-        <div
-          class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2"
-        >
-          <div class="fw-bold align-self-center">Inventory</div>
-          <div class="dropdown d-lg-none ms-auto">
-            <button
-              class="btn btn-sm btn-outline-secondary dropdown-toggle"
-              type="button"
-              id="filtersDropdownBtn"
-              data-bs-toggle="dropdown"
-              aria-expanded="false"
-            >
-              Filters
-            </button>
-            <ul
-              class="dropdown-menu p-3"
-              aria-labelledby="filtersDropdownBtn"
-              style="min-width: 250px"
-            >
-              <li class="mb-2">
-                <label class="form-label mb-1" for="categorySelectMobile"
-                  >Category:</label
-                >
-                <select
-                  id="categorySelectMobile"
-                  class="form-select form-select-sm"
-                >
-                  <option>All</option>
-                  <option>Food</option>
-                  <option>Non-Food</option>
-                </select>
-              </li>
-              <li>
-                <label class="form-label mb-1" for="dateSelectMobile"
-                  >Date:</label
-                >
-                <select
-                  id="dateSelectMobile"
-                  class="form-select form-select-sm"
-                >
-                  <option>All</option>
-                  <option>Today</option>
-                  <option>This Week</option>
-                  <option>This Month</option>
-                </select>
-              </li>
-              <li><hr class="dropdown-divider" /></li>
-              <li>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-secondary w-100"
-                  data-bs-toggle="modal"
-                  data-bs-target="#importInventoryModal"
-                >
-                  <i class="bi bi-file-earmark-arrow-up"></i> Import
-                </button>
-              </li>
-            </ul>
-          </div>
-          <div class="d-none d-lg-flex flex-wrap gap-3 ms-auto">
-            <div
-              class="d-flex align-items-center gap-2 flex-shrink-1"
-              style="min-width: 120px"
-            >
-              <label class="form-label mb-0" for="categorySelectDesktop"
-                >Category:</label
-              >
-              <select
-                id="categorySelectDesktop"
-                class="form-select form-select-sm"
-              >
-                <option>All</option>
-                <option>Food</option>
-                <option>Non-Food</option>
-              </select>
+      <div class="card card-accent p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6>Inventory Log</h6>
+
+          <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center search-box">
+              <input
+                type="text"
+                id="donationSearch"
+                class="form-control form-control-sm"
+                placeholder="Search..."
+                aria-label="Search"
+              />
             </div>
-            <div
-              class="d-flex align-items-center gap-2 flex-shrink-1"
-              style="min-width: 120px"
-            >
-              <label class="form-label mb-0" for="dateSelectDesktop"
-                >Date:</label
+            <div class="dropdown">
+              <button
+                class="dropdown-toggle"
+                type="button"
+                id="filtersDropdownBtn"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="false"
+                aria-expanded="false"
               >
-              <select id="dateSelectDesktop" class="form-select form-select-sm">
-                <option>All</option>
-                <option>Today</option>
-                <option>This Week</option>
-                <option>This Month</option>
-              </select>
-            </div>
-            <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 120px">
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="hideExpiredToggle" checked>
-                <label class="form-check-label" for="hideExpiredToggle">Hide expired</label>
+                <i class="bi bi-funnel-fill fs-5"></i>
+              </button>
+
+              <div class="dropdown-menu">
+                <form id="filterForm" class="px-3 py-2">
+                  <h5>Filter by</h5>
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <div class="form-label mb-1">Last Donated</div>
+                      <div class="row g-3 date-range-inputs">
+                        <div class="col-6">
+                          <label for="fromDate" class="form-label">From</label>
+                          <input
+                            type="date"
+                            id="fromDate"
+                            class="form-control form-control-sm"
+                          />
+                        </div>
+                        <div class="col-6">
+                          <label for="toDate" class="form-label">To</label>
+                          <input
+                            type="date"
+                            id="toDate"
+                            class="form-control form-control-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        class="d-flex justify-content-between align-items-center mt-3"
+                        id="quickRangeBtns"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm w-100 me-1"
+                          data-range="today"
+                        >
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm w-100 mx-1"
+                          data-range="week"
+                        >
+                          This Week
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm w-100 ms-1"
+                          data-range="month"
+                        >
+                          This Month
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="statusSelectMobile"
+                        >Status</label
+                      >
+                      <select
+                        id="statusSelectMobile"
+                        class="form-select form-select-sm"
+                      >
+                        <option selected>All</option>
+                        <option>Pending</option>
+                        <option>Acknowledged</option>
+                        <option>Picked Up</option>
+                        <option>Completed</option>
+                        <option>Failed Safety</option>
+                        <option>Cancelled</option>
+                      </select>
+                    </div>
+
+                    <div class="col-6">
+                      <label
+                        class="form-label mb-1"
+                        for="donationActivitySelectMobile"
+                        >Donation Activity</label
+                      >
+                      <select
+                        id="donationActivitySelectMobile"
+                        class="form-select form-select-sm"
+                      >
+                        <option selected>All</option>
+                        <option>Low</option>
+                        <option>Medium</option>
+                        <option>High</option>
+                      </select>
+                    </div>
+
+                    <div class="col-12">
+                      <label class="form-label mb-1" for="categorySelectMobile"
+                        >Location</label
+                      >
+                      <select
+                        id="categorySelectMobile"
+                        class="form-select form-select-sm"
+                      ></select>
+                    </div>
+                  </div>
+                </form>
+                <div class="dropdown-divider"></div>
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
+                >
+                  <button class="btn btn-sm btn-outline-secondary">
+                    Reset
+                  </button>
+                  <button class="btn btn-sm btn-primary">Apply</button>
+                </div>
               </div>
             </div>
-            <div class="d-flex align-items-center gap-2 flex-shrink-1" style="min-width: 160px">
-              <label class="form-label mb-0" for="pageSizeSelect">Page size:</label>
+
+            <div class="dropdown">
+              <button
+                class="dropdown-toggle"
+                type="button"
+                id="sortsDropdownBtn"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="false"
+                aria-expanded="false"
+              >
+                <i class="bi bi-arrow-down-up fs-5"></i>
+              </button>
+              <div class="dropdown-menu">
+                <form id="sortForm" class="px-3 py-2">
+                  <h5>Sort by</h5>
+                  <div class="mb-3">
+                    <label
+                      class="form-label mb-1"
+                      for="quantityOrderSelectMobile"
+                      >Quantity</label
+                    >
+                    <select
+                      id="quantityOrderSelectMobile"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected>None</option>
+                      <option>High to Low</option>
+                      <option>Low to High</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label
+                      class="form-label mb-1"
+                      for="submissionDateSelectMobile"
+                      >Submission Date</label
+                    >
+                    <select
+                      id="submissionDateSelectMobile"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected>None</option>
+                      <option>Newest First</option>
+                      <option>Oldest First</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="form-label mb-1" for="donorOrderSelectMobile"
+                      >Donor</label
+                    >
+                    <select
+                      id="donorOrderSelectMobile"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected>None</option>
+                      <option>Ascending</option>
+                      <option>Descending</option>
+                    </select>
+                  </div>
+                </form>
+                <div class="dropdown-divider"></div>
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
+                >
+                  <button class="btn btn-sm btn-outline-secondary">
+                    Reset
+                  </button>
+                  <button class="btn btn-sm btn-primary">Apply</button>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-sm import-inventory-btn"
+              data-bs-toggle="modal"
+              data-bs-target="#importInventoryModal"
+            >
+              <i class="bi bi-file-earmark-arrow-up-fill me-1"></i> Import
+            </button>
+
+            <div
+              class="d-flex align-items-center gap-2"
+              style="min-width: 120px"
+            >
+              <label class="fs-6 mb-0" for="pageSizeSelect">Page:</label>
               <select id="pageSizeSelect" class="form-select form-select-sm">
                 <option value="20" selected>20</option>
                 <option value="30">30</option>
                 <option value="50">50</option>
               </select>
             </div>
-            <div class="ms-2 d-flex gap-2">
-              <button
-                type="button"
-                class="btn btn-sm btn-secondary"
-                data-bs-toggle="modal"
-                data-bs-target="#importInventoryModal"
-              >
-                <i class="bi bi-file-earmark-arrow-up"></i> Import
-              </button>
+
+            <div
+              class="d-flex align-items-center gap-2"
+              style="min-width: 120px"
+            >
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="hideExpiredToggle"
+                  checked
+                />
+                <label class="fs-6" for="hideExpiredToggle">Hide expired</label>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="table-responsive">
-          <table class="table table-bordered table-striped align-middle">
+          <table
+            class="table table-bordered table-striped align-middle table-sm"
+          >
             <thead class="table-light">
               <tr>
                 <th>Item</th>
@@ -540,8 +752,11 @@
     <script src="scripts/js/ui/messages.js"></script>
     <script src="scripts/js/ui/notifications.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
+    <script src="scripts/js/ui/dropdownFilters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="scripts/js/ui/adminInventory.js?v=20250925"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
     <!-- Exclude donation-specific scripts to avoid unintended behavior on inventory page -->
   </body>
 </html>
