@@ -20,6 +20,24 @@
 
   // DOM Elements (optional; script will no-op if absent)
   const modalEl = document.getElementById('notificationsModal');
+  if (modalEl) {
+  // Create a Bootstrap modal instance with static backdrop and no keyboard closing
+  const modalInstance = new bootstrap.Modal(modalEl, {
+    backdrop: 'static', // prevent outside click close
+    keyboard: false,    // prevent Esc key close
+    focus: true
+  });
+
+  // Optional: override show behavior on the bell icon click
+  const bellAnchor = document.querySelector('a[data-bs-target="#notificationsModal"]');
+  if (bellAnchor) {
+    bellAnchor.addEventListener('click', e => {
+      e.preventDefault();
+      modalInstance.show();
+    });
+  }
+}
+
   const listEl = document.getElementById('notificationsList'); // e.g., <ul id="notificationsList"></ul>
   const badgeEl = document.getElementById('notificationsBadge'); // optional unread count badge
   const bellAnchor = document.querySelector('a[data-bs-target="#notificationsModal"]');

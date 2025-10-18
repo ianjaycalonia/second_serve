@@ -74,7 +74,7 @@ nav {
 
     .nav-icons {
       display: flex;
-      gap: 20px;
+      gap: 10px;
       align-items: center;
 
       a > i {
@@ -85,12 +85,11 @@ nav {
       }
 
       a > img {
-        width: 1.8em;
+        width: 45px;
         aspect-ratio: 1 / 1;
         object-fit: contain;
         transition: filter 0.3s ease;
       }
-
       .dropdown {
         .dropdown-menu {
           li > a {
@@ -268,27 +267,106 @@ main {
   display: block;
 }
 
-/* Smooth transition (optional aesthetic) */
-.card-hovered .login-icon {
-  transition: opacity 0.3s ease;
+/* Accent bar base */
+.card-accent-dynamic {
+  position: relative;
 }
 
-/* When no notification: freeze the animation by replacing with static frame */
-.bell-icon.paused {
-  /* trick: draw the GIF as a background image instead of playing <img> */
+.card-accent-dynamic::before {
   content: "";
-  background-image: url("images/bell.gif");
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: center;
-  filter: grayscale(0.3);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+
+  /* Default state — solid red, no animation, no glow */
+  background: #ed3f34;
+  background-size: 400% 100%;
+  box-shadow: none;
+  transition: box-shadow 0.3s ease, background 0.3s ease;
 }
 
-/* hide the original gif frame when paused */
-.bell-icon.paused[src] {
-  opacity: 0;
+/* Hover state — start animation + glow */
+.card-hovered:hover .card-accent-dynamic::before {
+  background: linear-gradient(
+    90deg,
+    #ed3f34,
+    #ffaa00,
+    #ed3f34,
+    #ffbb00,
+    #ed3f34
+  );
+  background-size: 400% 100%;
+  animation: accentColorChange 8s linear infinite, accentGlow 2s ease-in-out infinite alternate;
+  box-shadow: 0 0 15px rgba(255, 77, 0, 0.8),
+              0 0 30px rgba(255, 170, 0, 0.6),
+              0 0 45px rgba(255, 102, 51, 0.5);
 }
 
+/* Gradient animation */
+@keyframes accentColorChange {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Glowing animation */
+@keyframes accentGlow {
+  0% {
+    box-shadow: 0 0 10px rgba(237, 63, 52, 0.4),
+                0 0 20px rgba(255, 170, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 77, 0, 0.8),
+                0 0 40px rgba(255, 170, 0, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 10px rgba(237, 63, 52, 0.4),
+                0 0 20px rgba(255, 170, 0, 0.3);
+  }
+}
+.dashboard-icon {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.dashboard-icon:hover {
+  transform: scale(1.2); 
+}
+
+.badge-message {
+  position: absolute;
+  top: 1px;
+  left: 30px;
+  display: none;          /* hidden initially */
+  font-size: 0.6rem;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: white;
+  background-color: transparent;  /* no background on reload */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.3s ease; /* smooth show */
+}
+
+/* When you want to show it later (e.g., when message arrives) */
+.badge-message.active {
+  display: flex;
+  background-color: red; /* or any color you want */
+}
 /* Hide submenu when sidebar is collapsed */
 .sidebar.collapsed .collapse {
   display: none !important;
@@ -299,22 +377,18 @@ main {
   transform: rotate(180deg);
   transition: transform 0.3s;
 }
-.dashboard-icon {
-  border-radius: 50%; /* makes the image circular */
-  object-fit: cover; /* ensures the GIF fills the circle without distortion */
-}
 
-/* ✅ Animated glowing accent - Red & Orange only */
-.card-accent {
-  position: relative;
-}
 /* Normal sidebar: icon and text aligned horizontally */
 .dashboard-link {
   display: flex;
   align-items: center;
   gap: 8px; /* space between icon and text */
 }
-
+.dashboard-link {
+  display: flex;
+  align-items: center;
+  gap: 8px; 
+}
 /* When sidebar is collapsed */
 .sidebar.collapsed .dashboard-link {
   justify-content: center; /* centers content horizontally */
@@ -326,39 +400,18 @@ main {
 .dashboard-link {
   transition: all 0.3s ease;
 }
+.card-accent {
+  position: relative;
+}
+/* Accent bar */
 .card-accent::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  inset: 0 0 auto 0;
   height: 6px;
+  background: var(--secondary-color);
   border-top-left-radius: 0.5rem;
   border-top-right-radius: 0.5rem;
-
-  /* Animated gradient - only red & orange */
-  background: linear-gradient(
-    90deg,
-    #ff0000,
-    /* red */ #ffaa00,
-    /* orange */ #ff0000,
-    #ffbb00,
-    #ff0000
-  );
-  background-size: 400% 100%;
-  animation: accentColorChange 8s infinite linear;
-}
-
-@keyframes accentColorChange {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
 }
 
 @media (max-width: 768px) {

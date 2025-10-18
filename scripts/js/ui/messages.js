@@ -55,7 +55,7 @@
     try {
       if (bootstrap && bootstrap.Modal) {
         // Prefer constructor to avoid edge-cases in getOrCreateInstance with data-api interactions
-        modal = new bootstrap.Modal(modalEl, { backdrop: true, keyboard: true, focus: true });
+        modal = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false, focus: true });
       }
     } catch(_) { /* ignore */ }
     try { if (!modal && bootstrap && bootstrap.Modal) { modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: true, keyboard: true, focus: true }); } } catch(_) { /* ignore */ }
@@ -72,9 +72,9 @@
       document.querySelectorAll('a[data-bs-target="#messagesModal"]').forEach(anchor => {
         if (anchor.querySelector('.messages-badge')) return;
         const span = document.createElement('span');
-        span.className = 'messages-badge position-absolute translate-middle badge rounded-pill bg-danger';
+        span.className = 'messages-badge position-absolute translate-middle badge-message rounded-pill bg-danger';
         span.style.top = '6px';
-        span.style.right = '2px';
+        span.style.left = '37px';
         span.style.display = 'none';
         span.style.fontSize = '0.6rem';
         anchor.style.position = 'relative';
@@ -98,6 +98,11 @@
         if (total > 0) { span.textContent = total > 99 ? '99+' : String(total); span.style.display = ''; }
         else { span.style.display = 'none'; }
       });
+      // Update letter animation based on unread messages
+        if (window.LetterAnimation) {
+          window.LetterAnimation.update(total);
+        }
+
       // Turn mail icon red when there are unread messages
       document.querySelectorAll('a[data-bs-target="#messagesModal"]').forEach(anchor => {
         const icon = anchor.querySelector('i');
@@ -138,7 +143,40 @@
       async function apiPost(action, body){ const res = await fetch(apiBase + '?action=' + encodeURIComponent(action), { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(body||{}) }); return res.json(); }
       async function apiPatch(action, params){ const url = apiBase + '?' + new URLSearchParams(Object.assign({ action }, params||{})).toString(); const res = await fetch(url, { method:'PATCH', credentials:'include' }); return res.json(); }
 
-      function ensureTheme(){ if (document.getElementById('messages-theme-override')) return; const style=document.createElement('style'); style.id='messages-theme-override'; style.textContent = '#messagesModal .list-group-item.active{background-color:#35b4c1;border-color:#35b4c1;color:#fff} #messagesModal .btn-primary{background-color:#35b4c1;border-color:#35b4c1}'; document.head.appendChild(style); }
+      function ensureTheme(){
+  if (document.getElementById('messages-theme-override')) return;
+  const style = document.createElement('style');
+  style.id = 'messages-theme-override';
+  style.textContent = `
+    /* Active conversation */
+    #messagesModal .list-group-item.active {
+      background-color: #35b4c1;
+      border-color: #35b4c1;
+      color: #fff;
+    }
+
+    /* Primary button base */
+    #messagesModal .btn-primary {
+      background-color: #35b4c1;
+      border-color: #35b4c1;
+      transition: background-color 0.25s ease, transform 0.2s ease;
+    }
+
+    /* 🔹 Hover zoom-in effect */
+    #messagesModal .btn-primary:hover {
+      background-color: #2ea2ad;
+      border-color: #2ea2ad;
+      transform: scale(1.08);
+    }
+
+    /* Optional: smooth icon color on hover */
+    #messagesModal .btn-primary:hover i {
+      color: #fff;
+      transition: color 0.2s ease;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
       function buildUI(){
         const body = qsM('.modal-body'); if (!body) return; ensureTheme();
@@ -218,8 +256,78 @@
         });
       }
 
-      function renderMessages(){ const wrap = qsM('#mm-messages'); if (!wrap) return; wrap.innerHTML=''; messages.forEach(m=>{ const isMine = (window.CURRENT_USER_ID && Number(m.sender_id)===Number(window.CURRENT_USER_ID)); const div=document.createElement('div'); div.className='d-flex mb-2 '+(isMine?'justify-content-end':''); const style=isMine?'background: var(--hover-color); border:1px solid var(--secondary-color);':'background:#fff; border:1px solid #edf2f7;'; div.innerHTML = `<div class="p-2 rounded" style="max-width:80%; white-space:pre-wrap; ${style}">${(m.body||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}<div class="text-muted small mt-1">${m.created_at}</div></div>`; wrap.appendChild(div); }); wrap.scrollTop = wrap.scrollHeight; }
+        function renderMessages() {
+        const wrap = qsM('#mm-messages');
+        if (!wrap) return;
 
+        // Detect if user is near bottom before re-render
+        const wasNearBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 50;
+
+        wrap.innerHTML = '';
+        let lastDate = '';
+
+        messages.forEach(m => {
+          const isMine = (window.CURRENT_USER_ID && Number(m.sender_id) === Number(window.CURRENT_USER_ID));
+          const outer = document.createElement('div');
+          outer.className = 'mb-2 d-flex flex-column ' + (isMine ? 'align-items-end' : 'align-items-start');
+
+          const bubbleWrap = document.createElement('div');
+          bubbleWrap.className = 'd-flex ' + (isMine ? 'justify-content-end' : '');
+
+          const style = isMine
+            ? 'background: var(--primary-color); border:1px solid var(--primary-color); color: var(--primary-background);'
+            : 'background: var(--header-text-color); border:1px solid #717171ff; color: var(--primary-background);';
+
+          // Parse and format date/time
+          const msgDate = new Date(m.created_at);
+          const now = new Date();
+          const isSameDay =
+            msgDate.getFullYear() === now.getFullYear() &&
+            msgDate.getMonth() === now.getMonth() &&
+            msgDate.getDate() === now.getDate();
+
+          const timeStr = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const dateStr = msgDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+
+          // Date separator for messages from a new day
+          const msgDateKey = msgDate.toDateString();
+          if (msgDateKey !== lastDate) {
+            const sep = document.createElement('div');
+            sep.className = 'text-center text-muted small my-2';
+            sep.textContent = isSameDay ? 'Today' : dateStr;
+            wrap.appendChild(sep);
+            lastDate = msgDateKey;
+          }
+
+          // Sanitize message
+          const safeBody = (m.body || '').replace(/[&<>"']/g, c => ({
+            "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+          }[c]));
+
+          // Message bubble
+          const bubble = document.createElement('div');
+          bubble.className = 'p-2 rounded';
+          bubble.style.cssText = `max-width:100%; white-space:pre-wrap; ${style}`;
+          bubble.innerHTML = safeBody;
+
+          // Time below bubble (outside border)
+          const timeDiv = document.createElement('div');
+          timeDiv.className = 'text-muted small mt-1';
+          timeDiv.style.fontSize = '0.7rem';
+          timeDiv.textContent = isSameDay ? timeStr : `${timeStr}`;
+
+          bubbleWrap.appendChild(bubble);
+          outer.appendChild(bubbleWrap);
+          outer.appendChild(timeDiv);
+          wrap.appendChild(outer);
+        });
+
+        // Only scroll to bottom if user was near bottom before
+        if (wasNearBottom) {
+          wrap.scrollTop = wrap.scrollHeight;
+        }
+      }
+      
       async function loadConversations(){ const res = await apiGet({ action:'list_conversations' }); if (res.success){ convs = res.data.items||[]; renderConversations(); } if (window.__refreshMessagesBadge) try{ window.__refreshMessagesBadge(); }catch(_){ } }
       async function selectConversation(id){ activeId=id; messages=[]; messageIds=new Set(); lastId=null; await markRead(); await loadMessages(true); renderConversations(); setComposerEnabled(true); focusSingleChannel(); }
       async function loadMessages(reset){ if (!activeId || loadingMessages) return; loadingMessages=true; try{ const doReset = (typeof reset==='boolean') ? reset : (messages.length===0); const res = await apiGet({ action:'list_messages', conversation_id: activeId, limit: 100, after_id: doReset? '' : (lastId||'') }); if (!res.success) return; const items = Array.isArray(res.data?.items) ? res.data.items : []; if (doReset){ messages=[]; messageIds=new Set(); lastId=null; } for (const m of items){ const mid=Number(m.id); if (!messageIds.has(mid)){ messageIds.add(mid); messages.push(m); if (!lastId || mid>Number(lastId)) lastId=mid; } } messages.sort((a,b)=> Number(a.id)-Number(b.id)); renderMessages(); } finally { loadingMessages=false; } }
