@@ -24,6 +24,7 @@
       href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="scripts/css/tableLayout.css" />
   </head>
   {{ ... }}
   <body class="sidebar-collapsed">
@@ -50,8 +51,13 @@
             data-bs-target="#notificationsModal"
             aria-label="Open notifications"
           >
-          <img class="bell-icon" src="images/bell.gif"  alt="Bell" width="40" height="40">
-
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
 
             <span
               id="notificationsBadge"
@@ -65,8 +71,19 @@
             data-bs-target="#messagesModal"
             aria-label="Open messages"
           >
-            <img src="images/letter.gif" class="letter-icon" alt="Mail" width="35" height="35">
-            <span id="messagesBadge" class="badge bg-danger" style="display:none;">0</span>
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span
+              id="messagesBadge"
+              class="badge bg-danger"
+              style="display: none"
+              >0</span
+            >
           </a>
 
           <div class="dropdown">
@@ -77,9 +94,12 @@
               data-bs-toggle="dropdown"
               aria-expanded="false"
             >
-              <img src="images/profile.png" 
-                  alt="Dashboard Icon" 
-                  width="25" height="25"/>
+              <img
+                src="images/profile.png"
+                alt="Dashboard Icon"
+                width="25"
+                height="25"
+              />
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
@@ -292,9 +312,7 @@
         </ol>
       </div>
 
-      <div
-        class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3"
-      >
+      <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
         <h5 class="mb-0">Distribution Result</h5>
         <div class="d-flex gap-2">
           <button class="btn btn-sm btn-primary" id="saveChangesBtn">
@@ -476,17 +494,20 @@
             window.location.replace(url.toString());
             return; // stop further execution on this old document
           }
-        function syncNotifyVisibility() {
-          try {
-            var runBtn = document.getElementById('notifyRunBtn');
-            var hide = !runBtn || runBtn.classList.contains('d-none');
-            var container = document.getElementById('resultContainer');
-            if (!container) return;
-            container.querySelectorAll('.dr-notify-one').forEach(function(btn){
-              if (hide) btn.classList.add('d-none'); else btn.classList.remove('d-none');
-            });
-          } catch(_){}
-        }
+          function syncNotifyVisibility() {
+            try {
+              var runBtn = document.getElementById("notifyRunBtn");
+              var hide = !runBtn || runBtn.classList.contains("d-none");
+              var container = document.getElementById("resultContainer");
+              if (!container) return;
+              container
+                .querySelectorAll(".dr-notify-one")
+                .forEach(function (btn) {
+                  if (hide) btn.classList.add("d-none");
+                  else btn.classList.remove("d-none");
+                });
+            } catch (_) {}
+          }
           var hasRun = (url.searchParams.get("run_id") || "").trim() !== "";
           var hasPk = (url.searchParams.get("period_key") || "").trim() !== "";
           var hasIds =
@@ -551,14 +572,17 @@
         }
         function syncNotifyVisibility() {
           try {
-            var runBtn = document.getElementById('notifyRunBtn');
-            var hide = !runBtn || runBtn.classList.contains('d-none');
-            var container = document.getElementById('resultContainer');
+            var runBtn = document.getElementById("notifyRunBtn");
+            var hide = !runBtn || runBtn.classList.contains("d-none");
+            var container = document.getElementById("resultContainer");
             if (!container) return;
-            container.querySelectorAll('.dr-notify-one').forEach(function(btn){
-              if (hide) btn.classList.add('d-none'); else btn.classList.remove('d-none');
-            });
-          } catch(_){}
+            container
+              .querySelectorAll(".dr-notify-one")
+              .forEach(function (btn) {
+                if (hide) btn.classList.add("d-none");
+                else btn.classList.remove("d-none");
+              });
+          } catch (_) {}
         }
         if (document.readyState === "loading") {
           document.addEventListener("DOMContentLoaded", removeLegacyWeekUI);
@@ -572,14 +596,17 @@
       (function () {
         function syncNotifyVisibility() {
           try {
-            var runBtn = document.getElementById('notifyRunBtn');
-            var hide = !runBtn || runBtn.classList.contains('d-none');
-            var container = document.getElementById('resultContainer');
+            var runBtn = document.getElementById("notifyRunBtn");
+            var hide = !runBtn || runBtn.classList.contains("d-none");
+            var container = document.getElementById("resultContainer");
             if (!container) return;
-            container.querySelectorAll('.dr-notify-one').forEach(function(btn){
-              if (hide) btn.classList.add('d-none'); else btn.classList.remove('d-none');
-            });
-          } catch(_){ }
+            container
+              .querySelectorAll(".dr-notify-one")
+              .forEach(function (btn) {
+                if (hide) btn.classList.add("d-none");
+                else btn.classList.remove("d-none");
+              });
+          } catch (_) {}
         }
         function getAPI() {
           return typeof window.API_BASE_URL === "string" && window.API_BASE_URL
@@ -715,9 +742,11 @@
                   )
                     return;
                   const n = document.createElement("button");
-                  var runBtn = document.getElementById('notifyRunBtn');
-                  var hide = !runBtn || runBtn.classList.contains('d-none');
-                  n.className = "btn btn-sm btn-outline-primary dr-notify-one" + (hide?" d-none":"");
+                  var runBtn = document.getElementById("notifyRunBtn");
+                  var hide = !runBtn || runBtn.classList.contains("d-none");
+                  n.className =
+                    "btn btn-sm btn-outline-primary dr-notify-one" +
+                    (hide ? " d-none" : "");
                   n.setAttribute("data-rec", String(rid));
                   n.innerHTML = '<i class="bi bi-megaphone"></i> Notify';
                   n.addEventListener("click", () => notifyOne(rid));
@@ -736,8 +765,14 @@
               obs.observe(container, { childList: true, subtree: true });
             }
             // Extra: schedule a couple of retries to cover late async renders on first navigation
-            setTimeout(function(){ ensureButtons(); syncNotifyVisibility(); }, 50);
-            setTimeout(function(){ ensureButtons(); syncNotifyVisibility(); }, 150);
+            setTimeout(function () {
+              ensureButtons();
+              syncNotifyVisibility();
+            }, 50);
+            setTimeout(function () {
+              ensureButtons();
+              syncNotifyVisibility();
+            }, 150);
             // Render-wait loop: poll for cards rendered (via __DR_BYREC__ or .dr-add-item)
             (function waitForRender(maxMs) {
               let waited = 0;
@@ -774,19 +809,26 @@
         // Handle BFCache / back-forward navigation and SPA-like transitions
         try {
           window.addEventListener("pageshow", () =>
-            setTimeout(function(){ ensureButtons(); syncNotifyVisibility(); }, 0)
+            setTimeout(function () {
+              ensureButtons();
+              syncNotifyVisibility();
+            }, 0)
           );
         } catch (_) {}
         try {
-          var nb = document.getElementById('notifyRunBtn');
+          var nb = document.getElementById("notifyRunBtn");
           if (nb) {
-            nb.addEventListener('click', function(){ setTimeout(syncNotifyVisibility, 0); });
+            nb.addEventListener("click", function () {
+              setTimeout(syncNotifyVisibility, 0);
+            });
             if (window.MutationObserver) {
-              var ob = new MutationObserver(function(){ syncNotifyVisibility(); });
-              ob.observe(nb, { attributes: true, attributeFilter: ['class'] });
+              var ob = new MutationObserver(function () {
+                syncNotifyVisibility();
+              });
+              ob.observe(nb, { attributes: true, attributeFilter: ["class"] });
             }
           }
-        } catch(_){}
+        } catch (_) {}
       })();
     </script>
 
@@ -1161,80 +1203,28 @@
                     j = await res.json();
                   } catch (_) {}
                   if (res.ok && j && j.success) {
-                    // Success feedback
                     try {
-                      var bEl = document.getElementById("resultAlertBody");
-                      if (bEl) bEl.textContent = "Recipients notified.";
-                      var mEl = document.getElementById("resultAlertModal");
-                      if (mEl && window.bootstrap && bootstrap.Modal) {
-                        bootstrap.Modal.getOrCreateInstance(mEl).show();
-                      }
-                    } catch (_) {
-                      /* ignore */
-                    }
-                    btn.classList.add("d-none");
-                    btn.disabled = true;
-                    // Also write notifications for each recipient so it reflects in their feed
-                    try {
-                      for (var i = 0; i < recipientsToNotify.length; i++) {
-                        var rid = recipientsToNotify[i];
-                        var parts = [];
-                        // Build a short items list from the page if present
+                      // Hide the button and disable it
+                      btn.classList.add("d-none");
+                      btn.disabled = true;
+                      // Use the client-side helper to send per-recipient notifications,
+                      // update UI immediately, and persist per recipient.
+                      if (
+                        window &&
+                        typeof window.sendNotificationsForRun === "function"
+                      ) {
+                        // Fire-and-forget; it shows a summary toast when done
                         try {
-                          var tb = document.querySelector(
-                            'tbody.dr-recipient[data-rec="' + rid + '"]'
-                          );
-                          if (tb) {
-                            tb.querySelectorAll("tr").forEach(function (tr) {
-                              var nameEl = tr.querySelector(".dr-name");
-                              var qtyEl = tr.querySelector(".dr-qty");
-                              var name = nameEl
-                                ? (nameEl.value || "").trim()
-                                : "";
-                              var qty = qtyEl ? (qtyEl.value || "").trim() : "";
-                              if (name && qty) {
-                                parts.push(qty + "x " + name);
-                              }
-                            });
-                          }
+                          window.sendNotificationsForRun();
                         } catch (_) {}
-                        var msg = parts.length
-                          ? "You have been allocated items. Items: " +
-                            parts.slice(0, 6).join(", ") +
-                            (parts.length > 6 ? "…" : "")
-                          : "You have been allocated items.";
+                      } else {
+                        // Fallback: show a simple toast
                         try {
-                          var res2 = await fetch(
-                            API_BASE_URL +
-                              "/communications/notifications.php?action=create",
-                            {
-                              method: "POST",
-                              credentials: "include",
-                              headers: {
-                                "Content-Type": "application/json",
-                                Accept: "application/json",
-                              },
-                              body: JSON.stringify({
-                                user_id: rid,
-                                type: "allocation_ready",
-                                message: msg,
-                              }),
-                            }
-                          );
-                          if (!res2.ok) throw new Error("HTTP " + res2.status);
-                        } catch (err) {
-                          var fb3 = document.getElementById("resultFeedback");
-                          if (fb3)
-                            fb3.innerHTML =
-                              '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
-                        }
+                          if (window.showToast)
+                            showToast("Recipients notified.", "success");
+                        } catch (_) {}
                       }
-                    } catch (err) {
-                      var fb3 = document.getElementById("resultFeedback");
-                      if (fb3)
-                        fb3.innerHTML =
-                          '<div class="alert alert-danger py-2 mb-0">Failed to notify.</div>';
-                    }
+                    } catch (_) {}
                   } else {
                     var fb2 = document.getElementById("resultFeedback");
                     if (fb2)

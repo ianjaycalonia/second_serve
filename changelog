@@ -912,3 +912,116 @@ document.createElement("div"); wrapper.className = "ms-auto"; wrapper.innerHTML
     </div>
   </div>
 </div>
+
+<!-- distribute results table (new) -->
+const frag = document.createDocumentFragment(); // Create unified table
+structure const unifiedTable = document.createElement("div");
+unifiedTable.className = "table-responsive"; unifiedTable.innerHTML = `
+<table class="table table-bordered table-sm table-striped align-middle">
+  <thead class="table-light">
+    <tr>
+      <th>Recipient</th>
+      <th>Status</th>
+      <th>Created</th>
+      <th>Item</th>
+      <th>Quantity</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="dr-unified-tbody"></tbody>
+</table>
+`; const unifiedTbody = unifiedTable.querySelector("#dr-unified-tbody"); // Loop
+through recipients and items byRec.forEach(({ rid, items, error }) => { const
+meta = recMeta.get(rid) || {}; const base = meta.organization_name &&
+String(meta.organization_name).trim() ? String(meta.organization_name).trim() :
+meta.name || `Recipient ${rid}`; if (!Array.isArray(items) || !items.length) {
+const tr = document.createElement("tr"); tr.innerHTML = `
+<td>${base}</td>
+<td colspan="6" class="text-muted">No allocations saved for this recipient.</td>
+`; unifiedTbody.appendChild(tr); return; } // Helper: highest-level badge (for
+potential summary display if needed) let badgeHtml = ""; try { const statuses =
+items.map((a) => String(a.status || "").toLowerCase()); if (statuses.some((s) =>
+s === "completed")) { badgeHtml = "
+<span class="badge bg-primary ms-2">Completed</span>"; } else if
+(statuses.some((s) => s === "picked up")) { badgeHtml = "
+<span class="badge bg-secondary ms-2">Picked Up</span>"; } else if
+(statuses.some((s) => s === "acknowledged")) { badgeHtml = "
+<span class="badge bg-success ms-2">Acknowledged</span>"; } else if
+(statuses.some((s) => s === "updated")) { badgeHtml = "
+<span class="badge bg-warning text-dark ms-2">Updated</span>"; } else if
+(statuses.some((s) => s === "cancelled")) { badgeHtml = "
+<span class="badge bg-danger ms-2">Cancelled</span>"; } } catch (_) {} //
+Process each allocation and item items.forEach((a) => { const created =
+a.created_at ? new Date(a.created_at) : null; const dt = created ?
+`${String(created.getDate()).padStart(2, "0")}/${String( created.getMonth() + 1
+).padStart(2, "0")}/${created.getFullYear()} ${String( created.getHours()
+).padStart(2, "0")}:${String(created.getMinutes()).padStart(2, "0")}` : "";
+const status = a.status || "Allocated"; function statusBadge(s) { const t =
+String(s || "").toLowerCase(); if (t === "cancelled") return "<span
+  class="badge bg-danger"
+  >Cancelled</span
+>"; if (t === "acknowledged") return "<span class="badge bg-success"
+  >Acknowledged</span
+>"; if (t === "picked up") return "<span class="badge bg-secondary"
+  >Picked Up</span
+>"; if (t === "scheduled") return "<span class="badge bg-warning text-dark"
+  >Scheduled</span
+>"; if (t === "completed") return "<span class="badge bg-primary"
+  >Completed</span
+>"; if (t === "notified") return "<span class="badge bg-info text-dark"
+  >Notified</span
+>"; if (t === "updated") return "<span class="badge bg-warning text-dark"
+  >Updated</span
+>"; return "<span class="badge bg-info">Allocated</span>"; } if
+(Array.isArray(a.items)) { a.items.forEach((it) => { const tr =
+document.createElement("tr"); tr.dataset.allocationId = String(a.allocation_id
+|| ""); tr.dataset.itemId = String(it.item_id || ""); tr.dataset.rec = rid;
+tr.innerHTML = `
+<td>
+  ${base}${badgeHtml} ${ error ? `<span class="badge bg-danger ms-2"
+    >${error}</span
+  >` : "" }
+</td>
+<td>${statusBadge(status)}</td>
+<td>${dt}</td>
+<td>
+  <input type="text" class="form-control form-control-sm dr-name"
+  value="${(it.item_name || "").replace(/"/g, "&quot;")}" placeholder="Item
+  name">
+</td>
+<td>
+  <input
+    type="number"
+    class="form-control form-control-sm dr-qty"
+    value="${it.quantity}"
+    min="0"
+    step="1"
+  />
+</td>
+<td>
+  <div class="d-flex justify-content-center gap-2">
+    <button
+      class="btn btn-sm btn-outline-success dr-add-item"
+      data-rec="${rid}"
+      title="Add Item"
+    >
+      <i class="bi bi-plus-circle"></i>
+    </button>
+    <button
+      class="btn btn-sm btn-outline-info dr-notify"
+      data-rec="${rid}"
+      title="Notify"
+    >
+      <i class="bi bi-bell"></i>
+    </button>
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-danger dr-del"
+      title="Remove"
+    >
+      <i class="bi bi-x"></i>
+    </button>
+  </div>
+</td>
+`; unifiedTbody.appendChild(tr); }); } }); }); // Append the unified table
+frag.appendChild(unifiedTable); container.appendChild(frag);

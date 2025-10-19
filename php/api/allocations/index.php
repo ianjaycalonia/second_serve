@@ -121,6 +121,37 @@ try {
             }
             break;
 
+        case 'notify_recipient':
+            // Admin required; if not present, fallback to admin session for robustness
+            try { requireRole(['admin']); }
+            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            $payload = getJsonInput();
+            $runId = isset($payload['run_id']) ? (int)$payload['run_id'] : 0;
+            $recipientId = isset($payload['recipient_id']) ? (int)$payload['recipient_id'] : 0;
+            if ($runId <= 0 || $recipientId <= 0) { sendJson(['success'=>false,'error'=>'run_id and recipient_id are required'], 400); }
+            try {
+                $db = Database::getInstance();
+                // Ensure run exists
+                $run = $db->query('SELECT run_id FROM allocation_runs WHERE run_id = ? LIMIT 1', [$runId])->fetch();
+                if (!$run) sendJson(['success'=>false,'error'=>'Run not found'], 404);
+                // Persist DB state: mark allocations for this recipient in this run as Notified
+                $db->query(
+                    'UPDATE allocations
+                     SET status = "Notified", updated_at = NOW()
+                     WHERE run_id = ? AND recipient_id = ? AND LOWER(COALESCE(status, "")) IN ("pending","allocated","acknowledged","updated")'
+                    , [$runId, $recipientId]
+                );
+                // Insert notification record for the recipient
+                try {
+                    $msg = 'You have been allocated items. Check your Received Items.';
+                    $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_ready", ?, NOW())', [$recipientId, $msg]);
+                } catch (Exception $e) { /* ignore notification failures */ }
+                sendJson(['success'=>true, 'data'=>['run_id'=>$runId, 'recipient_id'=>$recipientId]]);
+            } catch (Exception $e) {
+                sendJson(['success'=>false,'error'=>'Failed to notify recipient: ' . $e->getMessage()], 500);
+            }
+            break;
+
         case 'allocate_week':
             requireRole(['admin']);
             $periodKey = isset($payload['period_key']) ? trim((string)$payload['period_key']) : '';

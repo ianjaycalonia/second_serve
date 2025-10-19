@@ -300,10 +300,10 @@ main {
     #ed3f34
   );
   background-size: 400% 100%;
-  animation: accentColorChange 8s linear infinite, accentGlow 2s ease-in-out infinite alternate;
-  box-shadow: 0 0 15px rgba(255, 77, 0, 0.8),
-              0 0 30px rgba(255, 170, 0, 0.6),
-              0 0 45px rgba(255, 102, 51, 0.5);
+  animation: accentColorChange 8s linear infinite,
+    accentGlow 2s ease-in-out infinite alternate;
+  box-shadow: 0 0 15px rgba(255, 77, 0, 0.8), 0 0 30px rgba(255, 170, 0, 0.6),
+    0 0 45px rgba(255, 102, 51, 0.5);
 }
 
 /* Gradient animation */
@@ -322,16 +322,13 @@ main {
 /* Glowing animation */
 @keyframes accentGlow {
   0% {
-    box-shadow: 0 0 10px rgba(237, 63, 52, 0.4),
-                0 0 20px rgba(255, 170, 0, 0.3);
+    box-shadow: 0 0 10px rgba(237, 63, 52, 0.4), 0 0 20px rgba(255, 170, 0, 0.3);
   }
   50% {
-    box-shadow: 0 0 25px rgba(255, 77, 0, 0.8),
-                0 0 40px rgba(255, 170, 0, 0.6);
+    box-shadow: 0 0 25px rgba(255, 77, 0, 0.8), 0 0 40px rgba(255, 170, 0, 0.6);
   }
   100% {
-    box-shadow: 0 0 10px rgba(237, 63, 52, 0.4),
-                0 0 20px rgba(255, 170, 0, 0.3);
+    box-shadow: 0 0 10px rgba(237, 63, 52, 0.4), 0 0 20px rgba(255, 170, 0, 0.3);
   }
 }
 .dashboard-icon {
@@ -342,20 +339,20 @@ main {
 }
 
 .dashboard-icon:hover {
-  transform: scale(1.2); 
+  transform: scale(1.2);
 }
 
 .badge-message {
   position: absolute;
   top: 1px;
   left: 30px;
-  display: none;          /* hidden initially */
+  display: none; /* hidden initially */
   font-size: 0.6rem;
   width: 15px;
   height: 15px;
   border-radius: 50%;
   color: white;
-  background-color: transparent;  /* no background on reload */
+  background-color: transparent; /* no background on reload */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -387,7 +384,7 @@ main {
 .dashboard-link {
   display: flex;
   align-items: center;
-  gap: 8px; 
+  gap: 8px;
 }
 /* When sidebar is collapsed */
 .sidebar.collapsed .dashboard-link {
