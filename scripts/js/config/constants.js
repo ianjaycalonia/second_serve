@@ -12,6 +12,8 @@
         const noop = function(){};
         if (console && typeof console.debug === 'function') console.debug = noop;
         if (console && typeof console.info === 'function') console.info = noop;
+        if (console && typeof console.log === 'function') console.log = noop;
+        if (console && typeof console.warn === 'function') console.warn = noop;
       } catch(_){}
     }
 

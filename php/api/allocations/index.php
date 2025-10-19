@@ -927,13 +927,17 @@ SQL);
                 // On-site issuances should never be attached to weekly runs
                 $runId = null;
 
-                // Deduct stock FIFO: prefer earliest expiry, then earliest added_at
+                // Deduct stock FIFO by item name (and optional category):
+                // Join donation_items to resolve product_name/product_category and expiry_date
                 $remaining = $qty;
                 $picked = [];
                 $params = [$itemName];
-                $sql = "SELECT inventory_id, quantity FROM inventory WHERE product_name = ? AND quantity > 0";
-                if ($category !== null && $category !== '') { $sql .= " AND product_category = ?"; $params[] = $category; }
-                $sql .= " ORDER BY COALESCE(expiry_date, '9999-12-31') ASC, added_at ASC, inventory_id ASC";
+                $sql = "SELECT inv.inventory_id, inv.quantity
+                          FROM inventory inv
+                          INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                         WHERE di.product_name = ? AND inv.quantity > 0";
+                if ($category !== null && $category !== '') { $sql .= " AND di.product_category = ?"; $params[] = $category; }
+                $sql .= " ORDER BY COALESCE(di.expiry_date, '9999-12-31') ASC, inv.added_at ASC, inv.inventory_id ASC";
                 $rows = $db->query($sql, $params)->fetchAll();
                 foreach ($rows as $r) {
                     if ($remaining <= 0) break;
@@ -949,6 +953,14 @@ SQL);
                     if ($newQty !== null && $newQty === ($have - $take)) {
                         $picked[] = ['inventory_id' => $invId, 'quantity' => $take];
                         $remaining -= $take;
+                        try {
+                            $uid = (int)(currentUserId() ?? 0);
+                            $db->query(
+                                'INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, performed_by, note, created_at)
+                                 VALUES (?, "out", ?, "onsite", ?, ?, ?, NOW())',
+                                [ $invId, (int)$take, (int)$recipientId, $uid, ($note !== null && $note !== '' ? $note : 'On-site Giveaway') ]
+                            );
+                        } catch (Exception $e) { /* ignore movement insert errors to not block issuance */ }
                     }
                 }
                 if ($remaining > 0) {

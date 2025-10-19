@@ -45,6 +45,15 @@ try {
                 sendJson(['success' => false, 'error' => 'Method not allowed'], 405);
             }
             break;
+
+        case 'changePassword':
+            if ($method === 'POST') {
+                requireAuth();
+                handleChangePassword($data);
+            } else {
+                sendJson(['success' => false, 'error' => 'Method not allowed'], 405);
+            }
+            break;
             
         default:
             sendJson(['success' => false, 'error' => 'Invalid action'], 400);
@@ -105,5 +114,23 @@ function handleLogout() {
     $auth = new Auth();
     $auth->logout();
     sendJson(['success' => true, 'message' => 'Logged out successfully']);
+}
+
+/**
+ * Handle change password
+ */
+function handleChangePassword($data) {
+    $userId = (int)currentUserId();
+    if ($userId <= 0) { sendJson(['success' => false, 'error' => 'Unauthorized'], 401); }
+    $current = isset($data['currentPassword']) ? (string)$data['currentPassword'] : '';
+    $new = isset($data['newPassword']) ? (string)$data['newPassword'] : '';
+    $confirm = isset($data['confirmPassword']) ? (string)$data['confirmPassword'] : '';
+    try {
+        $auth = new Auth();
+        $auth->changePassword($userId, $current, $new, $confirm);
+        sendJson(['success' => true, 'message' => 'Password updated']);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 400);
+    }
 }
 ?>

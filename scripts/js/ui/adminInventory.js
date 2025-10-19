@@ -20,6 +20,24 @@
     );
   }
 
+  function updateRowImmediate(itemName, category, updater) {
+    try {
+      const tbody = document.querySelector("main .table tbody");
+      if (!tbody) return;
+      const rows = tbody.querySelectorAll("tr");
+      for (const tr of rows) {
+        const tds = tr.querySelectorAll("td");
+        if (tds.length < 7) continue;
+        const nameText = (tds[0].textContent || "").trim();
+        const catText = (tds[1].textContent || "").trim();
+        if (nameText === itemName && catText === category) {
+          updater(tr, tds);
+          break;
+        }
+      }
+    } catch (_) {}
+  }
+
   async function loadCategoriesIntoSelect(id, items) {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -88,7 +106,7 @@
     });
   }
 
-  // Separate delegation for tag editing to avoid quantity prompt
+  // Separate delegation for tag editing to use modal instead of prompt
   document.addEventListener("click", async function (e) {
     const btnTag = e.target.closest(".inv-edit-tags");
     if (!btnTag) return;
@@ -96,36 +114,20 @@
     const category = btnTag.getAttribute("data-category") || "";
     const currentTags = btnTag.getAttribute("data-tags") || "";
     try {
-      const tags = prompt(
-        `Edit tags for ${itemName} (${category}). Use commas to separate.`,
-        currentTags
-      );
-      if (tags === null) return; // cancelled
-      const res = await fetch(
-        `${API_BASE_URL}/inventory/index.php/update-tags`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            scope: "group",
-            item_name: itemName,
-            category: category,
-            tags: String(tags || "").trim(),
-          }),
-        }
-      );
-      const j = await res
-        .json()
-        .catch(() => ({ success: false, error: `HTTP ${res.status}` }));
-      if (!res.ok || !j?.success) {
-        throw new Error(j?.error || `HTTP ${res.status}`);
+      // Store context
+      window.__tagCtx = { itemName, category };
+      const meta = document.getElementById("tagEditMeta");
+      if (meta) meta.textContent = `${itemName} (${category})`;
+      const input = document.getElementById("tagEditInput");
+      if (input) input.value = currentTags;
+      const fb = document.getElementById("tagEditFeedback");
+      if (fb) fb.textContent = "";
+      const modalEl = document.getElementById("tagEditModal");
+      if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
       }
-      const p = window.__inventoryLast?.pagination?.page || 1;
-      await loadAndRender(p);
     } catch (err) {
-      console.error("Update tags failed:", err);
-      alert("Failed to update tags: " + (err?.message || "Unknown error"));
+      console.error("Open tag edit modal failed:", err);
     }
   });
 
@@ -246,6 +248,9 @@
   }
 
   async function loadAndRender(page = 1) {
+    // Prevent overlapping refreshes
+    if (window.__invLoading) return;
+    window.__invLoading = true;
     try {
       const filters = getFilters();
       const limit = getPageSize();
@@ -306,6 +311,8 @@
           err.message
         )}). You must be logged in as Admin to view inventory.</td></tr>`;
       }
+    } finally {
+      window.__invLoading = false;
     }
   }
 
@@ -726,7 +733,14 @@
           : [];
         const rows = Array.isArray(previewData.rows) ? previewData.rows : [];
         if (!header.length || !rows.length) {
-          alert("No parsed rows to import.");
+          try {
+            const b = document.getElementById("importResultBody");
+            if (b) b.textContent = "No parsed rows to import.";
+            const m = document.getElementById("importResultModal");
+            if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+              bootstrap.Modal.getOrCreateInstance(m).show();
+            }
+          } catch (_) {}
           return;
         }
         const ix = (name) => header.indexOf(String(name || "").toLowerCase());
@@ -814,7 +828,14 @@
           payloadRows.push(rowObj);
         }
         if (!payloadRows.length) {
-          alert("No valid rows (need item_name and quantity>=1).");
+          try {
+            const b = document.getElementById("importResultBody");
+            if (b) b.textContent = "No valid rows (need item_name and quantity>=1).";
+            const m = document.getElementById("importResultModal");
+            if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+              bootstrap.Modal.getOrCreateInstance(m).show();
+            }
+          } catch (_) {}
           return;
         }
         const url = `${API_BASE_URL}/inventory/index.php/import`;
@@ -843,12 +864,8 @@
         // Refresh table
         const p = window.__inventoryLast?.pagination?.page || 1;
         await loadAndRender(p);
-        // Report summary (show first few error reasons if any)
-        if (errs.length) {
-          try {
-            console.error("Inventory import errors:", errs);
-          } catch (_) {}
-        }
+        // Report summary via modal (show first few error reasons if any)
+        try { if (errs.length) console.error("Inventory import errors:", errs); } catch (_) {}
         const firstErrors = errs
           .slice(0, 5)
           .map((e) => `#${e?.row ?? "?"}: ${e?.error ?? "unknown error"}`)
@@ -856,10 +873,24 @@
         const msg = `Imported ${inserted} row(s).${
           errs.length ? ` Skipped ${errs.length} invalid.` : ""
         }${firstErrors ? `\n\nSample errors:\n${firstErrors}` : ""}`;
-        alert(msg);
+        try {
+          const b = document.getElementById("importResultBody");
+          if (b) b.textContent = msg;
+          const m = document.getElementById("importResultModal");
+          if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(m).show();
+          }
+        } catch (_) {}
       } catch (err) {
         console.error("Import failed:", err);
-        alert("Import failed: " + (err?.message || "Unknown error"));
+        try {
+          const b = document.getElementById("importResultBody");
+          if (b) b.textContent = "Import failed: " + (err?.message || "Unknown error");
+          const m = document.getElementById("importResultModal");
+          if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(m).show();
+          }
+        } catch (_) {}
       } finally {
         submitBtn.disabled = false;
       }
@@ -873,6 +904,51 @@
     await loadCategories();
     loadAndRender(1);
     bindImportModal();
+    // Wire tag edit save button
+    try {
+      const save = document.getElementById("tagEditSaveBtn");
+      if (save) {
+        save.addEventListener("click", async () => {
+          try {
+            const ctx = window.__tagCtx || {};
+            const itemName = ctx.itemName || "";
+            const category = ctx.category || "";
+            const input = document.getElementById("tagEditInput");
+            const fb = document.getElementById("tagEditFeedback");
+            const tags = String(input?.value || "").trim();
+            if (!itemName || !category) {
+              if (fb) fb.textContent = "Invalid item context.";
+              return;
+            }
+            updateRowImmediate(itemName, category, (tr, tds) => {
+              tds[4].textContent = tags || "—";
+              const btn = tr.querySelector(".inv-edit-tags");
+              if (btn) btn.setAttribute("data-tags", tags);
+            });
+            const res = await fetch(`${API_BASE_URL}/inventory/index.php/update-tags`, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ scope: "group", item_name: itemName, category, tags })
+            });
+            const j = await res.json().catch(() => ({ success:false, error:`HTTP ${res.status}` }));
+            if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+            // Close modal
+            const m = document.getElementById("tagEditModal");
+            if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+              bootstrap.Modal.getOrCreateInstance(m).hide();
+            }
+            try { window.__invNonExpiredCache = {}; } catch (_) {}
+            const p = window.__inventoryLast?.pagination?.page || 1;
+            await loadAndRender(p);
+          } catch (err) {
+            console.error("Tag save failed:", err);
+            const fb = document.getElementById("tagEditFeedback");
+            if (fb) fb.textContent = err?.message || "Failed to update tags.";
+          }
+        });
+      }
+    } catch (_) {}
     // No export bindings here; exports will live in ReportAndAnalytics.html
     // Bind modal submit
     const submit = document.getElementById("onsiteIssueSubmitBtn");
@@ -914,6 +990,11 @@
         try {
           btn.disabled = true;
           if (fb) fb.textContent = "";
+          updateRowImmediate(itemName, category, (tr, tds) => {
+            const cur = parseInt((tds[2].textContent || "0").replace(/[^0-9]/g, ''), 10) || 0;
+            const next = Math.max(0, cur - quantity);
+            tds[2].textContent = String(next);
+          });
           // Hide the entry modal first to avoid stacked backdrops
           if (mEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
             bootstrap.Modal.getOrCreateInstance(mEl).hide();
@@ -921,6 +1002,7 @@
           cleanup();
           await createOnsiteAllocation(itemName, category, quantity, note);
           // Reload table
+          try { window.__invNonExpiredCache = {}; } catch (_) {}
           const p = window.__inventoryLast?.pagination?.page || 1;
           await loadAndRender(p);
         } catch (err) {

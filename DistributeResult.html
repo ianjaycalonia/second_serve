@@ -83,12 +83,12 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
-                <a class="dropdown-item" href="#">
+                <a class="dropdown-item" href="adminProfile.html">
                   <i class="bi bi-person me-2"></i>Profile
                 </a>
               </li>
               <li>
-                <a class="dropdown-item" href="#">
+                <a class="dropdown-item" href="adminSettings.html">
                   <i class="bi bi-gear me-2"></i>Settings
                 </a>
               </li>
@@ -476,6 +476,17 @@
             window.location.replace(url.toString());
             return; // stop further execution on this old document
           }
+        function syncNotifyVisibility() {
+          try {
+            var runBtn = document.getElementById('notifyRunBtn');
+            var hide = !runBtn || runBtn.classList.contains('d-none');
+            var container = document.getElementById('resultContainer');
+            if (!container) return;
+            container.querySelectorAll('.dr-notify-one').forEach(function(btn){
+              if (hide) btn.classList.add('d-none'); else btn.classList.remove('d-none');
+            });
+          } catch(_){}
+        }
           var hasRun = (url.searchParams.get("run_id") || "").trim() !== "";
           var hasPk = (url.searchParams.get("period_key") || "").trim() !== "";
           var hasIds =
@@ -538,6 +549,17 @@
             } catch (_) {}
           } catch (_) {}
         }
+        function syncNotifyVisibility() {
+          try {
+            var runBtn = document.getElementById('notifyRunBtn');
+            var hide = !runBtn || runBtn.classList.contains('d-none');
+            var container = document.getElementById('resultContainer');
+            if (!container) return;
+            container.querySelectorAll('.dr-notify-one').forEach(function(btn){
+              if (hide) btn.classList.add('d-none'); else btn.classList.remove('d-none');
+            });
+          } catch(_){}
+        }
         if (document.readyState === "loading") {
           document.addEventListener("DOMContentLoaded", removeLegacyWeekUI);
         } else {
@@ -548,6 +570,17 @@
     <!-- Per-recipient Notify button beside Add Item (post-render injection) -->
     <script>
       (function () {
+        function syncNotifyVisibility() {
+          try {
+            var runBtn = document.getElementById('notifyRunBtn');
+            var hide = !runBtn || runBtn.classList.contains('d-none');
+            var container = document.getElementById('resultContainer');
+            if (!container) return;
+            container.querySelectorAll('.dr-notify-one').forEach(function(btn){
+              if (hide) btn.classList.add('d-none'); else btn.classList.remove('d-none');
+            });
+          } catch(_){ }
+        }
         function getAPI() {
           return typeof window.API_BASE_URL === "string" && window.API_BASE_URL
             ? window.API_BASE_URL
@@ -682,7 +715,9 @@
                   )
                     return;
                   const n = document.createElement("button");
-                  n.className = "btn btn-sm btn-outline-primary dr-notify-one";
+                  var runBtn = document.getElementById('notifyRunBtn');
+                  var hide = !runBtn || runBtn.classList.contains('d-none');
+                  n.className = "btn btn-sm btn-outline-primary dr-notify-one" + (hide?" d-none":"");
                   n.setAttribute("data-rec", String(rid));
                   n.innerHTML = '<i class="bi bi-megaphone"></i> Notify';
                   n.addEventListener("click", () => notifyOne(rid));
@@ -694,14 +729,15 @@
         function initInject() {
           try {
             ensureButtons();
+            syncNotifyVisibility();
             const container = document.getElementById("resultContainer");
             if (container && window.MutationObserver) {
               const obs = new MutationObserver(() => ensureButtons());
               obs.observe(container, { childList: true, subtree: true });
             }
             // Extra: schedule a couple of retries to cover late async renders on first navigation
-            setTimeout(ensureButtons, 50);
-            setTimeout(ensureButtons, 150);
+            setTimeout(function(){ ensureButtons(); syncNotifyVisibility(); }, 50);
+            setTimeout(function(){ ensureButtons(); syncNotifyVisibility(); }, 150);
             // Render-wait loop: poll for cards rendered (via __DR_BYREC__ or .dr-add-item)
             (function waitForRender(maxMs) {
               let waited = 0;
@@ -738,9 +774,19 @@
         // Handle BFCache / back-forward navigation and SPA-like transitions
         try {
           window.addEventListener("pageshow", () =>
-            setTimeout(() => ensureButtons(), 0)
+            setTimeout(function(){ ensureButtons(); syncNotifyVisibility(); }, 0)
           );
         } catch (_) {}
+        try {
+          var nb = document.getElementById('notifyRunBtn');
+          if (nb) {
+            nb.addEventListener('click', function(){ setTimeout(syncNotifyVisibility, 0); });
+            if (window.MutationObserver) {
+              var ob = new MutationObserver(function(){ syncNotifyVisibility(); });
+              ob.observe(nb, { attributes: true, attributeFilter: ['class'] });
+            }
+          }
+        } catch(_){}
       })();
     </script>
 

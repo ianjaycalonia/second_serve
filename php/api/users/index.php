@@ -73,6 +73,7 @@ function handleUpdateProfile(array $payload) {
     $svc = new User();
     $svc->updateProfile((int)currentUserId(), [
         'name' => $payload['name'] ?? null,
+        'email' => $payload['email'] ?? null,
         'organization_name' => $payload['organization_name'] ?? null,
         'contact_number' => $payload['contact_number'] ?? null,
         'address' => $payload['address'] ?? null,

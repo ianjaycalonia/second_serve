@@ -79,12 +79,12 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
-                <a class="dropdown-item" href="#">
+                <a class="dropdown-item" href="adminProfile.html">
                   <i class="bi bi-person me-2"></i>Profile
                 </a>
               </li>
               <li>
-                <a class="dropdown-item" href="#">
+                <a class="dropdown-item" href="adminSettings.html">
                   <i class="bi bi-gear me-2"></i>Settings
                 </a>
               </li>
@@ -719,12 +719,14 @@
               b.setAttribute("title", title);
               b.setAttribute("data-bs-original-title", title);
             });
+            try { if (window.__rl_updateCounts) window.__rl_updateCounts(); } catch (_) {}
             const w5Col = document.getElementById("w5Col");
             if (w5Col && w5Col.style.display !== "none") {
               const w5Label = document.getElementById("w5Label");
               if (w5Label) {
                 const w5Start = new Date(y, m, 29);
                 w5Label.textContent = `Week 5 (${formatLongDate(w5Start)})`;
+                try { if (window.__rl_updateCounts) window.__rl_updateCounts(); } catch (_) {}
               }
             }
           } catch (_) {}
@@ -750,7 +752,7 @@
             });
             // Initial relabel and a delayed one after async loads
             relabelWeeks();
-            setTimeout(relabelWeeks, 150);
+            setTimeout(() => { try { relabelWeeks(); if (window.__rl_updateCounts) window.__rl_updateCounts(); } catch(_){} }, 150);
           } catch (_) {
             relabelWeeks();
           }

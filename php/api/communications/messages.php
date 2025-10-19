@@ -110,16 +110,13 @@ try {
                         'created_at'=>$last['created_at']
                     ]) : null;
 
-                    // Unread count: messages from other -> me with id greater than our last-read marker
-                    $lastReadId = getLastReadId($oid);
-                    $unread = 0;
-                    if ($lastReadId >= 0) {
-                        $row = db()->query(
-                            'SELECT COUNT(*) AS c FROM messages WHERE sender_id=? AND receiver_id=? AND id > ?',
-                            [$oid, $userId, $lastReadId]
-                        )->fetch();
-                        $unread = (int)($row ? $row['c'] : 0);
-                    }
+                    // Unread count: messages sent by other -> me that have not been marked read
+                    // Requires messages.receiver_read_at (DATETIME NULL) migration
+                    $row = db()->query(
+                        'SELECT COUNT(*) AS c FROM messages WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
+                        [$oid, $userId]
+                    )->fetch();
+                    $unread = (int)($row ? $row['c'] : 0);
                     $items[] = [
                         // Synthetic conversation id: use other user id (interpreted by frontend code as conversation_id)
                         'id' => $oid,
@@ -204,14 +201,23 @@ try {
                 $me = (int)(currentUserId() ?? 0);
                 $otherId = isset($_GET['conversation_id']) ? (int)$_GET['conversation_id'] : 0;
                 if ($otherId <= 0) sendJson(['success'=>false,'error'=>'conversation_id is required'], 400);
-                // Set last-read to the latest message id in this conversation (both directions)
-                $row = db()->query(
+                // Mark all inbound messages from other -> me as read (idempotent)
+                db()->query(
+                    'UPDATE messages SET receiver_read_at = NOW() WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
+                    [$otherId, $me]
+                );
+                // Calculate remaining unread and latest id for convenience
+                $rowMax = db()->query(
                     'SELECT MAX(id) AS max_id FROM messages WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)',
                     [$me, $otherId, $otherId, $me]
                 )->fetch();
-                $maxId = (int)($row && $row['max_id'] ? $row['max_id'] : 0);
-                setLastReadId($otherId, $maxId);
-                sendJson(['success'=>true,'message'=>'ok','data'=>['last_read_id'=>$maxId]]);
+                $maxId = (int)($rowMax && $rowMax['max_id'] ? $rowMax['max_id'] : 0);
+                $rowUnread = db()->query(
+                    'SELECT COUNT(*) AS c FROM messages WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
+                    [$otherId, $me]
+                )->fetch();
+                $remaining = (int)($rowUnread ? $rowUnread['c'] : 0);
+                sendJson(['success'=>true,'message'=>'ok','data'=>['last_read_id'=>$maxId,'remaining_unread'=>$remaining]]);
             }
             sendJson(['success'=>false,'error'=>'Invalid action'], 400);
 

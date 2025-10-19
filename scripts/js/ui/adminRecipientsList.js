@@ -44,6 +44,43 @@
     } catch (_) {}
   }
 
+  try { window.__rl_updateCounts = updateCounts; } catch (_) {}
+
+  async function clearUnsavedAcrossWeeks() {
+    try {
+      const pool = qs('#pool');
+      const dropIds = ['w1','w2','w3','w4','w5'];
+      let moved = 0;
+      for (const did of dropIds) {
+        const dz = qs('#' + did);
+        if (!dz) continue;
+        qsa('.rcard[data-user-id]', dz).forEach((card) => {
+          const id = parseInt(card.getAttribute('data-user-id') || '0', 10);
+          if (!id) return;
+          if (lockedIds.has(id)) return; // keep saved (locked) recipients
+          card.remove();
+          let poolCard = qs(`#pool .rcard[data-user-id="${id}"]`);
+          if (!poolCard) {
+            const user = window.__rl_usersById?.get(id);
+            if (user && pool) {
+              poolCard = createCard(user);
+              pool.appendChild(poolCard);
+            }
+          }
+          if (poolCard) {
+            delete poolCard.dataset.locked;
+            poolCard.style.display = '';
+          }
+          moved++;
+        });
+      }
+      updateCounts();
+      toast(moved ? `Cleared ${moved} unsaved recipient(s)` : 'No unsaved recipients to clear', moved ? 'success' : 'info');
+    } catch (e) {
+      toast('Failed to clear unsaved recipients', 'danger');
+    }
+  }
+
   // Determine recipient tag flags (infant/elderly/medicine) from user record
   function recipientFlags(user) {
     const txt = [
@@ -632,7 +669,7 @@
         if (old) old.remove();
         const b = document.createElement("span");
         b.className = "badge badge-count text-bg-secondary ms-2";
-        b.textContent = `${count}/${max}`;
+        b.textContent = String(count);
         lbl.appendChild(b);
       });
     } catch (_) {}
@@ -701,6 +738,7 @@
       // Refresh plan to get updated server locks
       await restoreFromServer();
       applyWeekFocusAndButtons();
+      
     } catch (e) {
       toast(`Failed to save ${weekKey}: ${e.message || e}`, "danger");
     }
@@ -878,11 +916,16 @@
       qs("#autoW3")?.addEventListener("click", () => autoFill("w3", 10));
       qs("#autoW4")?.addEventListener("click", () => autoFill("w4", 10));
       qs("#autoW5")?.addEventListener("click", () => autoFill("w5", 10));
-      qs("#reloadBtn")?.addEventListener("click", async () => {
+      const reloadBtn = qs('#reloadBtn');
+      if (reloadBtn) {
         try {
-          await init();
+          reloadBtn.setAttribute('title', 'Clear unsaved recipients');
+          reloadBtn.setAttribute('data-bs-original-title', 'Clear unsaved recipients');
         } catch (_) {}
-      });
+        reloadBtn.addEventListener('click', async () => {
+          await clearUnsavedAcrossWeeks();
+        });
+      }
       qs("#saveW1")?.addEventListener("click", () => saveWeekKey("W1", "w1"));
       qs("#saveW2")?.addEventListener("click", () => saveWeekKey("W2", "w2"));
       qs("#saveW3")?.addEventListener("click", () => saveWeekKey("W3", "w3"));
@@ -971,6 +1014,20 @@
           }
           await restoreFromServer();
           applyWeekFocusAndButtons();
+          try {
+            const allWeeksHaveEntries = Object.values(weeks).every(
+              (ids) => Array.isArray(ids) && ids.length > 0
+            );
+            const pool = document.getElementById('pool');
+            const noPoolVisible = (() => {
+              if (!pool) return false;
+              const cards = Array.from(pool.querySelectorAll('.rcard'));
+              return cards.every((el) => el.style.display === 'none');
+            })();
+            if (allWeeksHaveEntries && noPoolVisible) {
+              setTimeout(() => { window.location.href = 'DistributeItems.html'; }, 600);
+            }
+          } catch (_) {}
         } catch (e) {
           toast("Failed to save all weeks", "danger");
         }
@@ -1164,6 +1221,7 @@
         try {
           applyWeekFocusAndButtons();
         } catch (_) {}
+        try { updateCounts(); } catch (_) {}
       } catch (e) {
         try {
           __oldUpdateWeekLabels();

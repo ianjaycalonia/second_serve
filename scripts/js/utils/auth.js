@@ -133,19 +133,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 /(^|\/)scheduling\.html$/i,
                 // Protect Inventory page for admins only
                 /(^|\/)inventory\.html$/i,
+                // Admin profile/settings
+                /(^|\/)adminprofile\.html$/i,
+                /(^|\/)adminsettings\.html$/i,
             ]},
             // Donor pages
             { role: 'donor', patterns: [
                 /(^|\/)donordashboard\.html$/i,
-                /(^|\/)donorsmydonation\.html$/i,
+                /(^|\/)mydonations\.html$/i,
                 /(^|\/)schedulepickups\.html$/i,
                 /(^|\/)donationhistory\.html$/i,
+                // Donor profile/settings
+                /(^|\/)donorprofile\.html$/i,
+                /(^|\/)donorsettings\.html$/i,
             ]},
             // Recipient pages
             { role: 'recipient', patterns: [
                 /(^|\/)recipientdashboard\.html$/i,
-                /(^|\/)availabledonation\.html$/i,
+                /(^|\/)receiveditems\.html$/i,
                 /(^|\/)recipienthistory\.html$/i,
+                // Recipient profile/settings
+                /(^|\/)recipientprofile\.html$/i,
+                /(^|\/)recipientsettings\.html$/i,
             ]},
         ];
         for (const { role, patterns } of RULES) {

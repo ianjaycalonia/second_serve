@@ -74,12 +74,12 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
-                <a class="dropdown-item" href="#">
+                <a class="dropdown-item" href="adminProfile.html">
                   <i class="bi bi-person me-2"></i>Profile
                 </a>
               </li>
               <li>
-                <a class="dropdown-item" href="#">
+                <a class="dropdown-item" href="adminSettings.html">
                   <i class="bi bi-gear me-2"></i>Settings
                 </a>
               </li>
@@ -741,6 +741,78 @@
             >
               Give Now
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Tags Modal -->
+    <div
+      class="modal fade"
+      id="tagEditModal"
+      tabindex="-1"
+      aria-labelledby="tagEditModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tagEditModalLabel">Edit Tags</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="tagEditMeta" class="small text-muted mb-2"></div>
+            <label for="tagEditInput" class="form-label">Tags (comma-separated)</label>
+            <input id="tagEditInput" type="text" class="form-control" />
+            <div id="tagEditFeedback" class="small text-danger mt-2"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" id="tagEditSaveBtn" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Result Modal -->
+    <div
+      class="modal fade"
+      id="importResultModal"
+      tabindex="-1"
+      aria-labelledby="importResultModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importResultModalLabel">Import Result</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="importResultBody">Done.</div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- On-site Success Modal -->
+    <div
+      class="modal fade"
+      id="onsiteSuccessModal"
+      tabindex="-1"
+      aria-labelledby="onsiteSuccessModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="onsiteSuccessModalLabel">On-site Giveaway</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="onsiteSuccessBody">Completed.</div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>

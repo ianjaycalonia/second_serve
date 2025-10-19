@@ -186,6 +186,60 @@
       chart.update();
     }
 
+    // Summary wiring via donor_summary API (faster, scoped to donor)
+    function updateTilesFromSummary(totals){
+      try{
+        const elTotal = document.getElementById('totalDonations');
+        const elUpcoming = document.getElementById('upcomingDonations');
+        const elPending = document.getElementById('activeDonors');
+        const elCancelled = document.getElementById('activeRecipients');
+        if (elTotal) elTotal.textContent = String(totals?.total ?? 0);
+        if (elUpcoming) elUpcoming.textContent = String(totals?.upcoming_pickups ?? 0);
+        if (elPending) elPending.textContent = String(totals?.pending ?? 0);
+        if (elCancelled) elCancelled.textContent = String(totals?.cancelled ?? 0);
+      } catch(_){ }
+    }
+
+    function updateChartFromSummary(trend){
+      const chart = ensureChart(); if (!chart) return;
+      try{
+        const labels = Array.isArray(trend?.labels) ? trend.labels : [];
+        const data = Array.isArray(trend?.data) ? trend.data : [];
+        chart.data.labels = labels;
+        chart.data.datasets = [{
+          label: 'Donations Made (completed batches) ',
+          data: data,
+          borderColor: '#00a0b0',
+          backgroundColor: 'rgba(0,160,176,0.18)',
+          pointBackgroundColor: '#00a0b0',
+          pointBorderColor: '#00a0b0',
+          tension: 0.35,
+          fill: true,
+          pointRadius: 3
+        }];
+        chart.update();
+      } catch(_){ }
+    }
+
+    function fetchSummary(){
+      $.ajax({
+        url: `${API_BASE_URL}/dashboard/donor_summary.php`,
+        method: 'GET',
+        dataType: 'json',
+        xhrFields: { withCredentials: true },
+        success: function(resp){
+          const totals = resp?.data?.totals || {};
+          const trend = resp?.data?.trend || {};
+          updateTilesFromSummary(totals);
+          updateChartFromSummary(trend);
+        },
+        error: function(){
+          // Fallback to history-based computation
+          fetchHistory(true);
+        }
+      });
+    }
+
     // Donation modal + history logic
     const $modal = $("#donationModal");
     const $form = $("#donationForm");
@@ -615,6 +669,8 @@
     }
 
     // Initial load
+    fetchSummary();
+    // Keep history fetch as fallback/refresh for detailed views
     fetchHistory(true);
 
     // If content exists pre-open, ensure row selects are initialized

@@ -288,4 +288,20 @@ class Auth {
         session_destroy();
         session_start();
     }
+
+    public function changePassword(int $userId, string $currentPassword, string $newPassword, string $confirmPassword): void {
+        if ($userId <= 0) { throw new Exception('Unauthorized'); }
+        if ($newPassword === '' || $confirmPassword === '' || $currentPassword === '') { throw new Exception('All password fields are required'); }
+        if (strlen($newPassword) < 8) { throw new Exception('Password must be at least 8 characters long'); }
+        if ($newPassword !== $confirmPassword) { throw new Exception('Passwords do not match'); }
+
+        $row = $this->db->query('SELECT password_hash FROM users WHERE user_id = ? LIMIT 1', [$userId])->fetch();
+        if (!$row || empty($row['password_hash'])) { throw new Exception('User not found'); }
+        if (!password_verify($currentPassword, (string)$row['password_hash'])) { throw new Exception('Incorrect current password'); }
+        if (password_verify($newPassword, (string)$row['password_hash'])) { throw new Exception('New password must be different from current'); }
+
+        $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+        $this->db->query('UPDATE users SET password_hash = ? WHERE user_id = ?', [$hash, $userId]);
+        try { $this->db->query('UPDATE users SET must_change_password = 0 WHERE user_id = ?', [$userId]); } catch (Exception $e) { /* ignore */ }
+    }
 }

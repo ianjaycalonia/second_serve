@@ -367,8 +367,11 @@ CREATE TABLE `messages` (
   `receiver_id` INT NOT NULL,
   `content` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `receiver_read_at` DATETIME NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `messages_sender_receiver_idx` (`sender_id`, `receiver_id`),
+  KEY `messages_inbox_unread_idx` (`receiver_id`, `sender_id`, `receiver_read_at`),
+  KEY `messages_conv_idx` (`sender_id`, `receiver_id`, `id`),
   CONSTRAINT `messages_sender_fk` FOREIGN KEY (`sender_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `messages_receiver_fk` FOREIGN KEY (`receiver_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

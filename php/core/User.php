@@ -114,6 +114,18 @@ class User
         if (array_key_exists('name', $data)) {
             $this->db->query('UPDATE users SET name = ? WHERE user_id = ?', [$data['name'], $userId]);
         }
+        // Allow updating email with validation and uniqueness
+        if (array_key_exists('email', $data) && $data['email'] !== null && $data['email'] !== '') {
+            $email = (string)$data['email'];
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('Invalid email format');
+            }
+            $exists = $this->db->query('SELECT user_id FROM users WHERE email = ? AND user_id <> ? LIMIT 1', [$email, $userId])->fetch();
+            if ($exists) {
+                throw new Exception('Email already in use');
+            }
+            $this->db->query('UPDATE users SET email = ? WHERE user_id = ?', [$email, $userId]);
+        }
         $role = $u['role'];
         if ($role === 'recipient') {
             // Upsert recipient_profiles (no contact fields here; contacts are normalized into recipient_contacts)

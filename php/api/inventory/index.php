@@ -143,6 +143,30 @@ try {
         sendJson(['success'=>true, 'data'=> $summary]);
     }
 
+    // POST /api/inventory/update-tags - update tags for a grouped item (by name+category)
+    if ($method === 'POST' && preg_match('#^/(update-tags|update-tags/)\z#', $sub)) {
+        $data = getJsonInput();
+        $scope = isset($data['scope']) ? trim((string)$data['scope']) : 'group';
+        $itemName = isset($data['item_name']) ? trim((string)$data['item_name']) : '';
+        $category = isset($data['category']) ? trim((string)$data['category']) : '';
+        $tags = isset($data['tags']) ? (string)$data['tags'] : '';
+
+        if ($scope !== 'group') { sendJson(['success'=>false,'error'=>'Only group scope is supported'], 400); }
+        if ($itemName === '' || $category === '') { sendJson(['success'=>false,'error'=>'item_name and category are required'], 400); }
+
+        try {
+            $db = Database::getInstance();
+            // Update tags across all donation_items for this product_name + category
+            $db->query('UPDATE donation_items SET tags = ? WHERE product_name = ? AND product_category = ?', [ $tags, $itemName, $category ]);
+            // Report how many rows now carry the new tag value (approximation)
+            $row = $db->query('SELECT COUNT(*) AS n FROM donation_items WHERE product_name = ? AND product_category = ? AND COALESCE(tags, "") = ?', [ $itemName, $category, $tags ])->fetch();
+            $count = (int)($row['n'] ?? 0);
+            sendJson(['success'=>true, 'data'=>['updated'=>$count]]);
+        } catch (Exception $e) {
+            sendJson(['success'=>false,'error'=>'Failed to update tags: ' . $e->getMessage()], 500);
+        }
+    }
+
     // GET /api/inventory/list
     if ($method === 'GET' && preg_match('#^/(list|list/)\z#', $sub)) {
         $db = Database::getInstance();
