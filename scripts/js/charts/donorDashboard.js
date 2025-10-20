@@ -4,9 +4,9 @@
   $(function () {
     // Ensure API base URL is defined (fallback to project path)
     const API_BASE_URL =
-      typeof window.API_BASE_URL === 'string' && window.API_BASE_URL
+      typeof window.API_BASE_URL === "string" && window.API_BASE_URL
         ? window.API_BASE_URL
-        : '/Capstone%20Project/php/api';
+        : "/Capstone%20Project/php/api";
     // Chart helpers
     let donorChart = null;
     function ensureChart() {
@@ -21,165 +21,202 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: "index", intersect: false },
             stacked: false,
             scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
-            plugins: { legend: { position: 'bottom' } }
+            plugins: { legend: { position: "bottom" } },
           },
         });
 
-    // OCR tab handlers
-    function parseLineToNameQty(raw){
-      const s = String(raw||'').trim();
-      if (!s) return null;
-      let name = s, qty = 1;
-      const rx = /(.*?)[xX*\-:\s]+(\d{1,4})$/;
-      const m = s.match(rx);
-      if (m && m[1]) { name = m[1].trim(); qty = parseInt(m[2], 10) || 1; }
-      return { name, qty };
-    }
+        // OCR tab handlers
+        function parseLineToNameQty(raw) {
+          const s = String(raw || "").trim();
+          if (!s) return null;
+          let name = s,
+            qty = 1;
+          const rx = /(.*?)[xX*\-:\s]+(\d{1,4})$/;
+          const m = s.match(rx);
+          if (m && m[1]) {
+            name = m[1].trim();
+            qty = parseInt(m[2], 10) || 1;
+          }
+          return { name, qty };
+        }
 
-    function buildPreviewRow(id, name, qty){
-      return `
+        function buildPreviewRow(id, name, qty) {
+          return `
         <tr data-id="${id}">
-          <td><input type="text" class="form-control form-control-sm ocr-name" value="${name.replace(/"/g,'&quot;')}"></td>
+          <td><input type="text" class="form-control form-control-sm ocr-name" value="${name.replace(
+            /"/g,
+            "&quot;"
+          )}"></td>
           <td style="max-width:110px"><input type="number" class="form-control form-control-sm ocr-qty" min="1" value="${qty}"></td>
           <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger ocr-del" aria-label="Remove"><i class="bi bi-trash"></i></button></td>
         </tr>`;
-    }
+        }
 
-    function runOcrUpload(file){
-      const $status = $('#ocrStatus');
-      const $preview = $('#ocrPreview');
-      const $tbody = $('#ocrPreviewBody');
-      const $apply = $('#ocrApplyBtn');
-      const fd = new FormData();
-      fd.append('file', file);
-      $status.text('Uploading and parsing...').show();
-      $.ajax({
-        url: `${API_BASE_URL}/donations/index.php/ocr`,
-        method: 'POST',
-        data: fd,
-        processData: false,
-        contentType: false,
-        dataType: 'json',
-        xhrFields: { withCredentials: true },
-        success: function(resp){
-          const lines = Array.isArray(resp?.data) ? resp.data : [];
-          const parsed = [];
-          for (const line of lines){
-            const p = parseLineToNameQty(line);
-            if (p && p.name) parsed.push(p);
+        function runOcrUpload(file) {
+          const $status = $("#ocrStatus");
+          const $preview = $("#ocrPreview");
+          const $tbody = $("#ocrPreviewBody");
+          const $apply = $("#ocrApplyBtn");
+          const fd = new FormData();
+          fd.append("file", file);
+          $status.text("Uploading and parsing...").show();
+          $.ajax({
+            url: `${API_BASE_URL}/donations/index.php/ocr`,
+            method: "POST",
+            data: fd,
+            processData: false,
+            contentType: false,
+            dataType: "json",
+            xhrFields: { withCredentials: true },
+            success: function (resp) {
+              const lines = Array.isArray(resp?.data) ? resp.data : [];
+              const parsed = [];
+              for (const line of lines) {
+                const p = parseLineToNameQty(line);
+                if (p && p.name) parsed.push(p);
+              }
+              if (!parsed.length) {
+                $status
+                  .text(
+                    "No items detected. Ensure each line contains one item name."
+                  )
+                  .fadeOut(4000);
+                $preview.hide();
+                return;
+              }
+              // Populate preview table
+              $tbody.empty();
+              let counter = 1;
+              const MAX = 50;
+              for (const it of parsed.slice(0, MAX)) {
+                $tbody.append(buildPreviewRow(counter++, it.name, it.qty));
+              }
+              $apply.prop("disabled", false);
+              $preview.show();
+              $status
+                .text(
+                  `Parsed ${Math.min(
+                    parsed.length,
+                    MAX
+                  )} item(s). Review and click Apply.`
+                )
+                .fadeOut(4000);
+            },
+            error: function (err) {
+              const msg = err?.responseJSON?.error || "OCR failed";
+              $status.text(msg).fadeOut(4000);
+            },
+          });
+        }
+
+        // Click upload -> open file picker
+        $(document).on("click", "#ocrUploadBtn", function () {
+          const $file = $("#ocrFile");
+          if ($file.length) {
+            $file.trigger("click");
           }
-          if (!parsed.length){
-            $status.text('No items detected. Ensure each line contains one item name.').fadeOut(4000);
-            $preview.hide();
+        });
+
+        // Auto-start upload when a file is selected
+        $(document).on("change", "#ocrFile", function () {
+          const file = this.files && this.files[0];
+          if (file) {
+            runOcrUpload(file);
+          }
+        });
+
+        // Remove row in preview
+        $(document).on("click", ".ocr-del", function () {
+          $(this).closest("tr").remove();
+        });
+
+        // Apply preview to Normal Entry tab
+        $(document).on("click", "#ocrApplyBtn", function () {
+          const $rows = $("#ocrPreviewBody tr");
+          if (!$rows.length) {
+            showToast("No items to apply.", "warning");
             return;
           }
-          // Populate preview table
-          $tbody.empty();
-          let counter = 1;
-          const MAX = 50;
-          for (const it of parsed.slice(0, MAX)){
-            $tbody.append(buildPreviewRow(counter++, it.name, it.qty));
-          }
-          $apply.prop('disabled', false);
-          $preview.show();
-          $status.text(`Parsed ${Math.min(parsed.length, MAX)} item(s). Review and click Apply.`).fadeOut(4000);
-        },
-        error: function(err){
-          const msg = err?.responseJSON?.error || 'OCR failed';
-          $status.text(msg).fadeOut(4000);
-        }
-      });
-    }
-
-    // Click upload -> open file picker
-    $(document).on('click', '#ocrUploadBtn', function(){
-      const $file = $('#ocrFile');
-      if ($file.length) { $file.trigger('click'); }
-    });
-
-    // Auto-start upload when a file is selected
-    $(document).on('change', '#ocrFile', function(){
-      const file = this.files && this.files[0];
-      if (file) { runOcrUpload(file); }
-    });
-
-    // Remove row in preview
-    $(document).on('click', '.ocr-del', function(){
-      $(this).closest('tr').remove();
-    });
-
-    // Apply preview to Normal Entry tab
-    $(document).on('click', '#ocrApplyBtn', function(){
-      const $rows = $('#ocrPreviewBody tr');
-      if (!$rows.length){ showToast('No items to apply.', 'warning'); return; }
-      // Switch to Normal Entry
-      const tabTrigger = document.querySelector('#tab-entry-tab');
-      if (tabTrigger) new bootstrap.Tab(tabTrigger).show();
-      // Clear and add items
-      $itemsContainer.empty();
-      $rows.each(function(){
-        const name = String($(this).find('.ocr-name').val()||'').trim();
-        const qty = Math.max(1, parseInt($(this).find('.ocr-qty').val(), 10) || 1);
-        if (!name) return;
-        addItemRow();
-        const $row = $itemsContainer.find('.item-row').last();
-        const $select = $row.find('.item-name-select');
-        const opt = new Option(name, name, true, true);
-        $select.append(opt).trigger('change');
-        $row.find('.item-qty').val(qty);
-        // Expiry left empty for donor to fill (required)
-      });
-      showToast('OCR items applied. Please set expiry dates then submit.', 'info');
-    });
+          // Switch to Normal Entry
+          const tabTrigger = document.querySelector("#tab-entry-tab");
+          if (tabTrigger) new bootstrap.Tab(tabTrigger).show();
+          // Clear and add items
+          $itemsContainer.empty();
+          $rows.each(function () {
+            const name = String($(this).find(".ocr-name").val() || "").trim();
+            const qty = Math.max(
+              1,
+              parseInt($(this).find(".ocr-qty").val(), 10) || 1
+            );
+            if (!name) return;
+            addItemRow();
+            const $row = $itemsContainer.find(".item-row").last();
+            const $select = $row.find(".item-name-select");
+            const opt = new Option(name, name, true, true);
+            $select.append(opt).trigger("change");
+            $row.find(".item-qty").val(qty);
+            // Expiry left empty for donor to fill (required)
+          });
+          showToast(
+            "OCR items applied. Please set expiry dates then submit.",
+            "info"
+          );
+        });
         return donorChart;
-      } catch(_){ return null; }
+      } catch (_) {
+        return null;
+      }
     }
 
-    function lastNDatesLabels(n){
+    function lastNDatesLabels(n) {
       const labels = [];
-      const fmt = (d) => d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
-      for (let i=n-1;i>=0;i--){
-        const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i);
-        labels.push({ key: d.toISOString().slice(0,10), label: fmt(d) });
+      const fmt = (d) =>
+        d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      for (let i = n - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() - i);
+        labels.push({ key: d.toISOString().slice(0, 10), label: fmt(d) });
       }
       return labels;
     }
 
-    function updateChartWith(items){
-      const chart = ensureChart(); if (!chart) return;
+    function updateChartWith(items) {
+      const chart = ensureChart();
+      if (!chart) return;
       const days = lastNDatesLabels(7);
       // Build sets per day for distinct completed batches only
-      const perDay = new Map(days.map(d => [d.key, new Set()]));
-      if (Array.isArray(items)){
-        for (const it of items){
-          const s = (it.status||'').trim();
+      const perDay = new Map(days.map((d) => [d.key, new Set()]));
+      if (Array.isArray(items)) {
+        for (const it of items) {
+          const s = (it.status || "").trim();
           const b = it.batch_id ? String(it.batch_id) : null;
-          if (!b || s !== 'Completed') continue; // batch-based completed only
+          if (!b || s !== "Completed") continue; // batch-based completed only
           const dt = it.created_at ? new Date(it.created_at) : null;
           if (!dt || isNaN(dt)) continue;
-          dt.setHours(0,0,0,0);
-          const key = dt.toISOString().slice(0,10);
+          dt.setHours(0, 0, 0, 0);
+          const key = dt.toISOString().slice(0, 10);
           if (!perDay.has(key)) continue; // outside range
           perDay.get(key).add(b);
         }
       }
-      const labels = days.map(d => d.label);
-      const dataSeries = days.map(d => (perDay.get(d.key)?.size) || 0);
+      const labels = days.map((d) => d.label);
+      const dataSeries = days.map((d) => perDay.get(d.key)?.size || 0);
       const datasets = [
         {
-          label: 'Donations Made (completed batches)',
+          label: "Donations Made (completed batches)",
           data: dataSeries,
-          borderColor: '#00a0b0',
-          backgroundColor: 'rgba(0,160,176,0.18)',
-          pointBackgroundColor: '#00a0b0',
-          pointBorderColor: '#00a0b0',
+          borderColor: "#00a0b0",
+          backgroundColor: "rgba(0,160,176,0.18)",
+          pointBackgroundColor: "#00a0b0",
+          pointBorderColor: "#00a0b0",
           tension: 0.35,
           fill: true,
-          pointRadius: 3
-        }
+          pointRadius: 3,
+        },
       ];
       chart.data.labels = labels;
       chart.data.datasets = datasets;
@@ -187,56 +224,61 @@
     }
 
     // Summary wiring via donor_summary API (faster, scoped to donor)
-    function updateTilesFromSummary(totals){
-      try{
-        const elTotal = document.getElementById('totalDonations');
-        const elUpcoming = document.getElementById('upcomingDonations');
-        const elPending = document.getElementById('activeDonors');
-        const elCancelled = document.getElementById('activeRecipients');
+    function updateTilesFromSummary(totals) {
+      try {
+        const elTotal = document.getElementById("totalDonations");
+        const elUpcoming = document.getElementById("upcomingDonations");
+        const elPending = document.getElementById("activeDonors");
+        const elCancelled = document.getElementById("activeRecipients");
         if (elTotal) elTotal.textContent = String(totals?.total ?? 0);
-        if (elUpcoming) elUpcoming.textContent = String(totals?.upcoming_pickups ?? 0);
+        if (elUpcoming)
+          elUpcoming.textContent = String(totals?.upcoming_pickups ?? 0);
         if (elPending) elPending.textContent = String(totals?.pending ?? 0);
-        if (elCancelled) elCancelled.textContent = String(totals?.cancelled ?? 0);
-      } catch(_){ }
+        if (elCancelled)
+          elCancelled.textContent = String(totals?.cancelled ?? 0);
+      } catch (_) {}
     }
 
-    function updateChartFromSummary(trend){
-      const chart = ensureChart(); if (!chart) return;
-      try{
+    function updateChartFromSummary(trend) {
+      const chart = ensureChart();
+      if (!chart) return;
+      try {
         const labels = Array.isArray(trend?.labels) ? trend.labels : [];
         const data = Array.isArray(trend?.data) ? trend.data : [];
         chart.data.labels = labels;
-        chart.data.datasets = [{
-          label: 'Donations Made (completed batches) ',
-          data: data,
-          borderColor: '#00a0b0',
-          backgroundColor: 'rgba(0,160,176,0.18)',
-          pointBackgroundColor: '#00a0b0',
-          pointBorderColor: '#00a0b0',
-          tension: 0.35,
-          fill: true,
-          pointRadius: 3
-        }];
+        chart.data.datasets = [
+          {
+            label: "Donations Made (completed batches) ",
+            data: data,
+            borderColor: "#00a0b0",
+            backgroundColor: "rgba(0,160,176,0.18)",
+            pointBackgroundColor: "#00a0b0",
+            pointBorderColor: "#00a0b0",
+            tension: 0.35,
+            fill: true,
+            pointRadius: 3,
+          },
+        ];
         chart.update();
-      } catch(_){ }
+      } catch (_) {}
     }
 
-    function fetchSummary(){
+    function fetchSummary() {
       $.ajax({
         url: `${API_BASE_URL}/dashboard/donor_summary.php`,
-        method: 'GET',
-        dataType: 'json',
+        method: "GET",
+        dataType: "json",
         xhrFields: { withCredentials: true },
-        success: function(resp){
+        success: function (resp) {
           const totals = resp?.data?.totals || {};
           const trend = resp?.data?.trend || {};
           updateTilesFromSummary(totals);
           updateChartFromSummary(trend);
         },
-        error: function(){
+        error: function () {
           // Fallback to history-based computation
           fetchHistory(true);
-        }
+        },
       });
     }
 
@@ -263,8 +305,8 @@
           url: `${API_BASE_URL}/donations/index.php/items`,
           dataType: "json",
           data: function (params) {
-            const $row = $el.closest('.item-row');
-            const cat = String($row.find('.item-cat').val() || '').trim();
+            const $row = $el.closest(".item-row");
+            const cat = String($row.find(".item-cat").val() || "").trim();
             return { q: params.term || "", limit: 20, category: cat };
           },
           processResults: function (data) {
@@ -272,12 +314,15 @@
             return { results: items.map((n) => ({ id: n, text: n })) };
           },
           xhrFields: { withCredentials: true },
-          error: function(xhr){
+          error: function (xhr) {
             try {
-              const msg = xhr?.responseJSON?.error || 'Failed to load item suggestions';
+              const msg =
+                xhr?.responseJSON?.error || "Failed to load item suggestions";
               // Non-intrusive console warning to aid debugging if suggestions fail (e.g., not authenticated)
-              console.warn('Select2 items AJAX error:', msg);
-            } catch(_) { /* ignore */ }
+              console.warn("Select2 items AJAX error:", msg);
+            } catch (_) {
+              /* ignore */
+            }
           },
           cache: true,
         },
@@ -290,40 +335,42 @@
     }
 
     // When category changes, clear the item name so results are scoped
-    $itemsContainer.on('change', '.item-cat', function(){
-      const $row = $(this).closest('.item-row');
-      const $name = $row.find('.item-name-select');
-      $name.val(null).trigger('change');
+    $itemsContainer.on("change", ".item-cat", function () {
+      const $row = $(this).closest(".item-row");
+      const $name = $row.find(".item-name-select");
+      $name.val(null).trigger("change");
     });
 
     function initRowCategorySelect2($row) {
-      const $cat = $row.find('.item-cat');
+      const $cat = $row.find(".item-cat");
       if (!$cat.length || !$.fn.select2) return;
       // If already initialized, skip
-      if ($cat.hasClass('select2-hidden-accessible')) return;
+      if ($cat.hasClass("select2-hidden-accessible")) return;
       $cat.select2({
-        width: '100%',
-        placeholder: 'Select category',
+        width: "100%",
+        placeholder: "Select category",
         dropdownParent: $modal,
         tags: false,
         allowClear: true,
         minimumInputLength: 0,
         ajax: {
           url: `${API_BASE_URL}/donations/index.php/categories`,
-          dataType: 'json',
+          dataType: "json",
           delay: 250,
-          processResults: function(data){
-            const items = (data && Array.isArray(data.items)) ? data.items : [];
-            return { results: items.map(t => ({ id: t, text: t })) };
+          processResults: function (data) {
+            const items = data && Array.isArray(data.items) ? data.items : [];
+            return { results: items.map((t) => ({ id: t, text: t })) };
           },
           xhrFields: { withCredentials: true },
-          cache: true
-        }
+          cache: true,
+        },
       });
       // When opened and no options loaded yet, trigger an initial query
-      $cat.on('select2:open', function(){
-        const $search = $('.select2-container--open .select2-search__field');
-        if ($search.length) { $search.trigger('input'); }
+      $cat.on("select2:open", function () {
+        const $search = $(".select2-container--open .select2-search__field");
+        if ($search.length) {
+          $search.trigger("input");
+        }
       });
     }
 
@@ -344,62 +391,100 @@
     // Dynamic items UI
     function itemRowTemplate(id) {
       return `
-      <div class="card p-3 border item-row" data-id="${id}">
-        <div class="row g-2 align-items-end">
-          <div class="col-12 col-lg-3">
-            <label class="form-label mb-1">Category</label>
-            <select class="form-select item-cat" required>
-              <option value="">Select category</option>
-            </select>
-            <div class="invalid-feedback">Category is required.</div>
+      <div class="card card-accent p-3 item-row donation-card" data-id="${id}">
+        <div class="row g-3 gap-2 align-items-center">
+          <div class="col-12">
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label mb-1">Category</label>
+                <select class="form-select form-select-sm item-cat" required>
+                  <option value="">Select category</option>
+                </select>
+                <div class="invalid-feedback">Category is required.</div>
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-1">Item Name</label>
+                  <select
+                    class="form-select item-name-select"
+                    data-placeholder="Search or type new"
+                    required
+                  ></select>
+                  <div class="invalid-feedback">Item name is required.</div>
+              </div>
+            </div>
           </div>
-          <div class="col-12 col-lg-4">
-            <label class="form-label mb-1">Item Name</label>
-            <select class="form-select item-name-select" data-placeholder="Search or type new" required></select>
-            <div class="invalid-feedback">Item name is required.</div>
+          <div class="col-12">
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label mb-1">Quantity</label>
+                <input type="number" class="form-control form-control-sm item-qty" min="1" required />
+                <div class="invalid-feedback">Min 1</div>
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-1">Unit</label>
+                <select class="form-select form-select-sm item-unit">
+                  <option value="">Select unit (optional)</option>
+                  <option value="can">can</option>
+                  <option value="pack">pack</option>
+                  <option value="box">box</option>
+                  <option value="piece">piece</option>
+                  <option value="bottle">bottle</option>
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                </select>
+              </div>
+            </div>
           </div>
-          <div class="col-6 col-lg-2">
-            <label class="form-label mb-1">Quantity</label>
-            <input type="number" class="form-control item-qty" min="1" required>
-            <div class="invalid-feedback">Min 1</div>
+          <div class="col-12">
+            <div class="row g-3">
+              <div class="col-4">
+                <label class="form-label mb-1">Weight (kg)</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  class="form-control form-control-sm item-weight"
+                  placeholder="e.g., 2.5"
+                />
+              </div>
+              <div class="col-4">
+                <label class="form-label mb-1">Cost (₱)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control form-control-sm item-cost"
+                  placeholder="e.g., 150.00"
+                />
+              </div>
+              <div class="col-4">
+                <label class="form-label">Expiry Date</label>
+                <input type="date" class="form-control form-control-sm item-expiry" required />
+                <div class="invalid-feedback">Expiry date is required.</div>
+              </div>
+            </div>
           </div>
-          <div class="col-6 col-lg-2">
-            <label class="form-label mb-1">Unit</label>
-            <select class="form-select item-unit">
-              <option value="">Select unit (optional)</option>
-              <option value="can">can</option>
-              <option value="pack">pack</option>
-              <option value="box">box</option>
-              <option value="piece">piece</option>
-              <option value="bottle">bottle</option>
-              <option value="kg">kg</option>
-              <option value="g">g</option>
-            </select>
-          </div>
-          <div class="col-6 col-lg-2">
-            <label class="form-label mb-1">Expiry Date</label>
-            <input type="date" class="form-control item-expiry" required>
-            <div class="invalid-feedback">Expiry date is required.</div>
-          </div>
-          <div class="col-12 col-lg-1 text-end">
-            <label class="form-label mb-1 d-none d-lg-block">&nbsp;</label>
-            <button type="button" class="btn btn-sm btn-outline-danger d-flex align-items-center justify-content-center w-100 w-md-auto" aria-label="Remove item">
-              <i class="bi bi-trash"></i>
-            </button>
-          </div>
-        </div>
-        <div class="row g-2 mt-2">
-          <div class="col-6 col-lg-2">
-            <label class="form-label mb-1">Weight (kg)</label>
-            <input type="number" step="0.001" min="0" class="form-control item-weight" placeholder="e.g., 2.5">
-          </div>
-          <div class="col-6 col-lg-2">
-            <label class="form-label mb-1">Cost (₱)</label>
-            <input type="number" step="0.01" min="0" class="form-control item-cost" placeholder="e.g., 150.00">
-          </div>
-          <div class="col-12 col-lg-8">
+          <div class="col-12">
             <label class="form-label mb-1">Remarks</label>
-            <input type="text" class="form-control item-remarks" maxlength="500" placeholder="Optional notes for this item">
+            <input
+              type="text"
+              class="form-control form-control-sm item-remarks"
+              maxlength="500"
+              placeholder="Optional notes for this item"
+            />
+          </div>
+          
+          <div
+            class="d-flex justify-content-end align-items-center"
+          >
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-danger d-flex align-items-center gap-2"
+              aria-label="Remove item"
+            >
+              <i class="bi bi-trash"></i>
+              <span>Remove Item</span>
+            </button>
           </div>
         </div>
       </div>`;
@@ -411,7 +496,7 @@
       $itemsContainer.append(itemRowTemplate(id));
       const $row = $itemsContainer.find(`.item-row[data-id="${id}"]`);
       initRowCategorySelect2($row);
-      initSelect2($row.find('.item-name-select'));
+      initSelect2($row.find(".item-name-select"));
     }
     function removeItemRow(btn) {
       $(btn).closest(".item-row").remove();
@@ -452,8 +537,8 @@
         const $row = $(this);
         const name = String($row.find(".item-name-select").val() || "").trim();
         const qty = parseInt($row.find(".item-qty").val(), 10);
-        const expiry = String($row.find('.item-expiry').val() || '').trim();
-        const cat = String($row.find('.item-cat').val() || '').trim();
+        const expiry = String($row.find(".item-expiry").val() || "").trim();
+        const cat = String($row.find(".item-cat").val() || "").trim();
         if (!name || name.length < 1) {
           $row.find(".item-name-select").addClass("is-invalid");
           ok = false;
@@ -463,11 +548,11 @@
           ok = false;
         }
         if (!expiry) {
-          $row.find('.item-expiry').addClass('is-invalid');
+          $row.find(".item-expiry").addClass("is-invalid");
           ok = false;
         }
         if (!cat) {
-          $row.find('.item-cat').addClass('is-invalid');
+          $row.find(".item-cat").addClass("is-invalid");
           ok = false;
         }
       });
@@ -487,19 +572,24 @@
           String($row.find(".item-name-select").val() || "").trim()
         );
         fd.append("quantity[]", $row.find(".item-qty").val());
-        const unit = String($row.find('.item-unit').val() || '').trim();
-        fd.append('unit[]', unit);
+        const unit = String($row.find(".item-unit").val() || "").trim();
+        fd.append("unit[]", unit);
         const expiry = $row.find(".item-expiry").val();
         fd.append("expiry_date[]", expiry);
         // per-item fields
-        fd.append("type[]", String($row.find('.item-cat').val() || '').trim());
-        const w = $row.find('.item-weight').val();
-        if (w !== null && w !== undefined && String(w) !== '') fd.append('total_weight[]', w);
-        else fd.append('total_weight[]', '');
-        const c = $row.find('.item-cost').val();
-        if (c !== null && c !== undefined && String(c) !== '') fd.append('total_cost[]', c);
-        else fd.append('total_cost[]', '');
-        fd.append('remarks[]', String($row.find('.item-remarks').val() || '').trim());
+        fd.append("type[]", String($row.find(".item-cat").val() || "").trim());
+        const w = $row.find(".item-weight").val();
+        if (w !== null && w !== undefined && String(w) !== "")
+          fd.append("total_weight[]", w);
+        else fd.append("total_weight[]", "");
+        const c = $row.find(".item-cost").val();
+        if (c !== null && c !== undefined && String(c) !== "")
+          fd.append("total_cost[]", c);
+        else fd.append("total_cost[]", "");
+        fd.append(
+          "remarks[]",
+          String($row.find(".item-remarks").val() || "").trim()
+        );
       });
       // No image field appended; no batch-level category/remarks
 
@@ -567,50 +657,58 @@
 
     // (removed unused donation-history helpers)
 
-    function renderMetricsFrom(items){
-      try{
+    function renderMetricsFrom(items) {
+      try {
         // Total Donations Made: count DISTINCT completed batches only
         let total = 0;
-        if (Array.isArray(items)){
+        if (Array.isArray(items)) {
           const set = new Set();
-          for (const it of items){
-            const s = (it.status||'').trim();
-            if (it.batch_id && s === 'Completed') set.add(String(it.batch_id));
+          for (const it of items) {
+            const s = (it.status || "").trim();
+            if (it.batch_id && s === "Completed") set.add(String(it.batch_id));
           }
           total = set.size;
         }
         // Pending Donations: count DISTINCT batches that have at least one 'Pending' item
         let pending = 0;
-        if (Array.isArray(items)){
+        if (Array.isArray(items)) {
           const pendingBatches = new Set();
-          for (const it of items){
-            const s = (it.status||'').trim();
-            if (s === 'Pending' && it.batch_id){ pendingBatches.add(String(it.batch_id)); }
+          for (const it of items) {
+            const s = (it.status || "").trim();
+            if (s === "Pending" && it.batch_id) {
+              pendingBatches.add(String(it.batch_id));
+            }
           }
           pending = pendingBatches.size;
         }
         // Scheduled Pickups: count DISTINCT batches in 'Acknowledged' (pickup to be scheduled/ongoing)
         let allocated = 0;
-        if (Array.isArray(items)){
+        if (Array.isArray(items)) {
           const ackBatches = new Set();
-          for (const it of items){
-            const s = (it.status||'').trim();
-            if (s === 'Acknowledged' && it.batch_id){ ackBatches.add(String(it.batch_id)); }
+          for (const it of items) {
+            const s = (it.status || "").trim();
+            if (s === "Acknowledged" && it.batch_id) {
+              ackBatches.add(String(it.batch_id));
+            }
           }
           allocated = ackBatches.size;
         }
         // For cancelled, keep simple item counts (unchanged)
-        const byStatus = items.reduce((acc, it) => { const s=(it.status||'').trim(); acc[s]=(acc[s]||0)+1; return acc; }, {});
-        const cancelled = byStatus['Cancelled']||0;
-        const elTotal = document.getElementById('totalDonations');
-        const elUpcoming = document.getElementById('upcomingDonations');
-        const elPending = document.getElementById('activeDonors');
-        const elCancelled = document.getElementById('activeRecipients');
+        const byStatus = items.reduce((acc, it) => {
+          const s = (it.status || "").trim();
+          acc[s] = (acc[s] || 0) + 1;
+          return acc;
+        }, {});
+        const cancelled = byStatus["Cancelled"] || 0;
+        const elTotal = document.getElementById("totalDonations");
+        const elUpcoming = document.getElementById("upcomingDonations");
+        const elPending = document.getElementById("activeDonors");
+        const elCancelled = document.getElementById("activeRecipients");
         if (elTotal) elTotal.textContent = String(total);
         if (elUpcoming) elUpcoming.textContent = String(allocated);
         if (elPending) elPending.textContent = String(pending);
         if (elCancelled) elCancelled.textContent = String(cancelled);
-      }catch(_e){}
+      } catch (_e) {}
     }
 
     // (removed unused donation-history rendering)
@@ -648,11 +746,11 @@
     // When modal becomes visible, ensure at least one item row exists and init Select2
     $modal.on("shown.bs.modal", function () {
       if ($itemsContainer.find(".item-row").length === 0) addItemRow();
-      $itemsContainer.find(".item-row").each(function(){
+      $itemsContainer.find(".item-row").each(function () {
         const $row = $(this);
         initRowCategorySelect2($row);
-        const $name = $row.find('.item-name-select');
-        if ($name.length && !$name.hasClass('select2-hidden-accessible')) {
+        const $name = $row.find(".item-name-select");
+        if ($name.length && !$name.hasClass("select2-hidden-accessible")) {
           initSelect2($name);
         }
       });
@@ -674,6 +772,8 @@
     fetchHistory(true);
 
     // If content exists pre-open, ensure row selects are initialized
-    $itemsContainer.find('.item-row').each(function(){ initRowCategorySelect2($(this)); });
+    $itemsContainer.find(".item-row").each(function () {
+      initRowCategorySelect2($(this));
+    });
   });
 })();

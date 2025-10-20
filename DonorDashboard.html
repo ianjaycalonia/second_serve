@@ -17,6 +17,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <link rel="stylesheet" href="scripts/css/donorDashboard.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body class="sidebar-collapsed">
@@ -247,12 +248,12 @@
                 at 3 PM
               </div>
               <div class="details mb-2">
-                <strong>8:15 AM</strong><br />New Recipient registered: &ldquo;Helping
-                Hands Shelter&rdquo;
+                <strong>8:15 AM</strong><br />New Recipient registered:
+                &ldquo;Helping Hands Shelter&rdquo;
               </div>
               <div class="details mb-2">
-                <strong>4:00 PM</strong><br />Donation from &ldquo;DailyBites&rdquo;
-                successfully delivered
+                <strong>4:00 PM</strong><br />Donation from
+                &ldquo;DailyBites&rdquo; successfully delivered
               </div>
             </div>
 
@@ -383,9 +384,10 @@
                     <button
                       type="button"
                       id="addItemBtn"
-                      class="btn btn-sm btn-outline-secondary"
+                      class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2"
                     >
-                      <i class="bi bi-plus-lg"></i> Add Donation Item
+                      <i class="bi bi-plus-lg"></i>
+                      <span>Add Donation Item</span>
                     </button>
                   </div>
                   <div class="text-muted small mb-2">
@@ -406,16 +408,18 @@
                 role="tabpanel"
                 aria-labelledby="tab-ocr-tab"
               >
-                <div class="border rounded p-3">
+                <div class="card card-accent p-3">
                   <p class="mb-2">
                     Upload a receipt, donation list, or image to auto-fill
                     items. You can review and edit before submitting.
                   </p>
                   <div class="mb-3">
-                    <label for="ocrFile" class="form-label">Select file</label>
+                    <label for="ocrFile" class="form-label fw-semibold"
+                      >Select file</label
+                    >
                     <input
                       type="file"
-                      class="form-control"
+                      class="form-control form-control-sm"
                       id="ocrFile"
                       accept=".txt,image/*,.pdf"
                     />
@@ -428,9 +432,10 @@
                     <button
                       type="button"
                       id="ocrUploadBtn"
-                      class="btn btn-outline-primary"
+                      class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2"
                     >
-                      <i class="bi bi-cloud-arrow-up"></i> Choose File & Parse
+                      <i class="bi bi-cloud-arrow-up"></i>
+                      <span>Choose File & Parse</span>
                     </button>
                     <div
                       id="ocrStatus"
@@ -480,7 +485,7 @@
             </div>
             <button
               type="button"
-              class="btn btn-outline-secondary"
+              class="btn btn-sm btn-outline-secondary"
               data-bs-dismiss="modal"
             >
               Cancel
@@ -488,7 +493,7 @@
             <button
               type="button"
               id="submitDonationBtn"
-              class="btn btn-warning"
+              class="btn btn-sm btn-warning"
             >
               Submit Donation
             </button>
@@ -531,4 +536,3 @@
     <script src="scripts/js/ui/sidebar.js"></script>
   </body>
 </html>
-
