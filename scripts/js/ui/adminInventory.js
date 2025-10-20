@@ -66,8 +66,8 @@
       });
       const j = await res.json().catch(() => null);
       const items = Array.isArray(j?.data?.items) ? j.data.items : [];
-      await loadCategoriesIntoSelect("categorySelectDesktop", items);
-      await loadCategoriesIntoSelect("categorySelectMobile", items);
+      await loadCategoriesIntoSelect("inventoryCategorySelectDesktop", items);
+      await loadCategoriesIntoSelect("inventoryCategorySelectMobile", items);
     } catch (_) {
       // leave existing options
     }
@@ -177,12 +177,12 @@
 
   function getFilters() {
     const category =
-      document.getElementById("categorySelectDesktop")?.value ||
-      document.getElementById("categorySelectMobile")?.value ||
+      document.getElementById("inventoryCategorySelectDesktop")?.value ||
+      document.getElementById("inventoryCategorySelectMobile")?.value ||
       "All";
     const date =
-      document.getElementById("dateSelectDesktop")?.value ||
-      document.getElementById("dateSelectMobile")?.value ||
+      document.getElementById("inventoryDateSelectDesktop")?.value ||
+      document.getElementById("inventoryDateSelectMobile")?.value ||
       "All";
     const q = document.getElementById("searchInventoryInput")?.value || "";
     return { category, date, q };
@@ -338,10 +338,10 @@
 
   function bindFilters() {
     [
-      "categorySelectDesktop",
-      "categorySelectMobile",
-      "dateSelectDesktop",
-      "dateSelectMobile",
+      "inventoryCategorySelectDesktop",
+      "inventoryCategorySelectMobile",
+      "inventoryDateSelectDesktop",
+      "inventoryDateSelectMobile",
       "searchInventoryInput",
     ].forEach((id) => {
       const el = document.getElementById(id);

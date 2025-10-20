@@ -144,14 +144,14 @@
           "click",
           () => {
             [
-              "donorSelectDesktop",
-              "donorSelectMobile",
-              "statusSelectDesktop",
-              "statusSelectMobile",
-              "categorySelectDesktop",
-              "categorySelectMobile",
-              "dateSelectDesktop",
-              "dateSelectMobile",
+              "donationsDonorSelectDesktop",
+              "donationsDonorSelectMobile",
+              "donationsStatusSelectDesktop",
+              "donationsStatusSelectMobile",
+              "donationsCategorySelectDesktop",
+              "donationsCategorySelectMobile",
+              "donationsDateSelectDesktop",
+              "donationsDateSelectMobile",
             ].forEach((id) => {
               const el = getEl(id);
               if (el && el.options && el.options.length) el.selectedIndex = 0;
@@ -341,29 +341,29 @@
   // Filters
   function readFilters() {
     const donor = (
-      getEl("donorSelectDesktop")?.value ||
-      getEl("donorSelectMobile")?.value ||
+      getEl("donationsDonorSelectDesktop")?.value ||
+      getEl("donationsDonorSelectMobile")?.value ||
       ""
     ).trim();
     const status = (
-      getEl("statusSelectDesktop")?.value ||
-      getEl("statusSelectMobile")?.value ||
+      getEl("donationsStatusSelectDesktop")?.value ||
+      getEl("donationsStatusSelectMobile")?.value ||
       ""
     ).trim();
     const category = (
-      getEl("categorySelectDesktop")?.value ||
-      getEl("categorySelectMobile")?.value ||
+      getEl("donationsCategorySelectDesktop")?.value ||
+      getEl("donationsCategorySelectMobile")?.value ||
       ""
     ).trim();
     const date = (
-      getEl("dateSelectDesktop")?.value ||
-      getEl("dateSelectMobile")?.value ||
+      getEl("donationsDateSelectDesktop")?.value ||
+      getEl("donationsDateSelectMobile")?.value ||
       ""
     ).trim();
     const search = (getEl("donationSearch")?.value || "").trim();
     const receipt = (
-      getEl("recieptSelectMobile")?.value ||
-      getEl("receiptSelectDesktop")?.value ||
+      getEl("donationsReceiptSelectMobile")?.value ||
+      getEl("donationsReceiptSelectDesktop")?.value ||
       ""
     ).trim();
     const from = (getEl("fromDate")?.value || "").trim();
@@ -479,8 +479,8 @@
   }
   async function populateCategorySelects(items) {
     try {
-      const desktop = getEl("categorySelectDesktop"),
-        mobile = getEl("categorySelectMobile");
+      const desktop = getEl("donationsCategorySelectDesktop"),
+        mobile = getEl("donationsCategorySelectMobile");
       const FIXED = [
         "Bakery",
         "Beverage - Juices/Coffee/Tea",
@@ -547,8 +547,8 @@
     }
   }
   async function populateDonorSelects(items) {
-    const desktop = getEl("donorSelectDesktop"),
-      mobile = getEl("donorSelectMobile");
+    const desktop = getEl("donationsDonorSelectDesktop"),
+      mobile = getEl("donationsDonorSelectMobile");
     function build(labels) {
       const uniq = [...new Set(labels.filter(Boolean))].sort((a, b) =>
         a.localeCompare(b)
@@ -1425,20 +1425,20 @@
   }
   function bindFilters() {
     [
-      "donorSelectDesktop",
-      "donorSelectMobile",
-      "statusSelectDesktop",
-      "statusSelectMobile",
-      "categorySelectDesktop",
-      "categorySelectMobile",
-      "dateSelectDesktop",
-      "dateSelectMobile",
+      "donationsDonorSelectDesktop",
+      "donationsDonorSelectMobile",
+      "donationsStatusSelectDesktop",
+      "donationsStatusSelectMobile",
+      "donationsCategorySelectDesktop",
+      "donationsCategorySelectMobile",
+      "donationsDateSelectDesktop",
+      "donationsDateSelectMobile",
     ].forEach((id) => {
       const el = getEl(id);
       if (el)
-        el.addEventListener("change", () => {
-          renderTable(applyFilters(window.__adminDonationRaw || []));
-        });
+        el.addEventListener("change", () =>
+          renderTable(applyFilters(window.__adminDonationRaw || []))
+        );
     });
     // Search input (debounced)
     const searchEl = getEl("donationSearch");
@@ -1515,8 +1515,8 @@
           renderTable(applyFilters(window.__adminDonationRaw || []));
         });
       // receipt select(s)
-      const recMobile = getEl("recieptSelectMobile");
-      const recDesktop = getEl("receiptSelectDesktop");
+      const recMobile = getEl("donationsReceiptSelectMobile");
+      const recDesktop = getEl("donationsReceiptSelectDesktop");
       if (recMobile)
         recMobile.addEventListener("change", () =>
           renderTable(applyFilters(window.__adminDonationRaw || []))
@@ -1560,14 +1560,14 @@
       window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
       try {
         [
-          "donorSelectDesktop",
-          "donorSelectMobile",
-          "statusSelectDesktop",
-          "statusSelectMobile",
-          "categorySelectDesktop",
-          "categorySelectMobile",
-          "dateSelectDesktop",
-          "dateSelectMobile",
+          "donationsDonorSelectDesktop",
+          "donationsDonorSelectMobile",
+          "donationsStatusSelectDesktop",
+          "donationsStatusSelectMobile",
+          "donationsCategorySelectDesktop",
+          "donationsCategorySelectMobile",
+          "donationsDateSelectDesktop",
+          "donationsDateSelectMobile",
         ].forEach((id) => {
           const el = getEl(id);
           if (el && el.options && el.options.length) el.selectedIndex = 0;

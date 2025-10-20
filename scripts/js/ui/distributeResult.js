@@ -661,7 +661,7 @@
     if (!Array.isArray(items) || !items.length) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${base}${badgeHtml} ${
+        <td>${base} ${
         error ? `<span class='badge bg-danger ms-2'>${error}</span>` : ""
       }</td>
         <td colspan="5" class="text-muted">No allocations saved for this recipient.</td>`;
@@ -729,7 +729,7 @@
               </td>`;
 
             tr.innerHTML = `
-              <td>${base}${badgeHtml} ${
+              <td>${base} ${
               error ? `<span class='badge bg-danger ms-2'>${error}</span>` : ""
             }</td>
               <td>${statusBadge(status)}</td>
