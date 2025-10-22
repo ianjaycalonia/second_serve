@@ -45,9 +45,9 @@ try {
                     COALESCE(dp.organization_name, du.name) AS donor_name,
                     dc.name AS donor_category,
                     di.product_name,
-                    di.product_category,
+                    CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS product_category,
                     im.quantity,
-                    di.unit AS packed_by,
+                    COALESCE(u.label, u.code) AS packed_by,
                     di.total_weight,
                     di.total_cost,
                     di.expiry_date,
@@ -55,6 +55,8 @@ try {
                 FROM inventory_movements im
                 LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
                 LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
+                LEFT JOIN categories c ON c.category_id = di.category_id
+                LEFT JOIN units u ON u.unit_id = di.unit_id
                 LEFT JOIN donations d ON d.donation_id = di.donation_id
                 LEFT JOIN users du ON du.user_id = d.donor_id
                 LEFT JOIN donor_profiles dprof ON dprof.user_id = du.user_id
@@ -106,7 +108,7 @@ try {
         $sql = "SELECT 
                     im.created_at AS date_out,
                     di.product_name AS item,
-                    di.product_category AS category,
+                    CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category,
                     im.quantity,
                     im.mode,
                     im.note,
@@ -114,6 +116,7 @@ try {
                 FROM inventory_movements im
                 LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
                 LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
+                LEFT JOIN categories c ON c.category_id = di.category_id
                 LEFT JOIN users up ON up.user_id = im.performed_by
                 WHERE im.direction = 'out' AND im.created_at BETWEEN ? AND ?
                 ORDER BY im.created_at ASC, im.id ASC";
@@ -156,10 +159,24 @@ try {
 
         try {
             $db = Database::getInstance();
-            // Update tags across all donation_items for this product_name + category
-            $db->query('UPDATE donation_items SET tags = ? WHERE product_name = ? AND product_category = ?', [ $tags, $itemName, $category ]);
-            // Report how many rows now carry the new tag value (approximation)
-            $row = $db->query('SELECT COUNT(*) AS n FROM donation_items WHERE product_name = ? AND product_category = ? AND COALESCE(tags, "") = ?', [ $itemName, $category, $tags ])->fetch();
+            // Update tags by joining categories to match full label
+            $db->query(
+                'UPDATE donation_items di
+                 LEFT JOIN categories c ON c.category_id = di.category_id
+                 SET di.tags = ?
+                 WHERE di.product_name = ?
+                   AND CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) = ?',
+                [ $tags, $itemName, $category ]
+            );
+            // Report how many rows affected
+            $row = $db->query(
+                'SELECT COUNT(*) AS n FROM donation_items di
+                 LEFT JOIN categories c ON c.category_id = di.category_id
+                 WHERE di.product_name = ?
+                   AND CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) = ?
+                   AND COALESCE(di.tags, "") = ?',
+                [ $itemName, $category, $tags ]
+            )->fetch();
             $count = (int)($row['n'] ?? 0);
             sendJson(['success'=>true, 'data'=>['updated'=>$count]]);
         } catch (Exception $e) {
@@ -186,12 +203,12 @@ try {
         $where = [];
         $params = [];
         if ($q !== '') {
-            $where[] = '(di.product_name LIKE ? OR di.product_category LIKE ?)';
+            $where[] = "(di.product_name LIKE ? OR CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) LIKE ?)";
             $params[] = '%' . $q . '%';
             $params[] = '%' . $q . '%';
         }
         if ($category !== '' && strtolower($category) !== 'all') {
-            $where[] = 'di.product_category = ?';
+            $where[] = "CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) = ?";
             $params[] = $category;
         }
         if ($donorId) {
@@ -213,25 +230,31 @@ try {
         if ($groupMode === 'merge') {
             // Group by item_name + category
             $countSql = "SELECT COUNT(*) AS n FROM (
-                SELECT 1 FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id INNER JOIN donations d ON d.donation_id = di.donation_id $whereSql GROUP BY di.product_name, di.product_category
+                SELECT 1 FROM inventory inv
+                INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                LEFT JOIN categories c ON c.category_id = di.category_id
+                INNER JOIN donations d ON d.donation_id = di.donation_id
+                $whereSql GROUP BY di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))
             ) x";
             $total = (int)($db->query($countSql, $params)->fetch()['n'] ?? 0);
 
             $sql = "SELECT 
                         di.product_name AS item_name,
-                        di.product_category AS category,
+                        CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category,
                         SUM(inv.quantity) AS total_quantity,
                         MIN(di.expiry_date) AS earliest_expiry,
                         MIN(inv.added_at) AS first_added_at,
                         MAX(inv.added_at) AS last_added_at,
-                        MIN(di.unit) AS unit,
+                        MIN(COALESCE(u.label, u.code)) AS unit,
                         GROUP_CONCAT(DISTINCT NULLIF(di.tags, '') ORDER BY di.tags SEPARATOR ',') AS tags_concat,
                         COUNT(*) AS lots
                     FROM inventory inv
                     INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                    LEFT JOIN categories c ON c.category_id = di.category_id
+                    LEFT JOIN units u ON u.unit_id = di.unit_id
                     INNER JOIN donations d ON d.donation_id = di.donation_id
                     $whereSql
-                    GROUP BY di.product_name, di.product_category
+                    GROUP BY di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))
                     ORDER BY COALESCE(MIN(di.expiry_date), '9999-12-31') ASC, di.product_name ASC
                     LIMIT $limit OFFSET $offset";
             $rows = $db->query($sql, $params)->fetchAll();
@@ -253,27 +276,29 @@ try {
                 $r['derived_status'] = $status;
             }
         } else {
-            $countSql = "SELECT COUNT(*) AS n FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id INNER JOIN donations d ON d.donation_id = di.donation_id $whereSql";
+            $countSql = "SELECT COUNT(*) AS n FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id LEFT JOIN categories c ON c.category_id = di.category_id INNER JOIN donations d ON d.donation_id = di.donation_id $whereSql";
             $total = (int)($db->query($countSql, $params)->fetch()['n'] ?? 0);
 
             $sql = "SELECT 
                         inv.inventory_id AS id,
                         di.product_name AS item_name,
-                        di.product_category AS category,
+                        CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category,
                         inv.quantity,
                         di.expiry_date,
                         inv.added_at,
-                        di.unit AS unit,
+                        COALESCE(units.label, units.code) AS unit,
                         d.donation_id AS source_donation_id,
                         d.batch_id AS source_batch_id,
                         d.donor_id,
                         dp.organization_name AS donor_org,
-                        u.name AS donor_name
+                        usr.name AS donor_name
                     FROM inventory inv
                     INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                    LEFT JOIN categories c ON c.category_id = di.category_id
+                    LEFT JOIN units units ON units.unit_id = di.unit_id
                     INNER JOIN donations d ON d.donation_id = di.donation_id
-                    LEFT JOIN users u ON u.user_id = d.donor_id
-                    LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                    LEFT JOIN users usr ON usr.user_id = d.donor_id
+                    LEFT JOIN donor_profiles dp ON dp.user_id = usr.user_id
                     $whereSql
                     ORDER BY inv.added_at DESC
                     LIMIT $limit OFFSET $offset";
@@ -317,21 +342,35 @@ try {
     // GET /api/inventory/movements
     if ($method === 'GET' && preg_match('#^/(movements|movements/)\z#', $sub)) {
         $db = Database::getInstance();
-        $limit = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 100;
+        $limitRaw = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
+        $allowed = [20,50,100];
+        $limit = in_array($limitRaw, $allowed, true) ? $limitRaw : 20;
+        $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
         $mode = isset($_GET['mode']) ? trim(sanitize($_GET['mode'])) : '';
         $recipientId = isset($_GET['recipient_id']) && $_GET['recipient_id'] !== '' ? (int)$_GET['recipient_id'] : null;
         $since = isset($_GET['since']) ? trim($_GET['since']) : '';
         $days = isset($_GET['days']) ? max(1, min(31, (int)$_GET['days'])) : 2;
+        $direction = isset($_GET['direction']) ? strtolower(trim(sanitize($_GET['direction']))) : 'out'; // in|out|all
 
-        $where = ['im.direction = "out"'];
+        $where = [];
         $params = [];
-        if ($mode !== '' && in_array($mode, ['recipient','onsite'], true)) {
-            $where[] = 'im.mode = ?';
-            $params[] = $mode;
+        if ($direction === 'in') {
+            $where[] = 'im.direction = "in"';
+        } elseif ($direction === 'out') {
+            $where[] = 'im.direction = "out"';
+        } else { // all
+            $where[] = 'im.direction IN ("in","out")';
         }
-        if (!empty($recipientId)) {
-            $where[] = 'im.recipient_id = ?';
-            $params[] = $recipientId;
+        // Only apply mode/recipient filters when direction is out
+        if ($direction !== 'in') {
+            if ($mode !== '' && in_array($mode, ['recipient','onsite'], true)) {
+                $where[] = 'im.mode = ?';
+                $params[] = $mode;
+            }
+            if (!empty($recipientId)) {
+                $where[] = 'im.recipient_id = ?';
+                $params[] = $recipientId;
+            }
         }
         if ($since !== '') {
             $where[] = 'im.created_at >= ?';
@@ -341,6 +380,15 @@ try {
             $params[] = $days;
         }
         $whereSql = 'WHERE ' . implode(' AND ', $where);
+
+        // Count total for pagination
+        $countSql = "SELECT COUNT(*) AS n
+                FROM inventory_movements im
+                $whereSql";
+        $total = (int)($db->query($countSql, $params)->fetch()['n'] ?? 0);
+        $pages = ($limit ? (int)ceil($total / $limit) : 1);
+        if ($page > $pages && $pages > 0) { $page = $pages; }
+        $offset = ($page - 1) * $limit;
 
         $sql = "SELECT 
                     im.id,
@@ -354,17 +402,18 @@ try {
                     up.name AS performed_by_name,
                     im.created_at,
                     di.product_name AS item_name,
-                    di.product_category AS category
+                    CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category
                 FROM inventory_movements im
                 LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
                 LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
+                LEFT JOIN categories c ON c.category_id = di.category_id
                 LEFT JOIN users ur ON ur.user_id = im.recipient_id
                 LEFT JOIN users up ON up.user_id = im.performed_by
                 $whereSql
                 ORDER BY im.created_at DESC, im.id DESC
-                LIMIT $limit";
+                LIMIT $limit OFFSET $offset";
         $rows = $db->query($sql, $params)->fetchAll();
-        sendJson(['success' => true, 'data' => ['items' => $rows, 'limit' => $limit]]);
+        sendJson(['success' => true, 'data' => ['items' => $rows, 'pagination' => ['page'=>$page,'limit'=>$limit,'total'=>$total,'pages'=>$pages]]]);
     }
 
     // POST /api/inventory/move-out

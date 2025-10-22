@@ -301,14 +301,19 @@
 
   function filterPool(term) {
     const t = String(term || "").toLowerCase();
+    const locSel = document.getElementById('poolLocation');
+    const loc = (locSel && locSel.value) ? String(locSel.value).toLowerCase() : '';
     qsa("#pool .rcard").forEach((el) => {
       const lbl = (el.textContent || "").toLowerCase();
+      const city = String(el.dataset.city || '').toLowerCase();
       // Do not reveal locked entries via search
       if (el.dataset.locked === "1") {
         el.style.display = "none";
         return;
       }
-      el.style.display = !t || lbl.includes(t) ? "" : "none";
+      const matchesText = !t || lbl.includes(t);
+      const matchesLoc = !loc || city === loc;
+      el.style.display = (matchesText && matchesLoc) ? "" : "none";
     });
   }
 
@@ -874,10 +879,127 @@
           .toLowerCase();
         return org !== "foodbank (on-site)";
       });
+      // Derive municipality/city from freeform address strings for better sorting
+      function extractMunicipality(addr){
+        const s = String(addr || '').trim();
+        if (!s) return '';
+        // Normalize common punctuation and whitespaces
+        let t = s.replace(/[\.;]+/g, ',').replace(/\s+/g, ' ').trim();
+        // If the full string contains a "... City" phrase, return the LAST such phrase
+        try {
+          const re = /([A-Za-z][A-Za-z .-]*?\bCity)\b/gi;
+          let m, last = '';
+          while ((m = re.exec(t)) !== null) { last = (m[1] || '').trim(); }
+          if (last) return last.replace(/\s+/g,' ');
+        } catch(_) {}
+        // Split by commas and trim
+        let parts = t.split(',').map(p=>p.trim()).filter(Boolean);
+        if (!parts.length) return '';
+        // Remove trailing country/province noise
+        const drop = /^(philippines|region.*|central visayas|cebu( province)?|province of cebu)$/i;
+        while (parts.length && drop.test(parts[parts.length-1])) parts.pop();
+        // Inspect from the end; if a segment contains 'City', extract the tail phrase ending with City
+        for (let i=parts.length-1;i>=0;i--){
+          const seg = parts[i];
+          if (/city\b/i.test(seg)){
+            const mm = /([A-Za-z][A-Za-z .-]*?\bCity)\b/i.exec(seg);
+            if (mm && mm[1]) return mm[1].replace(/\s+/g,' ').trim();
+            return seg.replace(/\s+/g,' ').trim();
+          }
+        }
+        // If no explicit City, take the last meaningful token (not street-level word)
+        const isStreety = /\b(st|street|ave|avenue|rd|road|blvd|purok|sitio|zone|barangay|brgy|at|office|mabolo|lahug|guadalupe|kasambagan)\b/i;
+        for (let i=parts.length-1;i>=0;i--){
+          const seg = parts[i];
+          if (!isStreety.test(seg)) return seg.replace(/\s+/g,' ').trim();
+        }
+        // Fallback: first token
+        return parts[0].replace(/\s+/g,' ').trim();
+      }
+      // Sort by municipality/city then organization name
+      filtered.sort((a,b)=>{
+        const ma = extractMunicipality(a.address || a.recipient_address || '');
+        const mb = extractMunicipality(b.address || b.recipient_address || '');
+        const ca = ma.localeCompare(mb, undefined, { sensitivity:'base' });
+        if (ca !== 0) return ca;
+        const na = String(a.organization_name || a.name || '').toLowerCase();
+        const nb = String(b.organization_name || b.name || '').toLowerCase();
+        return na.localeCompare(nb);
+      });
+      // First pass: extract raw city labels
+      const rawCities = [];
+      const cityOfUser = new Map(); // user_id -> raw city
+      filtered.forEach((u) => {
+        const city = extractMunicipality(u.address || u.recipient_address || '');
+        if (city) rawCities.push(city);
+        cityOfUser.set(Number(u.user_id), city || '');
+      });
+      // Consolidate by substring containment: if label A contains label B (>=9 chars), keep the shorter (B)
+      function consolidate(labels){
+        const uniq = Array.from(new Set(labels.map(s=>s.trim()))).filter(Boolean);
+        uniq.sort((a,b)=>a.length-b.length || a.localeCompare(b, undefined, {sensitivity:'base'}));
+        const kept = [];
+        for (const s of uniq){
+          const sl = s.toLowerCase();
+          let covered = false;
+          for (let i=0;i<kept.length;i++){
+            const kl = kept[i].toLowerCase();
+            if (sl.includes(kl) && kept[i].length>=9) { // s contains kept[i]; shorter already kept
+              covered = true; break;
+            }
+            if (kl.includes(sl) && s.length>=9){ // kept includes s; replace with shorter s
+              kept[i] = s; covered = true; break;
+            }
+          }
+          if (!covered) kept.push(s);
+        }
+        // Final pass: ensure if two entries contain each other, keep the shortest
+        return kept;
+      }
+      const consolidated = consolidate(rawCities);
+      // Build a map from any raw city to its consolidated base (shortest containing string)
+      const toBase = new Map();
+      for (const s of rawCities){
+        const sl = s.toLowerCase();
+        let base = s;
+        for (const c of consolidated){
+          const cl = c.toLowerCase();
+          if (sl.includes(cl) || cl.includes(sl)){
+            base = (c.length <= s.length) ? c : s;
+            if (base.length>=9 || c.toLowerCase()===s.toLowerCase()) break;
+          }
+        }
+        toBase.set(s, base);
+      }
+      // Render cards with consolidated city tag
       filtered.forEach((u) => {
         window.__rl_usersById.set(Number(u.user_id), u);
-        pool.appendChild(createCard(u));
+        const card = createCard(u);
+        const raw = cityOfUser.get(Number(u.user_id)) || '';
+        const base = raw ? (toBase.get(raw) || raw) : '';
+        if (base) card.dataset.city = base.toLowerCase();
+        pool.appendChild(card);
       });
+      // Populate location select with consolidated unique cities/municipalities
+      try {
+        const sel = document.getElementById('poolLocation');
+        if (sel) {
+          const arr = consolidated.slice();
+          arr.sort((a,b)=>a.localeCompare(b, undefined, { sensitivity:'base' }));
+          // Clear existing (keep first 'All')
+          for (let i = sel.options.length - 1; i >= 1; i--) sel.remove(i);
+          arr.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            sel.appendChild(opt);
+          });
+          sel.addEventListener('change', ()=>{
+            const term = document.getElementById('poolSearch')?.value || '';
+            filterPool(term);
+          });
+        }
+      } catch(_) {}
 
       // Load plan from server (fallback to local if needed)
       await restoreFromServer();

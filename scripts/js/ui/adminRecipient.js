@@ -816,12 +816,74 @@ function showImportModal(title, html) {
     return Array.from(new Set(vals.filter(v => v && String(v).trim()))).sort((a,b)=>String(a).localeCompare(String(b)));
   }
 
+  // Derive a city/municipality label from a freeform address
+  function extractCity(addr){
+    const s = String(addr || '').trim();
+    if (!s) return '';
+    let t = s.replace(/[\.;]+/g, ',').replace(/\s+/g, ' ').trim();
+    // Prefer the last occurrence of a "... City" phrase
+    try {
+      const re = /([A-Za-z][A-Za-z .-]*?\bCity)\b/gi;
+      let m, last = '';
+      while ((m = re.exec(t)) !== null) { last = (m[1] || '').trim(); }
+      if (last) return last.replace(/\s+/g,' ');
+    } catch(_) {}
+    // Split by commas and trim parts
+    let parts = t.split(',').map(p=>p.trim()).filter(Boolean);
+    if (!parts.length) return '';
+    // Drop trailing country/province noise
+    const drop = /^(philippines|region.*|central visayas|cebu( province)?|province of cebu)$/i;
+    while (parts.length && drop.test(parts[parts.length-1])) parts.pop();
+    // If any part contains City, extract it
+    for (let i=parts.length-1;i>=0;i--){
+      const seg = parts[i];
+      if (/city\b/i.test(seg)){
+        const mm = /([A-Za-z][A-Za-z .-]*?\bCity)\b/i.exec(seg);
+        if (mm && mm[1]) return mm[1].replace(/\s+/g,' ').trim();
+        return seg.replace(/\s+/g,' ').trim();
+      }
+    }
+    // Otherwise take the last meaningful token (avoid street-level terms)
+    const isStreety = /\b(st|street|ave|avenue|rd|road|blvd|purok|sitio|zone|barangay|brgy|at|office)\b/i;
+    for (let i=parts.length-1;i>=0;i--){
+      const seg = parts[i];
+      if (!isStreety.test(seg)) return seg.replace(/\s+/g,' ').trim();
+    }
+    return parts[0].replace(/\s+/g,' ').trim();
+  }
+
+  // Consolidate labels: if two labels include each other (>=9 chars), keep the shorter
+  function consolidateLabels(labels){
+    const uniq = Array.from(new Set(labels.map(s=>String(s||'').trim()).filter(Boolean)));
+    uniq.sort((a,b)=>a.length-b.length || a.localeCompare(b, undefined, {sensitivity:'base'}));
+    const kept = [];
+    for (const s of uniq){
+      const sl = s.toLowerCase();
+      let covered = false;
+      for (let i=0;i<kept.length;i++){
+        const k = kept[i];
+        const kl = k.toLowerCase();
+        if ((sl.includes(kl) && k.length>=9) || (kl.includes(sl) && s.length>=9)){
+          // keep the shorter one
+          kept[i] = (k.length <= s.length) ? k : s;
+          covered = true;
+          break;
+        }
+      }
+      if (!covered) kept.push(s);
+    }
+    // De-dup after replacements
+    return Array.from(new Set(kept));
+  }
+
   function populateFilters(){
     const sel = document.getElementById('recipientCategorySelectMobile');
     if (sel){
-      const locs = uniqueSorted(recipientsData.map(u=>String(u.address||'').trim()).filter(Boolean));
+      // Build consolidated city list from addresses
+      const rawCities = recipientsData.map(u=>extractCity(u.address||'')).filter(Boolean);
+      const consolidated = consolidateLabels(rawCities).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
       const cur = sel.value;
-      sel.innerHTML = '<option>All</option>' + locs.map(l=>`<option${l===cur?' selected':''}>${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');
+      sel.innerHTML = '<option>All</option>' + consolidated.map(c=>`<option${c===cur?' selected':''}>${c.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');
     }
   }
 
@@ -863,10 +925,10 @@ function showImportModal(title, html) {
         const ts = tsRaw ? new Date(tsRaw) : null;
         if (!ts || ts > to) return false;
       }
-      // Location
+      // Location: match by derived consolidated city
       if (location && location !== 'All'){
-        const addr = String(u.address||'');
-        if (addr.trim() !== location) return false;
+        const city = extractCity(u.address||'');
+        if (!city || city.toLowerCase() !== String(location).toLowerCase()) return false;
       }
       // Status filter: try to match user account status
       if (statusFilter && statusFilter !== 'All'){

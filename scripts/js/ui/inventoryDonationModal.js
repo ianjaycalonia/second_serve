@@ -8,6 +8,7 @@
         : "/Capstone%20Project/php/api";
 
     const $modal = $("#donationModal");
+    const TAXO_BASE_URL = `${API_BASE_URL}/taxonomy/index.php`;
     const $form = $("#donationForm");
     const $submitBtn = $("#submitDonationBtn");
     const $itemsContainer = $("#itemsContainer");
@@ -30,6 +31,42 @@
       }
     }
 
+    function initRowUnitSelect2($row){
+      const $unit = $row.find('.item-unit');
+      if (!$unit.length || !$.fn.select2) return;
+      if ($unit.hasClass('select2-hidden-accessible')) return;
+      $unit.select2({
+        width: '100%',
+        placeholder: 'Select unit (optional)',
+        dropdownParent: $modal,
+        allowClear: true,
+        minimumInputLength: 0,
+        ajax: {
+          url: `${TAXO_BASE_URL}/units`,
+          dataType: 'json',
+          delay: 250,
+          data: function(params){ return { q: params.term || '', active: 1 }; },
+          processResults: function(data){
+            const items = Array.isArray(data?.items) ? data.items : [];
+            return { results: items.map(u => ({ id: u.unit_id, text: u.label || u.code })) };
+          },
+          xhrFields: { withCredentials: true },
+          cache: true,
+        }
+      });
+      // Lock unit after selection: show only the chosen one and disable control
+      $unit.on('select2:select', function(){
+        const data = $unit.select2('data');
+        if (Array.isArray(data) && data.length) {
+          const sel = data[0];
+          $unit.find('option').remove();
+          const opt = new Option(sel.text, sel.id, true, true);
+          $unit.append(opt).trigger('change.select2');
+          $unit.prop('disabled', true);
+        }
+      });
+    }
+
     function setSubmitting(isLoading) {
       if (isLoading) {
         $submitBtn
@@ -49,7 +86,7 @@
         tags: true,
         width: "100%",
         placeholder: $el.data("placeholder") || "Search or type new",
-        minimumInputLength: 1,
+        minimumInputLength: 0,
         dropdownParent: $modal,
         ajax: {
           delay: 250,
@@ -57,8 +94,24 @@
           dataType: "json",
           data: function (params) {
             const $row = $el.closest(".item-row");
-            const cat = String($row.find(".item-cat").val() || "").trim();
-            return { q: params.term || "", limit: 20, category: cat };
+            // Pass category label text (not ID) for backend filtering
+            let catLabel = '';
+            const $sel = $row.find('.item-cat');
+            if ($sel.length) {
+              try {
+                const data = $sel.select2('data');
+                if (Array.isArray(data) && data.length && data[0] && data[0].text) {
+                  catLabel = String(data[0].text).trim();
+                } else {
+                  const opt = $sel.find('option:selected');
+                  if (opt && opt.length) { catLabel = String(opt.text() || '').trim(); }
+                }
+              } catch(_) {
+                const opt = $sel.find('option:selected');
+                if (opt && opt.length) { catLabel = String(opt.text() || '').trim(); }
+              }
+            }
+            return { q: params.term || "", limit: 20, category: catLabel };
           },
           processResults: function (data) {
             const items = data && data.items ? data.items : [];
@@ -79,6 +132,11 @@
           return { id: term, text: term, newTag: true };
         },
       });
+      // Auto-trigger an initial fetch on open
+      $el.on('select2:open', function(){
+        const $search = $(".select2-container--open .select2-search__field");
+        if ($search.length) { $search.trigger('input'); }
+      });
     }
 
     function initRowCategorySelect2($row) {
@@ -93,12 +151,16 @@
         allowClear: true,
         minimumInputLength: 0,
         ajax: {
-          url: `${API_BASE_URL}/donations/index.php/categories`,
+          url: `${TAXO_BASE_URL}/categories`,
           dataType: "json",
           delay: 250,
+          data: function(params){ return { q: params.term || '', active: 1 }; },
           processResults: function (data) {
-            const items = data && Array.isArray(data.items) ? data.items : [];
-            return { results: items.map((t) => ({ id: t, text: t })) };
+            const items = Array.isArray(data?.items) ? data.items : [];
+            return { results: items.map((c) => {
+              const label = c?.secondary_name ? `${c.primary_name} - ${c.secondary_name}` : `${c.primary_name}`;
+              return { id: c.category_id, text: label };
+            }) };
           },
           xhrFields: { withCredentials: true },
           cache: true,
@@ -146,16 +208,7 @@
               </div>
               <div class="col-6">
                 <label class="form-label mb-1">Unit</label>
-                <select class="form-select form-select-sm item-unit">
-                  <option value="">Select unit (optional)</option>
-                  <option value="can">can</option>
-                  <option value="pack">pack</option>
-                  <option value="box">box</option>
-                  <option value="piece">piece</option>
-                  <option value="bottle">bottle</option>
-                  <option value="kg">kg</option>
-                  <option value="g">g</option>
-                </select>
+                <select class="form-select form-select-sm item-unit"></select>
               </div>
             </div>
           </div>
@@ -197,6 +250,7 @@
       const $row = $itemsContainer.find(`.item-row[data-id="${id}"]`);
       initRowCategorySelect2($row);
       initSelect2($row.find(".item-name-select"));
+      initRowUnitSelect2($row);
     }
     function removeItemRow(btn) {
       $(btn).closest(".item-row").remove();
@@ -212,6 +266,13 @@
       const $row = $(this).closest(".item-row");
       const $name = $row.find(".item-name-select");
       $name.val(null).trigger("change");
+      if ($name.hasClass('select2-hidden-accessible')) {
+        $name.select2('open');
+        setTimeout(()=>{
+          const $search = $(".select2-container--open .select2-search__field");
+          if ($search.length) { $search.trigger('input'); }
+        }, 0);
+      }
     });
 
     // OCR logic (same endpoints and UX)
@@ -348,11 +409,30 @@
         const $row = $(this);
         fd.append("name[]", String($row.find(".item-name-select").val() || "").trim());
         fd.append("quantity[]", $row.find(".item-qty").val());
-        const unit = String($row.find(".item-unit").val() || "").trim();
-        fd.append("unit[]", unit);
+        const unitId = String($row.find(".item-unit").val() || "").trim();
+        let unitText = '';
+        try {
+          const ud = $row.find('.item-unit').select2('data');
+          if (Array.isArray(ud) && ud.length && ud[0] && ud[0].text) unitText = String(ud[0].text).trim();
+        } catch (_) {}
+        if (unitText) fd.append("unit[]", unitText);
+        if (unitId) fd.append("unit_id[]", unitId);
         const expiry = $row.find(".item-expiry").val();
         fd.append("expiry_date[]", expiry);
-        fd.append("type[]", String($row.find(".item-cat").val() || "").trim());
+        // Send both label (type[]) and stable id (category_id[]) for compatibility
+        const catId = String($row.find(".item-cat").val() || "").trim();
+        let catLabel = '';
+        try {
+          const data = $row.find('.item-cat').select2('data');
+          if (Array.isArray(data) && data.length && data[0] && data[0].text) {
+            catLabel = String(data[0].text).trim();
+          }
+        } catch(_) {
+          const opt = $row.find('.item-cat option:selected');
+          if (opt && opt.length) { catLabel = String(opt.text() || '').trim(); }
+        }
+        if (catLabel) fd.append("type[]", catLabel);
+        if (catId) fd.append("category_id[]", catId);
         const w = $row.find(".item-weight").val();
         if (w !== null && w !== undefined && String(w) !== "") fd.append("total_weight[]", w); else fd.append("total_weight[]", "");
         const c = $row.find(".item-cost").val();
@@ -402,6 +482,7 @@
         if ($name.length && !$name.hasClass("select2-hidden-accessible")) {
           initSelect2($name);
         }
+        initRowUnitSelect2($row);
       });
     });
 

@@ -93,10 +93,18 @@ class Inventory
         $donationItemId = isset($donation['donation_item_id']) ? (int)$donation['donation_item_id'] : 0;
         if ($donationItemId <= 0) {
             try {
+                // Resolve unit_id from provided unit label/code if any
+                $unitId = null;
+                if (!empty($unitVal)) {
+                    try {
+                        $ur = $this->db->query("SELECT unit_id FROM units WHERE code = ? OR label = ? LIMIT 1", [$unitVal, $unitVal])->fetch();
+                        if ($ur && isset($ur['unit_id'])) { $unitId = (int)$ur['unit_id']; }
+                    } catch (Exception $e) { /* ignore */ }
+                }
                 $this->db->query(
-                    "INSERT INTO donation_items (donation_id, product_name, product_category, category_id, quantity, unit, total_weight, total_cost, expiry_date, tags, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NOW())",
-                    [ (int)$id, $itemName, ($category === '' ? null : $category), $categoryId, $qty, $unitVal, $expiry ]
+                    "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags, created_at)
+                     VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NOW())",
+                    [ (int)$id, $itemName, $categoryId, $qty, $unitId, $expiry ]
                 );
                 $donationItemId = (int)$this->db->lastInsertId();
             } catch (Exception $eDI) { /* fallback continue without donation_items */ }
@@ -113,12 +121,10 @@ class Inventory
         try {
             $this->ensureTables();
             $invId = (int)$this->db->lastInsertId();
-            $performedBy = null;
-            if (!empty($adminInCharge)) { $performedBy = (int)$adminInCharge; }
-            if (empty($performedBy)) {
-                try { $performedBy = (int)currentUserId(); } catch (Exception $e) { $performedBy = 0; }
-            }
-            if (empty($performedBy) && !empty($donorId)) { $performedBy = (int)$donorId; }
+            // Attribution: the admin performing the import/entry is the receiver
+            $performedBy = 0;
+            try { $performedBy = (int)currentUserId(); } catch (Exception $e) { $performedBy = 0; }
+            if (empty($performedBy) && !empty($adminInCharge)) { $performedBy = (int)$adminInCharge; }
             if ($invId > 0 && $qty > 0 && $performedBy > 0) {
                 // mode uses a broader string to indicate source
                 if ($donationItemId) {
@@ -144,10 +150,17 @@ class Inventory
     {
         // Read all items under this donation header and add each to inventory
         $rows = $this->db->query(
-            "SELECT di.donation_item_id, di.product_name AS name, di.product_category AS type, di.quantity, di.unit, di.expiry_date,
+            "SELECT di.donation_item_id,
+                    di.product_name AS name,
+                    CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type,
+                    di.quantity,
+                    COALESCE(u.label, u.code) AS unit,
+                    di.expiry_date,
                     d.donation_id AS id, d.donor_id, d.batch_id, d.admin_in_charge
              FROM donation_items di
              INNER JOIN donations d ON d.donation_id = di.donation_id
+             LEFT JOIN categories c ON c.category_id = di.category_id
+             LEFT JOIN units u ON u.unit_id = di.unit_id
              WHERE di.donation_id = ?",
             [$donationId]
         )->fetchAll();
@@ -170,10 +183,17 @@ class Inventory
     public function addFromBatchId(string $batchId): int
     {
         $rows = $this->db->query(
-            "SELECT di.donation_item_id, di.product_name AS name, di.product_category AS type, di.quantity, di.unit, di.expiry_date,
+            "SELECT di.donation_item_id,
+                    di.product_name AS name,
+                    CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type,
+                    di.quantity,
+                    COALESCE(u.label, u.code) AS unit,
+                    di.expiry_date,
                     d.donation_id AS id, d.donor_id, d.batch_id, d.admin_in_charge
              FROM donation_items di
              INNER JOIN donations d ON d.donation_id = di.donation_id
+             LEFT JOIN categories c ON c.category_id = di.category_id
+             LEFT JOIN units u ON u.unit_id = di.unit_id
              WHERE d.batch_id = ? AND d.deleted_at IS NULL",
             [$batchId]
         )->fetchAll();
@@ -252,7 +272,9 @@ class Inventory
                 "SELECT inv.inventory_id, inv.quantity
                  FROM inventory inv
                  INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
-                 WHERE di.product_name = ? AND di.product_category = ?
+                 LEFT JOIN categories c ON c.category_id = di.category_id
+                 WHERE di.product_name = ?
+                   AND CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) = ?
                  ORDER BY COALESCE(di.expiry_date, '9999-12-31') ASC, inv.added_at ASC
                  FOR UPDATE",
                 [$itemName, $category]
@@ -451,7 +473,25 @@ class Inventory
                 }
 
                 // Create a donation header to satisfy donation_items FK
-                $procType = ($tc !== null && $tc > 0) ? 'purchased' : 'donated';
+                // Respect spreadsheet's DONATED/PURCHASED when provided
+                $procType = 'donated';
+                $dopRaw = null;
+                if (isset($r['donated_or_purchased'])) { $dopRaw = $r['donated_or_purchased']; }
+                elseif (isset($r['DONATED/PURCHASED'])) { $dopRaw = $r['DONATED/PURCHASED']; }
+                elseif (isset($r['donated/purchased'])) { $dopRaw = $r['donated/purchased']; }
+                elseif (isset($r['donatedPurchased'])) { $dopRaw = $r['donatedPurchased']; }
+                if ($dopRaw !== null) {
+                    $v = strtolower(trim((string)$dopRaw));
+                    if ($v === 'donated' || $v === 'donation' || $v === 'donate') { $procType = 'donated'; }
+                    elseif ($v === 'purchased' || $v === 'purchase' || $v === 'bought') { $procType = 'purchased'; }
+                    else {
+                        // Unknown value: fallback to previous rule using total_cost
+                        if ($tc !== null && $tc > 0) { $procType = 'purchased'; }
+                    }
+                } else {
+                    // No column present: fallback to previous rule using total_cost
+                    if ($tc !== null && $tc > 0) { $procType = 'purchased'; }
+                }
                 $donorDisplay = ($donOrg !== '' ? $donOrg : $donName);
                 $this->db->query(
                     "INSERT INTO donations (donor_id, admin_in_charge, procurement_type, donor_name, entry_date, remarks, status, created_at)
@@ -460,11 +500,19 @@ class Inventory
                 );
                 $donationId = (int)$this->db->lastInsertId();
 
-                // Create donation_item row
+                // Resolve unit_id from provided unit label/code if any (normalized schema)
+                $unitId = null;
+                if ($unit !== '') {
+                    try {
+                        $ur = $this->db->query("SELECT unit_id FROM units WHERE code = ? OR label = ? LIMIT 1", [$unit, $unit])->fetch();
+                        if ($ur && isset($ur['unit_id'])) { $unitId = (int)$ur['unit_id']; }
+                    } catch (Exception $e) { /* ignore */ }
+                }
+                // Create donation_item row (normalized columns)
                 $this->db->query(
-                    "INSERT INTO donation_items (donation_id, product_name, product_category, category_id, quantity, unit, total_weight, total_cost, expiry_date, tags, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-                    [ $donationId, $item, ($cat === '' ? NULL : $cat), $categoryId, $qty, ($unit === '' ? NULL : $unit), $tw, $tc, $expNorm, ($tags === '' ? NULL : $tags) ]
+                    "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                    [ $donationId, $item, $categoryId, $qty, $unitId, $tw, $tc, $expNorm, ($tags === '' ? NULL : $tags) ]
                 );
                 $donationItemId = (int)$this->db->lastInsertId();
 
@@ -541,7 +589,11 @@ class Inventory
     {
         // Update tags on the source donation_items rows for this item/category
         $this->db->query(
-            "UPDATE donation_items SET tags = ? WHERE product_name = ? AND product_category = ?",
+            "UPDATE donation_items di
+             LEFT JOIN categories c ON c.category_id = di.category_id
+             SET di.tags = ?
+             WHERE di.product_name = ?
+               AND CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) = ?",
             [ $tags, $itemName, $category ]
         );
     }

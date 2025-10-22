@@ -1191,6 +1191,16 @@
     });
   }
 
+  // Rebind import handlers whenever the modal is opened (defensive against cache/init issues)
+  try {
+    const importModal = document.getElementById("importInventoryModal");
+    if (importModal) {
+      importModal.addEventListener("shown.bs.modal", () => {
+        try { bindImportModal(); } catch (_) {}
+      });
+    }
+  } catch (_) {}
+
   async function init() {
     // init
     bindFilters();
@@ -1198,6 +1208,17 @@
     await loadCategories();
     loadAndRender(1);
     bindImportModal();
+    // When the Import Result modal is closed, refresh the table immediately
+    try {
+      const irm = document.getElementById("importResultModal");
+      if (irm) {
+        irm.addEventListener("hidden.bs.modal", () => {
+          try { window.__invNonExpiredCache = {}; } catch (_) {}
+          const p = window.__inventoryLast?.pagination?.page || 1;
+          loadAndRender(p);
+        });
+      }
+    } catch (_) {}
     // Wire tag edit save button
     try {
       const save = document.getElementById("tagEditSaveBtn");

@@ -99,26 +99,7 @@ INSERT IGNORE INTO beneficiary_categories (`name`,`description`) VALUES
  ('Food Donation Drive', NULL),
  ('Others', NULL);
 
--- donation_items (line items per donation)
-CREATE TABLE `donation_items` (
-  `donation_item_id` INT NOT NULL AUTO_INCREMENT,
-  `donation_id` INT NOT NULL,
-  `product_name` VARCHAR(255) NOT NULL,
-  `product_category` VARCHAR(100) DEFAULT NULL,
-  `category_id` INT(11) DEFAULT NULL,
-  `quantity` INT NOT NULL,
-  `unit` VARCHAR(50) DEFAULT NULL,
-  `total_weight` DECIMAL(14,3) DEFAULT NULL,
-  `total_cost` DECIMAL(16,2) DEFAULT NULL,
-  `expiry_date` DATE DEFAULT NULL,
-  `tags` TEXT DEFAULT NULL,
-  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`donation_item_id`),
-  KEY `di_donation_idx` (`donation_id`),
-  KEY `di_category_idx` (`category_id`),
-  CONSTRAINT `di_donation_fk` FOREIGN KEY (`donation_id`) REFERENCES `donations`(`donation_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `di_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
 
 -- admin_profiles
 CREATE TABLE `admin_profiles` (
@@ -298,6 +279,50 @@ CREATE TABLE `categories` (
   UNIQUE KEY `uq_categories_primary_secondary` (`primary_name`, `secondary_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
+-- units (lookup for measurement units; UI-controlled list)
+CREATE TABLE `units` (
+  `unit_id` INT NOT NULL AUTO_INCREMENT,
+  `code` VARCHAR(50) NOT NULL,
+  `label` VARCHAR(100) DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`unit_id`),
+  UNIQUE KEY `uq_units_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+INSERT IGNORE INTO `units` (`code`, `label`) VALUES
+  ('bottle', 'bottle'),
+  ('can', 'can'),
+  ('pack', 'pack'),
+  ('box', 'box'),
+  ('piece', 'piece'),
+  ('kg', 'kilogram'),
+  ('g', 'gram');
+
+-- Seed minimal admin so FKs (donations.admin_in_charge) can reference it
+INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
+  (1, 'Admin One', 'admin1@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW())
+ON DUPLICATE KEY UPDATE `role`='admin', `status`='approved';
+
+-- Preload additional users (from legacy seed)
+INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
+  (2, 'Admin Two', 'admin2@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW())
+ON DUPLICATE KEY UPDATE `role`='admin', `status`='approved';
+
+INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
+  (3, 'Admin Three', 'admin3@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW())
+ON DUPLICATE KEY UPDATE `role`='admin', `status`='approved';
+
+INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
+  (4, 'Foodbank (On-site)', 'onsite@invalid.local', '', 'recipient', 'approved', NOW(), NOW())
+ON DUPLICATE KEY UPDATE `role`='recipient', `status`='approved';
+
+INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
+  (5, 'Test Donor', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW())
+ON DUPLICATE KEY UPDATE `role`='donor', `status`='approved';
+
+ 
+
 -- category_aliases: maps messy/raw labels from files to canonical categories
 CREATE TABLE `category_aliases` (
   `alias_id` INT NOT NULL AUTO_INCREMENT,
@@ -325,6 +350,28 @@ CREATE TABLE `products` (
   UNIQUE KEY `uniq_product_name` (`product_name`),
   KEY `products_category_idx` (`category_id`),
   CONSTRAINT `products_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- donation_items (line items per donation) - normalized: use FKs for category and unit
+CREATE TABLE `donation_items` (
+  `donation_item_id` INT NOT NULL AUTO_INCREMENT,
+  `donation_id` INT NOT NULL,
+  `product_name` VARCHAR(255) NOT NULL,
+  `category_id` INT(11) DEFAULT NULL,
+  `quantity` INT NOT NULL,
+  `unit_id` INT(11) DEFAULT NULL,
+  `total_weight` DECIMAL(14,3) DEFAULT NULL,
+  `total_cost` DECIMAL(16,2) DEFAULT NULL,
+  `expiry_date` DATE DEFAULT NULL,
+  `tags` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`donation_item_id`),
+  KEY `di_donation_idx` (`donation_id`),
+  KEY `di_category_idx` (`category_id`),
+  KEY `di_unit_idx` (`unit_id`),
+  CONSTRAINT `di_donation_fk` FOREIGN KEY (`donation_id`) REFERENCES `donations`(`donation_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `di_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `di_unit_fk` FOREIGN KEY (`unit_id`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 -- inventory (lot-level, normalized)
@@ -429,27 +476,6 @@ CREATE TABLE `recipient_profiles` (
   CONSTRAINT `rp_beneficiary_category_fk` FOREIGN KEY (`beneficiary_category_id`) REFERENCES `beneficiary_categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
-
-INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
-(1, 'Admin One', 'admin1@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
-(2, 'Admin Two', 'admin2@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
-(3, 'Admin Three', 'admin3@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW()),
-(4, 'Foodbank (On-site)', 'onsite@invalid.local', '', 'recipient', 'approved', NOW(), NOW()),
-(5, 'Test Donor', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW());
-
-INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, `address`) VALUES
-(1, 'Simply Share', '09910071270', 'Subangdaku, Mandaue City'),
-(2, 'Simply Share', '09910071271', 'Subangdaku, Mandaue City'),
-(3, 'Simply Share', '09910071272', 'Subangdaku, Mandaue City');
-
--- Recipient profile for Foodbank (On-site)
-INSERT INTO `recipient_profiles` (`user_id`, `organization_name`, `beneficiary_category_id`, `tags`, `address`, `total_residents`, `age_group`, `male_count`, `female_count`, `external_id`, `primary_contact_id`) VALUES
-(4, 'Foodbank (On-site)', NULL, 'onsite', 'Subangdaku, Mandaue City', NULL, NULL, NULL, NULL, NULL, NULL);
-
--- Donor profile for TestDonor
-INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category_id`, `contact_number`, `address`, `notes`) VALUES
-(5, 'TestDonor', NULL, '09910071273', 'Tabok, Mandaue City', NULL);
-
 -- settings (key-value store for global app settings)
 CREATE TABLE `settings` (
   `key` varchar(64) NOT NULL,
@@ -545,15 +571,40 @@ INSERT INTO `donations` (`donor_id`, `admin_in_charge`, `procurement_type`, `don
 VALUES (NULL, 1, 'donated', 'Sample Donor', NOW(), NULL, 'Picked Up', NOW());
 SET @seed_donation_id := LAST_INSERT_ID();
 
--- Create a donation item
+-- Create a donation item (normalized: use unit_id/category_id)
 INSERT INTO `donation_items` (
-  `donation_id`, `product_name`, `product_category`, `category_id`, `quantity`, `unit`, `total_weight`, `total_cost`, `expiry_date`, `tags`, `created_at`
+  `donation_id`, `product_name`, `category_id`, `quantity`, `unit_id`, `total_weight`, `total_cost`, `expiry_date`, `tags`, `created_at`
 ) VALUES (
-  @seed_donation_id, 'Bottled Water', 'Beverage - Water', NULL, 10, 'bottle', NULL, NULL, DATE_ADD(CURDATE(), INTERVAL 365 DAY), NULL, NOW()
+  @seed_donation_id, 'Bottled Water', NULL, 10,
+  (SELECT unit_id FROM units WHERE code = 'bottle' LIMIT 1),
+  NULL, NULL, DATE_ADD(CURDATE(), INTERVAL 365 DAY), NULL, NOW()
 );
 SET @seed_donation_item_id := LAST_INSERT_ID();
 
 -- Create the inventory lot referencing the donation item
 INSERT INTO `inventory` (`donation_item_id`, `quantity`, `added_at`) VALUES (@seed_donation_item_id, 10, NOW());
+
+-- =========================
+-- Seed legacy profiles (placed here so tables already exist)
+-- =========================
+INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, `address`) VALUES
+  (1, 'Simply Share', '09910071270', 'Subangdaku, Mandaue City')
+ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
+
+INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, `address`) VALUES
+  (2, 'Simply Share', '09910071271', 'Subangdaku, Mandaue City')
+ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
+
+INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, `address`) VALUES
+  (3, 'Simply Share', '09910071272', 'Subangdaku, Mandaue City')
+ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
+
+INSERT INTO `recipient_profiles` (`user_id`, `organization_name`, `beneficiary_category_id`, `tags`, `address`, `total_residents`, `age_group`, `male_count`, `female_count`, `external_id`, `primary_contact_id`) VALUES
+  (4, 'Foodbank (On-site)', NULL, 'onsite', 'Subangdaku, Mandaue City', NULL, NULL, NULL, NULL, NULL, NULL)
+ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
+
+INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category_id`, `contact_number`, `address`, `notes`) VALUES
+  (5, 'TestDonor', NULL, '09910071273', 'Tabok, Mandaue City', NULL)
+ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
 
 SET FOREIGN_KEY_CHECKS=1;

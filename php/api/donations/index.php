@@ -71,19 +71,28 @@ try {
             ? (int)$payload['donor_id']
             : (int)currentUserId();
 
-        // Validate required fields (expiry_date required)
-        $required = ['type','name','quantity','expiry_date'];
+        // Accept normalized IDs
+        $catId = isset($_POST['category_id']) && $_POST['category_id'] !== '' ? (int)$_POST['category_id'] : (isset($payload['category_id']) ? (int)$payload['category_id'] : null);
+        $unitId = isset($_POST['unit_id']) && $_POST['unit_id'] !== '' ? (int)$_POST['unit_id'] : (isset($payload['unit_id']) ? (int)$payload['unit_id'] : null);
+        $payload['category_id'] = $catId;
+        $payload['unit_id'] = $unitId;
+
+        // Validate required fields (expiry_date required); allow category via ID (preferred) or type label as fallback
+        $required = ['name','quantity','expiry_date'];
         foreach ($required as $f) {
             if (!isset($payload[$f]) || $payload[$f] === '') {
                 sendJson(['success' => false, 'error' => $f . ' is required'], 400);
             }
+        }
+        if (!isset($payload['type']) && !$catId) {
+            sendJson(['success' => false, 'error' => 'category_id or type is required'], 400);
         }
 
         // Enforce policy: no images at donation creation (images are uploaded by admin during Food Safety)
         $payload['image_url'] = null;
 
         // Normalize basic strings (do not HTML-encode for DB)
-        $payload['type'] = normalize_input($payload['type']);
+        if (isset($payload['type'])) { $payload['type'] = normalize_input($payload['type']); }
         $payload['name'] = normalize_input($payload['name']);
         $payload['expiry_date'] = normalize_input($payload['expiry_date']);
 
@@ -131,6 +140,9 @@ try {
         // Accept per-item arrays; fallback to single value if provided
         $typeSingle = isset($_POST['type']) && !is_array($_POST['type']) ? normalize_input($_POST['type']) : null;
         $typeArr = isset($_POST['type']) && is_array($_POST['type']) ? array_map('normalize_input', $_POST['type']) : [];
+        // New: accept stable category_id[] in addition to label type[]
+        $catIdSingle = isset($_POST['category_id']) && !is_array($_POST['category_id']) ? (int)$_POST['category_id'] : null;
+        $catIdArr = isset($_POST['category_id']) && is_array($_POST['category_id']) ? array_map('intval', $_POST['category_id']) : [];
 
         $names = isset($_POST['name']) ? (array)$_POST['name'] : [];
         $quantities = isset($_POST['quantity']) ? (array)$_POST['quantity'] : [];
@@ -175,12 +187,35 @@ try {
             $expiryRaw = isset($expiries[$i]) ? $expiries[$i] : '';
             $expiry = ($expiryRaw === null || $expiryRaw === '') ? null : normalize_input($expiryRaw);
             $typeVal = isset($typeArr[$i]) ? normalize_input((string)$typeArr[$i]) : ($typeSingle ?? '');
+            $catIdVal = isset($catIdArr[$i]) ? (int)$catIdArr[$i] : ($catIdSingle ?? null);
             $wVal = isset($weights[$i]) && $weights[$i] !== '' ? (float)$weights[$i] : null;
             $cVal = isset($costs[$i]) && $costs[$i] !== '' ? (float)$costs[$i] : null;
             $remarksVal = isset($remarksItems[$i]) ? normalize_input((string)$remarksItems[$i]) : null;
             $unitVal = isset($units[$i]) ? normalize_input((string)$units[$i]) : (isset($_POST['unit']) && !is_array($_POST['unit']) ? normalize_input((string)$_POST['unit']) : '');
-            if (!$name || !$qty || $qty < 1 || !$expiry || $typeVal === '') {
-                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, category, quantity (>=1), and expiry_date are required'], 400);
+            // Accept unit_id[] in addition to unit label
+            $unitIdSingle = isset($_POST['unit_id']) && !is_array($_POST['unit_id']) ? (int)$_POST['unit_id'] : null;
+            $unitIdArr = isset($_POST['unit_id']) && is_array($_POST['unit_id']) ? array_map('intval', $_POST['unit_id']) : [];
+            $unitIdVal = isset($unitIdArr[$i]) ? (int)$unitIdArr[$i] : ($unitIdSingle ?? null);
+            // Derive unit label from unit_id if label missing
+            if (($unitVal === '' || $unitVal === null) && $unitIdVal) {
+                try {
+                    $ur = Database::getInstance()->query('SELECT COALESCE(NULLIF(label,\'\'), code) AS name FROM units WHERE unit_id = ?', [$unitIdVal])->fetch();
+                    if ($ur && !empty($ur['name'])) { $unitVal = $ur['name']; }
+                } catch (Exception $e) { /* ignore */ }
+            }
+            // Allow either label (type) or stable id (category_id). If label missing but id present, derive label for readability.
+            if ($typeVal === '' && $catIdVal) {
+                try {
+                    $row = Database::getInstance()->query('SELECT primary_name, secondary_name FROM categories WHERE category_id = ?', [$catIdVal])->fetch();
+                    if ($row) {
+                        $typeVal = ($row['secondary_name'] !== null && $row['secondary_name'] !== '')
+                            ? ($row['primary_name'] . ' - ' . $row['secondary_name'])
+                            : $row['primary_name'];
+                    }
+                } catch (Exception $e) { /* ignore label derivation failure */ }
+            }
+            if (!$name || !$qty || $qty < 1 || !$expiry || ($typeVal === '' && !$catIdVal)) {
+                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, category (label or id), quantity (>=1), and expiry_date are required'], 400);
             }
             $itemIds[] = $service->addItem($donationId, [
                 'product_category' => $typeVal,
@@ -191,6 +226,8 @@ try {
                 'total_weight' => $wVal,
                 'total_cost' => $cVal,
                 'tags' => $remarksVal,
+                'category_id' => $catIdVal ?: null,
+                'unit_id' => $unitIdVal ?: null,
             ]);
         }
 
@@ -372,13 +409,27 @@ try {
         $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
         $limit = isset($_GET['limit']) ? max(1, min(100, (int)$_GET['limit'])) : 20; // 1..100
         $category = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
+        $categoryId = isset($_GET['category_id']) && $_GET['category_id'] !== '' ? (int)$_GET['category_id'] : null;
         $items = [];
         try {
             $db = Database::getInstance();
             // Prefer normalized schema: inventory -> donation_items
             $params = [];
             $where = "WHERE di.product_name IS NOT NULL AND di.product_name <> ''";
-            if ($category !== '') { $where .= " AND di.product_category = ?"; $params[] = $category; }
+            if ($categoryId !== null) {
+                $where .= " AND di.category_id = ?";
+                $params[] = $categoryId;
+            } else if ($category !== '') { // legacy label filtering
+                $catFull = preg_replace('/\s+/', ' ', trim($category));
+                $hasSecondary = (strpos($catFull, ' - ') !== false);
+                $where .= " AND (LOWER(di.product_category) = LOWER(?)";
+                $params[] = $catFull;
+                if (!$hasSecondary) { // primary-only, include subcategories
+                    $where .= " OR LOWER(di.product_category) LIKE LOWER(?)";
+                    $params[] = $catFull . ' - %';
+                }
+                $where .= ")";
+            }
             if ($q !== '') { $where .= " AND di.product_name LIKE ?"; $params[] = ('%'.$q.'%'); }
             $sql = "SELECT DISTINCT di.product_name AS name
                       FROM inventory inv
@@ -401,7 +452,17 @@ try {
                 $db = Database::getInstance();
                 $params = [];
                 $where = "WHERE di.product_name IS NOT NULL AND di.product_name <> ''";
-                if ($category !== '') { $where .= " AND di.product_category = ?"; $params[] = $category; }
+                if ($category !== '') {
+                    $catFull = preg_replace('/\s+/', ' ', trim($category));
+                    $hasSecondary = (strpos($catFull, ' - ') !== false);
+                    $where .= " AND (LOWER(di.product_category) = LOWER(?)";
+                    $params[] = $catFull;
+                    if (!$hasSecondary) {
+                        $where .= " OR LOWER(di.product_category) LIKE LOWER(?)";
+                        $params[] = $catFull . ' - %';
+                    }
+                    $where .= ")";
+                }
                 if ($q !== '') { $where .= " AND di.product_name LIKE ?"; $params[] = ('%'.$q.'%'); }
                 $rows = $db->query("SELECT DISTINCT di.product_name AS name FROM donation_items di $where ORDER BY name ASC LIMIT $limit", $params)->fetchAll();
                 $names = array_map(function($r){ return trim((string)($r['name'] ?? '')); }, $rows ?: []);

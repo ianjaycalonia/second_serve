@@ -18,6 +18,30 @@
     return { start, end };
   }
 
+  async function loadTotalWeight() {
+    try {
+      const url = new URL(`${API_BASE_URL}/inventory/index.php/report-in`, window.location.origin);
+      const { start, end } = getMonthRange();
+      url.searchParams.set('start', start);
+      url.searchParams.set('end', end);
+      url.searchParams.set('t', String(Date.now()));
+      const res = await fetch(url.toString(), { credentials: 'include', headers: { Accept: 'application/json' } });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+      const rows = Array.isArray(j?.data?.rows) ? j.data.rows : [];
+      const total = rows.reduce((sum, r) => {
+        const w = r['TOTAL WEIGHT(KG)'];
+        const num = typeof w === 'number' ? w : (w ? parseFloat(w) : 0);
+        return sum + (isFinite(num) ? num : 0);
+      }, 0);
+      const el = document.getElementById('totalWeightKg');
+      if (el) el.textContent = (Math.round(total * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    } catch (err) {
+      // Silent fail for the stat to avoid blocking rest of page
+      console.warn('Failed to load total weight:', err);
+    }
+  }
+
   async function exportIn() {
     try {
       const url = new URL(`${API_BASE_URL}/inventory/index.php/report-in`, window.location.origin);
@@ -69,6 +93,7 @@
   function init(){
     document.getElementById('exportInBtn')?.addEventListener('click', exportIn);
     document.getElementById('exportOutBtn')?.addEventListener('click', exportOut);
+    loadTotalWeight();
   }
 
   if (document.readyState === 'loading') {
