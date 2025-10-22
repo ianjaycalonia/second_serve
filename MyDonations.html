@@ -135,158 +135,213 @@
       <!-- Donation Log Table Only (KPIs removed as requested) -->
       <div class="card card-accent p-3">
         <div class="d-flex justify-content-between align-items-center mb-4">
-          <h6>Donation Log</h6>
-          <div class="d-flex gap-2">
-            <!-- Small screens -->
-            <div class="dropdown d-xl-none ms-auto">
+          <h6>My Donations Log</h6>
+          <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center search-box">
+              <input
+                type="text"
+                id="donationSearch"
+                class="form-control form-control-sm"
+                placeholder="Search..."
+                aria-label="Search"
+              />
+            </div>
+            <div class="dropdown">
               <button
-                class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                class="dropdown-toggle"
                 type="button"
                 id="filtersDropdownBtn"
                 data-bs-toggle="dropdown"
+                data-bs-auto-close="false"
                 aria-expanded="false"
               >
-                Filters
+                <i class="bi bi-funnel-fill fs-5"></i>
               </button>
-              <ul
-                class="dropdown-menu p-3"
-                aria-labelledby="filtersDropdownBtn"
-                style="min-width: 250px"
-              >
-                <li class="mb-2">
-                  <label class="form-label mb-1" for="myDonationsDonorSelectMobile"
-                    >Donor:</label
-                  >
-                  <select
-                    id="myDonationsDonorSelectMobile"
-                    class="form-select form-select-sm"
-                  >
-                    <option>All</option>
-                  </select>
-                </li>
-                <li class="mb-2">
-                  <label class="form-label mb-1" for="myDonationsStatusSelectMobile"
-                    >Donation Status:</label
-                  >
-                  <select
-                    id="myDonationsStatusSelectMobile"
-                    class="form-select form-select-sm"
-                  >
-                    <option selected>All</option>
-                    <option>Pending</option>
-                    <option>Acknowledged</option>
-                    <option>Picked Up</option>
-                    <option>Completed</option>
-                    <option>Failed Safety</option>
-                    <option>Cancelled</option>
-                  </select>
-                </li>
-                <li class="mb-2">
-                  <label class="form-label mb-1" for="myDonationsCategorySelectMobile"
-                    >Category:</label
-                  >
-                  <select
-                    id="myDonationsCategorySelectMobile"
-                    class="form-select form-select-sm"
-                  >
-                    <option>All</option>
-                    <option>rice</option>
-                    <option>canned goods</option>
-                    <option>frozen meat</option>
-                    <option>bread and pastries</option>
-                    <option>beverages and snacks</option>
-                  </select>
-                </li>
-                <li>
-                  <label class="form-label mb-1" for="myDonationsDateSelectMobile"
-                    >Date:</label
-                  >
-                  <select
-                    id="myDonationsDateSelectMobile"
-                    class="form-select form-select-sm"
-                  >
-                    <option>All</option>
-                    <option>Today</option>
-                    <option>This Week</option>
-                    <option>This Month</option>
-                  </select>
-                </li>
-              </ul>
+              <div class="dropdown-menu">
+                <form id="filterForm" class="px-3 py-2">
+                  <h5>Filter by</h5>
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <div class="form-label mb-1">Submitted On</div>
+                      <div class="row g-3 date-range-inputs">
+                        <div class="col-6">
+                          <label for="fromDate" class="form-label">From</label>
+                          <input
+                            type="date"
+                            id="fromDate"
+                            class="form-control form-control-sm"
+                          />
+                        </div>
+                        <div class="col-6">
+                          <label for="toDate" class="form-label">To</label>
+                          <input
+                            type="date"
+                            id="toDate"
+                            class="form-control form-control-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        class="d-flex justify-content-between align-items-center mt-3"
+                        id="quickRangeBtns"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm w-100 me-1"
+                          data-range="today"
+                        >
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm w-100 mx-1"
+                          data-range="week"
+                        >
+                          This Week
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm w-100 ms-1"
+                          data-range="month"
+                        >
+                          This Month
+                        </button>
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="donorSelectMobile"
+                        >Organization</label
+                      >
+                      <select
+                        id="donorSelectMobile"
+                        class="form-select form-select-sm"
+                      >
+                        <option>All</option>
+                      </select>
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="categorySelectMobile"
+                        >Type of Item</label
+                      >
+                      <select
+                        id="categorySelectMobile"
+                        class="form-select form-select-sm"
+                      ></select>
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="statusSelectMobile"
+                        >Status</label
+                      >
+                      <select
+                        id="statusSelectMobile"
+                        class="form-select form-select-sm"
+                      >
+                        <option selected>All</option>
+                        <option>Pending</option>
+                        <option>Acknowledged</option>
+                        <option>Picked Up</option>
+                        <option>Completed</option>
+                        <option>Failed Safety</option>
+                        <option>Cancelled</option>
+                      </select>
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="statusSelectMobile"
+                        >Receipt</label
+                      >
+                      <select
+                        id="recieptSelectMobile"
+                        class="form-select form-select-sm"
+                      >
+                        <option selected>All</option>
+                        <option>With Receipt</option>
+                        <option>Without Receipt</option>
+                      </select>
+                    </div>
+                  </div>
+                </form>
+                <div class="dropdown-divider"></div>
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
+                >
+                  <button class="btn btn-sm btn-outline-secondary">
+                    Reset
+                  </button>
+                  <button class="btn btn-sm btn-primary">Apply</button>
+                </div>
+              </div>
             </div>
 
-            <!-- Large screens -->
-            <div class="d-none d-xl-flex flex-wrap gap-3 ms-auto">
-              <div
-                class="d-flex align-items-center gap-2 flex-shrink-1"
-                style="min-width: 120px"
+            <div class="dropdown">
+              <button
+                class="dropdown-toggle"
+                type="button"
+                id="sortsDropdownBtn"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="false"
+                aria-expanded="false"
               >
-                <label class="form-label mb-0" for="myDonationsDonorSelectDesktop"
-                  >Donor:</label
-                >
-                <select
-                  id="myDonationsDonorSelectDesktop"
-                  class="form-select form-select-sm"
-                >
-                  <option>All</option>
-                </select>
-              </div>
-              <div
-                class="d-flex align-items-center gap-2 flex-shrink-1"
-                style="min-width: 160px"
-              >
-                <label
-                  class="form-label mb-0"
-                  for="myDonationsStatusSelectDesktop"
-                  style="white-space: nowrap"
-                  >Donation Status:</label
-                >
-                <select
-                  id="myDonationsStatusSelectDesktop"
-                  class="form-select form-select-sm"
-                  style="min-width: 140px"
-                >
-                  <option selected>All</option>
-                  <option>Pending</option>
-                  <option>Acknowledged</option>
-                  <option>Picked Up</option>
-                  <option>Completed</option>
-                  <option>Failed Safety</option>
-                  <option>Cancelled</option>
-                </select>
-              </div>
-              <div class="d-flex align-items-center gap-2 flex-shrink-1">
-                <label class="form-label mb-0" for="myDonationsCategorySelectDesktop"
-                  >Category:</label
-                >
-                <select
-                  id="myDonationsCategorySelectDesktop"
-                  class="form-select form-select-sm"
-                >
-                  <option>All</option>
-                  <option>rice</option>
-                  <option>canned goods</option>
-                  <option>frozen meat</option>
-                  <option>bread and pastries</option>
-                  <option>beverages and snacks</option>
-                </select>
-              </div>
+                <i class="bi bi-arrow-down-up fs-5"></i>
+              </button>
+              <div class="dropdown-menu">
+                <form id="sortForm" class="px-3 py-2">
+                  <h5>Sort by</h5>
+                  <div class="mb-3">
+                    <label
+                      class="form-label mb-1"
+                      for="quantityOrderSelectMobile"
+                      >Quantity</label
+                    >
+                    <select
+                      id="quantityOrderSelectMobile"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected>None</option>
+                      <option>High to Low</option>
+                      <option>Low to High</option>
+                    </select>
+                  </div>
 
-              <div
-                class="d-flex align-items-center gap-2 flex-shrink-1"
-                style="min-width: 120px"
-              >
-                <label class="form-label mb-0" for="myDonationsDateSelectDesktop"
-                  >Date:</label
+                  <div class="mb-3">
+                    <label
+                      class="form-label mb-1"
+                      for="submissionDateSelectMobile"
+                      >Submission Date</label
+                    >
+                    <select
+                      id="submissionDateSelectMobile"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected>None</option>
+                      <option>Newest First</option>
+                      <option>Oldest First</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="form-label mb-1" for="donorOrderSelectMobile"
+                      >Donor</label
+                    >
+                    <select
+                      id="donorOrderSelectMobile"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected>None</option>
+                      <option>Ascending</option>
+                      <option>Descending</option>
+                    </select>
+                  </div>
+                </form>
+                <div class="dropdown-divider"></div>
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
                 >
-                <select
-                  id="myDonationsDateSelectDesktop"
-                  class="form-select form-select-sm"
-                >
-                  <option>All</option>
-                  <option>Today</option>
-                  <option>This Week</option>
-                  <option>This Month</option>
-                </select>
+                  <button class="btn btn-sm btn-outline-secondary">
+                    Reset
+                  </button>
+                  <button class="btn btn-sm btn-primary">Apply</button>
+                </div>
               </div>
             </div>
           </div>
@@ -651,5 +706,6 @@
     <script src="scripts/js/ui/notifications.js"></script>
     <script src="scripts/js/ui/donorsMyDonation.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
+    <script src="scripts/js/ui/dropdownFilters.js"></script>
   </body>
 </html>

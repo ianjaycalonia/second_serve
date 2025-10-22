@@ -1025,3 +1025,87 @@ tr.innerHTML = `
 </td>
 `; unifiedTbody.appendChild(tr); }); } }); }); // Append the unified table
 frag.appendChild(unifiedTable); container.appendChild(frag);
+
+<!-- Add Donation modal -->
+<div class="row g-2 align-items-end">
+  <div class="col-12 col-lg-3">
+    <label class="form-label mb-1">Category</label>
+    <select class="form-select item-cat" required>
+      <option value="">Select category</option>
+    </select>
+    <div class="invalid-feedback">Category is required.</div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <label class="form-label mb-1">Item Name</label>
+    <select
+      class="form-select item-name-select"
+      data-placeholder="Search or type new"
+      required
+    ></select>
+    <div class="invalid-feedback">Item name is required.</div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <label class="form-label mb-1">Quantity</label>
+    <input type="number" class="form-control item-qty" min="1" required />
+    <div class="invalid-feedback">Min 1</div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <label class="form-label mb-1">Unit</label>
+    <select class="form-select item-unit">
+      <option value="">Select unit (optional)</option>
+      <option value="can">can</option>
+      <option value="pack">pack</option>
+      <option value="box">box</option>
+      <option value="piece">piece</option>
+      <option value="bottle">bottle</option>
+      <option value="kg">kg</option>
+      <option value="g">g</option>
+    </select>
+  </div>
+  <div class="col-6 col-lg-2">
+    <label class="form-label mb-1">Expiry Date</label>
+    <input type="date" class="form-control item-expiry" required />
+    <div class="invalid-feedback">Expiry date is required.</div>
+  </div>
+  <div class="col-12 col-lg-1 text-end">
+    <label class="form-label mb-1 d-none d-lg-block">&nbsp;</label>
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-danger d-flex align-items-center justify-content-center w-100 w-md-auto"
+      aria-label="Remove item"
+    >
+      <i class="bi bi-trash"></i>
+    </button>
+  </div>
+</div>
+<div class="row g-2 mt-2">
+  <div class="col-6 col-lg-2">
+    <label class="form-label mb-1">Weight (kg)</label>
+    <input
+      type="number"
+      step="0.001"
+      min="0"
+      class="form-control item-weight"
+      placeholder="e.g., 2.5"
+    />
+  </div>
+  <div class="col-6 col-lg-2">
+    <label class="form-label mb-1">Cost (₱)</label>
+    <input
+      type="number"
+      step="0.01"
+      min="0"
+      class="form-control item-cost"
+      placeholder="e.g., 150.00"
+    />
+  </div>
+  <div class="col-12 col-lg-8">
+    <label class="form-label mb-1">Remarks</label>
+    <input
+      type="text"
+      class="form-control item-remarks"
+      maxlength="500"
+      placeholder="Optional notes for this item"
+    />
+  </div>
+</div>
