@@ -179,15 +179,7 @@
     } catch (_) {}
   });
 
-  // Toolbar Add button opens the global Add flow
-  document.addEventListener("click", function(e){
-    const btn = e.target.closest("#addInventoryBtn");
-    if (!btn) return;
-    e.preventDefault();
-    try {
-      window.dispatchEvent(new CustomEvent("inventory:add-open"));
-    } catch (_) {}
-  });
+
 
   // Delegated handler: Discard quantity (opens modal, requires note)
   document.addEventListener("click", function (e) {
