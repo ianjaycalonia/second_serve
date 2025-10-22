@@ -554,73 +554,111 @@ try {
             sendJson(['success'=>true, 'data'=>['items'=>$list]]);
             break;
 
-        case 'acknowledge':
+        case 'pickup': // alias for schedule (Pick Up)
+        case 'schedule':
             requireRole(['recipient']);
             $currentId = (int)(currentUserId() ?? 0);
+            // Accept allocation_id from JSON or GET fallback
             $allocationId = isset($payload['allocation_id']) ? (int)$payload['allocation_id'] : 0;
-            if ($allocationId <= 0) { sendJson(['success'=>false,'error'=>'allocation_id is required'], 400); }
-            // Provide clearer errors
-            $row = Database::getInstance()->query('SELECT recipient_id, status FROM allocations WHERE allocation_id = ?', [$allocationId])->fetch();
-            if (!$row) { sendJson(['success'=>false,'error'=>'Allocation not found'], 404); }
-            if ((int)$row['recipient_id'] !== $currentId) { sendJson(['success'=>false,'error'=>'Forbidden: allocation does not belong to this recipient'], 403); }
-            $st = strtolower((string)($row['status'] ?? ''));
-            // Allow recipients to acknowledge when status is Pending, Allocated, Notified, or Updated
-            if (!in_array($st, ['pending','allocated','notified','updated'], true)) {
-              // If already acknowledged or later, return success without changing
-              if ($st === 'acknowledged' || $st === 'scheduled' || $st === 'picked up' || $st === 'completed') {
-                sendJson(['success'=>true]);
-              } else {
-                sendJson(['success'=>false,'error'=>'Invalid state: only Allocated/Notified can be acknowledged'], 400);
-              }
+            if ($allocationId <= 0 && isset($_GET['allocation_id'])) {
+                $allocationId = (int)$_GET['allocation_id'];
             }
-            $svc = new Allocation();
-            $ok = $svc->acknowledge($allocationId, $currentId);
-            if (!$ok) {
-                // Fallback: perform direct update when current status is permissible
-                try {
-                    $db = Database::getInstance();
-                    $db->query(
-                        'UPDATE allocations SET status = "Acknowledged", updated_at = NOW()
-                         WHERE allocation_id = ? AND recipient_id = ?
-                           AND LOWER(COALESCE(status, "")) IN ("pending","allocated","notified","updated")',
-                        [$allocationId, $currentId]
-                    );
-                    // Notify admins that an allocation was acknowledged
-                    try {
-                        $db->query('/*noop*/SELECT 1'); // ensure $db defined
-                        $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
-                        foreach ($admins as $ad){
-                            $aid = (int)($ad['user_id'] ?? 0);
-                            if ($aid>0){
-                                $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_acknowledged", ?, NOW())', [
-                                    $aid,
-                                    'A recipient acknowledged their allocation.'
-                                ]);
-                            }
-                        }
-                    } catch (Exception $e) { /* ignore notification errors */ }
-                    // If no rows affected, still fail
-                    sendJson(['success'=>true]);
-                } catch (Exception $e) {
-                    sendJson(['success'=>false,'error'=>'Unable to acknowledge'], 400);
+            if ($allocationId <= 0) { sendJson(['success'=>false,'error'=>'allocation_id is required'], 400); }
+            // Ownership/state pre-checks and clearer errors
+            try {
+                $db = Database::getInstance();
+                $hdr = $db->query('SELECT recipient_id, status FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocationId])->fetch();
+                if (!$hdr) { sendJson(['success'=>false,'error'=>'Allocation not found'], 404); }
+                if ((int)($hdr['recipient_id'] ?? 0) !== $currentId) { sendJson(['success'=>false,'error'=>'Forbidden: allocation does not belong to this recipient'], 403); }
+                $st = strtolower((string)($hdr['status'] ?? ''));
+                if (!in_array($st, ['allocated','notified','acknowledged'], true)) {
+                    // If already picked up/completed, return success
+                    if (in_array($st, ['scheduled','picked up','completed'], true)) {
+                        sendJson(['success'=>true]);
+                    }
+                    sendJson(['success'=>false,'error'=>'Invalid state: allocation must be Allocated/Notified/Acknowledged to pick up'], 400);
                 }
-            } else {
-                // Notify admins that an allocation was acknowledged
+            } catch (Exception $e) { /* continue to service */ }
+
+            // Perform pickup (deduct inventory and mark Picked Up). Auto-ack happens in service if needed
+            $svc = new Allocation();
+            try {
+                $ok = $svc->schedule($allocationId, $currentId);
+                if (!$ok) {
+                    sendJson(['success'=>false,'error'=>'Unable to pick up (invalid state or insufficient stock)'], 400);
+                }
+                // Notify admins of pickup
                 try {
                     $db = Database::getInstance();
                     $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
                     foreach ($admins as $ad){
                         $aid = (int)($ad['user_id'] ?? 0);
                         if ($aid>0){
-                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_acknowledged", ?, NOW())', [
+                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_picked_up", ?, NOW())', [
                                 $aid,
-                                'A recipient acknowledged their allocation.'
+                                'A recipient picked up their allocation.'
                             ]);
                         }
                     }
                 } catch (Exception $e) { /* ignore notification errors */ }
                 sendJson(['success'=>true]);
+            } catch (Exception $e) {
+                sendJson(['success'=>false,'error'=>'Unable to pick up: ' . $e->getMessage()], 400);
             }
+            break;
+
+        case 'acknowledge':
+            requireRole(['recipient']);
+            $currentId = (int)(currentUserId() ?? 0);
+            // Accept allocation_id from JSON or GET fallback
+            $allocationId = isset($payload['allocation_id']) ? (int)$payload['allocation_id'] : 0;
+            if ($allocationId <= 0 && isset($_GET['allocation_id'])) {
+                $allocationId = (int)$_GET['allocation_id'];
+            }
+            if ($allocationId <= 0) { sendJson(['success'=>false,'error'=>'allocation_id is required'], 400); }
+            // Provide clearer errors and allow idempotency
+            $db = Database::getInstance();
+            $row = $db->query('SELECT recipient_id, status FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocationId])->fetch();
+            if (!$row) { sendJson(['success'=>false,'error'=>'Allocation not found'], 404); }
+            if ((int)$row['recipient_id'] !== $currentId) { sendJson(['success'=>false,'error'=>'Forbidden: allocation does not belong to this recipient'], 403); }
+            $st = strtolower((string)($row['status'] ?? ''));
+            // If already acknowledged or later, return success (idempotent)
+            if (in_array($st, ['acknowledged','scheduled','picked up','completed'], true)) {
+                sendJson(['success'=>true]);
+            }
+            // Only allow acknowledge from Pending/Allocated/Notified/Updated
+            if (!in_array($st, ['pending','allocated','notified','updated'], true)) {
+                sendJson(['success'=>false,'error'=>'Invalid state: only Pending/Allocated/Notified/Updated can be acknowledged'], 400);
+            }
+            $svc = new Allocation();
+            $ok = $svc->acknowledge($allocationId, $currentId);
+            if (!$ok) {
+                // Fallback direct update
+                try {
+                    $db->query(
+                        'UPDATE allocations SET status = "Acknowledged", acknowledged_at = NOW(), updated_at = NOW()
+                         WHERE allocation_id = ? AND recipient_id = ?
+                           AND LOWER(COALESCE(status, "")) IN ("pending","allocated","notified","updated")',
+                        [$allocationId, $currentId]
+                    );
+                } catch (Exception $e) {
+                    sendJson(['success'=>false,'error'=>'Unable to acknowledge'], 400);
+                }
+            }
+            // Notify admins
+            try {
+                $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
+                foreach ($admins as $ad){
+                    $aid = (int)($ad['user_id'] ?? 0);
+                    if ($aid>0){
+                        $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_acknowledged", ?, NOW())', [
+                            $aid,
+                            'A recipient acknowledged their allocation.'
+                        ]);
+                    }
+                }
+            } catch (Exception $e) { /* ignore */ }
+            sendJson(['success'=>true]);
             break;
 
         case 'acknowledge_admin':
@@ -812,6 +850,32 @@ SQL);
             $currentId = (int)(currentUserId() ?? 0);
             $allocationId = isset($payload['allocation_id']) ? (int)$payload['allocation_id'] : 0;
             if ($allocationId <= 0) { sendJson(['success'=>false,'error'=>'allocation_id is required'], 400); }
+            // Pre-checks for clearer errors
+            try {
+                $db = Database::getInstance();
+                $hdr = $db->query('SELECT recipient_id, status FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocationId])->fetch();
+                if (!$hdr) { sendJson(['success'=>false,'error'=>'Allocation not found'], 404); }
+                if ((int)($hdr['recipient_id'] ?? 0) !== $currentId) { sendJson(['success'=>false,'error'=>'Forbidden: allocation does not belong to this recipient'], 403); }
+                $st = strtolower((string)($hdr['status'] ?? ''));
+                if (!in_array($st, ['allocated','notified','acknowledged'], true)) {
+                    sendJson(['success'=>false,'error'=>'Invalid state: allocation must be Allocated/Notified/Acknowledged to schedule'], 400);
+                }
+                $items = $db->query('SELECT inventory_id, quantity FROM allocation_items WHERE allocation_id = ? ORDER BY id ASC', [$allocationId])->fetchAll() ?: [];
+                if (!count($items)) { sendJson(['success'=>false,'error'=>'No items in allocation to schedule'], 400); }
+                // If inventory exists, check availability to provide clearer message
+                $invOk = true; $invErr = '';
+                try { $db->query('SELECT 1 FROM inventory LIMIT 1')->fetch(); } catch (Exception $e) { $invOk = false; }
+                if ($invOk) {
+                    foreach ($items as $it){
+                        $iid = (int)($it['inventory_id'] ?? 0); $need = (int)($it['quantity'] ?? 0);
+                        if ($iid <= 0 || $need <= 0) continue;
+                        $row = $db->query('SELECT quantity FROM inventory WHERE inventory_id = ? LIMIT 1', [$iid])->fetch();
+                        if (!$row) { $invErr = 'Inventory item not found for one or more allocation items'; break; }
+                        if ((int)($row['quantity'] ?? 0) < $need) { $invErr = 'Insufficient stock for one or more items'; break; }
+                    }
+                    if ($invErr !== '') { sendJson(['success'=>false,'error'=>$invErr], 400); }
+                }
+            } catch (Exception $e) { /* fall through to service call */ }
             $svc = new Allocation();
             try {
                 $ok = $svc->schedule($allocationId, $currentId);

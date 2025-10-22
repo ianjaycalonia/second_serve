@@ -53,6 +53,11 @@ if (strpos($sub, '/index.php') === 0) {
 
 $service = new Donation();
 
+// Normalize raw user input for storage: trim and decode HTML entities
+function normalize_input($val) {
+    return html_entity_decode(trim((string)$val), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
 try {
     // Routes
     // POST /api/donations (root) or /create
@@ -77,10 +82,10 @@ try {
         // Enforce policy: no images at donation creation (images are uploaded by admin during Food Safety)
         $payload['image_url'] = null;
 
-        // Sanitize basic strings (not base64)
-        $payload['type'] = sanitize($payload['type']);
-        $payload['name'] = sanitize($payload['name']);
-        $payload['expiry_date'] = sanitize($payload['expiry_date']);
+        // Normalize basic strings (do not HTML-encode for DB)
+        $payload['type'] = normalize_input($payload['type']);
+        $payload['name'] = normalize_input($payload['name']);
+        $payload['expiry_date'] = normalize_input($payload['expiry_date']);
 
         $newId = $service->create($payload);
 
@@ -124,8 +129,8 @@ try {
             : (int)currentUserId();
 
         // Accept per-item arrays; fallback to single value if provided
-        $typeSingle = isset($_POST['type']) && !is_array($_POST['type']) ? sanitize($_POST['type']) : null;
-        $typeArr = isset($_POST['type']) && is_array($_POST['type']) ? array_map('sanitize', $_POST['type']) : [];
+        $typeSingle = isset($_POST['type']) && !is_array($_POST['type']) ? normalize_input($_POST['type']) : null;
+        $typeArr = isset($_POST['type']) && is_array($_POST['type']) ? array_map('normalize_input', $_POST['type']) : [];
 
         $names = isset($_POST['name']) ? (array)$_POST['name'] : [];
         $quantities = isset($_POST['quantity']) ? (array)$_POST['quantity'] : [];
@@ -134,7 +139,7 @@ try {
         $weights = isset($_POST['total_weight']) ? (array)$_POST['total_weight'] : [];
         $costs = isset($_POST['total_cost']) ? (array)$_POST['total_cost'] : [];
         $remarksItems = isset($_POST['remarks']) && is_array($_POST['remarks']) ? (array)$_POST['remarks'] : [];
-        $remarks = isset($_POST['remarks']) && !is_array($_POST['remarks']) ? sanitize((string)$_POST['remarks']) : null; // batch-level notes
+        $remarks = isset($_POST['remarks']) && !is_array($_POST['remarks']) ? normalize_input((string)$_POST['remarks']) : null; // batch-level notes
         $count = max(count($names), count($quantities), count($expiries));
         if ($count === 0) { sendJson(['success' => false, 'error' => 'items are required'], 400); }
 
@@ -165,15 +170,15 @@ try {
         // Insert items sequentially under this header
         $itemIds = [];
         for ($i = 0; $i < $count; $i++) {
-            $name = isset($names[$i]) ? sanitize($names[$i]) : null;
+            $name = isset($names[$i]) ? normalize_input($names[$i]) : null;
             $qty = isset($quantities[$i]) ? (int)$quantities[$i] : null;
             $expiryRaw = isset($expiries[$i]) ? $expiries[$i] : '';
-            $expiry = ($expiryRaw === null || $expiryRaw === '') ? null : sanitize($expiryRaw);
-            $typeVal = isset($typeArr[$i]) ? sanitize((string)$typeArr[$i]) : ($typeSingle ?? '');
+            $expiry = ($expiryRaw === null || $expiryRaw === '') ? null : normalize_input($expiryRaw);
+            $typeVal = isset($typeArr[$i]) ? normalize_input((string)$typeArr[$i]) : ($typeSingle ?? '');
             $wVal = isset($weights[$i]) && $weights[$i] !== '' ? (float)$weights[$i] : null;
             $cVal = isset($costs[$i]) && $costs[$i] !== '' ? (float)$costs[$i] : null;
-            $remarksVal = isset($remarksItems[$i]) ? sanitize((string)$remarksItems[$i]) : null;
-            $unitVal = isset($units[$i]) ? sanitize((string)$units[$i]) : (isset($_POST['unit']) && !is_array($_POST['unit']) ? sanitize((string)$_POST['unit']) : '');
+            $remarksVal = isset($remarksItems[$i]) ? normalize_input((string)$remarksItems[$i]) : null;
+            $unitVal = isset($units[$i]) ? normalize_input((string)$units[$i]) : (isset($_POST['unit']) && !is_array($_POST['unit']) ? normalize_input((string)$_POST['unit']) : '');
             if (!$name || !$qty || $qty < 1 || !$expiry || $typeVal === '') {
                 sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, category, quantity (>=1), and expiry_date are required'], 400);
             }

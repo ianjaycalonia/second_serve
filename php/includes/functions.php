@@ -25,7 +25,7 @@ function sanitize($data) {
     if (is_array($data)) {
         return array_map('sanitize', $data);
     }
-    return htmlspecialchars(trim((string)$data), ENT_QUOTES, 'UTF-8');
+    return trim((string)$data);
 }
 
 function getJsonInput(): array {

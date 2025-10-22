@@ -286,8 +286,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         title = 'Incorrect password';
                         body = 'The password you entered is incorrect. Please try again.';
                     } else if (lower.includes('account not approved')) {
-                        title = 'Account not approved';
-                        body = 'Your account is not yet approved. Please wait for approval or contact support.';
+                        // Show a neutral system error to avoid implying deliberate deactivation
+                        title = 'System Error';
+                        body = 'A system error occurred. Please contact the administrators immediately.';
                     }
                     showBootstrapError(body, title);
                 },

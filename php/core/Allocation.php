@@ -854,11 +854,16 @@ class Allocation
 
     public function schedule(int $allocationId, int $recipientId): bool
     {
-        // Only allow schedule if owned by recipient and in Acknowledged status
+        // Allow schedule if owned by recipient and in Allocated/Notified/Acknowledged status
         $row = $this->db->query('SELECT status, recipient_id FROM allocations WHERE allocation_id = ?', [$allocationId])->fetch();
         if (!$row || (int)$row['recipient_id'] !== $recipientId) return false;
         $st = strtolower((string)$row['status']);
-        if ($st !== 'acknowledged') return false;
+        if (!in_array($st, ['allocated','notified','acknowledged'], true)) return false;
+
+        // If not yet acknowledged, auto-acknowledge now
+        if ($st !== 'acknowledged'){
+            $this->db->query('UPDATE allocations SET status = "Acknowledged", acknowledged_at = NOW(), updated_at = NOW() WHERE allocation_id = ?', [$allocationId]);
+        }
 
         // Get allocation items to deduct from inventory
         $items = $this->db->query('SELECT inventory_id, quantity FROM allocation_items WHERE allocation_id = ? ORDER BY id ASC', [$allocationId])->fetchAll();
@@ -895,8 +900,8 @@ class Allocation
                         $need = (int)($it['quantity'] ?? 0);
                         if ($inventoryId <= 0 || $need <= 0) continue;
 
-                        // Get current inventory quantity
-                        $invRow = $this->db->query('SELECT quantity, product_name, product_category, unit FROM inventory WHERE inventory_id = ?', [$inventoryId])->fetch();
+                        // Get current inventory quantity (only columns guaranteed to exist)
+                        $invRow = $this->db->query('SELECT quantity FROM inventory WHERE inventory_id = ?', [$inventoryId])->fetch();
                         if (!$invRow) {
                             // Inventory item not found
                             if ($this->db->inTransaction()) $this->db->rollBack();

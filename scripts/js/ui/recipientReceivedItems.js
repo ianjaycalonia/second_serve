@@ -531,7 +531,7 @@
                 ok = true;
               } else {
                 const res = await fetch(
-                  `${API_BASE_URL}/allocations/index.php?action=${action}`,
+                  `${API_BASE_URL}/allocations/index.php?action=${action}&allocation_id=${encodeURIComponent(String(aid))}`,
                   {
                     method: "POST",
                     credentials: "include",
@@ -551,24 +551,7 @@
               msg = e?.message || "Failed";
             }
             if (!ok) {
-              if (
-                res.status === 400 &&
-                msg.includes(
-                  "Invalid state: only Allocated/Notified can be acknowledged"
-                )
-              ) {
-                showToast("Already acknowledged. Schedule pickup.");
-              } else if (res.status === 400 || res.status === 403) {
-                showToast(`Unable to acknowledge: ${msg}`);
-                alert(
-                  `Unable to acknowledge: ${msg} (Check console for details)`
-                );
-              } else {
-                showToast(`Failed to acknowledge. ${msg}`);
-                alert(
-                  `Failed to acknowledge. ${msg} (Check console for details)`
-                );
-              }
+              showToast(`Failed to acknowledge. ${msg}`);
               ackBtn.disabled = false;
               return;
             }
@@ -631,7 +614,7 @@
                 await window.AllocationsAPI.schedule(aid);
                 ok = true;
               } else {
-                const url = `${API_BASE_URL}/allocations/index.php?action=schedule`;
+                const url = `${API_BASE_URL}/allocations/index.php?action=pickup&allocation_id=${encodeURIComponent(String(aid))}`;
                 const res = await fetch(url, {
                   method: "POST",
                   credentials: "include",
@@ -643,7 +626,7 @@
                 });
                 const j = await res.json().catch(() => null);
                 ok = !!(res.ok && j?.success);
-                if (!ok) msg = j?.error || `HTTP ${res.status}`;
+                if (!ok) msg = (j && (j.error || j.message)) || `HTTP ${res.status}`;
               }
             } catch (e) {
               ok = false;

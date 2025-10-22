@@ -238,6 +238,17 @@ class User
         // Optional: store reason in a separate audit table in the future
     }
 
+    // Admin: set arbitrary user status (e.g., inactive) without removing visibility
+    public function setStatus(int $userId, string $status): void
+    {
+        $allowed = ['approved','pending','rejected','inactive'];
+        $s = strtolower(trim($status));
+        if (!in_array($s, $allowed, true)) {
+            throw new Exception('Invalid status');
+        }
+        $this->db->query('UPDATE users SET status = ? WHERE user_id = ?', [$s, $userId]);
+    }
+
     // Generate a placeholder email from organization name (sanitized) with a non-routable domain
     private function generatePlaceholderEmail(?string $organizationName = null): string
     {

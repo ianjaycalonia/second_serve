@@ -14,16 +14,27 @@ class Inventory
     {
         if (!$donation || empty($donation['id'])) { return; }
         $id = (int)$donation['id'];
-        // Idempotency: skip if any inventory lot already exists for this donation (via donation_items)
-        $exists = $this->db->query(
-            "SELECT inv.inventory_id
-             FROM inventory inv
-             INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
-             WHERE di.donation_id = ?
-             LIMIT 1",
-            [$id]
-        )->fetch();
-        if ($exists) { return; }
+        // Idempotency:
+        // - Prefer per-item idempotency: if a specific donation_item_id is given and already in inventory, skip only that item
+        // - Fallback: if no donation_item_id provided, then skip when any lot exists for the donation id (legacy single-item donations)
+        $donationItemId = isset($donation['donation_item_id']) ? (int)$donation['donation_item_id'] : 0;
+        if ($donationItemId > 0) {
+            $exists = $this->db->query(
+                "SELECT 1 FROM inventory WHERE donation_item_id = ? LIMIT 1",
+                [$donationItemId]
+            )->fetch();
+            if ($exists) { return; }
+        } else {
+            $exists = $this->db->query(
+                "SELECT inv.inventory_id
+                 FROM inventory inv
+                 INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                 WHERE di.donation_id = ?
+                 LIMIT 1",
+                [$id]
+            )->fetch();
+            if ($exists) { return; }
+        }
         // Prepare safe values for new schema
         $itemName = isset($donation['name']) ? trim((string)$donation['name']) : '';
         if ($itemName === '') { $itemName = 'Unknown Item'; }
@@ -198,7 +209,7 @@ class Inventory
     public function moveOut(int $inventoryId, int $quantity, int $performedBy, string $mode, ?int $recipientId = null, ?string $note = null): array
     {
         if ($quantity <= 0) { throw new Exception('Quantity must be positive'); }
-        if (!in_array($mode, ['recipient','onsite'], true)) { throw new Exception('Invalid mode'); }
+        if (!in_array($mode, ['recipient','onsite','discarded'], true)) { throw new Exception('Invalid mode'); }
         if ($mode === 'recipient' && empty($recipientId)) { throw new Exception('recipient_id is required for recipient mode'); }
 
         $this->ensureTables();
@@ -230,7 +241,7 @@ class Inventory
     public function moveOutGroup(string $itemName, string $category, int $quantity, int $performedBy, string $mode, ?int $recipientId = null, ?string $note = null): array
     {
         if ($quantity <= 0) { throw new Exception('Quantity must be positive'); }
-        if (!in_array($mode, ['recipient','onsite'], true)) { throw new Exception('Invalid mode'); }
+        if (!in_array($mode, ['recipient','onsite','discarded'], true)) { throw new Exception('Invalid mode'); }
         if ($mode === 'recipient' && empty($recipientId)) { throw new Exception('recipient_id is required for recipient mode'); }
 
         $this->ensureTables();

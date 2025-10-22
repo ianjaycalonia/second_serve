@@ -712,9 +712,12 @@ function showImportModal(title, html) {
     }">${text}</span>`;
   }
 
+  // Keep datasets in memory for filtering/sorting
+  let recipientsData = [];
+
   async function fetchRecipients() {
     const res = await fetch(
-      `${API_BASE_URL}/users/index.php?action=list&role=recipient&status=approved&t=${Date.now()}`,
+      `${API_BASE_URL}/users/index.php?action=list&role=recipient&t=${Date.now()}`,
       {
         method: "GET",
         headers: { Accept: "application/json" },
@@ -749,6 +752,24 @@ function showImportModal(title, html) {
           : u.status === "pending"
           ? badge("Pending", "warning")
           : badge("Inactive", "secondary");
+      const statusLower = String(u.status || '').toLowerCase();
+      const isInactive = statusLower !== 'approved';
+      const actionsMenu = `
+        <div class="dropdown-menu dropdown-menu-end p-2" style="min-width:auto;">
+          <div class="d-flex align-items-center justify-content-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary edit-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit" data-user-id="${u.user_id}">
+              <i class="bi bi-pencil-square"></i>
+            </button>
+            ${statusLower === 'approved' ? `
+            <button class="btn btn-sm btn-outline-danger deactivate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate" data-user-id="${u.user_id}">
+              <i class="bi bi-person-x"></i>
+            </button>` : ''}
+            ${isInactive ? `
+            <button class="btn btn-sm btn-outline-success activate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate" data-user-id="${u.user_id}">
+              <i class="bi bi-person-check"></i>
+            </button>` : ''}
+          </div>
+        </div>`;
       return `
         <tr>
           <td data-label="Name of Beneficiary">${escapeHtml(recipientName)}</td>
@@ -769,13 +790,384 @@ function showImportModal(title, html) {
             email || "—"
           )}</td>
           <td data-label="Status">${status}</td>
-          <td data-label="Actions"><a href="#" class="d-flex align-items-center justify-content-center fs-4" data-user-id="${
-            u.user_id
-          }"><i class="bi bi-eye-fill btn btn-outline-primary"></i><i class="bi bi-three-dots-vertical"></i></a></td>
+          <td data-label="Actions">
+            <div class="dropdown recipient-actions d-inline-flex align-items-center">
+              <a href="#" class="btn btn-outline-primary btn-sm me-1 view-btn" data-user-id="${u.user_id}">
+                <i class="bi bi-eye-fill"></i>
+              </a>
+              <button class="btn btn-link p-0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              ${actionsMenu}
+            </div>
+          </td>
         </tr>
       `;
     });
     tbody.innerHTML = rows.join("");
+    // Initialize tooltips for dynamically added action icons
+    try{
+      const tips = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tips.forEach(el => { if (window.bootstrap && bootstrap.Tooltip) bootstrap.Tooltip.getOrCreateInstance(el); });
+    }catch(_){ }
+  }
+
+  function uniqueSorted(vals){
+    return Array.from(new Set(vals.filter(v => v && String(v).trim()))).sort((a,b)=>String(a).localeCompare(String(b)));
+  }
+
+  function populateFilters(){
+    const sel = document.getElementById('recipientCategorySelectMobile');
+    if (sel){
+      const locs = uniqueSorted(recipientsData.map(u=>String(u.address||'').trim()).filter(Boolean));
+      const cur = sel.value;
+      sel.innerHTML = '<option>All</option>' + locs.map(l=>`<option${l===cur?' selected':''}>${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');
+    }
+  }
+
+  function applyFiltersAndSort(){
+    const q = (document.getElementById('donationSearch')?.value || '').trim().toLowerCase();
+    const fromStr = document.getElementById('fromDate')?.value || '';
+    const toStr = document.getElementById('toDate')?.value || '';
+    const statusSel = document.getElementById('recipientStatusSelectMobile');
+    const statusFilter = (statusSel && statusSel.value) ? statusSel.value : 'All';
+    const actSel = document.getElementById('recipientDonationActivitySelectMobile');
+    const activity = (actSel && actSel.value) ? actSel.value : 'All';
+    const locSel = document.getElementById('recipientCategorySelectMobile');
+    const location = (locSel && locSel.value) ? locSel.value : '';
+
+    // Sort controls
+    const qtySel = document.getElementById('recipientQuantityOrderSelectMobile');
+    const qtyOrder = qtySel ? qtySel.value : 'None';
+    const dateSel = document.getElementById('recipientSubmissionDateSelectMobile');
+    const dateOrder = dateSel ? dateSel.value : 'None';
+    const nameSel = document.getElementById('recipientDonorOrderSelectMobile');
+    const nameOrder = nameSel ? nameSel.value : 'None';
+
+    let list = recipientsData.filter((u)=>{
+      const orgName = String(u.organization_name||'');
+      const userName = String(u.name||'');
+      if (q){
+        const L = (orgName + ' ' + userName).toLowerCase();
+        if (!L.includes(q)) return false;
+      }
+      // Date filter (use created_at or updated_at if present)
+      const tsRaw = String(u.updated_at || u.created_at || '').trim();
+      if (fromStr){
+        const from = new Date(fromStr + 'T00:00:00');
+        const ts = tsRaw ? new Date(tsRaw) : null;
+        if (!ts || ts < from) return false;
+      }
+      if (toStr){
+        const to = new Date(toStr + 'T23:59:59');
+        const ts = tsRaw ? new Date(tsRaw) : null;
+        if (!ts || ts > to) return false;
+      }
+      // Location
+      if (location && location !== 'All'){
+        const addr = String(u.address||'');
+        if (addr.trim() !== location) return false;
+      }
+      // Status filter: try to match user account status
+      if (statusFilter && statusFilter !== 'All'){
+        const userStatus = String(u.status||'').toLowerCase();
+        if (userStatus !== statusFilter.toLowerCase()) return false;
+      }
+      // Activity filter: no backend metric; treat as no-op for now
+      return true;
+    });
+
+    // Sorting
+    if (nameOrder && nameOrder !== 'None'){
+      list.sort((a,b)=>{
+        const an = (a.organization_name || a.name || '').toLowerCase();
+        const bn = (b.organization_name || b.name || '').toLowerCase();
+        const cmp = an.localeCompare(bn);
+        return nameOrder === 'Ascending' ? cmp : -cmp;
+      });
+    }
+    if (dateOrder && dateOrder !== 'None'){
+      list.sort((a,b)=>{
+        const at = a.updated_at || a.created_at || '';
+        const bt = b.updated_at || b.created_at || '';
+        const av = at ? new Date(at).getTime() : 0;
+        const bv = bt ? new Date(bt).getTime() : 0;
+        return dateOrder === 'Newest First' ? (bv - av) : (av - bv);
+      });
+    }
+    if (qtyOrder && qtyOrder !== 'None'){
+      // No quantity metric available; keep stable
+    }
+    renderRecipients(list);
+  }
+
+  function bindUI(){
+    // Search is live
+    const search = document.getElementById('donationSearch');
+    if (search){ search.addEventListener('input', ()=>applyFiltersAndSort()); }
+    // Filters and sorts: Apply-button gating
+    const quick = document.getElementById('quickRangeBtns');
+    if (quick){
+      quick.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button[data-range]'); if (!btn) return;
+        const r = btn.getAttribute('data-range');
+        const today = new Date();
+        const pad=(n)=>String(n).padStart(2,'0');
+        const fmt=(d)=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        let from = new Date(today), to = new Date(today);
+        if (r==='today'){ /* no-op */ }
+        else if (r==='week'){
+          const day = today.getDay();
+          const diff = (day===0?6:day-1);
+          from = new Date(today); from.setDate(today.getDate()-diff);
+        } else if (r==='month'){
+          from = new Date(today.getFullYear(), today.getMonth(), 1);
+        }
+        const fd=document.getElementById('fromDate'); const td=document.getElementById('toDate');
+        if (fd) fd.value = fmt(from); if (td) td.value = fmt(to);
+        // Wait for Apply
+      });
+    }
+    // Reset/Apply in dropdowns
+    document.querySelectorAll('.dropdown-menu').forEach(menu=>{
+      menu.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button'); if (!btn) return;
+        const label = (btn.textContent||'').trim().toLowerCase();
+        if (label==='reset'){
+          const fd=document.getElementById('fromDate'); const td=document.getElementById('toDate'); if (fd) fd.value=''; if (td) td.value='';
+          ['recipientStatusSelectMobile','recipientDonationActivitySelectMobile','recipientCategorySelectMobile','recipientQuantityOrderSelectMobile','recipientSubmissionDateSelectMobile','recipientDonorOrderSelectMobile'].forEach(id=>{ const el=document.getElementById(id); if (el) el.selectedIndex=0; });
+          const s=document.getElementById('donationSearch'); if (s) s.value='';
+        } else if (label==='apply'){
+          applyFiltersAndSort();
+        }
+      });
+    });
+
+    // Delegated actions handlers
+    document.addEventListener('click', (e)=>{
+      const edit = e.target.closest && e.target.closest('.edit-btn');
+      if (edit){
+        e.preventDefault();
+        const id = Number(edit.getAttribute('data-user-id'));
+        const u = (recipientsData||[]).find(x=>Number(x.user_id)===id);
+        if (!u){ try{ showToast('Recipient not found', 'danger'); }catch(_){ } return; }
+        openEditModal(u);
+        return;
+      }
+      const deactivate = e.target.closest && e.target.closest('.deactivate-btn');
+      if (deactivate){
+        e.preventDefault();
+        const id = Number(deactivate.getAttribute('data-user-id'));
+        const u = (recipientsData||[]).find(x=>Number(x.user_id)===id);
+        if (!u){ try{ showToast('Recipient not found', 'danger'); }catch(_){ } return; }
+        confirmAction({
+          title: 'Deactivate Recipient',
+          message: `Are you sure you want to deactivate ${escapeHtml(u.organization_name || u.name || 'this recipient')}?`,
+          confirmText: 'Deactivate',
+          confirmClass: 'btn-danger'
+        }).then((ok)=>{ if (ok) deactivateRecipient(id).catch(()=>{}); });
+        return;
+      }
+      const activate = e.target.closest && e.target.closest('.activate-btn');
+      if (activate){
+        e.preventDefault();
+        const id = Number(activate.getAttribute('data-user-id'));
+        const u = (recipientsData||[]).find(x=>Number(x.user_id)===id);
+        if (!u){ try{ showToast('Recipient not found', 'danger'); }catch(_){ } return; }
+        confirmAction({
+          title: 'Activate Recipient',
+          message: `Activate ${escapeHtml(u.organization_name || u.name || 'this recipient')}?`,
+          confirmText: 'Activate',
+          confirmClass: 'btn-success'
+        }).then((ok)=>{ if (ok) activateRecipient(id).catch(()=>{}); });
+        return;
+      }
+    });
+  }
+
+  function ensureConfirmModal(){
+    let el = document.getElementById('adminConfirmModal');
+    if (el) return el;
+    const html = `
+      <div class="modal fade" id="adminConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="adminConfirmTitle">Confirm</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="adminConfirmBody">Are you sure?</div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-primary" id="adminConfirmBtn">Confirm</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    document.body.appendChild(div.firstElementChild);
+    return document.getElementById('adminConfirmModal');
+  }
+
+  function confirmAction(opts){
+    return new Promise((resolve)=>{
+      const el = ensureConfirmModal();
+      const titleEl = el.querySelector('#adminConfirmTitle');
+      const bodyEl = el.querySelector('#adminConfirmBody');
+      const btnEl = el.querySelector('#adminConfirmBtn');
+      if (titleEl) titleEl.textContent = String(opts?.title || 'Confirm');
+      if (bodyEl) bodyEl.innerHTML = String(opts?.message || 'Are you sure?');
+      if (btnEl){
+        btnEl.textContent = String(opts?.confirmText || 'Confirm');
+        btnEl.className = 'btn ' + (opts?.confirmClass || 'btn-primary');
+      }
+      const modal = bootstrap.Modal.getOrCreateInstance(el);
+      const onCancel = ()=>{ cleanup(); resolve(false); };
+      const onOk = ()=>{ cleanup(); modal.hide(); resolve(true); };
+      function cleanup(){
+        btnEl.removeEventListener('click', onOk);
+        el.removeEventListener('hidden.bs.modal', onCancel);
+      }
+      btnEl.addEventListener('click', onOk);
+      el.addEventListener('hidden.bs.modal', onCancel, { once: true });
+      modal.show();
+    });
+  }
+
+  function ensureEditModal(){
+    let el = document.getElementById('recipientEditModal');
+    if (el) return el;
+    const html = `
+      <div class="modal fade" id="recipientEditModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Edit Recipient</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form id="recipientEditForm" class="vstack gap-2">
+                <input type="hidden" id="edit_user_id" />
+                <div>
+                  <label class="form-label">Organization/Beneficiary</label>
+                  <input type="text" class="form-control" id="edit_org" />
+                </div>
+                <div>
+                  <label class="form-label">Contact Person</label>
+                  <input type="text" class="form-control" id="edit_name" />
+                </div>
+                <div>
+                  <label class="form-label">Address</label>
+                  <input type="text" class="form-control" id="edit_address" />
+                </div>
+                <div>
+                  <label class="form-label">Position/Designation</label>
+                  <input type="text" class="form-control" id="edit_position" />
+                </div>
+                <div>
+                  <label class="form-label">Contact #</label>
+                  <input type="text" class="form-control" id="edit_contact_no" />
+                </div>
+                <div>
+                  <label class="form-label">Email</label>
+                  <input type="email" class="form-control" id="edit_email" />
+                </div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-primary" id="recipientEditSaveBtn">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    document.body.appendChild(div.firstElementChild);
+    return document.getElementById('recipientEditModal');
+  }
+
+  function openEditModal(u){
+    const el = ensureEditModal();
+    el.querySelector('#edit_user_id').value = u.user_id;
+    el.querySelector('#edit_org').value = u.organization_name || '';
+    el.querySelector('#edit_name').value = u.name || '';
+    el.querySelector('#edit_address').value = u.address || '';
+    el.querySelector('#edit_position').value = u.position_designation || '';
+    el.querySelector('#edit_contact_no').value = u.contact_number || '';
+    el.querySelector('#edit_email').value = u.email || '';
+    const modal = bootstrap.Modal.getOrCreateInstance(el);
+    const saveBtn = el.querySelector('#recipientEditSaveBtn');
+    saveBtn.onclick = async ()=>{
+      try{
+        saveBtn.disabled = true;
+        await updateRecipient({
+          user_id: Number(el.querySelector('#edit_user_id').value),
+          organization_name: el.querySelector('#edit_org').value.trim(),
+          name: el.querySelector('#edit_name').value.trim(),
+          address: el.querySelector('#edit_address').value.trim(),
+          position_designation: el.querySelector('#edit_position').value.trim(),
+          contact_number: el.querySelector('#edit_contact_no').value.trim(),
+          email: el.querySelector('#edit_email').value.trim(),
+        });
+        modal.hide();
+        try{ showToast('Recipient updated successfully', 'success'); }catch(_){ }
+      } finally {
+        saveBtn.disabled = false;
+      }
+    };
+    modal.show();
+  }
+
+  async function updateRecipient(payload){
+    const res = await fetch(`${API_BASE_URL}/users/index.php?action=adminUpdateProfile`,{
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    if (!j?.success) throw new Error(j?.error || 'Update failed');
+    const recipients = await fetchRecipients();
+    recipientsData = recipients;
+    populateFilters();
+    applyFiltersAndSort();
+  }
+
+  async function deactivateRecipient(user_id){
+    const res = await fetch(`${API_BASE_URL}/users/index.php?action=setStatus`,{
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ user_id, status: 'inactive' })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    if (!j?.success) throw new Error(j?.error || 'Deactivate failed');
+    try{ showToast('Recipient deactivated', 'success'); }catch(_){ }
+    const recipients = await fetchRecipients();
+    recipientsData = recipients;
+    populateFilters();
+    applyFiltersAndSort();
+  }
+
+  async function activateRecipient(user_id){
+    const res = await fetch(`${API_BASE_URL}/users/index.php?action=setStatus`,{
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ user_id, status: 'approved' })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    if (!j?.success) throw new Error(j?.error || 'Activate failed');
+    try{ showToast('Recipient activated', 'success'); }catch(_){ }
+    const recipients = await fetchRecipients();
+    recipientsData = recipients;
+    populateFilters();
+    applyFiltersAndSort();
   }
 
   async function init() {
@@ -785,7 +1177,10 @@ function showImportModal(title, html) {
         tbody.innerHTML = `<tr><td colspan="9" class="text-center py-3">Loading recipients...</td></tr>`;
       }
       const recipients = await fetchRecipients();
-      renderRecipients(recipients);
+      recipientsData = recipients;
+      populateFilters();
+      bindUI();
+      applyFiltersAndSort();
 
       // Import from Excel wiring
       const fileInput = document.getElementById("importRecipientsInput");

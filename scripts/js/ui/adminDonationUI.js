@@ -101,6 +101,16 @@
         }[c])
     );
   }
+  function decodeHtml(s) {
+    try {
+      // Use the browser to decode existing entities like &#039; or &amp;
+      const el = document.createElement("textarea");
+      el.innerHTML = String(s || "");
+      return el.value;
+    } catch (_) {
+      return String(s || "");
+    }
+  }
   function capFirst(s) {
     if (!s) return "";
     s = String(s);
@@ -182,7 +192,7 @@
       const isBatch = !!gr.batch_id && gr.items.length > 1;
       if (isBatch) {
         const first = gr.items[0] || {},
-          donor = escapeHtml(first.donor_org || "—"),
+          donor = escapeHtml(decodeHtml(first.donor_org || "—")),
           created = fmtDateTime(gr.created_at),
           statusHtml = badge(first.status || "");
         const da = `data-batch="${gr.batch_id}" data-status="${
@@ -201,13 +211,13 @@
           first.status === "Picked Up" || first.status === "Completed";
         const imgCell = isFailed
           ? `<div class="small text-danger text-center">${escapeHtml(
-              fail || "Failed safety check"
+              decodeHtml(fail || "Failed safety check")
             )}</div>`
           : showReceipt
           ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da}>View</button></div>`
           : isCancelled && cancel
           ? `<div class="small text-muted text-center">${escapeHtml(
-              cancel
+              decodeHtml(cancel)
             )}</div>`
           : '<div class="d-flex justify-content-center">—</div>';
         const actions = [];
@@ -249,11 +259,11 @@
                     .map(
                       (r) =>
                         `<tr><td>${escapeHtml(
-                          r.name || ""
+                          decodeHtml(r.name || "")
                         )}</td><td>${escapeHtml(
-                          capFirst(r.type || "")
+                          decodeHtml(capFirst(r.type || ""))
                         )}</td><td>${r.quantity ?? ""}</td><td>${escapeHtml(
-                          r.expiry_date || ""
+                          decodeHtml(r.expiry_date || "")
                         )}</td><td>${badge(r.status)}</td></tr>`
                     )
                     .join("")}
@@ -263,8 +273,8 @@
           </tr>`);
       } else {
         const r = gr.items[0],
-          donor = escapeHtml(r.donor_org || "—"),
-          item = escapeHtml(r.name || ""),
+          donor = escapeHtml(decodeHtml(r.donor_org || "—")),
+          item = escapeHtml(decodeHtml(r.name || "")),
           qty = (r.quantity ?? "") + "",
           created = fmtDateTime(gr.created_at),
           statusHtml = badge(r.status || ""),
@@ -281,7 +291,7 @@
               needFail
                 ? `data-need-fail-reason="1" data-id="${r.id ?? ""}"`
                 : ""
-            }>${escapeHtml(fail || "Failed safety check")}</div>`
+            }>${escapeHtml(decodeHtml(fail || "Failed safety check"))}</div>`
           : showReceipt
           ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" data-id="${
               r.id ?? ""
@@ -290,7 +300,7 @@
             }">View</button></div>`
           : isCancelled && cancel
           ? `<div class="small text-muted text-center">${escapeHtml(
-              cancel
+              decodeHtml(cancel)
             )}</div>`
           : '<div class="d-flex justify-content-center">—</div>';
         const da = `data-id="${

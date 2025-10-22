@@ -8,6 +8,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
+function handleSetStatus(array $payload) {
+    if (empty($payload['user_id']) || empty($payload['status'])) {
+        sendJson(['success' => false, 'error' => 'user_id and status are required'], 400);
+    }
+    $svc = new User();
+    $svc->setStatus((int)$payload['user_id'], (string)$payload['status']);
+    sendJson(['success' => true, 'message' => 'Status updated']);
+}
+
 setCorsHeaders();
 header('Content-Type: application/json');
 
@@ -45,6 +54,14 @@ try {
             requireRole(['admin']);
             handleReject($payload);
             break;
+        case 'adminUpdateProfile':
+            requireRole(['admin']);
+            handleAdminUpdateProfile($payload);
+            break;
+        case 'setStatus':
+            requireRole(['admin']);
+            handleSetStatus($payload);
+            break;
         case 'importRecipients':
             requireRole(['admin']);
             handleImportRecipients($payload);
@@ -77,6 +94,24 @@ function handleUpdateProfile(array $payload) {
         'organization_name' => $payload['organization_name'] ?? null,
         'contact_number' => $payload['contact_number'] ?? null,
         'address' => $payload['address'] ?? null,
+    ]);
+    sendJson(['success' => true, 'message' => 'Profile updated']);
+}
+
+function handleAdminUpdateProfile(array $payload) {
+    if (empty($payload['user_id'])) {
+        sendJson(['success' => false, 'error' => 'user_id is required'], 400);
+    }
+    $svc = new User();
+    // Pass through only known fields; User::updateProfile will route per role
+    $svc->updateProfile((int)$payload['user_id'], [
+        'name' => $payload['name'] ?? null,
+        'email' => $payload['email'] ?? null,
+        'organization_name' => $payload['organization_name'] ?? null,
+        'contact_number' => $payload['contact_number'] ?? null,
+        'address' => $payload['address'] ?? null,
+        'position_designation' => $payload['position_designation'] ?? null,
+        'contact_person' => $payload['contact_person'] ?? null,
     ]);
     sendJson(['success' => true, 'message' => 'Profile updated']);
 }

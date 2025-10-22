@@ -378,7 +378,7 @@ try {
 
         if ($inventoryId <= 0) { sendJson(['success' => false, 'error' => 'inventory_id is required'], 400); }
         if ($quantity <= 0) { sendJson(['success' => false, 'error' => 'quantity must be positive'], 400); }
-        if ($mode !== 'recipient' && $mode !== 'onsite') { sendJson(['success' => false, 'error' => 'mode must be recipient or onsite'], 400); }
+        if (!in_array($mode, ['recipient','onsite','discarded'], true)) { sendJson(['success' => false, 'error' => 'mode must be recipient, onsite, or discarded'], 400); }
         if ($mode === 'recipient' && empty($recipientId)) { sendJson(['success' => false, 'error' => 'recipient_id is required for recipient mode'], 400); }
 
         $inv = new Inventory();
@@ -408,7 +408,7 @@ try {
 
         if ($itemName === '' || $category === '') { sendJson(['success' => false, 'error' => 'item_name and category are required'], 400); }
         if ($quantity <= 0) { sendJson(['success' => false, 'error' => 'quantity must be positive'], 400); }
-        if ($mode !== 'recipient' && $mode !== 'onsite') { sendJson(['success' => false, 'error' => 'mode must be recipient or onsite'], 400); }
+        if (!in_array($mode, ['recipient','onsite','discarded'], true)) { sendJson(['success' => false, 'error' => 'mode must be recipient, onsite, or discarded'], 400); }
         if ($mode === 'recipient' && empty($recipientId)) { sendJson(['success' => false, 'error' => 'recipient_id is required for recipient mode'], 400); }
 
         $inv = new Inventory();

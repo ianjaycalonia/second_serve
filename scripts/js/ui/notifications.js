@@ -50,7 +50,7 @@
 
   // State
   let pollingTimer = 0;
-  let lastRender = [];
+  let lastSig = null; // string signature of last rendered list; null means never rendered
 
   function fmtDate(iso) {
     const d = new Date(iso);
@@ -71,14 +71,24 @@
         default: return '🔔';
       }
     })((n.type || '').toLowerCase());
+    const msgText = String(n.message || '');
+    const t = (n.type || '').toLowerCase();
+    const shouldLinkToReceived = (
+      t.startsWith('allocation_') ||
+      /allocation\s+has\s+been\s+updated/i.test(msgText) ||
+      /allocation\s+updated/i.test(msgText)
+    );
+    // Use a stretched-link anchor so the whole row is clickable even without JS
+    const linkHtml = shouldLinkToReceived ? '<a href="ReceivedItems.html" class="stretched-link" aria-label="Open received items"></a>' : '';
     return `
-      <li class="list-group-item d-flex align-items-start ${unreadClass} clickable" data-id="${n.id}" data-type="${n.type || ''}" data-ref-type="${n.reference_type || ''}" data-ref-id="${n.reference_id || ''}">
-        <div class="me-2" aria-hidden="true">${iconHtml}</div>
-        <div class="flex-grow-1">
+      <li class="list-group-item d-flex align-items-start position-relative ${unreadClass} clickable" style="cursor:pointer; user-select:none;" data-id="${n.id}" data-type="${n.type || ''}" data-ref-type="${n.reference_type || ''}" data-ref-id="${n.reference_id || ''}">
+        <div class="me-2" aria-hidden="true" style="cursor:pointer; user-select:none;">${iconHtml}</div>
+        <div class="flex-grow-1" style="cursor:pointer; user-select:none;">
           <div class="fw-semibold mb-1">${escapeHtml(n.message || '')}</div>
           <div class="text-muted small">${fmtDate(n.created_at)}${n.reference_type && n.reference_id ? ` · ${n.reference_type} #${n.reference_id}` : ''}</div>
         </div>
         ${n.read_status ? '' : '<span class="badge bg-primary align-self-center">new</span>'}
+        ${linkHtml}
       </li>`;
   }
 
@@ -123,13 +133,13 @@
       }
     }
 
-    // Click handlers to mark as read and redirect
-    listEl.querySelectorAll('li[data-id]').forEach(li => {
+    // Click handlers to mark as read and redirect (bind to all items to avoid attribute-specific misses)
+    listEl.querySelectorAll('li.list-group-item').forEach(li => {
       if (li.dataset.bound === '1') return;
       li.dataset.bound = '1';
       li.addEventListener('click', async () => {
-        const id = parseInt(li.getAttribute('data-id'), 10);
-        if (!id) return;
+        const idRaw = li.getAttribute('data-id');
+        const idNum = idRaw && /^\d+$/.test(idRaw) ? parseInt(idRaw, 10) : null;
         const nType = (li.getAttribute('data-type') || '').toLowerCase();
         const refType = (li.getAttribute('data-ref-type') || '').toLowerCase();
         const refIdRaw = li.getAttribute('data-ref-id');
@@ -141,9 +151,9 @@
           const badge = li.querySelector('.badge');
           if (badge) badge.remove();
           // Only call PATCH when it was unread; ignore any errors (it might have been read via markAllRead)
-          if (wasUnread) {
+          if (wasUnread && idNum !== null) {
             try {
-              await fetch(`${API_BASE_URL}/communications/notifications.php?action=read&id=${id}`, {
+              await fetch(`${API_BASE_URL}/communications/notifications.php?action=read&id=${idNum}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include'
@@ -164,13 +174,15 @@
           } else if (nType === 'donation_cancelled') {
             if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
-          } else if (nType === 'allocation_ready') {
-            // Recipients: redirect to Received Items page to view allocations
-            if (role === 'recipient') {
-              dest = 'ReceivedItems.html';
-            }
+          } else if (nType.startsWith('allocation_')) {
+            // Any allocation-related notification opens ReceivedItems.html (role-agnostic to ensure navigation works)
+            dest = 'ReceivedItems.html';
+          } else if (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated') {
+            // Normalize generic updated notifications to ReceivedItems for recipients
+            if (role === 'recipient' || refType === 'allocation') dest = 'ReceivedItems.html';
           }
           // Fallbacks by reference_type if not set above
+          if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
           if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
 
@@ -187,6 +199,32 @@
         }
       });
     });
+
+    // Safety net: delegated handler on container to catch any missed bindings
+    if (listEl && listEl.dataset.delegate !== '1') {
+      listEl.dataset.delegate = '1';
+      listEl.addEventListener('click', async (ev) => {
+        const li = ev.target && (ev.target.closest ? ev.target.closest('li.list-group-item') : null);
+        if (!li) return;
+        if (li.dataset.bound === '1') return; // primary handler will process
+        // Fallback: run a minimal navigate flow
+        try {
+          const nType = (li.getAttribute('data-type') || '').toLowerCase();
+          const refType = (li.getAttribute('data-ref-type') || '').toLowerCase();
+          let dest = null;
+          if (nType.startsWith('allocation_')) dest = 'ReceivedItems.html';
+          if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) dest = 'ReceivedItems.html';
+          if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
+          if (dest) {
+            try {
+              const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+              modal.hide();
+            } catch(_) {}
+            window.location.href = dest;
+          }
+        } catch(_) {}
+      }, true);
+    }
   }
 
   async function fetchNotifications() {
@@ -212,11 +250,12 @@
       }
       const json = await res.json();
       const items = json?.data?.items || [];
-      // Render only if changed (shallow compare by id+read_status count)
+      // Compute signature by id+read_status, regardless of order
       const sig = items.map(n => `${n.id}:${n.read_status ? 1 : 0}`).join('|');
-      if (sig !== lastRender.join('|')) {
+      // Always render on first fetch, even if empty
+      if (lastSig === null || sig !== lastSig) {
         render(items);
-        lastRender = sig.split('|');
+        lastSig = sig;
       }
     } catch (e) {
       // If we reach here and UI not yet updated, provide a minimal hint

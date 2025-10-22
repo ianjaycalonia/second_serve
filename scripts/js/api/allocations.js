@@ -34,7 +34,18 @@
     },
     async acknowledge(allocation_id){ return post('acknowledge', { allocation_id }); },
     async acknowledgeByAdmin(allocation_id){ return post('acknowledge_admin', { allocation_id }); },
-    async schedule(allocation_id){ return post('schedule', { allocation_id }); },
+    async pickup(allocation_id){
+      const url = URL + '?action=pickup&allocation_id=' + encodeURIComponent(String(allocation_id||''));
+      return root.fetchJson(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body: JSON.stringify({ allocation_id })
+      });
+    },
+    // Deprecated: keep for backward compatibility; delegates to pickup
+    async schedule(allocation_id){
+      return this.pickup(allocation_id);
+    },
     async complete(allocation_id){ return post('complete', { allocation_id }); },
     async cancel(allocation_id, reason){ return post('cancel', { allocation_id, reason }); },
     async finalize(allocation_id){ return post('finalize', { allocation_id }); },

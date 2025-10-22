@@ -131,12 +131,159 @@
     }
   });
 
+  // When discard modal is closed, apply immediate visual deduction if available
+  (function bindDiscardHiddenImmediateUpdate(){
+    try {
+      const dm = document.getElementById("discardModal");
+      if (!dm) return;
+      dm.addEventListener("hidden.bs.modal", function(){
+        try {
+          const info = window.__discardLast;
+          if (!info || !info.itemName || !info.category || !info.qty) return;
+          updateRowImmediate(info.itemName, info.category, (tr, tds) => {
+            try {
+              const qCell = tds[2];
+              const current = parseInt((qCell.textContent || "0").replace(/[^0-9-]/g, ""), 10) || 0;
+              const next = Math.max(0, current - Number(info.qty || 0));
+              qCell.textContent = String(next);
+            } catch (_) {}
+          });
+        } finally {
+          try { window.__discardLast = null; } catch (_) {}
+        }
+      });
+    } catch (_) {}
+  })();
+
+  // Delegated handler: Add quantity action (fires a custom event for app code to handle)
+  document.addEventListener("click", function (e) {
+    const el = e.target.closest(".inv-add");
+    if (!el) return;
+    e.preventDefault();
+    const itemName = el.getAttribute("data-item-name") || "";
+    const category = el.getAttribute("data-category") || "";
+    const tags = el.getAttribute("data-tags") || "";
+    try {
+      window.dispatchEvent(
+        new CustomEvent("inventory:add", { detail: { itemName, category, tags } })
+      );
+    } catch (_) {}
+    // Close any open dropdown
+    try {
+      const dd = el.closest(".dropdown");
+      const btn = dd && dd.querySelector("[data-bs-toggle=dropdown]");
+      if (btn && typeof bootstrap !== "undefined") {
+        const inst = bootstrap.Dropdown.getOrCreateInstance(btn);
+        inst.hide();
+      }
+    } catch (_) {}
+  });
+
+  // Toolbar Add button opens the global Add flow
+  document.addEventListener("click", function(e){
+    const btn = e.target.closest("#addInventoryBtn");
+    if (!btn) return;
+    e.preventDefault();
+    try {
+      window.dispatchEvent(new CustomEvent("inventory:add-open"));
+    } catch (_) {}
+  });
+
+  // Delegated handler: Discard quantity (opens modal, requires note)
+  document.addEventListener("click", function (e) {
+    const el = e.target.closest(".inv-discard");
+    if (!el) return;
+    e.preventDefault();
+    const itemName = el.getAttribute("data-item-name") || "";
+    const category = el.getAttribute("data-category") || "";
+    // Store context
+    window.__discardCtx = { itemName, category };
+    try {
+      const meta = document.getElementById("discardItemMeta");
+      if (meta) meta.textContent = `${itemName} (${category})`;
+      const qtyEl = document.getElementById("discardQty");
+      if (qtyEl) qtyEl.value = "1";
+      const noteEl = document.getElementById("discardNote");
+      if (noteEl) noteEl.value = "";
+      const fb = document.getElementById("discardFeedback");
+      if (fb) fb.textContent = "";
+      const mEl = document.getElementById("discardModal");
+      if (mEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+        bootstrap.Modal.getOrCreateInstance(mEl).show();
+      }
+      // Close dropdown after opening modal
+      const dd = el.closest(".dropdown");
+      const btn = dd && dd.querySelector("[data-bs-toggle=dropdown]");
+      if (btn && typeof bootstrap !== "undefined") {
+        const inst = bootstrap.Dropdown.getOrCreateInstance(btn);
+        inst.hide();
+      }
+    } catch (_) {}
+  });
+
+  // Submit Discard
+  document.addEventListener("click", async function (e) {
+    const submit = e.target.closest("#discardSubmitBtn");
+    if (!submit) return;
+    try {
+      const ctx = window.__discardCtx || { itemName: "", category: "" };
+      const qtyEl = document.getElementById("discardQty");
+      const noteEl = document.getElementById("discardNote");
+      const fb = document.getElementById("discardFeedback");
+      const qty = parseInt(qtyEl && qtyEl.value ? qtyEl.value : "0", 10) || 0;
+      const note = (noteEl && noteEl.value ? noteEl.value : "").trim();
+      if (qty <= 0) { if (fb) fb.textContent = "Quantity must be at least 1."; return; }
+      if (note.length === 0) { if (fb) fb.textContent = "Reason is required."; return; }
+      fb && (fb.textContent = "");
+      submit.disabled = true;
+      // Call group move-out with mode 'discarded'
+      const resp = await fetch(`${API_BASE_URL}/inventory/index.php/move-out-group`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ item_name: ctx.itemName, category: ctx.category, quantity: qty, mode: "discarded", note })
+      });
+      const jr = await resp.json().catch(() => null);
+      if (!resp.ok || jr?.success === false) {
+        throw new Error(jr?.error || `HTTP ${resp.status}`);
+      }
+      // Save last successful discard for immediate UI update on modal close
+      window.__discardLast = { itemName: ctx.itemName, category: ctx.category, qty };
+      // Close discard modal and show success
+      try {
+        const dm = document.getElementById("discardModal");
+        if (dm && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+          bootstrap.Modal.getOrCreateInstance(dm).hide();
+        }
+        document.querySelectorAll(".modal-backdrop").forEach((el)=>{ try{ el.remove(); }catch(_){} });
+      } catch (_) {}
+      try {
+        const body = document.getElementById("discardSuccessBody");
+        if (body) { body.textContent = `Discarded ${qty} × ${ctx.itemName} (${ctx.category}).`; }
+        const sm = document.getElementById("discardSuccessModal");
+        if (sm && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+          bootstrap.Modal.getOrCreateInstance(sm).show();
+        }
+      } catch (_) {}
+      // Refresh table
+      await loadAndRender(1);
+    } catch (err) {
+      const fb = document.getElementById("discardFeedback");
+      if (fb) fb.textContent = err?.message || "Failed to discard.";
+    } finally {
+      const submitBtn = document.getElementById("discardSubmitBtn");
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+
   function badge(status) {
     switch (status) {
       case "Expired":
         return '<span class="badge bg-danger">Expired</span>';
       case "Expiring Soon":
-        return '<span class="badge bg-warning text-dark">Expiring Soon</span>';
+      case "Soon To Expire":
+      case "Soon to Expire":
+        return '<span class="badge bg-warning text-dark">Soon To Expire</span>';
       default:
         return '<span class="badge bg-success">In Stock</span>';
     }
@@ -180,12 +327,16 @@
       document.getElementById("inventoryCategorySelectDesktop")?.value ||
       document.getElementById("inventoryCategorySelectMobile")?.value ||
       "All";
-    const date =
-      document.getElementById("inventoryDateSelectDesktop")?.value ||
-      document.getElementById("inventoryDateSelectMobile")?.value ||
-      "All";
-    const q = document.getElementById("searchInventoryInput")?.value || "";
-    return { category, date, q };
+    const q = document.getElementById("donationSearch")?.value || "";
+    // Date range filters (from/to) come from inputs inside the Filters dropdown
+    const fromDate = document.getElementById("fromDate")?.value || "";
+    const toDate = document.getElementById("toDate")?.value || "";
+    // Sorting selections from Sort dropdown
+    const qtyOrder = document.getElementById("quantityOrderSelectMobile")?.value || "None";
+    const submOrder = document.getElementById("submissionDateSelectMobile")?.value || "None";
+    const nameOrder = document.getElementById("donorOrderSelectMobile")?.value || "None";
+    const hideExpired = !!document.getElementById("hideExpiredToggle")?.checked;
+    return { category, q, fromDate, toDate, qtyOrder, submOrder, nameOrder, hideExpired };
   }
 
   function renderTable(items) {
@@ -216,9 +367,17 @@
       const status = badge(r.derived_status || "In Stock");
       const data = `data-item-name="${item}" data-category="${cat}" data-tags="${tags}"`;
       const actions = `
-        <div class="d-flex justify-content-center" style="gap:6px;">
-          <button type="button" class="btn btn-sm btn-outline-warning inv-edit-tags" ${data} title="Edit Tags"><i class="bi bi-tags"></i></button>
-          <button type="button" class="btn btn-sm btn-outline-secondary inv-issue-onsite" ${data} title="On-site Giveaway"><i class="bi bi-people"></i></button>
+        <div class="dropdown text-center">
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
+            <i class="bi bi-three-dots-vertical"></i>
+          </button>
+          <div class="dropdown-menu p-2 text-center">
+            <div class="d-flex align-items-center justify-content-center" style="gap:6px;">
+              <button type="button" class="btn btn-sm btn-outline-warning inv-edit-tags" ${data} title="Edit Tags"><i class="bi bi-tags"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-secondary inv-issue-onsite" ${data} title="On-site Giveaway"><i class="bi bi-people"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-danger inv-discard" ${data} title="Discard"><i class="bi bi-trash"></i></button>
+            </div>
+          </div>
         </div>`;
       return `
         <tr>
@@ -247,6 +406,65 @@
     return Math.max(1, Math.min(100, val));
   }
 
+  function applyClientFiltersAndSort(items, filters) {
+    let arr = Array.isArray(items) ? [...items] : [];
+    // Date range filter: use earliest_expiry if present
+    const from = (filters.fromDate || "").trim();
+    const to = (filters.toDate || "").trim();
+    const parseD = (s) => {
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    };
+    const dFrom = from ? parseD(from) : null;
+    const dTo = to ? parseD(to) : null;
+    if (dFrom || dTo) {
+      arr = arr.filter((r) => {
+        const s = r.earliest_expiry || r.added_at || r.created_at || "";
+        const d = parseD(s);
+        if (!d) return false;
+        if (dFrom && d < dFrom) return false;
+        if (dTo) {
+          const dToEnd = new Date(dTo);
+          dToEnd.setHours(23, 59, 59, 999);
+          if (d > dToEnd) return false;
+        }
+        return true;
+      });
+    }
+    // Sorting: build one combined comparator so priority sticks
+    const qtySel = (filters.qtyOrder || "None").toLowerCase();
+    const dtSel = (filters.submOrder || "None").toLowerCase();
+    const nameSel = (filters.nameOrder || "None").toLowerCase();
+    const toQty = (r) => Number(r.total_quantity ?? r.quantity ?? 0) || 0;
+    const toDate = (r) => {
+      const s = r.earliest_expiry || r.added_at || r.created_at || "";
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? new Date(0) : d;
+    };
+    const toName = (r) => String(r.item_name || "").toLowerCase();
+    if (["high to low", "low to high", "newest first", "oldest first", "ascending", "descending"].some((v) => [qtySel, dtSel, nameSel].includes(v))) {
+      arr.sort((a, b) => {
+        // Quantity primary when set
+        if (["high to low", "low to high"].includes(qtySel)) {
+          const A = toQty(a), B = toQty(b);
+          if (A !== B) return qtySel === "high to low" ? B - A : A - B;
+        }
+        // Date secondary when set
+        if (["newest first", "oldest first"].includes(dtSel)) {
+          const A = toDate(a).getTime(), B = toDate(b).getTime();
+          if (A !== B) return dtSel === "newest first" ? B - A : A - B;
+        }
+        // Name tertiary when set
+        if (["ascending", "descending"].includes(nameSel)) {
+          const A = toName(a), B = toName(b);
+          if (A !== B) return nameSel === "ascending" ? (A < B ? -1 : 1) : (A > B ? -1 : 1);
+        }
+        return 0;
+      });
+    }
+    return arr;
+  }
+
   async function loadAndRender(page = 1) {
     // Prevent overlapping refreshes
     if (window.__invLoading) return;
@@ -254,25 +472,25 @@
     try {
       const filters = getFilters();
       const limit = getPageSize();
-      const hideExpired =
-        !!document.getElementById("hideExpiredToggle")?.checked;
+      const hideExpired = !!filters.hideExpired;
       if (!hideExpired) {
         // Normal server-side pagination
-        const data = await fetchInventory({ ...filters, page, limit });
-        window.__inventoryLast = data;
-        renderTable(data.items || []);
+        const data = await fetchInventory({ category: filters.category, q: filters.q, page, limit });
+        const items = applyClientFiltersAndSort(data.items || [], filters);
+        window.__inventoryLast = { items, pagination: data.pagination };
+        renderTable(items);
         renderPagination(data.pagination || { page: 1, pages: 1 });
         return;
       }
 
       // Hide expired ON: build a client-side non-expired collection across all server pages
-      const key = JSON.stringify({ k: "inv", ...filters });
+      const key = JSON.stringify({ k: "inv", category: filters.category, q: filters.q });
       const cache =
         window.__invNonExpiredCache || (window.__invNonExpiredCache = {});
       let items = Array.isArray(cache[key]?.items) ? cache[key].items : null;
       if (!items) {
         // Fetch page 1 with max chunk (100)
-        const first = await fetchInventory({ ...filters, page: 1, limit: 100 });
+        const first = await fetchInventory({ category: filters.category, q: filters.q, page: 1, limit: 100 });
         const totalPages = Math.max(1, first?.pagination?.pages || 1);
         const collected = [];
         const filterFn = (arr) =>
@@ -281,11 +499,7 @@
           );
         collected.push(...filterFn(first.items));
         for (let p = 2; p <= totalPages; p++) {
-          const next = await fetchInventory({
-            ...filters,
-            page: p,
-            limit: 100,
-          });
+          const next = await fetchInventory({ category: filters.category, q: filters.q, page: p, limit: 100 });
           collected.push(...filterFn(next.items));
         }
         items = collected;
@@ -296,7 +510,8 @@
       const pages = Math.max(1, Math.ceil(total / limit));
       const cur = Math.min(Math.max(1, page), pages);
       const start = (cur - 1) * limit;
-      const slice = items.slice(start, start + limit);
+      const sortedFiltered = applyClientFiltersAndSort(items, filters);
+      const slice = sortedFiltered.slice(start, start + limit);
       window.__inventoryLast = {
         items: slice,
         pagination: { page: cur, pages, total },
@@ -337,18 +552,7 @@
   }
 
   function bindFilters() {
-    [
-      "inventoryCategorySelectDesktop",
-      "inventoryCategorySelectMobile",
-      "inventoryDateSelectDesktop",
-      "inventoryDateSelectMobile",
-      "searchInventoryInput",
-    ].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener("change", () => loadAndRender(1));
-      }
-    });
+    // Pagination buttons
     const pag = document.getElementById("inventoryPagination");
     if (pag) {
       pag.addEventListener("click", (e) => {
@@ -358,11 +562,109 @@
         loadAndRender(p);
       });
     }
-    // Hide expired toggle reloads list
+    // Hide expired toggle should apply instantly
     const hide = document.getElementById("hideExpiredToggle");
     if (hide) {
       hide.addEventListener("change", () => loadAndRender(1));
     }
+    // Quick range buttons to set date inputs (no auto-apply)
+    const qr = document.getElementById("quickRangeBtns");
+    if (qr) {
+      qr.addEventListener("click", (e) => {
+        const b = e.target.closest("button[data-range]");
+        if (!b) return;
+        const now = new Date();
+        let from = "", to = "";
+        const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (b.dataset.range === "today") {
+          from = fmt(today);
+          to = fmt(today);
+        } else if (b.dataset.range === "week") {
+          const start = new Date(today);
+          start.setDate(start.getDate() - start.getDay()); // Sunday
+          const end = new Date(start);
+          end.setDate(start.getDate() + 6);
+          from = fmt(start);
+          to = fmt(end);
+        } else if (b.dataset.range === "month") {
+          const start = new Date(today.getFullYear(), today.getMonth(), 1);
+          const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+          from = fmt(start);
+          to = fmt(end);
+        }
+        const fEl = document.getElementById("fromDate");
+        const tEl = document.getElementById("toDate");
+        if (fEl) fEl.value = from;
+        if (tEl) tEl.value = to;
+      });
+    }
+    // Filter Apply/Reset buttons inside filters dropdown
+    (function bindFilterApplyReset() {
+      const form = document.getElementById("filterForm");
+      if (!form) return;
+      const menu = form.closest(".dropdown-menu");
+      if (!menu) return;
+      const btns = menu.querySelectorAll(".btn");
+      let btnReset = null, btnApply = null;
+      btns.forEach((b) => {
+        const label = (b.textContent || "").trim().toLowerCase();
+        if (label === "reset") btnReset = b;
+        if (label === "apply") btnApply = b;
+      });
+      if (btnReset) {
+        btnReset.addEventListener("click", () => {
+          try {
+            const f = document.getElementById("fromDate");
+            const t = document.getElementById("toDate");
+            if (f) f.value = "";
+            if (t) t.value = "";
+            const catM = document.getElementById("inventoryCategorySelectMobile");
+            const catD = document.getElementById("inventoryCategorySelectDesktop");
+            if (catM) catM.value = "All";
+            if (catD) catD.value = "All";
+          } catch (_) {}
+        });
+      }
+      if (btnApply) {
+        btnApply.addEventListener("click", () => {
+          loadAndRender(1);
+        });
+      }
+    })();
+    // Sort Apply/Reset buttons inside sort dropdown
+    ;(function bindSortApplyReset() {
+      const form = document.getElementById("sortForm");
+      if (!form) return;
+      const menu = form.closest(".dropdown-menu");
+      if (!menu) return;
+      const btns = menu.querySelectorAll(".btn");
+      let btnReset = null, btnApply = null;
+      btns.forEach((b) => {
+        const label = (b.textContent || "").trim().toLowerCase();
+        if (label === "reset") btnReset = b;
+        if (label === "apply") btnApply = b;
+      });
+      if (btnReset) {
+        btnReset.addEventListener("click", () => {
+          try {
+            const qSel = document.getElementById("quantityOrderSelectMobile");
+            const dSel = document.getElementById("submissionDateSelectMobile");
+            const nSel = document.getElementById("donorOrderSelectMobile");
+            if (qSel) qSel.value = "None";
+            if (dSel) dSel.value = "None";
+            if (nSel) nSel.value = "None";
+          } catch (_) {}
+        });
+      }
+      if (btnApply) {
+        btnApply.addEventListener("click", () => {
+          loadAndRender(1);
+        });
+      }
+    })();
+    // Do not auto-apply on change for filters/sorting/search; only on Apply
+    // Page size select remains immediate below
     // Page size select
     const pageSize = document.getElementById("pageSizeSelect");
     if (pageSize) {

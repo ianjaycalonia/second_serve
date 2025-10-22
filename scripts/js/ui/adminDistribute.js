@@ -10,169 +10,9 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
 
   // (moved) attachAllocateNow defined at top-level below
 
-  // Allocate ALL available inventory items (optionally filtered by category) across recipients
-  function tryAutoAllAllItems(cat, ids){
-    return new Promise((resolve)=>{
-      if (!(Array.isArray(ids) && ids.length && window.Allocation && typeof window.Allocation.allocateItems==='function')){
-        resolve({ applied:false });
-        return;
-      }
-
-  // --- Exclusion logic for cancelled/completed statuses ---
-  function isExcludedStatus(s){
-    try { return /cancel|decline|no\s*show|complete|deliver|picked/i.test(String(s||'')); } catch(_){ return false; }
-  }
-  async function fetchExcludedIdsForPeriods(){
-    try{
-      const curPk = (typeof getPeriodKeyFromInputs==='function') ? getPeriodKeyFromInputs() : null;
-      const curRes = curPk ? await fetchRunAllocationsByPeriod(curPk) : { ok:false, items:[] };
-      const ids = new Set();
-      // Only exclude current-period statuses; do NOT exclude previous period so rollbacks can surface
-      (curRes.items||[]).forEach(a=>{ if (isExcludedStatus(a?.status)) ids.add(Number(a?.recipient_id||0)); });
-
-      // Fallback/augment: also check latest allocation per currently selected recipients
-      try{
-        const selectedIds = Array.from(document.querySelectorAll('#diSelected .di-card'))
-          .map(el => Number(el.dataset.id)).filter(n => Number.isFinite(n) && n>0);
-        if (selectedIds.length){
-          const API = (typeof API_BASE_URL==='string' && API_BASE_URL) ? API_BASE_URL : '/Capstone%20Project/php/api';
-          const fetchByRecipient = async (rid)=>{
-            const url = `${API}/allocations/index.php?action=list_by_recipient&recipient_id=${encodeURIComponent(String(rid))}&t=${Date.now()}`;
-            try { const res=await fetch(url,{credentials:'include',headers:{'Accept':'application/json'}}); const j=await res.json().catch(()=>null); return (res.ok&&j?.success&&Array.isArray(j?.data?.items))? j.data.items:[]; } catch(_){ return []; }
-          };
-          const histories = await Promise.all(selectedIds.map(async id=>{ const hist=await fetchByRecipient(id); const sorted=[...hist].sort((a,b)=> new Date(b.created_at||0)-new Date(a.created_at||0)); return { id, latest: sorted[0] }; }));
-          histories.forEach(r=>{ if (r.latest && isExcludedStatus(r.latest.status)) ids.add(r.id); });
-        }
-      } catch(_){ }
-
-      return ids;
-    } catch(_){ return new Set(); }
-  }
-  function overrideBuildSelectedSimple(){
-    try{
-      if (window.__diBuildOverrideBound) return; window.__diBuildOverrideBound = true;
-      const orig = window.buildSelectedSimple;
-      window.buildSelectedSimple = async function(weeksMap, cancelledSet){
-        try{
-          const selected = qs('#diSelected'); const pool = qs('#diPool'); if (!selected || !pool) return;
-          // Merge excluded from API statuses
-          const apiExcluded = await fetchExcludedIdsForPeriods();
-          const skip = new Set([...(cancelledSet instanceof Set? cancelledSet : []), ...apiExcluded]);
-          // Compute desired ids using Scheduling
-          const cur = (typeof getCurrentBucketNow==='function') ? getCurrentBucketNow() : 'W1';
-          let ids = [];
-          try { ids = window.Scheduling.buildSelectedIds(weeksMap, skip, { currentBucket: cur }); } catch(_){ ids = []; }
-          // Prepend rollback candidates (previous-period cancelled)
-          try {
-            const carry = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
-            if (carry && carry.size){
-              const desired = [];
-              carry.forEach(function(v){
-                try{ const n = parseInt(v,10)||0; if (n>0 && !skip.has(n) && !ids.includes(n)) desired.push(n); } catch(_){ }
-              });
-              if (desired.length){ ids = desired.concat(ids); }
-            }
-          } catch(_){ }
-          // Purge already-rendered excluded
-          try {
-            qsa('#diSelected .di-card').forEach(el=>{ const rid = parseInt(el.dataset.id||'0',10)||0; if (rid && skip.has(rid)) pool.appendChild(el); });
-          } catch(_){ }
-          // Render
-          selected.innerHTML = '';
-          ids.forEach(id=>{
-            if (skip.has(id)) return;
-            const card = qs(`.di-card[data-id="${id}"]`) || ensureCardForId(id);
-            if (card) selected.appendChild(card);
-          });
-          try { updateSelectedCount(); } catch(_){ }
-          try { updateHeaderMeta(); } catch(_){ }
-          try { refreshBadges(); } catch(_){ }
-        } catch(_){ }
-      };
-    } catch(_){ }
-  }
-  // Bind override on load
-  try {
-    if (document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', overrideBuildSelectedSimple);
-    } else { overrideBuildSelectedSimple(); }
-  } catch(_){ }
-
-  // Observe #diSelected for added nodes and purge excluded in real-time
-  async function startExclusionObserver(){
-    try{
-      const selected = document.querySelector('#diSelected'); const pool = document.querySelector('#diPool');
-      if (!selected || !pool) return;
-      let excluded = await fetchExcludedIdsForPeriods();
-      // Refresh excluded set periodically to reflect latest statuses
-      setInterval(async ()=>{ try { excluded = await fetchExcludedIdsForPeriods(); } catch(_){} }, 30000);
-      // Initial sweep
-      try {
-        selected.querySelectorAll('.di-card').forEach(el=>{ const rid=+el.dataset.id; if (excluded.has(rid)) pool.appendChild(el); });
-      } catch(_){ }
-      const observer = new MutationObserver((mutations)=>{
-        try{
-          mutations.forEach(m=>{
-            m.addedNodes && m.addedNodes.forEach(node=>{
-              if (!(node && node.nodeType===1)) return;
-              if (!node.matches || !node.matches('.di-card')) return;
-              const rid = +node.dataset.id;
-              if (excluded.has(rid)) pool.appendChild(node);
-            });
-          });
-          try { updateSelectedCount(); } catch(_){}
-          try { refreshBadges(); } catch(_){}
-        } catch(_){ }
-      });
-      observer.observe(selected, { childList:true });
-      window.__diExclusionObserver = observer;
-    } catch(_){ }
-  }
-  try {
-    if (document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', startExclusionObserver);
-    } else { startExclusionObserver(); }
-  } catch(_){ }
-      const params = new URLSearchParams({ group: 'merge', page: '1', limit: '50' });
-      if (cat) params.set('category', cat);
-      fetch(`php/api/inventory/index.php/list?${params.toString()}`, { credentials: 'include' })
-        .then(r=>r.json())
-        .then(data => {
-          const items = data?.data?.items || [];
-          if (!items.length){ resolve({ applied:false }); return; }
-          const popMap = buildRecipientPopulationMap();
-          const recipients = ids.map(id => ({ id, population: popMap.get(Number(id)) }));
-          let totalUnits = 0; let itemsProcessed = 0;
-          items.forEach(it => {
-            const name = (it.item_name ?? it.product_name ?? '').trim();
-            const category = (it.category ?? it.product_category ?? '').trim();
-            const totalQty = parseInt(it.total_quantity ?? it.quantity ?? 0, 10) || 0;
-            // Enforce minimum available quantity for auto-allocation
-            if (!name || totalQty < 20) return;
-            // Skip expired goods based on earliest_expiry/expiry_date or derived_status
-            try {
-              const status = String(it.derived_status || '').toLowerCase();
-              const expRaw = (it.earliest_expiry || it.expiry_date || '').trim();
-              if (status === 'expired') return;
-              if (expRaw) {
-                const exp = new Date(expRaw + 'T00:00:00');
-                const today = new Date(); today.setHours(0,0,0,0);
-                if (exp < today) return;
-              }
-            } catch(_) { /* ignore date parse errors */ }
-            const allocs = window.Allocation.allocateItems(totalQty, recipients);
-            if (!Array.isArray(allocs) || !allocs.length) return;
-            let itemUnits = 0;
-            allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, category, name, n, (it.unit||''), (it.unit||'')); itemUnits += n; } });
-            if (itemUnits>0){ totalUnits += itemUnits; itemsProcessed++; }
-          });
-          resolve({ applied: itemsProcessed>0 && totalUnits>0, totalUnits, itemsProcessed });
-        })
-        .catch(()=> resolve({ applied:false }));
-    });
-  }
+  // (Removed duplicate early tryAutoAllAllItems and stray fetch block)
+// Allocate ALL available inventory items handled by the implementation later in the file
   
-
   // Sort pool by week membership (W1..W4 order), then label
   function sortPoolByWeeks(){ try { return window.sortPoolByWeeks(); } catch(_){ } }
 
@@ -234,10 +74,34 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       try {
         const carouselEl = document.getElementById('diAllocCarousel');
         if (carouselEl && window.bootstrap?.Carousel){
-          const c = window.bootstrap.Carousel.getOrCreateInstance(carouselEl, { interval: false, ride: false, touch: false });
+          const c = window.bootstrap.Carousel.getOrCreateInstance(carouselEl, { interval: false, ride: false, touch: false, keyboard: false, wrap: false });
           carouselEl.addEventListener('slid.bs.carousel', (ev)=>{
             const i = ev.to + 1; if (counter) counter.textContent = `${i} / ${total}`;
           });
+          // Block edge/surface clicks from sliding, but allow interactive controls inside items
+          try {
+            const hardStop = (e)=>{ try{ e.stopImmediatePropagation(); }catch(_){} try{ e.stopPropagation(); }catch(_){} try{ e.preventDefault(); }catch(_){} };
+            const guard = (e)=>{
+              const t = e.target;
+              if (!t) { hardStop(e); return; }
+              // Allow delete button, qty input and its container to work
+              if (t.closest && (t.closest('.alloc-del-btn') || t.closest('.alloc-qty-input'))) return;
+              // Allow external nav area
+              if (t.closest && t.closest('#diAllocNav')) return;
+              // Otherwise, block to prevent unintended slide
+              hardStop(e);
+            };
+            ['click','mousedown','mouseup','pointerdown','pointerup','touchstart','touchend'].forEach(ev=> carouselEl.addEventListener(ev, guard, { capture: true }));
+          } catch(_){ }
+          // Disable default internal controls and indicators from receiving input
+          try {
+            const intPrev = document.querySelector('#diAllocCarousel .carousel-control-prev');
+            const intNext = document.querySelector('#diAllocCarousel .carousel-control-next');
+            const indicatorsHost = document.getElementById('diAllocIndicators');
+            if (intPrev) intPrev.style.pointerEvents = 'none';
+            if (intNext) intNext.style.pointerEvents = 'none';
+            if (indicatorsHost) indicatorsHost.style.pointerEvents = 'none';
+          } catch(_){ }
           // Wire external prev/next
           if (prevBtn){ try { prevBtn.onclick = ()=> c.prev(); } catch(_){ } }
           if (nextBtn){ try { nextBtn.onclick = ()=> c.next(); } catch(_){ } }
@@ -256,7 +120,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
     const ids = Array.isArray(window.__diAllocIds)?window.__diAllocIds:[];
     return ids[idx] || null;
   }
-  function addAllocItemToRecipient(recipientId, cat, name, qty, unit){
+  function addAllocItemToRecipient(recipientId, cat, name, qty, unit, statusLabel){
     try{
       if (!recipientId) return;
       const host = document.getElementById('alloc-items-' + recipientId);
@@ -266,10 +130,11 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       const li = document.createElement('li');
       li.className = 'd-flex align-items-center border-bottom py-1 small px-2';
       const label = [cat||'', name||''].filter(Boolean).join(' • ');
+      const statusBadge = (statusLabel && String(statusLabel).trim()) ? `<span class="badge bg-warning text-dark ms-2">${statusLabel}</span>` : '';
       const q = Math.max(1, parseInt(qty||1,10)||1);
       const u = (unit||'') || '';
       li.innerHTML = `
-        <span class="alloc-label flex-grow-1">${label}</span>
+        <span class="alloc-label flex-grow-1">${label} ${statusBadge}</span>
         <div class="d-flex align-items-center gap-2" style="width:90px; justify-content:flex-end">
           <input type="number" class="form-control form-control-sm alloc-qty-input" min="1" value="${q}" style="width:80px" />
         </div>
@@ -289,8 +154,16 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       const delBtn = li.querySelector('.alloc-del-btn');
       if (delBtn){
         const stopAll = (e)=>{ try{ e.stopImmediatePropagation(); }catch(_){} try{ e.stopPropagation(); }catch(_){} try{ e.preventDefault(); }catch(_){} };
-        delBtn.addEventListener('click', (e)=>{ stopAll(e); li.remove(); }, { capture: true });
-        ['mousedown','pointerdown','touchstart'].forEach(ev=> delBtn.addEventListener(ev, stopAll, { capture: true }));
+        // Prevent carousel gestures but allow click to reach remover handler
+        ['mousedown','mouseup','pointerdown','pointerup','touchstart','touchend'].forEach(ev=> delBtn.addEventListener(ev, stopAll, { capture: true }));
+        // Remove on click after stopping propagation
+        delBtn.addEventListener('click', (e)=>{ stopAll(e); try{ li.remove(); }catch(_){} }, { capture: true });
+        // Inner icon: same behavior
+        const icon = delBtn.querySelector('i');
+        if (icon){
+          ['mousedown','mouseup','pointerdown','pointerup','touchstart','touchend'].forEach(ev=> icon.addEventListener(ev, stopAll, { capture: true }));
+          icon.addEventListener('click', (e)=>{ stopAll(e); try{ li.remove(); }catch(_){} }, { capture: true });
+        }
       }
     } catch(_){ }
   }
@@ -336,7 +209,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           const sel2Data = (window.jQuery && jQuery.fn && jQuery('#diGlobalName').select2) ? jQuery('#diGlobalName').select2('data') : [];
           if (Array.isArray(sel2Data) && sel2Data[0] && sel2Data[0].__unit) unit = sel2Data[0].__unit;
         } catch(_){ }
-        addAllocItemToRecipient(rid, cat, name, qty, unit, unit);
+        addAllocItemToRecipient(rid, cat, name, qty, unit);
       });
     }
     if (autoAllBtn){
@@ -347,6 +220,13 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           const meta = qs('#diAllocMeta'); if (meta) meta.textContent = 'Please select recipients first.';
           return;
         }
+        // Clear existing auto-added rows so each run shows fresh results
+        try {
+          ids.forEach(rid => {
+            const host = document.getElementById('alloc-items-' + rid);
+            if (host) host.innerHTML = '';
+          });
+        } catch(_) { }
         tryAutoAllAllItems(cat, ids).then(res => {
           const meta = qs('#diAllocMeta');
           if (meta) meta.textContent = '';
@@ -381,7 +261,13 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           const it = items[0] || {};
           const totalQty = parseInt(it?.total_quantity||it?.quantity||0,10)||0;
           // Enforce minimum available quantity for auto-allocation (single-item)
-          if (totalQty < 20){ resolve({ applied:false }); return; }
+          try {
+            const status = String(it?.derived_status || '').toLowerCase();
+            const isSoon = (status === 'expiring soon' || status === 'soon to expire');
+            if (!isSoon && totalQty < 20){ resolve({ applied:false }); return; }
+          } catch(_) {
+            if (totalQty < 20){ resolve({ applied:false }); return; }
+          }
           // Skip expired goods
           try {
             const status = String(it?.derived_status || '').toLowerCase();
@@ -406,11 +292,18 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
             const recipients = (window.Allocation && typeof window.Allocation.recipientsWithPopulation==='function')
               ? window.Allocation.recipientsWithPopulation(eligibleIds, popMap)
               : eligibleIds.map(id => ({ id, population: popMap.get(Number(id)) }));
-            try { console.debug('[DI][alloc] recipients (algo one)', recipients); } catch(_){ }
+            try { console.log('[DI][alloc] recipients (algo one)', recipients); } catch(_){ }
             const allocs = window.Allocation.allocateItems(allocatableTotal/0.9, recipients);
             if (!Array.isArray(allocs) || !allocs.length){ resolve({ applied:false }); return; }
             let sum = 0;
-            allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, cat, name, n, (it.unit||''), (it.unit||'')); sum += n; } });
+            const statusLabel = (String(it?.derived_status||'').toLowerCase()==='expiring soon' || String(it?.derived_status||'').toLowerCase()==='soon to expire') ? 'Soon To Expire' : '';
+            allocs.forEach(a => {
+              const n = Math.max(0, parseInt(a.allocation||0,10)||0);
+              const minPerRecipient = (totalQty < 30) ? 3 : 1;
+              if (n < minPerRecipient) return;
+              addAllocItemToRecipient(a.id, cat, name, n, (it.unit||''), statusLabel);
+              sum += n;
+            });
             resolve({ applied:true, sum });
           });
         }).catch(()=> resolve({ applied:false }));
@@ -423,7 +316,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       if (!(Array.isArray(ids) && ids.length && window.Allocation && typeof window.Allocation.allocateItems==='function')){
         resolve({ applied:false }); return;
       }
-      const params = new URLSearchParams({ group: 'merge', page: '1', limit: '50' });
+      const params = new URLSearchParams({ group: 'merge', page: '1', limit: '100' });
       if (cat) params.set('category', cat);
       // Ensure we have a fresh population map from the Allocation module
       const ensurePopAll = async ()=>{
@@ -441,46 +334,91 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       };
       fetch(`php/api/inventory/index.php/list?${params.toString()}`, { credentials: 'include' })
         .then(r=>r.json())
-        .then(data => {
-          const items = data?.data?.items || [];
+        .then(async data => {
+          let items = data?.data?.items || [];
+          const pages = parseInt(data?.data?.pagination?.pages || 1, 10) || 1;
+          if (pages > 1) {
+            const fetches = [];
+            for (let p = 2; p <= pages; p++) {
+              const pParams = new URLSearchParams(params);
+              pParams.set('page', String(p));
+              fetches.push(
+                fetch(`php/api/inventory/index.php/list?${pParams.toString()}`, { credentials: 'include' })
+                  .then(rr => rr.json())
+                  .then(dd => (dd?.data?.items || []))
+                  .catch(()=>[])
+              );
+            }
+            const rest = await Promise.all(fetches);
+            rest.forEach(arr => { items = items.concat(arr); });
+          }
           if (!items.length){ resolve({ applied:false }); return; }
+          // Prioritize soon-to-expire first, then nearest expiry
+          try {
+            const toDateVal = (it)=>{
+              const s = (it.earliest_expiry || it.expiry_date || '').trim();
+              const d = new Date(s);
+              return isNaN(d.getTime()) ? new Date('9999-12-31') : d;
+            };
+            items.sort((a,b)=>{
+              const sa = String(a.derived_status||'').toLowerCase();
+              const sb = String(b.derived_status||'').toLowerCase();
+              const aSoon = (sa === 'expiring soon' || sa === 'soon to expire');
+              const bSoon = (sb === 'expiring soon' || sb === 'soon to expire');
+              if (aSoon !== bSoon) return aSoon ? -1 : 1;
+              const da = toDateVal(a).getTime();
+              const db = toDateVal(b).getTime();
+              return da - db;
+            });
+          } catch(_) { }
           ensurePopAll().then((popMap)=>{
             const recipients = (window.Allocation && typeof window.Allocation.recipientsWithPopulation==='function')
               ? window.Allocation.recipientsWithPopulation(ids, popMap)
               : ids.map(id => ({ id, population: popMap.get(Number(id)) }));
-            try { console.debug('[DI][alloc] recipients (all items)', recipients); } catch(_){ }
+            try { console.log('[DI][alloc] recipients (all items)', recipients); } catch(_){ }
             let totalUnits = 0, itemsProcessed = 0;
-            const tagMap = buildRecipientTagMap();
+            const scanned = items.length;
+            // Constraints: exclude expired; per-recipient minimum is conditional (>=3 only if totalQty < 30)
             items.forEach(it => {
               const name = (it.item_name ?? it.product_name ?? '').trim();
               const category = (it.category ?? it.product_category ?? '').trim();
               const totalQty = parseInt(it.total_quantity ?? it.quantity ?? 0, 10) || 0;
-              // Enforce minimum available quantity for auto-allocation (all-items)
-              if (!name || totalQty < 20) return;
-              // Skip expired goods
+              if (!name || totalQty <= 0) return;
+              // Exclude expired items (by derived_status or date)
               try {
-                const status = String(it.derived_status || '').toLowerCase();
-                const expRaw = (it.earliest_expiry || it.expiry_date || '').trim();
-                if (status === 'expired') return;
-                if (expRaw) {
-                  const exp = new Date(expRaw + 'T00:00:00');
-                  const today = new Date(); today.setHours(0,0,0,0);
-                  if (exp < today) return;
+                const st = String(it.derived_status || '').toLowerCase();
+                const expRaw2 = (it.earliest_expiry || it.expiry_date || '').trim();
+                if (st === 'expired') return;
+                if (expRaw2) {
+                  const exp2 = new Date(expRaw2 + 'T00:00:00');
+                  const today2 = new Date(); today2.setHours(0,0,0,0);
+                  if (exp2 < today2) return;
                 }
               } catch(_) { }
-              // Determine eligible recipients by tag intersection
-              const itemTags = normalizeTags(it?.tags_concat || it?.tags || '');
-              const eligible = (itemTags.size)
-                ? recipients.filter(r => hasTagIntersect(itemTags, tagMap.get(Number(r.id))) )
-                : recipients.slice();
-              if (!eligible.length && itemTags.size) return; // specialty item with no matching recipients
+              const eligible = recipients.slice();
               const allocs = window.Allocation.allocateItems(totalQty, eligible);
               if (!Array.isArray(allocs) || !allocs.length) return;
               let itemUnits = 0;
-              allocs.forEach(a => { const n = Math.max(0, parseInt(a.allocation||0,10)||0); if (n>0){ addAllocItemToRecipient(a.id, category, name, n, (it.unit||''), (it.unit||'')); itemUnits += n; } });
+              const statusLc = String(it.derived_status || '').toLowerCase();
+              const isSoon = (statusLc === 'expiring soon' || statusLc === 'soon to expire');
+              const statusLabel = isSoon ? 'Soon To Expire' : '';
+              allocs.forEach(a => {
+                const n = Math.max(0, parseInt(a.allocation||0,10)||0);
+                const minPerRecipient = (totalQty < 30) ? 3 : 1;
+                if (n < minPerRecipient) return;
+                addAllocItemToRecipient(a.id, category, name, n, (it.unit||''), statusLabel);
+                itemUnits += n;
+              });
               if (itemUnits>0){ totalUnits += itemUnits; itemsProcessed++; }
             });
             resolve({ applied: itemsProcessed>0 && totalUnits>0, totalUnits, itemsProcessed });
+            // Show diagnostics to admin
+            try {
+              const meta = document.getElementById('diAllocMeta');
+              if (meta) {
+                meta.textContent = `Processed ${itemsProcessed} item${itemsProcessed===1?'':'s'} • Expired excluded • Scanned: ${scanned}`;
+              }
+            } catch(_) { }
           });
         })
         .catch(()=> resolve({ applied:false }));
