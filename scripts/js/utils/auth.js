@@ -17,6 +17,20 @@ function setLoading(button, isLoading) {
     }
 }
 
+// Toggle registration fields by role (donor vs recipient)
+document.addEventListener('DOMContentLoaded', function(){
+    const roleSel = document.getElementById('registerRole');
+    const donorWrap = document.getElementById('wrapDonorCategory');
+    const recipWrap = document.getElementById('wrapBeneficiaryCategory');
+    const updateVis = () => {
+        const v = (roleSel?.value||'').toLowerCase();
+        if (donorWrap) donorWrap.style.display = (v === 'donor') ? '' : 'none';
+        if (recipWrap) recipWrap.style.display = (v === 'recipient') ? '' : 'none';
+    };
+    roleSel?.addEventListener('change', updateVis);
+    updateVis();
+});
+
 // Show error message in form
 function showError(elementId, message) {
     let errorElement = document.getElementById(`${elementId}Error`);
@@ -51,7 +65,6 @@ function handleApiResponse(response, successCallback) {
 
 // Handle API error
 function handleApiError(error) {
-    console.error('API Error:', error);
     const message = (error && (error.responseJSON?.error || error.responseText)) || 'An error occurred. Please try again.';
     // Prefer a Bootstrap modal instead of alert for better UX
     showBootstrapError(message, inferErrorTitle(error));
@@ -215,6 +228,36 @@ document.addEventListener('DOMContentLoaded', function() {
                     roleSelect.value = preRole;
                 }
             }
+
+            // Populate donor/beneficiary categories lazily on modal open
+            try {
+                const donorSel = document.getElementById('registerDonorCategory');
+                if (donorSel && donorSel.options.length <= 1) {
+                    fetch(`${API_BASE_URL}/lookups/donor-categories?active=1&limit=200`, { credentials: 'include' })
+                        .then(r => r.json()).then(j => {
+                            const items = Array.isArray(j?.items) ? j.items : [];
+                            items.forEach(it => {
+                                const opt = document.createElement('option');
+                                opt.value = String(it.id);
+                                opt.textContent = String(it.name || '');
+                                donorSel.appendChild(opt);
+                            });
+                        }).catch(() => {});
+                }
+                const beneSel = document.getElementById('registerBeneficiaryCategory');
+                if (beneSel && beneSel.options.length <= 1) {
+                    fetch(`${API_BASE_URL}/lookups/beneficiary-categories?active=1&limit=200`, { credentials: 'include' })
+                        .then(r => r.json()).then(j => {
+                            const items = Array.isArray(j?.items) ? j.items : [];
+                            items.forEach(it => {
+                                const opt = document.createElement('option');
+                                opt.value = String(it.id);
+                                opt.textContent = String(it.name || '');
+                                beneSel.appendChild(opt);
+                            });
+                        }).catch(() => {});
+                }
+            } catch(_) { /* ignore */ }
         });
     }
 
@@ -286,9 +329,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         title = 'Incorrect password';
                         body = 'The password you entered is incorrect. Please try again.';
                     } else if (lower.includes('account not approved')) {
-                        // Show a neutral system error to avoid implying deliberate deactivation
-                        title = 'System Error';
-                        body = 'A system error occurred. Please contact the administrators immediately.';
+                        title = 'Pending Approval';
+                        body = 'Your account is pending admin approval. Please wait until an administrator approves your registration.';
                     }
                     showBootstrapError(body, title);
                 },
@@ -346,6 +388,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             setLoading(submitBtn, true);
             
+            // Determine optional taxonomy fields based on role
+            const donorCategoryId = role === 'donor' ? Number(document.getElementById('registerDonorCategory')?.value || '') || undefined : undefined;
+            const beneficiaryCategoryId = role === 'recipient' ? Number(document.getElementById('registerBeneficiaryCategory')?.value || '') || undefined : undefined;
+
             // Call register API
             $.ajax({
                 url: `${AUTH_API_URL}?action=register`,
@@ -358,35 +404,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     role,
                     organization_name: document.getElementById('registerOrganization').value.trim() || undefined,
                     contact_number: document.getElementById('registerContact').value.trim() || undefined,
-                    address: document.getElementById('registerAddress').value.trim() || undefined
+                    address: document.getElementById('registerAddress').value.trim() || undefined,
+                    donor_category_id: donorCategoryId,
+                    beneficiary_category_id: beneficiaryCategoryId
                 }),
                 contentType: 'application/json',
                 dataType: 'json',
                 success: function(response) {
-                    // Store user like login does, then redirect if provided
-                    if (response && response.user) {
-                        try { sessionStorage.setItem('user', JSON.stringify(response.user)); } catch (_) {}
+                    const u = response && response.user ? response.user : null;
+                    const approved = u && String(u.status||'').toLowerCase() === 'approved';
+                    if (approved) {
+                        try { sessionStorage.setItem('user', JSON.stringify(u)); } catch(_) {}
+                        const dest = response?.redirect || getDashboardUrl(u.role);
+                        if (dest) { window.location.href = dest; return; }
                     }
-                    const dest = response?.redirect || (response?.user ? getDashboardUrl(response.user.role) : null);
-                    if (dest) {
-                        window.location.href = dest;
-                        return;
-                    }
-                    // Fallback: no redirect, show success message (legacy flow)
-                    handleApiResponse(response, function() {
-                        const loginTab = new bootstrap.Tab(document.getElementById('login-tab'));
-                        loginTab.show();
-                        registerForm.reset();
-                        const successAlert = `
-                            <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                Registration successful! You can now log in.
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
-                        `;
-                        const alertContainer = document.createElement('div');
-                        alertContainer.innerHTML = successAlert;
-                        document.querySelector('#login-tab-pane').prepend(alertContainer.firstElementChild);
-                    });
+                    // Pending (e.g., recipients): inform user and switch to Login
+                    const loginTab = new bootstrap.Tab(document.getElementById('login-tab'));
+                    loginTab.show();
+                    const msg = 'Registration received. Your account is pending admin approval. You will be able to login once approved.';
+                    const alert = document.createElement('div');
+                    alert.className = 'alert alert-info alert-dismissible fade show';
+                    alert.setAttribute('role','alert');
+                    alert.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+                    document.querySelector('#login-tab-pane')?.prepend(alert);
                 },
                 error: function(xhr) {
                     const error = xhr.responseJSON?.error || 'Registration failed';
@@ -519,7 +559,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const modalEl = document.querySelector(targetSel);
             if (!modalEl) {
-                console.warn('Modal target not found:', targetSel);
                 return; // do not throw; keep UX safe
             }
             // Use Bootstrap API to show (works even if data attributes exist)
@@ -527,7 +566,6 @@ document.addEventListener('DOMContentLoaded', function() {
             modal.show();
             e.preventDefault();
         } catch(err) {
-            console.error('Modal trigger handler error:', err);
             // Fail-safe: do not propagate to avoid global crashes
             e.preventDefault();
         }

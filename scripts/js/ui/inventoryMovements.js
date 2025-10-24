@@ -94,7 +94,6 @@
         try { window.scrollTo({ top: prevScrollY, left: 0, behavior: 'auto' }); } catch(_) { window.scrollTo(0, prevScrollY); }
       }
     } catch (err) {
-      console.error('Failed to load movements:', err);
       if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-3">Failed to load movements: ${escapeHtml(err?.message||'Error')}</td></tr>`;
     }
   }

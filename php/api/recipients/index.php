@@ -272,6 +272,21 @@ try {
                 } else {
                     try { $db->query('DELETE FROM settings WHERE `key` = ?', [$lockKey]); } catch (Throwable $e) { /* ignore */ }
                 }
+
+                // Emit admin-only notification summarizing this week's plan save
+                try {
+                    $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin'")->fetchAll();
+                    if ($admins) {
+                        $count = count($ids);
+                        $msg = sprintf('Saved plan for %s %s: %d recipient%s', $month, $wk, $count, $count===1?'':'s');
+                        foreach ($admins as $a) {
+                            $db->query(
+                                "INSERT INTO notifications (user_id, type, reference_type, reference_id, message, read_status, created_at) VALUES (?,?,?,?,?,0,NOW())",
+                                [ (int)$a['user_id'], 'plan_saved', 'allocation_run', $runId, $msg ]
+                            );
+                        }
+                    }
+                } catch (Throwable $e) { /* non-fatal */ }
             }
             sendJson(['success' => true, 'message' => 'Plan saved and locks updated']);
             break;

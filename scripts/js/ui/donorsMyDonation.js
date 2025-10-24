@@ -207,7 +207,6 @@
         await reloadList();
         showSuccess("Batch updated");
       } catch (err) {
-        console.error(err);
         alert("Failed to save batch: " + (err?.message || "Unknown error"));
       } finally {
         btn.disabled = false;
@@ -692,7 +691,6 @@
           await reloadList();
           showSuccess("Donation updated");
         } catch (err) {
-          console.error(err);
           alert(
             "Failed to update donation: " + (err?.message || "Unknown error")
           );
@@ -794,7 +792,6 @@
           await reloadList();
           showSuccess(batchId ? "Batch cancelled" : "Donation cancelled");
         } catch (err) {
-          console.error(err);
           alert(
             "Failed to cancel donation(s): " + (err?.message || "Unknown error")
           );

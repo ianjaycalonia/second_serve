@@ -3,8 +3,8 @@
 #filtersDropdownBtn + .dropdown-menu,
 #sortsDropdownBtn + .dropdown-menu {
   width: 500px;
-  max-height: auto;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .dropdown-toggle::after {
@@ -77,4 +77,20 @@ button#sortsDropdownBtn {
     font-size: 0.9rem;
     font-weight: 500;
   }
+}
+
+/* Ensure dropdowns overlay sidebar and stay within viewport */
+.dropdown-menu {
+  z-index: 2100; /* higher than sidebar (2000) */
+  max-width: 95vw;
+}
+
+@media (max-width: 575.98px){
+  #filtersDropdownBtn + .dropdown-menu,
+  #sortsDropdownBtn + .dropdown-menu{
+    width: min(92vw, 480px);
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .search-box input{ width: 140px; }
 }

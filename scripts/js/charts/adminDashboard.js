@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', function() {
             setInterval(loadDashboardData, 5 * 60 * 1000);
         }
     } catch (error) {
-        console.error('Error initializing dashboard:', error);
     }
 });
 
@@ -84,7 +83,6 @@ async function loadDashboardData() {
         }
         
     } catch (error) {
-        console.error('Error loading dashboard data:', error);
         
         // Show error to user
         const errorElement = document.createElement('div');

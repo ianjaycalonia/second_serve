@@ -196,7 +196,6 @@
             error: function(xhr){
               try {
                 const msg = xhr?.responseJSON?.error || `HTTP ${xhr?.status||''}` || 'Failed to load donors';
-                console.warn('Donor Select2 AJAX error:', msg);
               } catch(_) { /* ignore */ }
             }
           },

@@ -42,7 +42,6 @@
             }
           } catch (e) {
             // ignore per-toggle errors
-            console.error(e);
           }
         });
 
@@ -79,12 +78,10 @@
             if (parent) parent.classList.remove("show");
           } catch (e) {
             // ignore per-menu errors
-            console.error(e);
           }
         });
       } catch (e) {
         // defensive
-        console.error(e);
       }
     }
 
@@ -97,7 +94,6 @@
           closeOtherDropdowns(openingDropdown);
         } catch (e) {
           // swallow
-          console.error(e);
         }
       },
       true
@@ -119,7 +115,6 @@
           closeOtherDropdowns(openingDropdown);
         } catch (e) {
           // swallow
-          console.error(e);
         }
       },
       true

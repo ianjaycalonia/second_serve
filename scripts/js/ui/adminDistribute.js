@@ -1026,12 +1026,6 @@ function annotateCardsWithWeeksEx(weeksEx){ try { return window.annotateCardsWit
       }
       try {
         if (weeks){
-          console.log('[DI] plan sizes:', {
-            W1: Array.isArray(weeks.W1)?weeks.W1.length:0,
-            W2: Array.isArray(weeks.W2)?weeks.W2.length:0,
-            W3: Array.isArray(weeks.W3)?weeks.W3.length:0,
-            W4: Array.isArray(weeks.W4)?weeks.W4.length:0,
-          });
         }
       } catch(_){ }
 

@@ -18,7 +18,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const toggleBtn = document.getElementById("sidebarToggle");
   const backdrop = document.querySelector(".sidebar-backdrop");
-  const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+  const isMobile = () => window.matchMedia("(max-width: 992px)").matches;
+
+  // Harden initial state: ensure backdrop is hidden and body not marked open
+  try {
+    if (backdrop) backdrop.style.display = "none";
+    document.body.classList.remove("sidebar-open");
+  } catch (_) {}
 
   // Build sidebar items by role before wiring behaviors
   try {
@@ -140,13 +146,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function openSidebar() {
     body.classList.add("sidebar-open");
-    if (backdrop) backdrop.style.display = "block";
+    try {
+      if (backdrop) backdrop.style.display = "none"; // keep hidden per mobile UX
+      // Force aside visible in off-canvas mode
+      if (isMobile() && sidebar) {
+        sidebar.style.display = "block";
+        sidebar.style.transform = "translateX(0)";
+      }
+    } catch (_) {}
     hideTooltips();
   }
 
   function closeSidebar() {
     body.classList.remove("sidebar-open");
-    if (backdrop) backdrop.style.display = "none";
+    try {
+      if (backdrop) backdrop.style.display = "none";
+      if (isMobile() && sidebar) {
+        sidebar.style.transform = "translateX(-100%)";
+        // Delay hiding to allow transform to apply; but ensure it's not blocking
+        setTimeout(() => { try { sidebar.style.display = "none"; } catch(_) {} }, 150);
+      }
+    } catch (_) {}
     hideTooltips();
   }
 

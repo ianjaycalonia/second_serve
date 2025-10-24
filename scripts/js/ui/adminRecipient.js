@@ -450,7 +450,6 @@ function showImportModal(title, html) {
         try {
           await doImport();
         } catch (err) {
-          console.error(err);
           showImportModal(
             "Import Error",
             `<div class="text-danger">${escapeHtml(

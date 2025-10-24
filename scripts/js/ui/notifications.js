@@ -195,7 +195,6 @@
             window.location.href = dest;
           }
         } catch (e) {
-          console.error('Failed to mark read', e);
         }
       });
     });
@@ -304,7 +303,6 @@
         credentials: 'include'
       });
     } catch (e) {
-      console.error('markAllRead failed', e);
     }
   }
 

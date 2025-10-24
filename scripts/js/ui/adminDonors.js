@@ -320,7 +320,6 @@ document.addEventListener("DOMContentLoaded", () => {
             populateFilters();
             applyFiltersAndSort();
           } catch(err){
-            console.error('Import failed:', err);
             try{ showToast(`Import failed: ${err.message}`, 'danger'); }catch(_){ }
           } finally {
             e.target.value = '';

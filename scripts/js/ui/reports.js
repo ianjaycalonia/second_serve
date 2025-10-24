@@ -38,7 +38,6 @@
       if (el) el.textContent = (Math.round(total * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
     } catch (err) {
       // Silent fail for the stat to avoid blocking rest of page
-      console.warn('Failed to load total weight:', err);
     }
   }
 
@@ -61,7 +60,6 @@
       const fname = `product_in_${(j?.data?.start||'')}_${(j?.data?.end||'')}.xlsx`.replace(/[^a-zA-Z0-9_.-]/g,'_');
       XLSX.writeFile(wb, fname);
     } catch (err) {
-      console.error('Export In failed:', err);
       alert('Export In failed: ' + (err?.message || 'Unknown error'));
     }
   }
@@ -85,7 +83,6 @@
       const fname = `product_out_${(j?.data?.start||'')}_${(j?.data?.end||'')}.xlsx`.replace(/[^a-zA-Z0-9_.-]/g,'_');
       XLSX.writeFile(wb, fname);
     } catch (err) {
-      console.error('Export Out failed:', err);
       alert('Export Out failed: ' + (err?.message || 'Unknown error'));
     }
   }

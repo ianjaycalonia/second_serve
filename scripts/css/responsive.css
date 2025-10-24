@@ -1,0 +1,101 @@
+/* Global responsive tweaks */
+
+:root{
+  --touch-min-size: 44px;
+}
+
+/* Sidebar collapse refinements */
+@media (max-width: 991.98px){
+  body.sidebar-collapsed aside.sidebar,
+  body.sidebar-collapsed aside{ width: 64px; }
+  aside .sidebar-text{ display: none !important; }
+  nav .brand{ display:none !important; }
+  #sidebarToggle{ padding: 6px 8px; }
+}
+
+/* Card padding and typography */
+.card.card-accent,
+.card.card-accent-dynamic{ padding: 0.75rem; }
+
+h5,h6{ font-size: clamp(0.95rem, 1.2vw + 0.6rem, 1.1rem); }
+.metric-number{ font-size: clamp(1.25rem, 2.5vw + 0.6rem, 2rem); }
+
+/* Touch target sizing */
+.btn, .nav-link, .dropdown-toggle, .form-control, .form-select{
+  min-height: var(--touch-min-size);
+}
+.btn.btn-sm{ min-height: 34px; }
+
+/* Toolbars wrap better on small screens */
+@media (max-width: 575.98px){
+  .d-flex.flex-wrap.gap-2 > *{ margin-bottom: 4px; }
+  .card .section-title{ font-size: 0.95rem; }
+}
+
+/* Tables: horizontal scroll on narrow screens */
+.table-responsive{ width: 100%; overflow-x: auto; }
+.table{ margin-bottom: 0; }
+
+/* Charts scale by height */
+canvas{ max-width: 100%; height: auto; }
+
+/* Toolbars in cards: wrap on small screens */
+@media (max-width: 575.98px){
+  .card .d-flex.justify-content-between{ flex-wrap: wrap; gap: 8px; }
+  .card .d-flex.justify-content-between > *{ margin-bottom: 4px; }
+  .search-box input{ width: 140px; }
+  /* Also wrap inner toolbar rows that use gap-3 */
+  .card .d-flex.align-items-center.gap-3{ flex-wrap: wrap; gap: 6px; }
+  .card .d-flex.align-items-center.gap-2{ flex-wrap: wrap; gap: 6px; }
+  .card .form-select{ min-width: 0; }
+  .card .btn.btn-sm{ padding: .35rem .5rem; }
+  /* Override inline min-width groups in Inventory toolbar */
+  .card [style*="min-width: 120px"]{ min-width: 0 !important; width: auto !important; }
+  /* Make filter/sort icon buttons visible against light headers */
+  #filtersDropdownBtn,
+  #sortsDropdownBtn{
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: .375rem;
+  }
+}
+
+/* Ensure filter/sort icons are visible on light card headers */
+.card #filtersDropdownBtn,
+.card #sortsDropdownBtn{
+  color: var(--bs-body-color, #212529) !important;
+  border-color: var(--bs-border-color, #dee2e6) !important;
+}
+
+/* Compact import buttons on phones to minimize overflow */
+@media (max-width: 575.98px){
+  #importDonorsBtn,
+  #importRecipientsBtn,
+  .import-inventory-btn{
+    padding: .35rem .5rem;
+    white-space: nowrap;
+  }
+}
+
+/* RecipientsList: stack pool and weeks comfortably */
+@media (max-width: 991.98px){
+  #weeksRow .col-12.col-lg-3{ flex: 0 0 100%; max-width: 100%; }
+  #weeksRow .card .btn-group .btn{ padding: 6px 8px; }
+  .rpool-scroll{ max-height: 40vh; overflow:auto; }
+}
+
+/* Icon-only buttons: increase tap area */
+.btn i, .dashboard-icon{ pointer-events: none; }
+
+/* Modals: comfortable spacing on mobile */
+@media (max-width: 575.98px){
+  .modal-dialog{ margin: .5rem; }
+  .modal-body{ padding: .75rem; }
+}
+
+/* Admin Profile/Settings: simplify on mobile */
+@media (max-width: 767.98px){
+  .profile-elements .col-6{ flex: 0 0 100% !important; max-width: 100% !important; }
+  .profile-elements .profile-photo{ display: none; }
+  #myTabContent .system-photo{ display: none; }
+}

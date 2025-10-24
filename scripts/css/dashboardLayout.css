@@ -467,14 +467,10 @@ main {
   }
 
   .sidebar-backdrop {
-    display: none;
+    display: none !important; /* Always hidden on mobile */
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.3);
+    background: transparent;
     z-index: 1999;
-  }
-
-  body.sidebar-open .sidebar-backdrop {
-    display: block;
   }
 }

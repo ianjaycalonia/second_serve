@@ -13,6 +13,7 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <link rel="stylesheet" href="scripts/css/responsive.css" />
     <link rel="stylesheet" href="scripts/css/monthlyRecipients.css" />
     <style>
       /* Constrain brand logo */
@@ -37,6 +38,34 @@
           <div class="brand d-none d-md-block">
             Second Serve by <span>Simply</span><span>Share</span>
           </div>
+
+      <!-- Pending Recipient Approvals -->
+      <div class="card card-accent mb-3" id="pendingApprovalsCard" style="display:none;">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+            <div class="fw-semibold">Pending Recipient Approvals</div>
+            <div class="d-flex align-items-center gap-2">
+              <button id="reloadPendingBtn" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Organization</th>
+                  <th>Contact</th>
+                  <th>Email</th>
+                  <th>Address</th>
+                  <th style="width: 140px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="pendingRecipientsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
         </div>
         <div class="nav-icons">
           <a
@@ -91,6 +120,11 @@
               <li>
                 <a class="dropdown-item" href="taxonomy.html">
                   <i class="bi bi-tags me-2"></i>Categories
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="InventoryMovements.html">
+                  <i class="bi bi-arrow-left-right me-2"></i>Movements
                 </a>
               </li>
               <li><hr class="dropdown-divider" /></li>
@@ -561,9 +595,6 @@
             >
               <div class="fw-semibold">Pool of Approved Recipients</div>
               <div class="d-flex align-items-center flex-wrap gap-2">
-                <select id="poolLocation" class="form-select form-select-sm" style="min-width: 180px">
-                  <option value="">All</option>
-                </select>
                 <input
                   id="poolSearch"
                   class="form-control form-control-sm"
@@ -657,6 +688,73 @@
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
+    <script>
+      (function(){
+        const API = '/Capstone%20Project/php/api';
+        const card = document.getElementById('pendingApprovalsCard');
+        const tbody = document.getElementById('pendingRecipientsBody');
+        const reloadBtn = document.getElementById('reloadPendingBtn');
+
+        async function fetchPending(){
+          try{
+            const res = await fetch(`${API}/users/index.php?action=listPending&role=recipient`, { credentials: 'include' });
+            const j = await res.json();
+            if (!res.ok || !j?.success){ throw new Error(j?.error || `HTTP ${res.status}`); }
+            const items = Array.isArray(j?.data?.items) ? j.data.items : [];
+            render(items);
+          }catch(e){ render([]); }
+        }
+        function render(items){
+          if (!tbody || !card) return;
+          tbody.innerHTML = '';
+          if (!items.length){ card.style.display = 'none'; return; }
+          card.style.display = '';
+          for (const u of items){
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${escapeHtml(u.organization_name || u.name || '')}</td>
+              <td>${escapeHtml(u.position_designation || '')} ${escapeHtml(u.contact_number || '')}</td>
+              <td>${escapeHtml(u.email || '')}</td>
+              <td>${escapeHtml(u.address || '')}</td>
+              <td>
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-success" data-act="approve" data-id="${u.user_id}"><i class="bi bi-check2"></i></button>
+                  <button class="btn btn-outline-danger" data-act="reject" data-id="${u.user_id}"><i class="bi bi-x"></i></button>
+                </div>
+              </td>`;
+            tbody.appendChild(tr);
+          }
+        }
+        function escapeHtml(s){
+          try{ return String(s).replace(/[&<>"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }catch(_){ return ''; }
+        }
+        async function postJSON(url, body){
+          const res = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, credentials:'include', body: JSON.stringify(body||{}) });
+          const j = await res.json().catch(()=>({ success:false, error:`HTTP ${res.status}` }));
+          if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+          return j;
+        }
+        async function onClick(e){
+          const btn = e.target.closest('button[data-act]');
+          if (!btn) return;
+          const id = Number(btn.getAttribute('data-id')||'0')||0; if (!id) return;
+          const act = btn.getAttribute('data-act');
+          try{
+            btn.disabled = true;
+            if (act === 'approve'){
+              await postJSON(`${API}/users/index.php?action=approve`, { user_id: id });
+            } else if (act === 'reject'){
+              await postJSON(`${API}/users/index.php?action=reject`, { user_id: id });
+            }
+          }catch(err){ /* could add toast here */ }
+          finally { btn.disabled = false; fetchPending(); }
+        }
+        if (tbody){ tbody.addEventListener('click', onClick); }
+        if (reloadBtn){ reloadBtn.addEventListener('click', function(){ fetchPending(); }); }
+        // initial load
+        fetchPending();
+      })();
+    </script>
     <script>
       (function () {
         function formatLongDate(d) {

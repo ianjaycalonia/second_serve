@@ -88,10 +88,10 @@ class Auth {
         // Merge profile fields according to role for convenience
         $profile = [];
         if ($user['role'] === 'recipient') {
-            // Some schemas may not include organization_type or primary_contact_id; be resilient
+            // Align with schema: recipient_profiles has organization_name, address, primary_contact_id
             try {
                 $p = $this->db->query(
-                    'SELECT rp.organization_name, rp.organization_type, rp.address,
+                    'SELECT rp.organization_name, rp.address,
                             pc.position_designation, pc.contact_number, pc.email
                      FROM recipient_profiles rp
                      LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
@@ -99,26 +99,23 @@ class Auth {
                     [$user['user_id']]
                 )->fetch();
             } catch (Exception $e) {
-                // Fallback without optional columns/join
                 $p = $this->db->query(
                     'SELECT organization_name, address FROM recipient_profiles WHERE user_id = ?',
                     [$user['user_id']]
                 )->fetch();
-                if ($p && !array_key_exists('organization_type', $p)) { $p['organization_type'] = null; }
                 $p['position_designation'] = $p['position_designation'] ?? null;
                 $p['contact_number'] = $p['contact_number'] ?? null;
                 $p['email'] = $p['email'] ?? null;
             }
             $profile = $p ?: [];
         } elseif ($user['role'] === 'donor') {
-            // Some schemas may not include donor_category; attempt with it, then fallback
+            // Schema uses donor_category_id; keep null if not set
             try {
                 $p = $this->db->query(
-                    'SELECT organization_name, donor_category, contact_number, address FROM donor_profiles WHERE user_id = ?',
+                    'SELECT organization_name, donor_category_id AS donor_category, contact_number, address FROM donor_profiles WHERE user_id = ?',
                     [$user['user_id']]
                 )->fetch();
             } catch (Exception $e) {
-                // Fallback without donor_category
                 $p = $this->db->query(
                     'SELECT organization_name, contact_number, address FROM donor_profiles WHERE user_id = ?',
                     [$user['user_id']]
@@ -167,27 +164,37 @@ class Auth {
             $data['password'],
             $data['role'],
             $data['organization_name'] ?? null,
-            $data['organization_type'] ?? null,
+            null,
             $data['contact_number'] ?? null,
-            $data['address'] ?? null
+            $data['address'] ?? null,
+            isset($data['donor_category_id']) ? (int)$data['donor_category_id'] : null,
+            isset($data['beneficiary_category_id']) ? (int)$data['beneficiary_category_id'] : null
         );
 
-        // Auto-login newly registered and approved users
-        $loggedIn = $this->login($data['email'], $data['password'], $data['role']);
-        $_SESSION['user_id'] = $loggedIn['user_id'];
-        $_SESSION['user_role'] = $loggedIn['role'];
-        if (empty($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        // Auto-login only if status is approved; otherwise return pending status
+        if (($user['status'] ?? '') === 'approved') {
+            $loggedIn = $this->login($data['email'], $data['password'], $data['role']);
+            $_SESSION['user_id'] = $loggedIn['user_id'];
+            $_SESSION['user_role'] = $loggedIn['role'];
+            if (empty($_SESSION['csrf_token'])) {
+                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            }
+            return [
+                'user' => $loggedIn,
+                'csrf_token' => $_SESSION['csrf_token'],
+                'redirect' => self::dashboardUrl($loggedIn['role'])
+            ];
         }
 
+        // Not approved (e.g., recipient pending)
         return [
-            'user' => $loggedIn,
-            'csrf_token' => $_SESSION['csrf_token'],
-            'redirect' => self::dashboardUrl($loggedIn['role'])
+            'user' => $user,
+            'csrf_token' => null,
+            'redirect' => null
         ];
     }
 
-    public function register(string $name, string $email, string $password, string $role, ?string $organization_name = null, ?string $organization_type = null, ?string $contact_number = null, ?string $address = null): array {
+    public function register(string $name, string $email, string $password, string $role, ?string $organization_name = null, ?string $organization_type = null, ?string $contact_number = null, ?string $address = null, ?int $donor_category_id = null, ?int $beneficiary_category_id = null): array {
         // Ensure email not taken
         $existing = $this->db->query(
             'SELECT user_id FROM users WHERE email = ?',
@@ -204,17 +211,26 @@ class Auth {
             $row = $this->db->query('SELECT COALESCE(MAX(user_id),0)+1 AS next_id FROM users')->fetch();
             $userId = (int)($row['next_id'] ?? 1);
             // Insert minimal user with explicit user_id
+            // New recipients require admin approval; donors are auto-approved
+            $status = ($role === 'recipient') ? 'pending' : 'approved';
             $this->db->query(
-                "INSERT INTO users (user_id, name, email, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, ?, 'approved', NOW())",
-                [$userId, $name, $email, $hashed, $role]
+                "INSERT INTO users (user_id, name, email, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())",
+                [$userId, $name, $email, $hashed, $role, $status]
             );
             // Insert profile according to role
             if ($role === 'recipient') {
-                // Insert base recipient profile (contacts are stored separately)
-                $this->db->query(
-                    'INSERT INTO recipient_profiles (user_id, organization_name, organization_type, address) VALUES (?,?,?,?)',
-                    [$userId, $organization_name, $organization_type, $address]
-                );
+                // Insert base recipient profile (align to schema: no organization_type column)
+                if ($beneficiary_category_id) {
+                    $this->db->query(
+                        'INSERT INTO recipient_profiles (user_id, organization_name, beneficiary_category_id, address) VALUES (?,?,?,?)',
+                        [$userId, $organization_name, $beneficiary_category_id, $address]
+                    );
+                } else {
+                    $this->db->query(
+                        'INSERT INTO recipient_profiles (user_id, organization_name, address) VALUES (?,?,?)',
+                        [$userId, $organization_name, $address]
+                    );
+                }
                 // If contact info provided, create a primary recipient contact and set primary_contact_id
                 if (!empty($contact_number)) {
                     $this->db->query(
@@ -225,16 +241,20 @@ class Auth {
                     $this->db->query('UPDATE recipient_profiles SET primary_contact_id = ? WHERE user_id = ?', [$pcId, $userId]);
                 }
                 $profile = $this->db->query(
-                    'SELECT organization_name, organization_type, address FROM recipient_profiles WHERE user_id = ?',
+                    'SELECT organization_name, address FROM recipient_profiles WHERE user_id = ?',
                     [$userId]
                 )->fetch() ?: [];
             } elseif ($role === 'donor') {
                 $this->db->query(
-                    'INSERT INTO donor_profiles (user_id, organization_name, contact_number, address) VALUES (?,?,?,?)',
-                    [$userId, $organization_name, $contact_number, $address]
+                    $donor_category_id
+                        ? 'INSERT INTO donor_profiles (user_id, organization_name, donor_category_id, contact_number, address) VALUES (?,?,?,?,?)'
+                        : 'INSERT INTO donor_profiles (user_id, organization_name, contact_number, address) VALUES (?,?,?,?)',
+                    $donor_category_id
+                        ? [$userId, $organization_name, $donor_category_id, $contact_number, $address]
+                        : [$userId, $organization_name, $contact_number, $address]
                 );
                 $profile = $this->db->query(
-                    'SELECT organization_name, donor_category, contact_number, address FROM donor_profiles WHERE user_id = ?',
+                    'SELECT organization_name, donor_category_id AS donor_category, contact_number, address FROM donor_profiles WHERE user_id = ?',
                     [$userId]
                 )->fetch() ?: [];
             } else {
@@ -255,6 +275,24 @@ class Auth {
                 [$userId]
             )->fetch();
             $this->db->commit();
+
+            // Notify all admins of new registration (donor/recipient)
+            try {
+                if (in_array($role, ['donor','recipient'])) {
+                    $admins = $this->db->query('SELECT user_id FROM users WHERE role = \"admin\"')->fetchAll();
+                    if ($admins) {
+                        $type = $role === 'recipient' ? 'new_recipient' : 'new_donor';
+                        $msg = ($role === 'recipient' ? 'New recipient registered: ' : 'New donor registered: ') . ($name ?: $email);
+                        foreach ($admins as $a) {
+                            $this->db->query(
+                                'INSERT INTO notifications (user_id, type, reference_type, reference_id, message, read_status, created_at) VALUES (?,?,?,?,?,0,NOW())',
+                                [(int)$a['user_id'], $type, 'user', $userId, $msg]
+                            );
+                        }
+                    }
+                }
+            } catch (Exception $e) { /* non-fatal */ }
+
             return array_merge($base ?: [], $profile ?: []);
         } catch (Exception $e) {
             $this->db->rollBack();
