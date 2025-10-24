@@ -81,13 +81,14 @@ try {
         if (strtolower($role) === 'donor') {
             $rows = $db->query(
                 'SELECT d.donation_id AS id, COALESCE(di.product_name, CONCAT("Batch (", COUNT(di2.donation_item_id), " items)")) AS name,
-                        COALESCE(di.product_category, NULL) AS type, d.created_at, d.batch_id,
+                        CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS type, d.created_at, d.batch_id,
                         CASE WHEN d.batch_id IS NULL THEN 0 ELSE 1 END AS is_group
                  FROM donations d
                  LEFT JOIN donation_items di ON di.donation_id = d.donation_id
+                 LEFT JOIN categories c ON c.category_id = di.category_id
                  LEFT JOIN donation_items di2 ON di2.donation_id = d.donation_id
                  WHERE d.deleted_at IS NULL AND d.donor_id = ?
-                 GROUP BY d.donation_id, di.product_name, di.product_category, d.created_at, d.batch_id
+                 GROUP BY d.donation_id, di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")), d.created_at, d.batch_id
                  ORDER BY d.created_at DESC
                  LIMIT 5',
                 [$userId]

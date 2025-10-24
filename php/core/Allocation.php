@@ -107,11 +107,16 @@ class Allocation
     {
         // Load available inventory with optional product join for tags
         $rows = $this->db->query(
-            "SELECT i.inventory_id, i.product_id, i.product_name, i.product_category, i.unit, i.quantity,
-                    COALESCE(NULLIF(TRIM(i.tags), ''), NULLIF(TRIM(p.tags), '')) AS tags
-             FROM inventory i
-             LEFT JOIN products p ON p.product_id = i.product_id
-             WHERE COALESCE(i.quantity,0) > 0",
+            "SELECT inv.inventory_id, NULL AS product_id, di.product_name,
+                    CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS product_category,
+                    COALESCE(u.label, u.code) AS unit,
+                    inv.quantity,
+                    NULL AS tags
+             FROM inventory inv
+             INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+             LEFT JOIN categories c ON c.category_id = di.category_id
+             LEFT JOIN units u ON u.unit_id = di.unit_id
+             WHERE COALESCE(inv.quantity,0) > 0",
             []
         )->fetchAll();
         // Normalize tags and index
@@ -180,7 +185,7 @@ class Allocation
                 $rid = (int)($a['recipient_id'] ?? 0);
                 if ($invId <= 0 || $qty <= 0 || $rid <= 0) continue;
                 // Deduct inventory (ensure available)
-                $cur = $this->db->query('SELECT quantity, product_name, product_category, unit FROM inventory WHERE inventory_id = ? FOR UPDATE', [$invId])->fetch();
+                $cur = $this->db->query('SELECT di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category, COALESCE(u.label, u.code) AS unit, inv.quantity FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id LEFT JOIN categories c ON c.category_id = di.category_id LEFT JOIN units u ON u.unit_id = di.unit_id WHERE inv.inventory_id = ? FOR UPDATE', [$invId])->fetch();
                 if (!$cur) continue;
                 $currentQty = (int)($cur['quantity'] ?? 0);
                 if ($currentQty < $qty) continue;
@@ -370,7 +375,7 @@ class Allocation
                 if ($name === '' || $need <= 0) continue;
                 // Gather matching inventory rows FIFO (by inventory_id ASC) with quantity > 0
                 $rows = $this->db->query(
-                    'SELECT inventory_id, quantity, product_name, product_category, unit FROM inventory WHERE COALESCE(quantity,0) > 0 AND product_name = ? AND (product_category = ? OR (? = "" AND product_category IS NULL)) AND (unit = ? OR (? = "" AND (unit IS NULL OR unit = ""))) ORDER BY inventory_id ASC',
+                    'SELECT inv.inventory_id, inv.quantity, di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category, COALESCE(u.label, u.code) AS unit FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id LEFT JOIN categories c ON c.category_id = di.category_id LEFT JOIN units u ON u.unit_id = di.unit_id WHERE COALESCE(inv.quantity,0) > 0 AND di.product_name = ? AND (CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) = ? OR (? = "")) AND (COALESCE(u.label, u.code) = ? OR (? = "")) ORDER BY inv.inventory_id ASC',
                     [$name, $cat, $cat, $unit, $unit]
                 )->fetchAll();
                 $idx = 0;
@@ -432,8 +437,9 @@ class Allocation
                         'SELECT inv.inventory_id
                            FROM inventory inv
                            INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                           LEFT JOIN categories c ON c.category_id = di.category_id
                           WHERE di.product_name = ?
-                            AND (di.product_category = ? OR ? = "")
+                            AND (CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) = ? OR ? = "")
                           ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
                           LIMIT 1',
                         [$name, $category, $category]
@@ -597,8 +603,9 @@ class Allocation
                 'SELECT inv.inventory_id
                    FROM inventory inv
                    INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                   LEFT JOIN categories c ON c.category_id = di.category_id
                   WHERE di.product_name = ?
-                    AND (di.product_category = ? OR ? IS NULL OR ? = "")
+                    AND (CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) = ? OR ? IS NULL OR ? = "")
                   ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
                   LIMIT 1',
                 [$name, $category, $category, $category]
@@ -647,18 +654,19 @@ class Allocation
                     'SELECT inv.inventory_id
                        FROM inventory inv
                        INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                       LEFT JOIN categories c ON c.category_id = di.category_id
                       WHERE di.product_name = ?
-                        AND (di.product_category = ? OR ? IS NULL OR ? = "")
+                        AND (CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) = ? OR ? IS NULL OR ? = "")
                       ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
                       LIMIT 1',
                     [$name, $cat, $cat, $cat]
                 )->fetch();
                 if (!$row){
-                    $row = $this->db->query('SELECT inv.inventory_id FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id WHERE di.product_name = ? ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC LIMIT 1', [$name])->fetch();
+                    $row = $this->db->query('SELECT inv.inventory_id FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id LEFT JOIN categories c ON c.category_id = di.category_id WHERE di.product_name = ? ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC LIMIT 1', [$name])->fetch();
                 }
                 if (!$row && strlen($name) >= 3){
                     $pattern = '%'.$name.'%';
-                    $row = $this->db->query('SELECT inv.inventory_id FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id WHERE di.product_name LIKE ? ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC LIMIT 1', [$pattern])->fetch();
+                    $row = $this->db->query('SELECT inv.inventory_id FROM inventory inv INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id LEFT JOIN categories c ON c.category_id = di.category_id WHERE di.product_name LIKE ? ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC LIMIT 1', [$pattern])->fetch();
                 }
                 if ($row){ $sets[] = 'inventory_id = ?'; $vals[] = (int)$row['inventory_id']; }
             }
@@ -734,11 +742,14 @@ class Allocation
                     ai.id,
                     ai.inventory_id,
                     ai.quantity,
-                    i.product_name,
-                    i.product_category,
-                    i.unit
+                    di.product_name,
+                    CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category,
+                    COALESCE(u.label, u.code) AS unit
                 FROM allocation_items ai
-                LEFT JOIN inventory i ON ai.inventory_id = i.inventory_id
+                LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
+                LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                LEFT JOIN categories c ON c.category_id = di.category_id
+                LEFT JOIN units u ON u.unit_id = di.unit_id
                 WHERE ai.allocation_id = ?
                 ORDER BY ai.id ASC
             ', [$aid])->fetchAll();

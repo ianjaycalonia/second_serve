@@ -203,8 +203,9 @@ try {
                                 'SELECT inv.inventory_id
                                    FROM inventory inv
                                    INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                                   LEFT JOIN categories c ON c.category_id = di.category_id
                                   WHERE di.product_name = ?
-                                    AND (di.product_category = ? OR ? IS NULL)
+                                    AND (CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) = ? OR ? IS NULL)
                                   ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
                                   LIMIT 1',
                                 [$name, $cat, $cat]
@@ -215,6 +216,7 @@ try {
                                     'SELECT inv.inventory_id
                                        FROM inventory inv
                                        INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                                       LEFT JOIN categories c ON c.category_id = di.category_id
                                       WHERE di.product_name = ?
                                       ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
                                       LIMIT 1',
@@ -228,6 +230,7 @@ try {
                                     'SELECT inv.inventory_id
                                        FROM inventory inv
                                        INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                                       LEFT JOIN categories c ON c.category_id = di.category_id
                                       WHERE di.product_name LIKE ?
                                       ORDER BY COALESCE(di.expiry_date, "9999-12-31") ASC, inv.added_at ASC
                                       LIMIT 1',
@@ -439,10 +442,13 @@ try {
                 foreach ($rows as $r){
                     $aid = (int)$r['allocation_id'];
                     $items = $db->query('SELECT ai.id, ai.inventory_id, ai.quantity,
-                                                 di.product_name, di.product_category, di.unit
+                                                 di.product_name,
+                                                 CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category,
+                                                 di.unit
                                            FROM allocation_items ai
                                            LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
                                            LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                                           LEFT JOIN categories c ON c.category_id = di.category_id
                                           WHERE ai.allocation_id = ?
                                           ORDER BY ai.id ASC', [$aid])->fetchAll() ?: [];
                     $out[] = [
@@ -508,10 +514,13 @@ try {
                     $aid = (int)$r['allocation_id'];
                     // Use normalized join via donation_items to fetch product fields
                     $items = $db->query('SELECT ai.id, ai.inventory_id, ai.quantity,
-                                                 di.product_name, di.product_category, di.unit
+                                                 di.product_name,
+                                                 CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category,
+                                                 di.unit
                                           FROM allocation_items ai
                                           LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
                                           LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                                          LEFT JOIN categories c ON c.category_id = di.category_id
                                           WHERE ai.allocation_id = ?
                                           ORDER BY ai.id ASC', [$aid])->fetchAll() ?: [];
                     $itemCount = is_array($items) ? count($items) : 0;
@@ -1027,11 +1036,12 @@ SQL);
                 $remaining = $qty;
                 $picked = [];
                 $params = [$itemName];
-                $sql = "SELECT inv.inventory_id, inv.quantity
+                $sql = "SELECT inv.inventory_id
                           FROM inventory inv
                           INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                          LEFT JOIN categories c ON c.category_id = di.category_id
                          WHERE di.product_name = ? AND inv.quantity > 0";
-                if ($category !== null && $category !== '') { $sql .= " AND di.product_category = ?"; $params[] = $category; }
+                if ($category !== null && $category !== '') { $sql .= " AND CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) = ?"; $params[] = $category; }
                 $sql .= " ORDER BY COALESCE(di.expiry_date, '9999-12-31') ASC, inv.added_at ASC, inv.inventory_id ASC";
                 $rows = $db->query($sql, $params)->fetchAll();
                 foreach ($rows as $r) {

@@ -543,6 +543,12 @@
     container.innerHTML = parts.join("");
   }
 
+  // Simple debounce for live search
+  function debounce(fn, delay = 300) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn.apply(null, args), delay); };
+  }
+
   function bindFilters() {
     // Pagination buttons
     const pag = document.getElementById("inventoryPagination");
@@ -655,8 +661,17 @@
         });
       }
     })();
-    // Do not auto-apply on change for filters/sorting/search; only on Apply
-    // Page size select remains immediate below
+    // Live search: independent from Apply button
+    const searchEl = document.getElementById("donationSearch");
+    if (searchEl) {
+      const doSearch = debounce(() => loadAndRender(1), 250);
+      searchEl.addEventListener("input", doSearch);
+      searchEl.addEventListener("keyup", (e) => {
+        if (e.key === "Enter") loadAndRender(1);
+      });
+    }
+
+    // Keep other filters/sorting on Apply; Page size select remains immediate below
     // Page size select
     const pageSize = document.getElementById("pageSizeSelect");
     if (pageSize) {

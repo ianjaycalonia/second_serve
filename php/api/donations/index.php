@@ -419,13 +419,13 @@ try {
             if ($categoryId !== null) {
                 $where .= " AND di.category_id = ?";
                 $params[] = $categoryId;
-            } else if ($category !== '') { // legacy label filtering
+            } else if ($category !== '') { // legacy label filtering via categories join
                 $catFull = preg_replace('/\s+/', ' ', trim($category));
                 $hasSecondary = (strpos($catFull, ' - ') !== false);
-                $where .= " AND (LOWER(di.product_category) = LOWER(?)";
+                $where .= " AND (LOWER(CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))) = LOWER(?)";
                 $params[] = $catFull;
                 if (!$hasSecondary) { // primary-only, include subcategories
-                    $where .= " OR LOWER(di.product_category) LIKE LOWER(?)";
+                    $where .= " OR LOWER(CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))) LIKE LOWER(?)";
                     $params[] = $catFull . ' - %';
                 }
                 $where .= ")";
@@ -434,6 +434,7 @@ try {
             $sql = "SELECT DISTINCT di.product_name AS name
                       FROM inventory inv
                       INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                      LEFT JOIN categories c ON c.category_id = di.category_id
                       $where
                       ORDER BY name ASC
                       LIMIT $limit";
@@ -455,16 +456,16 @@ try {
                 if ($category !== '') {
                     $catFull = preg_replace('/\s+/', ' ', trim($category));
                     $hasSecondary = (strpos($catFull, ' - ') !== false);
-                    $where .= " AND (LOWER(di.product_category) = LOWER(?)";
+                    $where .= " AND (LOWER(CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))) = LOWER(?)";
                     $params[] = $catFull;
                     if (!$hasSecondary) {
-                        $where .= " OR LOWER(di.product_category) LIKE LOWER(?)";
+                        $where .= " OR LOWER(CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))) LIKE LOWER(?)";
                         $params[] = $catFull . ' - %';
                     }
                     $where .= ")";
                 }
                 if ($q !== '') { $where .= " AND di.product_name LIKE ?"; $params[] = ('%'.$q.'%'); }
-                $rows = $db->query("SELECT DISTINCT di.product_name AS name FROM donation_items di $where ORDER BY name ASC LIMIT $limit", $params)->fetchAll();
+                $rows = $db->query("SELECT DISTINCT di.product_name AS name FROM donation_items di LEFT JOIN categories c ON c.category_id = di.category_id $where ORDER BY name ASC LIMIT $limit", $params)->fetchAll();
                 $names = array_map(function($r){ return trim((string)($r['name'] ?? '')); }, $rows ?: []);
                 if (is_array($names)) { $items = $names; }
             } catch (Exception $e) {
@@ -486,9 +487,9 @@ try {
             // Prefer categories from donation_items (normalized)
             if ($term !== '') {
                 $like = '%' . $term . '%';
-                $rows = $db->query("SELECT DISTINCT di.product_category AS category FROM donation_items di WHERE di.product_category IS NOT NULL AND di.product_category <> '' AND di.product_category LIKE ? ORDER BY category ASC", [$like])->fetchAll();
+                $rows = $db->query("SELECT DISTINCT CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category FROM donation_items di LEFT JOIN categories c ON c.category_id = di.category_id WHERE di.category_id IS NOT NULL AND CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) LIKE ? ORDER BY category ASC", [$like])->fetchAll();
             } else {
-                $rows = $db->query("SELECT DISTINCT di.product_category AS category FROM donation_items di WHERE di.product_category IS NOT NULL AND di.product_category <> '' ORDER BY category ASC")->fetchAll();
+                $rows = $db->query("SELECT DISTINCT CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category FROM donation_items di LEFT JOIN categories c ON c.category_id = di.category_id WHERE di.category_id IS NOT NULL ORDER BY category ASC")->fetchAll();
             }
             foreach ($rows as $r) {
                 $t = isset($r['category']) ? trim((string)$r['category']) : '';

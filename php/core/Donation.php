@@ -131,7 +131,7 @@ class Donation
                             u.name AS donor_name,
                             COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
                             di.product_name AS name,
-                            di.product_category AS type,
+                            CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type,
                             di.quantity,
                             di.expiry_date,
                             d.status,
@@ -141,7 +141,8 @@ class Donation
                         FROM donations d
                         LEFT JOIN users u ON u.user_id = d.donor_id
                         LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
-                        INNER JOIN donation_items di ON di.donation_id = d.donation_id" . $whereSqlSingles . "";
+                        INNER JOIN donation_items di ON di.donation_id = d.donation_id
+                        LEFT JOIN categories c ON c.category_id = di.category_id" . $whereSqlSingles . "";
 
             $sql = "SELECT * FROM (" . $sqlGrouped . ") g
                     UNION ALL
@@ -239,12 +240,12 @@ class Donation
         $limit = max(1, min(100, (int)$limit));
         $params = [];
         $where = ['d.deleted_at IS NULL'];
-        if ($category !== null && $category !== '') { $where[] = 'di.product_category = ?'; $params[] = $category; }
+        if ($category !== null && $category !== '') { $where[] = "CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) = ?"; $params[] = $category; }
         if ($q !== '') {
             $like = '%' . $q . '%';
             $where[] = 'di.product_name LIKE ?';
             $params[] = $like;
-            $sql = "SELECT DISTINCT di.product_name AS name FROM donation_items di INNER JOIN donations d ON d.donation_id = di.donation_id WHERE " . implode(' AND ', $where) . " ORDER BY di.product_name ASC LIMIT $limit";
+            $sql = "SELECT DISTINCT di.product_name AS name FROM donation_items di INNER JOIN donations d ON d.donation_id = di.donation_id LEFT JOIN categories c ON c.category_id = di.category_id WHERE " . implode(' AND ', $where) . " ORDER BY di.product_name ASC LIMIT $limit";
             $rows = $this->db->query($sql, $params)->fetchAll();
         } else {
             // Return most frequent names when no query provided

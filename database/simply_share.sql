@@ -321,23 +321,6 @@ INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `statu
   (5, 'Test Donor', 'testdonor@simplyshare.org', '$2y$10$oURfajvoYjiYIoJtNA8/MOTrzSveBLam35ucrlwWVMcj9aPDrJ22O', 'donor', 'approved', NOW(), NOW())
 ON DUPLICATE KEY UPDATE `role`='donor', `status`='approved';
 
- 
-
--- category_aliases: maps messy/raw labels from files to canonical categories
-CREATE TABLE `category_aliases` (
-  `alias_id` INT NOT NULL AUTO_INCREMENT,
-  `category_id` INT NOT NULL,
-  `raw_label` VARCHAR(255) NOT NULL,
-  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`alias_id`),
-  UNIQUE KEY `uq_alias_label` (`raw_label`),
-  KEY `ca_category_idx` (`category_id`),
-  CONSTRAINT `ca_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
-
--- Attach FK now that categories exists
--- (donations no longer references categories at header level)
-
 -- products (must be created before inventory)
 CREATE TABLE `products` (
   `product_id` int(11) NOT NULL AUTO_INCREMENT,
@@ -351,6 +334,41 @@ CREATE TABLE `products` (
   KEY `products_category_idx` (`category_id`),
   CONSTRAINT `products_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- Triggers to keep products.product_category synchronized with categories
+DELIMITER $$
+DROP TRIGGER IF EXISTS products_bi_sync_category $$
+CREATE TRIGGER products_bi_sync_category
+BEFORE INSERT ON products
+FOR EACH ROW
+BEGIN
+  IF NEW.category_id IS NOT NULL THEN
+    SET NEW.product_category = (SELECT primary_name FROM categories WHERE category_id = NEW.category_id LIMIT 1);
+  END IF;
+END $$
+
+DROP TRIGGER IF EXISTS products_bu_sync_category $$
+CREATE TRIGGER products_bu_sync_category
+BEFORE UPDATE ON products
+FOR EACH ROW
+BEGIN
+  IF NEW.category_id IS NOT NULL AND (OLD.category_id IS NULL OR NEW.category_id <> OLD.category_id) THEN
+    SET NEW.product_category = (SELECT primary_name FROM categories WHERE category_id = NEW.category_id LIMIT 1);
+  END IF;
+END $$
+
+DROP TRIGGER IF EXISTS categories_au_sync_products $$
+CREATE TRIGGER categories_au_sync_products
+AFTER UPDATE ON categories
+FOR EACH ROW
+BEGIN
+  IF NEW.primary_name <> OLD.primary_name THEN
+    UPDATE products
+    SET product_category = NEW.primary_name
+    WHERE category_id = NEW.category_id;
+  END IF;
+END $$
+DELIMITER ;
 
 -- donation_items (line items per donation) - normalized: use FKs for category and unit
 CREATE TABLE `donation_items` (
@@ -406,6 +424,29 @@ CREATE TABLE `inventory_movements` (
   CONSTRAINT `im_performed_by_fk` FOREIGN KEY (`performed_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `im_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- Triggers: enforce inventory_movements.donation_item_id consistency with inventory
+DELIMITER $$
+DROP TRIGGER IF EXISTS im_bi_set_donation_item $$
+CREATE TRIGGER im_bi_set_donation_item
+BEFORE INSERT ON inventory_movements
+FOR EACH ROW
+BEGIN
+  IF NEW.inventory_id IS NOT NULL THEN
+    SET NEW.donation_item_id = (SELECT donation_item_id FROM inventory WHERE inventory_id = NEW.inventory_id LIMIT 1);
+  END IF;
+END $$
+
+DROP TRIGGER IF EXISTS im_bu_set_donation_item $$
+CREATE TRIGGER im_bu_set_donation_item
+BEFORE UPDATE ON inventory_movements
+FOR EACH ROW
+BEGIN
+  IF NEW.inventory_id IS NOT NULL THEN
+    SET NEW.donation_item_id = (SELECT donation_item_id FROM inventory WHERE inventory_id = NEW.inventory_id LIMIT 1);
+  END IF;
+END $$
+DELIMITER ;
 
 -- Minimal messages table (direct messages only) with role-based trigger
 CREATE TABLE `messages` (
