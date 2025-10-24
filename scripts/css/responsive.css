@@ -84,8 +84,8 @@ canvas{ max-width: 100%; height: auto; }
   .rpool-scroll{ max-height: 40vh; overflow:auto; }
 }
 
-/* Icon-only buttons: increase tap area */
-.btn i, .dashboard-icon{ pointer-events: none; }
+/* Icon-only buttons: increase tap area (do not disable clicks on links) */
+.btn i, img.dashboard-icon{ pointer-events: none; }
 
 /* Modals: comfortable spacing on mobile */
 @media (max-width: 575.98px){
