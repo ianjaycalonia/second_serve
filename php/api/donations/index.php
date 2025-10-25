@@ -77,16 +77,14 @@ try {
         $payload['category_id'] = $catId;
         $payload['unit_id'] = $unitId;
 
-        // Validate required fields (expiry_date required); allow category via ID (preferred) or type label as fallback
+        // Validate required fields (expiry_date required). Category/unit/weight are optional and inferred server-side.
         $required = ['name','quantity','expiry_date'];
         foreach ($required as $f) {
             if (!isset($payload[$f]) || $payload[$f] === '') {
                 sendJson(['success' => false, 'error' => $f . ' is required'], 400);
             }
         }
-        if (!isset($payload['type']) && !$catId) {
-            sendJson(['success' => false, 'error' => 'category_id or type is required'], 400);
-        }
+        // Category/type no longer required
 
         // Enforce policy: no images at donation creation (images are uploaded by admin during Food Safety)
         $payload['image_url'] = null;
@@ -214,8 +212,8 @@ try {
                     }
                 } catch (Exception $e) { /* ignore label derivation failure */ }
             }
-            if (!$name || !$qty || $qty < 1 || !$expiry || ($typeVal === '' && !$catIdVal)) {
-                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, category (label or id), quantity (>=1), and expiry_date are required'], 400);
+            if (!$name || !$qty || $qty < 1 || !$expiry) {
+                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, quantity (>=1), and expiry_date are required'], 400);
             }
             $itemIds[] = $service->addItem($donationId, [
                 'product_category' => $typeVal,
@@ -231,11 +229,20 @@ try {
             ]);
         }
 
-        // Immediately add items to inventory (idempotent per donation item) so Product In appears without waiting for status changes
-        try {
-            (new Inventory())->addFromBatchId($batchId);
-        } catch (Exception $e) {
-            error_log('Inventory add from batch failed: ' . $e->getMessage());
+        // Do not add to inventory at creation time; inventory should reflect physical pickup events.
+
+        // Admins may still choose to mark completed; inventory will only be recorded on 'Picked Up'.
+        if ($role === 'admin') {
+            try {
+                $service->updateStatusByBatch($batchId, 'Completed');
+            } catch (Exception $e) {
+                error_log('Failed to auto-complete admin donation batch: ' . $e->getMessage());
+            }
+            try {
+                Database::getInstance()->query("UPDATE batches SET status = 'Completed' WHERE batch_id = ?", [$batchId]);
+            } catch (Exception $e) {
+                /* ignore batch status update errors */
+            }
         }
 
         // Notify all approved admins once for the batch submission
@@ -369,7 +376,10 @@ try {
         try {
             $db = Database::getInstance();
             $before = $db->query(
-                "SELECT donation_id AS id, product_name AS name, quantity, expiry_date FROM donations WHERE batch_id = ?",
+                "SELECT di.donation_item_id AS id, di.product_name AS name, di.quantity, di.expiry_date
+                   FROM donation_items di
+                   INNER JOIN donations d ON d.donation_id = di.donation_id
+                  WHERE d.batch_id = ?",
                 [$batchId]
             )->fetchAll();
             $byId = [];
@@ -624,8 +634,8 @@ try {
             $code = ($msg === 'Not found') ? 404 : 400;
             sendJson(['success' => false, 'error' => $msg], $code);
         }
-        // If moved to Picked Up or Completed, ensure inventory contains it
-        if ($status === 'Picked Up' || $status === 'Completed') {
+        // Only when moved to 'Picked Up', ensure inventory contains it
+        if ($status === 'Picked Up') {
             try { (new Inventory())->addFromDonationId($id); } catch (Exception $e) { error_log('Inventory add on status (single) failed: '.$e->getMessage()); }
         }
         // Stamp admin_in_charge on first admin action if not already set

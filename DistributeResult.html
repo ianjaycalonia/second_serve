@@ -506,15 +506,19 @@
           }
           function syncNotifyVisibility() {
             try {
-              var runBtn = document.getElementById("notifyRunBtn");
-              var hide = !runBtn || runBtn.classList.contains("d-none");
               var container = document.getElementById("resultContainer");
               if (!container) return;
               container
-                .querySelectorAll(".dr-notify-one")
-                .forEach(function (btn) {
-                  if (hide) btn.classList.add("d-none");
-                  else btn.classList.remove("d-none");
+                .querySelectorAll('tbody.dr-recipient[data-rec]')
+                .forEach(function (tb) {
+                  try {
+                    var rid = tb.getAttribute('data-rec') || '';
+                    var hasPending = !!tb.querySelector('tr[data-status="pending"]');
+                    var btn = container.querySelector('.dr-notify-one[data-rec="' + rid + '"]');
+                    if (!btn) return;
+                    if (hasPending) btn.classList.remove('d-none');
+                    else btn.classList.add('d-none');
+                  } catch (_) {}
                 });
             } catch (_) {}
           }
@@ -582,15 +586,19 @@
         }
         function syncNotifyVisibility() {
           try {
-            var runBtn = document.getElementById("notifyRunBtn");
-            var hide = !runBtn || runBtn.classList.contains("d-none");
             var container = document.getElementById("resultContainer");
             if (!container) return;
             container
-              .querySelectorAll(".dr-notify-one")
-              .forEach(function (btn) {
-                if (hide) btn.classList.add("d-none");
-                else btn.classList.remove("d-none");
+              .querySelectorAll('tbody.dr-recipient[data-rec]')
+              .forEach(function (tb) {
+                try {
+                  var rid = tb.getAttribute('data-rec') || '';
+                  var hasPending = !!tb.querySelector('tr[data-status="pending"]');
+                  var btn = container.querySelector('.dr-notify-one[data-rec="' + rid + '"]');
+                  if (!btn) return;
+                  if (hasPending) btn.classList.remove('d-none');
+                  else btn.classList.add('d-none');
+                } catch (_) {}
               });
           } catch (_) {}
         }
@@ -746,11 +754,19 @@
                     setTimeout(() => ensureButtons(), 100);
                     return;
                   }
-                  // Avoid duplicates per recipient
-                  if (
-                    actions.querySelector(`.dr-notify-one[data-rec="${rid}"]`)
-                  )
+                  // Dedupe existing buttons for this recipient (keep one, prefer the one under actions)
+                  const existingAll = container.querySelectorAll(`.dr-notify-one[data-rec="${rid}"]`);
+                  if (existingAll.length > 0) {
+                    // If one already exists under actions, remove others; else move first into actions and remove the rest
+                    let keep = actions.querySelector(`.dr-notify-one[data-rec="${rid}"]`);
+                    if (!keep) {
+                      keep = existingAll[0];
+                      try { actions.appendChild(keep); } catch(_){}
+                    }
+                    existingAll.forEach((btn) => { if (btn !== keep) { try { btn.remove(); } catch(_){} } });
                     return;
+                  }
+                  // Create a new button if none exists
                   const n = document.createElement("button");
                   var runBtn = document.getElementById("notifyRunBtn");
                   var hide = !runBtn || runBtn.classList.contains("d-none");

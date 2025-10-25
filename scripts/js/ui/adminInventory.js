@@ -27,7 +27,7 @@
       const rows = tbody.querySelectorAll("tr");
       for (const tr of rows) {
         const tds = tr.querySelectorAll("td");
-        if (tds.length < 7) continue;
+        if (tds.length < 8) continue;
         const nameText = (tds[0].textContent || "").trim();
         const catText = (tds[1].textContent || "").trim();
         if (nameText === itemName && catText === category) {
@@ -356,13 +356,14 @@
     } catch (_) {}
     if (!Array.isArray(filtered) || filtered.length === 0) {
       tbody.innerHTML =
-        '<tr><td colspan="7" class="text-center py-4">No inventory items match the current filters.</td></tr>';
+        '<tr><td colspan="8" class="text-center py-4">No inventory items match the current filters.</td></tr>';
       return;
     }
     const rows = filtered.map((r) => {
       const item = escapeHtml(r.item_name || "");
       const cat = escapeHtml(r.category || "");
       const qty = (r.total_quantity ?? r.quantity ?? 0) + "";
+      const unit = escapeHtml(r.unit || "");
       const soonest = escapeHtml(r.earliest_expiry || "—");
       const tagsRaw = r.tags_concat || r.tags || "" || "";
       const tags = escapeHtml(tagsRaw);
@@ -386,6 +387,7 @@
           <td>${item}</td>
           <td>${cat}</td>
           <td>${qty}</td>
+          <td>${unit || '—'}</td>
           <td>${soonest}</td>
           <td>${tags || "—"}</td>
           <td>${status}</td>
@@ -524,7 +526,7 @@
       console.error("Failed to load inventory:", err);
       const tbody = document.querySelector("main .table tbody");
       if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Failed to load inventory (${escapeHtml(
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Failed to load inventory (${escapeHtml(
           err.message
         )}). You must be logged in as Admin to view inventory.</td></tr>`;
       }

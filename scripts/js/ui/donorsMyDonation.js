@@ -25,6 +25,7 @@
           status || "Unknown"
         }</span>`;
     }
+  }
 
   function ensureToastContainer() {
     let cont = document.getElementById("globalToastContainer");
@@ -60,13 +61,13 @@
       }
     } catch (_) { try { console.error(message); } catch(_){} }
   }
-  }
 
   function batchItemRowTemplate(it) {
     const id = it.id || 0;
     const name = escapeHtml(it.name || "");
-    const qty = it.quantity ?? (id ? "" : 1);
+    const qty = (it.quantity !== undefined && it.quantity !== null && it.quantity !== '') ? it.quantity : 1;
     const expiry = escapeHtml(it.expiry_date || "");
+    const cost = (it && it.total_cost != null && it.total_cost !== "") ? Number(it.total_cost) : "";
     return `
       <div class="card p-3 border batch-item-row position-relative" data-id="${
         id > 0 ? id : ""
@@ -83,7 +84,11 @@
             <label class="form-label mb-1">Quantity</label>
             <input type="number" class="form-control batch-item-qty" min="1" value="${qty}" required>
           </div>
-          <div class="col-6 col-md-3">
+          <div class="col-6 col-md-2">
+            <label class="form-label mb-1">Cost (₱)</label>
+            <input type="number" class="form-control batch-item-cost" step="0.01" min="0" value="${cost}">
+          </div>
+          <div class="col-6 col-md-2">
             <label class="form-label mb-1">Expiry Date</label>
             <input type="date" class="form-control batch-item-expiry" value="${expiry}" required>
           </div>
@@ -93,21 +98,22 @@
 
   function initBatchItemSelect2($scope) {
     if (!window.jQuery || !window.jQuery.fn.select2) return;
-    const $parent = window.jQuery("#editBatchModal");
-    $scope.find("select.batch-item-name").each(function () {
+    const $parent = window.jQuery('#editBatchModal');
+    $scope.find('select.batch-item-name').each(function(){
       const $sel = window.jQuery(this);
-      if ($sel.hasClass("select2-hidden-accessible")) return;
+      if ($sel.hasClass('select2-hidden-accessible')) return;
+      const placeholder = $sel.data('placeholder') || 'Search or type new';
       $sel.select2({
         tags: true,
-        width: "100%",
-        placeholder: $sel.data("placeholder") || "Search or type new",
+        width: '100%',
+        placeholder,
         dropdownParent: $parent,
         minimumInputLength: 1,
         ajax: {
           delay: 250,
           url: `${API_BASE_URL}/donations/index.php/items`,
-          dataType: "json",
-          data: (params) => ({ q: params.term || "", limit: 20 }),
+          dataType: 'json',
+          data: (params) => ({ q: params.term || '', limit: 20 }),
           processResults: (data) => {
             const items = data && data.items ? data.items : [];
             return { results: items.map((n) => ({ id: n, text: n })) };
@@ -115,25 +121,22 @@
           cache: true,
         },
         createTag: function (params) {
-          const term = (params.term || "").trim();
-          if (term === "") return null;
+          const term = (params.term || '').trim();
+          if (term === '') return null;
           return { id: term, text: term, newTag: true };
         },
       });
-      const initial = $sel.data("initial") || "";
+      const initial = $sel.data('initial') || '';
       if (initial) {
-        if (
-          !$sel.find(`option[value="${initial.replace(/"/g, "&quot;")}"]`)
-            .length
-        ) {
+        if (!$sel.find(`option[value="${initial.replace(/"/g, '&quot;')}"]`).length) {
           $sel.append(new Option(initial, initial, true, true));
         }
-        $sel.val(initial).trigger("change");
+        $sel.val(initial).trigger('change');
       }
     });
   }
 
-  async function openBatchEditModal(batchId, category) {
+  async function openBatchEditModal(batchId) {
     try {
       const res = await fetch(
         `${API_BASE_URL}/donations/index.php/batch/${batchId}`,
@@ -149,9 +152,7 @@
       const items = data?.data?.items || [];
       const cont = document.getElementById("batchItemsContainer");
       cont.innerHTML = items.map((it) => batchItemRowTemplate(it)).join("");
-      if (window.jQuery) {
-        initBatchItemSelect2(window.jQuery(cont));
-      }
+      if (window.jQuery) { initBatchItemSelect2(window.jQuery(cont)); }
       // Initialize tooltips for remove buttons
       try {
         const tooltipTriggerList = Array.prototype.slice.call(
@@ -166,9 +167,6 @@
         /* ignore */
       }
       document.getElementById("editBatchId").value = batchId;
-      if (category) {
-        document.getElementById("editBatchCategory").value = category;
-      }
       const m = new bootstrap.Modal(document.getElementById("editBatchModal"));
       m.show();
     } catch (e) {
@@ -183,7 +181,6 @@
     if (!btn) return;
     btn.addEventListener("click", async function () {
       const batchId = document.getElementById("editBatchId").value;
-      const type = document.getElementById("editBatchCategory").value;
       const rows = document.querySelectorAll(
         "#batchItemsContainer .batch-item-row"
       );
@@ -192,9 +189,11 @@
         const idAttr = row.getAttribute("data-id");
         const id = idAttr ? parseInt(idAttr, 10) : 0;
         const name = window.jQuery
-          ? String(window.jQuery(row).find(".batch-item-name").val() || "")
-          : "";
+          ? String(window.jQuery(row).find('.batch-item-name').val() || '')
+          : (row.querySelector('.batch-item-name')?.value || '');
         const qty = parseInt(row.querySelector(".batch-item-qty").value, 10);
+        const costStr = (row.querySelector(".batch-item-cost")?.value || "").trim();
+        const cost = costStr === "" ? null : Number(costStr);
         const expiry = row.querySelector(".batch-item-expiry").value;
         if (!name || !qty || qty < 1 || !expiry) {
           showError("Please ensure all items have name, quantity (>=1), and expiry.");
@@ -205,6 +204,7 @@
           name,
           quantity: qty,
           expiry_date: expiry,
+          total_cost: cost,
         });
       }
       btn.disabled = true;
@@ -218,7 +218,7 @@
               "X-HTTP-Method-Override": "PUT",
             },
             credentials: "include",
-            body: JSON.stringify({ type, items }),
+            body: JSON.stringify({ items }),
           }
         );
         const text = await res.text();
@@ -331,7 +331,7 @@
     if (!tbody) return;
     if (!groups.length) {
       tbody.innerHTML =
-        '<tr><td colspan="5" class="text-center">No donations logged yet.</td></tr>';
+        '<tr><td colspan="4" class="text-center">No donations logged yet.</td></tr>';
       return;
     }
 
@@ -383,7 +383,7 @@
             </td>
           </tr>
           <tr class="child-container d-none" data-batch-id="${group.batch_id}">
-            <td colspan="5" class="p-0">
+            <td colspan="4" class="p-0">
               <table class="table table-sm mb-0">
                 <thead>
                   <tr class="table-light">
@@ -485,20 +485,20 @@
     eventsBound = true;
 
     function initEditNameSelect2() {
-      const $sel = window.jQuery && window.jQuery("#editNameSelect");
+      const $sel = window.jQuery && window.jQuery('#editNameSelect');
       if (!$sel || !$sel.length || !window.jQuery.fn.select2) return;
-      if ($sel.hasClass("select2-hidden-accessible")) return; // already
+      if ($sel.hasClass('select2-hidden-accessible')) return; // already
       $sel.select2({
         tags: true,
-        width: "100%",
-        placeholder: $sel.data("placeholder") || "Search or type new",
-        dropdownParent: window.jQuery("#editDonationModal"),
+        width: '100%',
+        placeholder: $sel.data('placeholder') || 'Search or type new',
+        dropdownParent: window.jQuery('#editDonationModal'),
         minimumInputLength: 1,
         ajax: {
           delay: 250,
           url: `${API_BASE_URL}/donations/index.php/items`,
-          dataType: "json",
-          data: (params) => ({ q: params.term || "", limit: 20 }),
+          dataType: 'json',
+          data: (params) => ({ q: params.term || '', limit: 20 }),
           processResults: (data) => {
             const items = data && data.items ? data.items : [];
             return { results: items.map((n) => ({ id: n, text: n })) };
@@ -506,8 +506,8 @@
           cache: true,
         },
         createTag: function (params) {
-          const term = (params.term || "").trim();
-          if (term === "") return null;
+          const term = (params.term || '').trim();
+          if (term === '') return null;
           return { id: term, text: term, newTag: true };
         },
       });
@@ -556,7 +556,6 @@
       const editBtn = t.closest(".edit-donation");
       if (editBtn) {
         const id = editBtn.getAttribute("data-id");
-        const type = editBtn.getAttribute("data-type") || "";
         const name = editBtn.getAttribute("data-name") || "";
         const qty = editBtn.getAttribute("data-qty") || "";
         const expiry = editBtn.getAttribute("data-expiry") || "";
@@ -564,20 +563,23 @@
           document.getElementById("editDonationModal")
         );
         document.getElementById("editDonationId").value = id;
-        document.getElementById("editType").value = type;
-        // Initialize select2 and set current value
+        // Initialize Select2 and set current value
         initEditNameSelect2();
         if (window.jQuery) {
-          const $sel = window.jQuery("#editNameSelect");
-          // Ensure option exists for current name so it can be selected
-          const escaped = name.replace(/"/g, "&quot;");
+          const $sel = window.jQuery('#editNameSelect');
+          const escaped = name.replace(/"/g, '&quot;');
           if (!$sel.find(`option[value="${escaped}"]`).length) {
             $sel.append(new Option(name, name, true, true));
           }
-          $sel.val(name).trigger("change");
+          $sel.val(name).trigger('change');
+        } else {
+          const sel = document.getElementById('editNameSelect');
+          if (sel) sel.value = name;
         }
         document.getElementById("editQuantity").value = qty;
         document.getElementById("editExpiry").value = expiry || "";
+        // Cost is not available from list payload; leave blank for optional update
+        const costEl = document.getElementById("editCost"); if (costEl) costEl.value = "";
         m.show();
         return;
       }
@@ -617,8 +619,7 @@
       const editBatchBtn = t.closest(".edit-batch");
       if (editBatchBtn) {
         const batchId = editBatchBtn.getAttribute("data-batch-id");
-        const category = editBatchBtn.getAttribute("data-category") || "";
-        openBatchEditModal(batchId, category);
+        openBatchEditModal(batchId);
         return;
       }
 
@@ -646,9 +647,7 @@
             expiry_date: "",
           })
         );
-        if (window.jQuery) {
-          initBatchItemSelect2(window.jQuery(cont));
-        }
+        if (window.jQuery) { initBatchItemSelect2(window.jQuery(cont)); }
         // Initialize tooltip for the newly added remove button
         try {
           const lastCard = cont.lastElementChild;
@@ -674,13 +673,13 @@
         const id = document.getElementById("editDonationId").value;
         const expiryVal = document.getElementById("editExpiry").value;
         const payload = {
-          type: document.getElementById("editType").value,
           name: (window.jQuery
-            ? String(window.jQuery("#editNameSelect").val() || "")
-            : ""
+            ? String(window.jQuery('#editNameSelect').val() || '')
+            : String(document.getElementById('editNameSelect')?.value || '')
           ).trim(),
           quantity: parseInt(document.getElementById("editQuantity").value, 10),
           expiry_date: expiryVal,
+          total_cost: (function(){ const v = (document.getElementById("editCost")?.value||"").trim(); return v===""? null : Number(v); })(),
         };
         if (!payload.name || !payload.quantity || payload.quantity < 1 || !expiryVal) {
           showError("Please provide a valid name, quantity, and expiry date.");

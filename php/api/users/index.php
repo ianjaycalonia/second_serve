@@ -26,6 +26,14 @@ $payload = sanitize(getJsonInput());
 
 try {
     switch ($action) {
+        case 'createDonor':
+            requireRole(['admin']);
+            handleCreateDonor($payload);
+            break;
+        case 'createRecipient':
+            requireRole(['admin']);
+            handleCreateRecipient($payload);
+            break;
         case 'getProfile':
             requireAuth();
             handleGetProfile();
@@ -170,4 +178,41 @@ function handleImportDonors(array $payload) {
     $svc = new User();
     $summary = $svc->importDonors($rows);
     sendJson(['success' => true, 'data' => $summary]);
+}
+
+function handleCreateDonor(array $payload) {
+    // Accept minimal fields: organization_name or name required
+    $svc = new User();
+    $res = $svc->adminCreateDonor([
+        'organization_name' => $payload['organization_name'] ?? ($_POST['organization_name'] ?? null),
+        'name' => $payload['name'] ?? ($_POST['name'] ?? null),
+        'email' => $payload['email'] ?? ($_POST['email'] ?? null),
+        'contact_number' => $payload['contact_number'] ?? ($_POST['contact_number'] ?? null),
+        'address' => $payload['address'] ?? ($_POST['address'] ?? null),
+        'donor_category_id' => isset($payload['donor_category_id']) ? $payload['donor_category_id'] : ($_POST['donor_category_id'] ?? null),
+        'notes' => $payload['notes'] ?? ($_POST['notes'] ?? null),
+    ]);
+    sendJson(['success' => true, 'data' => $res]);
+}
+
+function handleCreateRecipient(array $payload) {
+    // Accept minimal fields: organization_name or name required
+    $svc = new User();
+    $res = $svc->adminCreateRecipient([
+        'organization_name' => $payload['organization_name'] ?? ($_POST['organization_name'] ?? null),
+        'name' => $payload['name'] ?? ($_POST['name'] ?? null),
+        'email' => $payload['email'] ?? ($_POST['email'] ?? null),
+        'contact_person' => $payload['contact_person'] ?? ($_POST['contact_person'] ?? null),
+        'position_designation' => $payload['position_designation'] ?? ($_POST['position_designation'] ?? null),
+        'contact_number' => $payload['contact_number'] ?? ($_POST['contact_number'] ?? null),
+        'address' => $payload['address'] ?? ($_POST['address'] ?? null),
+        'beneficiary_category_id' => isset($payload['beneficiary_category_id']) ? $payload['beneficiary_category_id'] : ($_POST['beneficiary_category_id'] ?? null),
+        'total_residents' => $payload['total_residents'] ?? ($_POST['total_residents'] ?? null),
+        'age_group' => $payload['age_group'] ?? ($_POST['age_group'] ?? null),
+        'male_count' => $payload['male_count'] ?? ($_POST['male_count'] ?? null),
+        'female_count' => $payload['female_count'] ?? ($_POST['female_count'] ?? null),
+        'external_id' => $payload['external_id'] ?? ($_POST['external_id'] ?? null),
+        'tags' => $payload['tags'] ?? ($_POST['tags'] ?? null),
+    ]);
+    sendJson(['success' => true, 'data' => $res]);
 }

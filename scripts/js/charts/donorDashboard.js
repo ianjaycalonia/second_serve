@@ -291,43 +291,7 @@
     const $addItemBtn = $("#addItemBtn");
     const $datalist = $("#itemsDatalist");
 
-    function initRowUnitSelect2($row){
-      const $unit = $row.find('.item-unit');
-      if (!$unit.length || !$.fn.select2) return;
-      if ($unit.hasClass('select2-hidden-accessible')) return;
-      $unit.select2({
-        width: '100%',
-        placeholder: 'Select unit (optional)',
-        dropdownParent: $modal,
-        allowClear: true,
-        minimumInputLength: 0,
-        ajax: {
-          url: `${TAXO_BASE_URL}/units`,
-          dataType: 'json',
-          delay: 250,
-          data: function(params){ return { q: params.term || '', active: 1 }; },
-          processResults: function(data){
-            const items = Array.isArray(data?.items) ? data.items : [];
-            return { results: items.map(u => ({ id: u.unit_id, text: u.label || u.code })) };
-          },
-          xhrFields: { withCredentials: true },
-          cache: true,
-        }
-      });
-      // When unit is selected, lock it: keep only that option and disable control
-      $unit.on('select2:select', function (e) {
-        const data = $unit.select2('data');
-        if (Array.isArray(data) && data.length) {
-          const sel = data[0];
-          // Replace options with one selected option
-          $unit.find('option').remove();
-          const opt = new Option(sel.text, sel.id, true, true);
-          $unit.append(opt).trigger('change.select2');
-          // Disable to prevent further changes
-          $unit.prop('disabled', true);
-        }
-      });
-    }
+    // Unit selection removed from donor modal
 
     // No image upload for donors anymore
 
@@ -378,64 +342,6 @@
       });
     }
 
-    // When category changes, clear the item name so results are scoped and prompt suggestions
-    $itemsContainer.on("change", ".item-cat", function () {
-      const $row = $(this).closest(".item-row");
-      const $name = $row.find(".item-name-select");
-      $name.val(null).trigger("change");
-      // If select2 is initialized, open and trigger search to load suggestions for the selected category
-      if ($name.hasClass('select2-hidden-accessible')) {
-        $name.select2('open');
-        setTimeout(()=>{
-          const $search = $(".select2-container--open .select2-search__field");
-          if ($search.length) { $search.trigger('input'); }
-        }, 0);
-      }
-    });
-
-    function initRowCategorySelect2($row) {
-      const $cat = $row.find(".item-cat");
-      if (!$cat.length || !$.fn.select2) return;
-      // If already initialized, skip
-      if ($cat.hasClass("select2-hidden-accessible")) return;
-      $cat.select2({
-        width: "100%",
-        placeholder: "Select category",
-        dropdownParent: $modal,
-        tags: false,
-        allowClear: true,
-        minimumInputLength: 0,
-        ajax: {
-          url: `${TAXO_BASE_URL}/categories`,
-          dataType: "json",
-          delay: 250,
-          data: function (params){
-            return { q: params.term || "", active: 1 };
-          },
-          processResults: function (data) {
-            const items = Array.isArray(data?.items) ? data.items : [];
-            return {
-              results: items.map((c) => {
-                const label = c?.secondary_name
-                  ? `${c.primary_name} - ${c.secondary_name}`
-                  : `${c.primary_name}`;
-                return { id: c.category_id, text: label };
-              }),
-            };
-          },
-          xhrFields: { withCredentials: true },
-          cache: true,
-        },
-      });
-      // When opened and no options loaded yet, trigger an initial query
-      $cat.on("select2:open", function () {
-        const $search = $(".select2-container--open .select2-search__field");
-        if ($search.length) {
-          $search.trigger("input");
-        }
-      });
-    }
-
     function setSubmitting(isLoading) {
       if (isLoading) {
         $submitBtn
@@ -458,13 +364,6 @@
           <div class="col-12">
             <div class="row g-3">
               <div class="col-6">
-                <label class="form-label mb-1">Category</label>
-                <select class="form-select form-select-sm item-cat" required>
-                  <option value="">Select category</option>
-                </select>
-                <div class="invalid-feedback">Category is required.</div>
-              </div>
-              <div class="col-6">
                 <label class="form-label mb-1">Item Name</label>
                   <select
                     class="form-select item-name-select"
@@ -473,34 +372,16 @@
                   ></select>
                   <div class="invalid-feedback">Item name is required.</div>
               </div>
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="row g-3">
               <div class="col-6">
                 <label class="form-label mb-1">Quantity</label>
                 <input type="number" class="form-control form-control-sm item-qty" min="1" required />
                 <div class="invalid-feedback">Min 1</div>
               </div>
-              <div class="col-6">
-                <label class="form-label mb-1">Unit</label>
-                <select class="form-select form-select-sm item-unit"></select>
-              </div>
             </div>
           </div>
           <div class="col-12">
             <div class="row g-3">
-              <div class="col-4">
-                <label class="form-label mb-1">Weight (kg)</label>
-                <input
-                  type="number"
-                  step="0.001"
-                  min="0"
-                  class="form-control form-control-sm item-weight"
-                  placeholder="e.g., 2.5"
-                />
-              </div>
-              <div class="col-4">
+              <div class="col-6">
                 <label class="form-label mb-1">Cost (₱)</label>
                 <input
                   type="number"
@@ -510,7 +391,7 @@
                   placeholder="e.g., 150.00"
                 />
               </div>
-              <div class="col-4">
+              <div class="col-6">
                 <label class="form-label">Expiry Date</label>
                 <input type="date" class="form-control form-control-sm item-expiry" required />
                 <div class="invalid-feedback">Expiry date is required.</div>
@@ -526,15 +407,8 @@
               placeholder="Optional notes for this item"
             />
           </div>
-          
-          <div
-            class="d-flex justify-content-end align-items-center"
-          >
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-danger d-flex align-items-center gap-2"
-              aria-label="Remove item"
-            >
+          <div class="d-flex justify-content-end align-items-center">
+            <button type="button" class="btn btn-sm btn-outline-danger d-flex align-items-center gap-2" aria-label="Remove item">
               <i class="bi bi-trash"></i>
               <span>Remove Item</span>
             </button>
@@ -548,9 +422,7 @@
       const id = __rowId++;
       $itemsContainer.append(itemRowTemplate(id));
       const $row = $itemsContainer.find(`.item-row[data-id="${id}"]`);
-      initRowCategorySelect2($row);
       initSelect2($row.find(".item-name-select"));
-      initRowUnitSelect2($row);
     }
     function removeItemRow(btn) {
       $(btn).closest(".item-row").remove();
@@ -579,7 +451,6 @@
     function validateForm() {
       let ok = true;
       $form.find(".is-invalid").removeClass("is-invalid");
-      // Top-level category is optional; per-item categories are required instead
       $("#donationType").removeClass("is-invalid");
       // At least one item row
       const rows = $itemsContainer.find(".item-row");
@@ -592,7 +463,6 @@
         const name = String($row.find(".item-name-select").val() || "").trim();
         const qty = parseInt($row.find(".item-qty").val(), 10);
         const expiry = String($row.find(".item-expiry").val() || "").trim();
-        const cat = String($row.find(".item-cat").val() || "").trim();
         if (!name || name.length < 1) {
           $row.find(".item-name-select").addClass("is-invalid");
           ok = false;
@@ -603,10 +473,6 @@
         }
         if (!expiry) {
           $row.find(".item-expiry").addClass("is-invalid");
-          ok = false;
-        }
-        if (!cat) {
-          $row.find(".item-cat").addClass("is-invalid");
           ok = false;
         }
       });
@@ -626,34 +492,9 @@
           String($row.find(".item-name-select").val() || "").trim()
         );
         fd.append("quantity[]", $row.find(".item-qty").val());
-        const unitId = String($row.find(".item-unit").val() || "").trim();
-        let unitText = '';
-        try {
-          const ud = $row.find('.item-unit').select2('data');
-          if (Array.isArray(ud) && ud.length && ud[0] && ud[0].text) unitText = String(ud[0].text).trim();
-        } catch (_) {}
-        if (unitText) fd.append("unit[]", unitText);
-        if (unitId) fd.append("unit_id[]", unitId);
         const expiry = $row.find(".item-expiry").val();
         fd.append("expiry_date[]", expiry);
-        // per-item fields: send both label (type[]) and stable id (category_id[])
-        const catId = String($row.find(".item-cat").val() || "").trim();
-        let catLabel = '';
-        try {
-          const data = $row.find('.item-cat').select2('data');
-          if (Array.isArray(data) && data.length && data[0] && data[0].text) {
-            catLabel = String(data[0].text).trim();
-          }
-        } catch(_) {
-          const opt = $row.find('.item-cat option:selected');
-          if (opt && opt.length) { catLabel = String(opt.text() || '').trim(); }
-        }
-        if (catLabel) { fd.append("type[]", catLabel); }
-        if (catId) { fd.append("category_id[]", catId); }
-        const w = $row.find(".item-weight").val();
-        if (w !== null && w !== undefined && String(w) !== "")
-          fd.append("total_weight[]", w);
-        else fd.append("total_weight[]", "");
+        // No category/unit/weight fields submitted; backend infers them by item name
         const c = $row.find(".item-cost").val();
         if (c !== null && c !== undefined && String(c) !== "")
           fd.append("total_cost[]", c);
@@ -820,12 +661,10 @@
       if ($itemsContainer.find(".item-row").length === 0) addItemRow();
       $itemsContainer.find(".item-row").each(function () {
         const $row = $(this);
-        initRowCategorySelect2($row);
         const $name = $row.find(".item-name-select");
         if ($name.length && !$name.hasClass("select2-hidden-accessible")) {
           initSelect2($name);
         }
-        initRowUnitSelect2($row);
       });
     });
 
@@ -845,8 +684,6 @@
     fetchHistory(true);
 
     // If content exists pre-open, ensure row selects are initialized
-    $itemsContainer.find(".item-row").each(function () {
-      initRowCategorySelect2($(this));
-    });
+    // No category/unit initialization needed on ready
   });
 })();

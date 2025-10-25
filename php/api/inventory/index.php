@@ -302,19 +302,31 @@ try {
         $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
         if ($groupMode === 'merge') {
-            // Group by item_name + category
+            // Group by item_name + category + expiry bucket so expired lots stay separate
             $countSql = "SELECT COUNT(*) AS n FROM (
                 SELECT 1 FROM inventory inv
                 INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
                 LEFT JOIN categories c ON c.category_id = di.category_id
                 INNER JOIN donations d ON d.donation_id = di.donation_id
-                $whereSql GROUP BY di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))
+                $whereSql GROUP BY di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')),
+                    CASE
+                        WHEN di.expiry_date IS NULL THEN 'no-expiry'
+                        WHEN di.expiry_date < CURDATE() THEN 'expired'
+                        WHEN di.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN 'soon'
+                        ELSE 'fresh'
+                    END
             ) x";
             $total = (int)($db->query($countSql, $params)->fetch()['n'] ?? 0);
 
             $sql = "SELECT 
                         di.product_name AS item_name,
                         CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category,
+                        CASE
+                            WHEN di.expiry_date IS NULL THEN 'no-expiry'
+                            WHEN di.expiry_date < CURDATE() THEN 'expired'
+                            WHEN di.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN 'soon'
+                            ELSE 'fresh'
+                        END AS expiry_bucket,
                         SUM(inv.quantity) AS total_quantity,
                         MIN(di.expiry_date) AS earliest_expiry,
                         MIN(inv.added_at) AS first_added_at,
@@ -328,24 +340,32 @@ try {
                     LEFT JOIN units u ON u.unit_id = di.unit_id
                     INNER JOIN donations d ON d.donation_id = di.donation_id
                     $whereSql
-                    GROUP BY di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))
-                    ORDER BY COALESCE(MIN(di.expiry_date), '9999-12-31') ASC, di.product_name ASC
+                    GROUP BY di.product_name, CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')),
+                        CASE
+                            WHEN di.expiry_date IS NULL THEN 'no-expiry'
+                            WHEN di.expiry_date < CURDATE() THEN 'expired'
+                            WHEN di.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN 'soon'
+                            ELSE 'fresh'
+                        END
+                    ORDER BY FIELD(expiry_bucket, 'expired','soon','fresh','no-expiry'), COALESCE(MIN(di.expiry_date), '9999-12-31'), item_name ASC
                     LIMIT $limit OFFSET $offset";
             $rows = $db->query($sql, $params)->fetchAll();
             // Derive status using earliest_expiry
-            $today = new DateTime('today');
             foreach ($rows as &$r) {
-                $status = 'In Stock';
-                if (!empty($r['earliest_expiry'])) {
-                    try {
-                        $exp = new DateTime($r['earliest_expiry']);
-                        if ($exp < $today) {
-                            $status = 'Expired';
-                        } else {
-                            $diff = (int)$today->diff($exp)->format('%r%a');
-                            if ($diff >= 0 && $diff <= 3) { $status = 'Expiring Soon'; }
-                        }
-                    } catch (Exception $e) { /* ignore */ }
+                $bucket = isset($r['expiry_bucket']) ? (string)$r['expiry_bucket'] : '';
+                switch ($bucket) {
+                    case 'expired':
+                        $status = 'Expired';
+                        break;
+                    case 'soon':
+                        $status = 'Expiring Soon';
+                        break;
+                    default:
+                        $status = 'In Stock';
+                        break;
+                }
+                if ($bucket === 'no-expiry') {
+                    $r['earliest_expiry'] = null;
                 }
                 $r['derived_status'] = $status;
             }

@@ -220,15 +220,7 @@
                         <option>All</option>
                       </select>
                     </div>
-                    <div class="col-6">
-                      <label class="form-label mb-1" for="categorySelectMobile"
-                        >Type of Item</label
-                      >
-                      <select
-                        id="categorySelectMobile"
-                        class="form-select form-select-sm"
-                      ></select>
-                    </div>
+                    
                     <div class="col-6">
                       <label class="form-label mb-1" for="statusSelectMobile"
                         >Status</label
@@ -353,7 +345,6 @@
           >
             <thead class="table-light">
               <tr>
-                <th>Category</th>
                 <th>Items Donated</th>
                 <th>Status</th>
                 <th>Pickup Dates</th>
@@ -362,7 +353,7 @@
             </thead>
             <tbody>
               <tr>
-                <td colspan="5" class="text-center">
+                <td colspan="4" class="text-center">
                   No donations logged yet.
                 </td>
               </tr>
@@ -458,19 +449,6 @@
             <form id="editDonationForm">
               <input type="hidden" id="editDonationId" />
               <div class="mb-3">
-                <label class="form-label">Category</label>
-                <select class="form-select" id="editType">
-                  <option value="Rice">Rice</option>
-                  <option value="Canned Goods">Canned Goods</option>
-                  <option value="Frozen Meat">Frozen Meat</option>
-                  <option value="Bread &amp; Pastries">
-                    Bread &amp; Pastries
-                  </option>
-                  <option value="Beverages">Beverages</option>
-                  <option value="Snacks">Snacks</option>
-                </select>
-              </div>
-              <div class="mb-3">
                 <label class="form-label">Name</label>
                 <select
                   class="form-select"
@@ -487,6 +465,16 @@
                   class="form-control"
                   id="editQuantity"
                   required
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Cost (₱)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="editCost"
                 />
               </div>
               <div class="mb-3">
@@ -626,8 +614,7 @@
             <div>
               <h5 class="modal-title" id="editBatchModalLabel">Edit Batch</h5>
               <div class="text-muted small">
-                Update the category and items in this batch. Expiry date is
-                required for all.
+                Update the items in this batch. Expiry date is required for all.
               </div>
             </div>
             <button
@@ -639,23 +626,6 @@
           </div>
           <div class="modal-body pt-3">
             <input type="hidden" id="editBatchId" />
-            <div class="row g-3 mb-3">
-              <div class="col-12 col-md-6">
-                <label for="editBatchCategory" class="form-label"
-                  >Category</label
-                >
-                <select id="editBatchCategory" class="form-select" required>
-                  <option value="Rice">Rice</option>
-                  <option value="Canned Goods">Canned Goods</option>
-                  <option value="Frozen Meat">Frozen Meat</option>
-                  <option value="Bread &amp; Pastries">
-                    Bread &amp; Pastries
-                  </option>
-                  <option value="Beverages">Beverages</option>
-                  <option value="Snacks">Snacks</option>
-                </select>
-              </div>
-            </div>
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label mb-0">Batch Items</label>
               <button

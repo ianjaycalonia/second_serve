@@ -286,7 +286,7 @@ class User
     }
 
     // Create a recipient user and optional recipient profile. Returns new user_id
-    private function createRecipient(array $data): int
+    private function createRecipient(array $data, ?string &$plainPassword = null): int
     {
         // Prefer explicit name; if missing, fall back to contact_person; else organization_name
         $name = $data['name'] ?? ($data['contact_person'] ?? ($data['organization_name'] ?? 'Recipient'));
@@ -301,6 +301,7 @@ class User
         // Use a fixed default password for imported recipients per requirements
         $plain = 'recipient123';
         $hash = password_hash($plain, PASSWORD_DEFAULT);
+        $plainPassword = $plain;
 
         // Compute next user_id explicitly (schema may not have AUTO_INCREMENT)
         $row = $this->db->query('SELECT COALESCE(MAX(user_id),0)+1 AS next_id FROM users')->fetch();
@@ -324,6 +325,9 @@ class User
         $maleCount = isset($data['male_count']) && $data['male_count'] !== '' ? (int)$data['male_count'] : null;
         $femaleCount = isset($data['female_count']) && $data['female_count'] !== '' ? (int)$data['female_count'] : null;
         $externalId = $data['external_id'] ?? null;
+        $beneficiaryCategoryId = isset($data['beneficiary_category_id']) && $data['beneficiary_category_id'] !== ''
+            ? (int)$data['beneficiary_category_id']
+            : null;
         // Derive tags automatically (behind-the-scenes; editable later by admin)
         $derivedTags = $this->deriveRecipientTags([
             'organization_type' => $organizationType,
@@ -334,7 +338,7 @@ class User
         ]);
         $this->db->query(
             "INSERT INTO recipient_profiles (user_id, organization_name, beneficiary_category_id, tags, address, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [$userId, $organization, null, $derivedTags, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
+            [$userId, $organization, $beneficiaryCategoryId, $derivedTags, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
         );
 
         // Create a primary contact if contact info is provided and set as primary
@@ -348,6 +352,39 @@ class User
         }
 
         return $userId;
+    }
+
+    public function adminCreateDonor(array $data): array
+    {
+        $org = isset($data['organization_name']) ? trim((string)$data['organization_name']) : '';
+        $name = isset($data['name']) ? trim((string)$data['name']) : '';
+        if ($org === '' && $name === '') {
+            throw new Exception('organization_name or name is required');
+        }
+        if (isset($data['donor_category_id']) && !isset($data['donor_category'])) {
+            $data['donor_category'] = $data['donor_category_id'];
+        }
+        $plain = null;
+        $userId = $this->createDonor($data, $plain);
+        return [
+            'user_id' => $userId,
+            'temporary_password' => $plain,
+        ];
+    }
+
+    public function adminCreateRecipient(array $data): array
+    {
+        $org = isset($data['organization_name']) ? trim((string)$data['organization_name']) : '';
+        $name = isset($data['name']) ? trim((string)$data['name']) : '';
+        if ($org === '' && $name === '') {
+            throw new Exception('organization_name or name is required');
+        }
+        $plain = null;
+        $userId = $this->createRecipient($data, $plain);
+        return [
+            'user_id' => $userId,
+            'temporary_password' => $plain,
+        ];
     }
 
     // Create a recipient contact row
@@ -468,7 +505,7 @@ class User
     }
 
     // Create a donor user and optional donor profile. Returns new user_id
-    private function createDonor(array $data): int
+    private function createDonor(array $data, ?string &$plainPassword = null): int
     {
         $organization = $data['organization_name'] ?? ($data['donor_name'] ?? ($data['company'] ?? null));
         $name = $data['name'] ?? ($data['contact_person'] ?? ($organization ?? 'Donor'));
@@ -479,6 +516,7 @@ class User
 
         $plain = bin2hex(random_bytes(6));
         $hash = password_hash($plain, PASSWORD_DEFAULT);
+        $plainPassword = $plain;
 
         // Compute next user_id explicitly (schema may not have AUTO_INCREMENT)
         $row = $this->db->query('SELECT COALESCE(MAX(user_id),0)+1 AS next_id FROM users')->fetch();
@@ -496,7 +534,7 @@ class User
         }
 
         // donor_profiles
-        $donorCategory = $data['donor_category'] ?? ($data['type'] ?? null);
+        $donorCategory = $data['donor_category'] ?? ($data['donor_category_id'] ?? ($data['type'] ?? null));
         $notes = $data['notes'] ?? null;
         $this->db->query(
             "INSERT INTO donor_profiles (user_id, organization_name, donor_category, contact_number, address, notes) VALUES (?,?,?,?,?,?)",

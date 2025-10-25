@@ -1332,13 +1332,23 @@
           if (!items.length) items = id ? [{ id, name: "", quantity: "" }] : [];
           container.innerHTML = items
             .map((it, idx) => {
-              const label = `${idx + 1}. ${escapeHtml(it?.name || "")}${
-                  it?.quantity ? ` (x${it.quantity})` : ""
-                }`,
-                did = String(it?.id || "");
-              return `<div class="border rounded p-2 d-flex flex-column gap-1"><div class="fw-semibold">${
-                label || "Item" + (did ? ` #${did}` : "")
-              }</div><input type="hidden" name="item_ids[]" value="${did}"><label class="form-label mb-1">Expiry date photo (one per item)</label><input type="file" class="form-control" name="expiry_item_photo[${did}]" accept="image/*" capture="environment"></div>`;
+              const did = String(it?.id || "");
+              const qtyVal = (it && typeof it.quantity !== 'undefined') ? Number(it.quantity) : '';
+              const title = `${idx + 1}. ${escapeHtml(it?.name || "")}`;
+              return (
+                `<div class="border rounded p-2 d-flex flex-column gap-2">
+                   <div class="fw-semibold">${title}</div>
+                   <div class="row g-2 align-items-center">
+                     <div class="col-6 col-sm-4">
+                       <label class="form-label mb-1" for="fsQty_${did}">Quantity</label>
+                       <input type="number" min="0" step="1" class="form-control form-control-sm" id="fsQty_${did}" name="quantity_override[${did}]" value="${qtyVal !== '' ? qtyVal : ''}" />
+                     </div>
+                   </div>
+                   <input type="hidden" name="item_ids[]" value="${did}">
+                   <label class="form-label mb-1">Expiry date photo (one per item)</label>
+                   <input type="file" class="form-control" name="expiry_item_photo[${did}]" accept="image/*" capture="environment">
+                 </div>`
+              );
             })
             .join("");
         }

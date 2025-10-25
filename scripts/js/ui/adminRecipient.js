@@ -385,7 +385,6 @@ function showImportModal(title, html) {
       bootstrap.Modal.getOrCreateInstance(modalEl).hide();
       // Show result
       if (summary.errors && summary.errors.length) {
-        console.warn("Import errors:", summary.errors);
         const list = summary.errors
           .slice(0, 10)
           .map(
@@ -1420,11 +1419,7 @@ function showImportModal(title, html) {
                 );
             }
 
-            // Diagnostics in console
-            console.info("[Import] Detected header row index:", headerRowIdx);
-            console.info("[Import] Header:", header);
-            console.info("[Import] Parsed rows count:", rows.length);
-            console.info("[Import] First 3 rows:", rows.slice(0, 3));
+            // (diagnostics removed)
 
             if (rows.length === 0) {
               const diag = `
@@ -1441,15 +1436,13 @@ function showImportModal(title, html) {
               showImportModal("Import Problem", diag);
               return;
             }
-
             // Show Preview & Edit modal before sending to backend
             await showPreviewAndMaybeImport(rows);
           } catch (err) {
-            console.error("Import failed:", err);
             showImportModal(
               "Import Error",
               `<div class="text-danger">${escapeHtml(
-                err.message || "Unknown error"
+                err.message || "Import failed"
               )}</div>`
             );
           } finally {
@@ -1474,4 +1467,63 @@ function showImportModal(title, html) {
   } else {
     init();
   }
+
+  // Add Recipient modal submit handler (manual create)
+  document.addEventListener('DOMContentLoaded', () => {
+    const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+    const addBtn = document.getElementById('addRecSubmitBtn');
+    if (!addBtn) return;
+    addBtn.addEventListener('click', async () => {
+      const org = document.getElementById('addRecOrg')?.value.trim() || '';
+      const name = document.getElementById('addRecName')?.value.trim() || '';
+      const email = document.getElementById('addRecEmail')?.value.trim() || '';
+      const contact_number = document.getElementById('addRecPhone')?.value.trim() || '';
+      const address = document.getElementById('addRecAddress')?.value.trim() || '';
+      const total_residents = document.getElementById('addRecPopulation')?.value || '';
+      const age_group = document.getElementById('addRecAgeGroup')?.value.trim() || '';
+      const male_count = document.getElementById('addRecMale')?.value || '';
+      const female_count = document.getElementById('addRecFemale')?.value || '';
+      const fb = document.getElementById('addRecFeedback');
+      if (fb) fb.textContent = '';
+      if (!org && !name) {
+        if (fb) fb.textContent = 'Organization Name or Contact Person is required.';
+        return;
+      }
+      addBtn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE_URL}/users/index.php?action=createRecipient`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            organization_name: org || null,
+            name: name || null,
+            email: email || null,
+            contact_number: contact_number || null,
+            address: address || null,
+            total_residents: total_residents ? Number(total_residents) : null,
+            age_group: age_group || null,
+            male_count: male_count ? Number(male_count) : null,
+            female_count: female_count ? Number(female_count) : null,
+          })
+        });
+        const j = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+        if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+        const data = j.data || {};
+        try {
+          const m = document.getElementById('addRecipientModal');
+          if (m && window.bootstrap && bootstrap.Modal) bootstrap.Modal.getOrCreateInstance(m).hide();
+        } catch (_) {}
+        const tmp = data.temporary_password ? `Temporary password: ${String(data.temporary_password)}` : '';
+        alert(`Recipient created. ${tmp}`.trim());
+        // Simple reload to repopulate list consistently
+        window.location.reload();
+      } catch (err) {
+        if (fb) fb.textContent = err?.message || 'Failed to create recipient';
+      } finally {
+        addBtn.disabled = false;
+      }
+    });
+  });
+
 })();

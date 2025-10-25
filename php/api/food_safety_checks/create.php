@@ -267,6 +267,26 @@ try {
         }
     }
 
+    // Apply optional per-item quantity overrides before changing status/inventory
+    if (!empty($_POST['quantity_override']) && is_array($_POST['quantity_override'])) {
+        foreach ($_POST['quantity_override'] as $donIdStr => $qVal) {
+            $donId = (int)$donIdStr;
+            $qty = is_numeric($qVal) ? (int)$qVal : null;
+            if ($donId > 0 && $qty !== null && $qty >= 0) {
+                try {
+                    // Update all donation_items under this donation header
+                    $db->query(
+                        "UPDATE donation_items SET quantity = ? WHERE donation_id = ?",
+                        [ $qty, $donId ]
+                    );
+                } catch (Exception $e) {
+                    // Non-fatal: continue other updates
+                    error_log('FS quantity_override update failed for donation_id '.$donId.': '.$e->getMessage());
+                }
+            }
+        }
+    }
+
     // Update donation/batch status according to result
     $service = new Donation();
     if ($result === 'passed') {

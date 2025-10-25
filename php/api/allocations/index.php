@@ -100,21 +100,8 @@ try {
                      WHERE run_id = ? AND LOWER(COALESCE(status, "")) IN ("pending","allocated","acknowledged")'
                     , [$runId]
                 );
-                // Create per-recipient notifications so recipients are informed in their bell
-                try {
-                    $rows = $db->query('SELECT DISTINCT recipient_id FROM allocations WHERE run_id = ? AND LOWER(COALESCE(status, "")) = "notified"', [$runId])->fetchAll() ?: [];
-                    foreach ($rows as $r){
-                        $rid = (int)($r['recipient_id'] ?? 0);
-                        if ($rid <= 0) continue;
-                        // Insert minimal notification record
-                        $msg = 'You have been allocated items. Check your Received Items.';
-                        try {
-                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_ready", ?, NOW())', [$rid, $msg]);
-                        } catch (Exception $e) {
-                            // If table or schema differs, ignore to avoid breaking notify_run
-                        }
-                    }
-                } catch (Exception $e) { /* ignore notification failures */ }
+                // Do not insert a generic notification here; upstream callers may add
+                // a richer, de-duplicated notification.
                 sendJson(['success'=>true, 'data'=>['run_id'=>$runId]]);
             } catch (Exception $e) {
                 sendJson(['success'=>false,'error'=>'Failed to notify run: ' . $e->getMessage()], 500);
@@ -141,11 +128,7 @@ try {
                      WHERE run_id = ? AND recipient_id = ? AND LOWER(COALESCE(status, "")) IN ("pending","allocated","acknowledged","updated")'
                     , [$runId, $recipientId]
                 );
-                // Insert notification record for the recipient
-                try {
-                    $msg = 'You have been allocated items. Check your Received Items.';
-                    $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_ready", ?, NOW())', [$recipientId, $msg]);
-                } catch (Exception $e) { /* ignore notification failures */ }
+                // Do not insert a generic notification here; upstream may handle messaging.
                 sendJson(['success'=>true, 'data'=>['run_id'=>$runId, 'recipient_id'=>$recipientId]]);
             } catch (Exception $e) {
                 sendJson(['success'=>false,'error'=>'Failed to notify recipient: ' . $e->getMessage()], 500);
@@ -252,15 +235,35 @@ try {
                     } catch (Exception $e) {
                         $db->query('UPDATE allocations SET status = "Pending", updated_at = NOW() WHERE allocation_id = ?', [$allocId]);
                     }
-                    // Notify recipient that allocation contents were updated
+                    // Notify recipient that allocation contents were updated (include item summary)
                     try {
                         $rowR = $db->query('SELECT recipient_id FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocId])->fetch();
                         $rid = $rowR ? (int)$rowR['recipient_id'] : 0;
                         if ($rid>0){
-                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "status_updated", ?, NOW())', [
-                                $rid,
-                                'Your allocation has been updated.'
-                            ]);
+                            $rowsIt = $db->query('SELECT ai.quantity, di.product_name
+                                                  FROM allocation_items ai
+                                                  LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
+                                                  LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                                                  WHERE ai.allocation_id = ?
+                                                  ORDER BY ai.id ASC', [$allocId])->fetchAll() ?: [];
+                            $parts = [];
+                            foreach ($rowsIt as $rIt){
+                                $q = (int)($rIt['quantity'] ?? 0);
+                                $nm = trim((string)($rIt['product_name'] ?? ''));
+                                if ($q>0 && $nm !== ''){ $parts[] = $q.'x '.$nm; }
+                                if (count($parts) >= 6) break;
+                            }
+                            $msg = 'Your allocation has been updated.';
+                            if (!empty($parts)){
+                                $msg .= ' Items: ' . implode(', ', $parts);
+                            }
+                            // Try to include reference fields if schema supports them
+                            try {
+                                $db->query('INSERT INTO notifications (user_id, type, message, reference_type, reference_id, created_at) VALUES (?, "status_updated", ?, "allocation", ?, NOW())', [ $rid, $msg, $allocId ]);
+                            } catch (Exception $e2) {
+                                // Fallback without reference columns
+                                $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "status_updated", ?, NOW())', [ $rid, $msg ]);
+                            }
                         }
                     } catch (Exception $e) { /* ignore */ }
                     sendJson(['success'=>true, 'data'=>['allocation_id'=>$allocId, 'updated'=>true]]);
@@ -846,19 +849,9 @@ SQL);
                 } catch (Exception $e) { /* best-effort */ }
             }
 
-            // Notify admins of cancellation and replacement selection
-            try {
-                $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
-                foreach ($admins as $ad){
-                    $aid = (int)($ad['user_id'] ?? 0);
-                    if ($aid>0){
-                        $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_cancelled", ?, NOW())', [
-                            $aid,
-                            'Allocation cancelled and replacement selected.'
-                        ]);
-                    }
-                }
-            } catch (Exception $e) { /* ignore */ }
+            // Do not send a second generic notification here.
+            // The call to $svc->cancel(...) above already inserts a detailed
+            // notification with actor and reason. Keeping only that prevents duplicates.
             sendJson(['success'=>true, 'data'=>[
                 'cancelled_allocation_id'=>$allocationId,
                 'cancelled_recipient_id'=>$recId,

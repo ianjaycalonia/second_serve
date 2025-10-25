@@ -326,6 +326,86 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         });
       }
+
+      // Add Donor modal submit handler
+      const addBtn = document.getElementById('addDonorSubmitBtn');
+      if (addBtn) {
+        // Initialize Select2 for donor category with backend lookups
+        try {
+          const sel = document.getElementById('addDonorCategory');
+          const modalEl = document.getElementById('addDonorModal');
+          if (sel && window.$ && $.fn.select2) {
+            $(sel).select2({
+              width: '100%',
+              placeholder: 'Select a category',
+              allowClear: true,
+              dropdownParent: modalEl ? $(modalEl) : undefined,
+              ajax: {
+                url: `${API_BASE_URL}/lookups/index.php/donor-categories`,
+                dataType: 'json',
+                delay: 250,
+                data: (params) => ({ q: params.term || '', limit: 20, active: 1 }),
+                processResults: (data) => ({
+                  results: Array.isArray(data?.items)
+                    ? data.items.map((it) => ({ id: it.id, text: it.name }))
+                    : []
+                })
+              }
+            });
+          }
+        } catch (_) {}
+
+        addBtn.addEventListener('click', async () => {
+          const org = document.getElementById('addDonorOrg')?.value.trim() || '';
+          const name = document.getElementById('addDonorName')?.value.trim() || '';
+          const email = document.getElementById('addDonorEmail')?.value.trim() || '';
+          const contact_number = document.getElementById('addDonorPhone')?.value.trim() || '';
+          const address = document.getElementById('addDonorAddress')?.value.trim() || '';
+          const donor_category_id = document.getElementById('addDonorCategory')?.value || '';
+          const fb = document.getElementById('addDonorFeedback');
+          if (fb) fb.textContent = '';
+          if (!org && !name) {
+            if (fb) fb.textContent = 'Organization Name or Contact Person is required.';
+            return;
+          }
+          addBtn.disabled = true;
+          try {
+            const res = await fetch(`${API_BASE_URL}/users/index.php?action=createDonor`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              body: JSON.stringify({
+                organization_name: org || null,
+                name: name || null,
+                email: email || null,
+                contact_number: contact_number || null,
+                address: address || null,
+                donor_category_id: donor_category_id ? Number(donor_category_id) : null,
+              })
+            });
+            const j = await res.json().catch(()=>({success:false,error:`HTTP ${res.status}`}));
+            if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+            const data = j.data || {};
+            // Hide modal
+            try {
+              const m = document.getElementById('addDonorModal');
+              if (m && window.bootstrap && bootstrap.Modal) bootstrap.Modal.getOrCreateInstance(m).hide();
+            } catch(_){}
+            // Refresh lists
+            const [freshDonors, freshDonations] = await Promise.all([ fetchDonors(), fetchDonations() ]);
+            donorsData = freshDonors; donationsData = freshDonations;
+            populateFilters();
+            applyFiltersAndSort();
+            // Show temp password
+            const tmp = data.temporary_password ? `Temporary password: ${escapeHtml(data.temporary_password)}` : '';
+            alert(`Donor created. ${tmp}`.trim());
+          } catch(err){
+            if (fb) fb.textContent = err?.message || 'Failed to create donor';
+          } finally {
+            addBtn.disabled = false;
+          }
+        });
+      }
     } catch (err) {
       console.error("Failed to load donors:", err);
       const tbody = document.querySelector("main .table tbody");

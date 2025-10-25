@@ -70,22 +70,84 @@ class Donation
     // Add an item to an existing donation header; returns donation_item_id
     public function addItem(int $donationId, array $it): int
     {
+        // Normalize provided values
+        $name = isset($it['product_name']) ? sanitize((string)$it['product_name']) : null;
+        $catId = isset($it['category_id']) ? ($it['category_id'] ?: null) : null;
+        $qty = (int)($it['quantity'] ?? 0);
+        $unitId = isset($it['unit_id']) ? ($it['unit_id'] ?: null) : null;
+        $tw = isset($it['total_weight']) && $it['total_weight'] !== '' ? (float)$it['total_weight'] : null;
+        $tc = isset($it['total_cost']) && $it['total_cost'] !== '' ? (float)$it['total_cost'] : null;
+        $exp = (!empty($it['expiry_date']) ? $it['expiry_date'] : null);
+        $tags = isset($it['tags']) ? sanitize((string)$it['tags']) : null;
+
+        // If category/unit/weight not provided, infer from latest existing row with same product_name
+        if (!empty($name) && ($catId === null || $unitId === null || $tw === null)) {
+            try {
+                $row = $this->db->query(
+                    "SELECT di.category_id, di.unit_id, di.total_weight
+                     FROM donation_items di
+                     INNER JOIN donations d ON d.donation_id = di.donation_id
+                     WHERE di.product_name = ? AND d.deleted_at IS NULL
+                     ORDER BY di.created_at DESC
+                     LIMIT 1",
+                    [$name]
+                )->fetch();
+                if ($row) {
+                    if ($catId === null && isset($row['category_id']) && $row['category_id'] !== null) {
+                        $catId = (int)$row['category_id'];
+                    }
+                    if ($unitId === null && isset($row['unit_id']) && $row['unit_id'] !== null) {
+                        $unitId = (int)$row['unit_id'];
+                    }
+                    if ($tw === null && isset($row['total_weight']) && $row['total_weight'] !== null && $row['total_weight'] !== '') {
+                        $tw = (float)$row['total_weight'];
+                    }
+                }
+            } catch (Exception $e) { /* ignore inference errors */ }
+        }
+
         $this->db->query(
             "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (int)$donationId,
-                isset($it['product_name']) ? sanitize((string)$it['product_name']) : null,
-                isset($it['category_id']) ? ($it['category_id'] ?: null) : null,
-                (int)($it['quantity'] ?? 0),
-                isset($it['unit_id']) ? ($it['unit_id'] ?: null) : null,
-                isset($it['total_weight']) && $it['total_weight'] !== '' ? (float)$it['total_weight'] : null,
-                isset($it['total_cost']) && $it['total_cost'] !== '' ? (float)$it['total_cost'] : null,
-                (!empty($it['expiry_date']) ? $it['expiry_date'] : null),
-                isset($it['tags']) ? sanitize((string)$it['tags']) : null,
+                $name,
+                $catId,
+                $qty,
+                $unitId,
+                $tw,
+                $tc,
+                $exp,
+                $tags,
             ]
         );
         return (int)$this->db->lastInsertId();
+    }
+
+    /**
+     * (Optional future use) Infer latest saved defaults for a given product_name.
+     */
+    private function inferDefaultsByProductName(string $name): array
+    {
+        try {
+            $row = $this->db->query(
+                "SELECT di.category_id, di.unit_id, di.total_weight
+                 FROM donation_items di
+                 INNER JOIN donations d ON d.donation_id = di.donation_id
+                 WHERE di.product_name = ? AND d.deleted_at IS NULL
+                 ORDER BY di.created_at DESC
+                 LIMIT 1",
+                [$name]
+            )->fetch();
+            if ($row) {
+                return [
+                    'category_id' => isset($row['category_id']) ? ($row['category_id'] !== null ? (int)$row['category_id'] : null) : null,
+                    'unit_id' => isset($row['unit_id']) ? ($row['unit_id'] !== null ? (int)$row['unit_id'] : null) : null,
+                    'total_weight' => isset($row['total_weight']) ? ($row['total_weight'] !== null ? (float)$row['total_weight'] : null) : null,
+                ];
+            }
+        } catch (Exception $e) { /* ignore */ }
+        return ['category_id' => null, 'unit_id' => null, 'total_weight' => null];
     }
 
     // List donations, optionally by status
@@ -202,7 +264,9 @@ class Donation
     // List items by batch id (non-archived)
     public function listByBatch(string $batchId): array
     {
-        $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
+        $sql = "SELECT di.donation_item_id AS id, d.donation_id, d.donor_id,
+                       u.name AS donor_name,
+                       COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
                        di.product_name AS name,
                        CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type,
                        di.quantity,
@@ -398,90 +462,66 @@ class DonationEditor
         return $rows;
     }
 
-    // Update batch category (type) and individual items fields
-    // Supports: update existing items, create new items (id=0), soft-delete removed items
+    // Update individual items fields for a batch using normalized donation_items
+    // Supports: update existing items (id=donation_item_id), create new items (id=0)
     public function updateBatchFields(string $batchId, ?string $type, array $items): void
     {
         $this->db->beginTransaction();
         try {
-            // Fetch existing items in the batch to determine donor_id, current type, and detect removals
+            // Fetch existing donation headers and items within this batch
             $existing = $this->db->query(
-                "SELECT donation_id AS id, donor_id, product_category AS type FROM donations WHERE deleted_at IS NULL AND batch_id = ?",
+                "SELECT d.donation_id, d.donor_id FROM donations d WHERE d.deleted_at IS NULL AND d.batch_id = ?",
                 [$batchId]
             )->fetchAll();
             if (!$existing) { throw new Exception('Not found'); }
             $donorId = (int)$existing[0]['donor_id'];
-            $currentType = $existing[0]['type'] ?? null;
+            // Choose the first header to attach new items if needed
+            $headerDonationId = (int)$existing[0]['donation_id'];
 
-            // If a new type is specified, apply to all items in the batch
-            $effectiveType = $type !== null ? sanitize($type) : ($currentType !== null ? sanitize((string)$currentType) : null);
-            if ($type !== null) {
-                $this->db->query(
-                    "UPDATE donations SET product_category = ? WHERE deleted_at IS NULL AND batch_id = ?",
-                    [$effectiveType, $batchId]
-                );
-            }
+            // Map of existing donation_item_id => donation_id (to validate ownership)
+            $rows = $this->db->query(
+                "SELECT di.donation_item_id, di.donation_id FROM donation_items di INNER JOIN donations d ON d.donation_id = di.donation_id WHERE d.deleted_at IS NULL AND d.batch_id = ?",
+                [$batchId]
+            )->fetchAll();
+            $byItemId = [];
+            foreach ($rows as $r) { $byItemId[(int)$r['donation_item_id']] = (int)$r['donation_id']; }
 
             // Build sets of existing IDs and submitted IDs
-            $existingIds = array_map(fn($r) => (int)$r['id'], $existing);
+            $existingIds = array_keys($byItemId);
             $submittedIds = [];
 
             // Validate and upsert
             foreach ($items as $it) {
-                $id = (int)($it['id'] ?? 0);
+                $id = (int)($it['id'] ?? 0); // donation_item_id
                 $name = isset($it['name']) ? sanitize((string)$it['name']) : '';
                 $qty = isset($it['quantity']) ? (int)$it['quantity'] : 0;
                 $expiry = isset($it['expiry_date']) ? (string)$it['expiry_date'] : '';
+                $totalCost = isset($it['total_cost']) && $it['total_cost'] !== '' ? (float)$it['total_cost'] : null;
                 if ($name === '' || $qty < 1 || $expiry === '') { throw new Exception('Invalid item fields'); }
 
                 if ($id > 0) {
-                    // Update existing
+                    // Update existing donation_items row (ensure it belongs to this batch)
                     $submittedIds[] = $id;
+                    if (!isset($byItemId[$id])) { throw new Exception('Invalid item id'); }
                     $this->db->query(
-                        "UPDATE donations SET product_name = ?, quantity = ?, expiry_date = ? WHERE donation_id = ? AND deleted_at IS NULL AND batch_id = ?",
-                        [$name, $qty, $expiry, $id, $batchId]
+                        "UPDATE donation_items SET product_name = ?, quantity = ?, expiry_date = ?, total_cost = ? WHERE donation_item_id = ?",
+                        [$name, $qty, $expiry, $totalCost, $id]
                     );
                 } else {
-                    // Insert new item into the batch; use effective type (new or current)
-                    // Snapshot donor name/org and set entry_date
-                    $donorName = null;
-                    try {
-                        $row = $this->db->query(
-                            "SELECT COALESCE(dp.organization_name, '') AS org, u.name
-                             FROM users u LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
-                             WHERE u.user_id = ?",
-                            [$donorId]
-                        )->fetch();
-                        if ($row) { $donorName = ($row['org'] !== '') ? $row['org'] : (!empty($row['name']) ? $row['name'] : null); }
-                    } catch (Exception $e) { /* ignore */ }
-                    $this->db->query(
-                        "INSERT INTO donations (donor_id, batch_id, product_category, product_name, quantity, expiry_date, donor_name, entry_date, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), 'Pending', NOW())",
-                        [
-                            $donorId,
-                            $batchId,
-                            $effectiveType,
-                            $name,
-                            $qty,
-                            $expiry === '' ? null : $expiry,
-                            $donorName,
-                        ]
-                    );
-                    $submittedIds[] = (int)$this->db->lastInsertId();
+                    // Insert new donation_items row under the chosen header
+                    $svc = new Donation();
+                    $newItemId = $svc->addItem($headerDonationId, [
+                        'product_name' => $name,
+                        'quantity' => $qty,
+                        'expiry_date' => $expiry,
+                        'total_cost' => $totalCost,
+                    ]);
+                    $submittedIds[] = (int)$newItemId;
                 }
             }
 
             // Soft-delete items that were removed (present before but not in submitted list)
-            $toDelete = array_values(array_diff($existingIds, $submittedIds));
-            if (!empty($toDelete)) {
-                // Build placeholders
-                $placeholders = implode(',', array_fill(0, count($toDelete), '?'));
-                $params = $toDelete;
-                $params[] = $batchId;
-                $this->db->query(
-                    "UPDATE donations SET deleted_at = NOW() WHERE donation_id IN ($placeholders) AND batch_id = ?",
-                    $params
-                );
-            }
+            // For safety, do not delete historical items automatically. (No-op)
 
             $this->db->commit();
         } catch (Exception $e) {

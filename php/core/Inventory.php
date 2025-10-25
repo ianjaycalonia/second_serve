@@ -111,16 +111,18 @@ class Inventory
         }
 
         // Insert to inventory (normalized minimal columns)
+        $invId = 0;
         if ($donationItemId > 0) {
             $this->db->query(
                 "INSERT INTO inventory (donation_item_id, quantity, added_at) VALUES (?, ?, NOW())",
                 [ $donationItemId, $qty ]
             );
+            // Capture the inventory row id immediately after insert
+            $invId = (int)$this->db->lastInsertId();
         }
         // Record an 'in' movement for audit and reporting
         try {
             $this->ensureTables();
-            $invId = (int)$this->db->lastInsertId();
             // Attribution priority: session user -> admin_in_charge -> donor_id -> any approved admin
             $performedBy = 0;
             try { $performedBy = (int)currentUserId(); } catch (Exception $e) { $performedBy = 0; }

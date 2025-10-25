@@ -248,7 +248,7 @@
       if (!actionsTh) return;
       // Consider an action visible if any primary action button exists and is actually visible
       const candidates = container.querySelectorAll(
-        ".dr-add-item, .dr-notify, .dr-del"
+        ".dr-add-item, .dr-notify-one, .dr-del"
       );
       let anyActionVisible = false;
       const isVisible = (el) => {
@@ -668,6 +668,7 @@
       tb.appendChild(tr);
     } else {
       // Add one row per item (items nested under allocations)
+      let notifyAddedForThisRecipient = false;
       items.forEach((a) => {
         const created = a.created_at ? new Date(a.created_at) : null;
         const dt = created
@@ -706,6 +707,10 @@
             tr.dataset.allocationId = String(a.allocation_id || "");
             tr.dataset.itemId = String(it.item_id || "");
             tr.dataset.rec = String(rid);
+            tr.dataset.status = String(status).toLowerCase();
+            // Expose grouping keys for validation
+            tr.dataset.name = String(it.item_name || it.name || "");
+            tr.dataset.category = String(it.category || a.product_category || "");
 
             const statusLower = String(status || "").toLowerCase();
             const isNotified = statusLower === "notified";
@@ -714,14 +719,17 @@
               ? 'disabled aria-disabled="true"'
               : "";
             const disabledClass = isNotified ? " disabled" : "";
+            const notifyBtnHtml = !notifyAddedForThisRecipient
+              ? `<button class="btn btn-sm btn-outline-info dr-notify-one${disabledClass}" data-rec="${rid}" title="Notify" ${disabledAttr}>
+                   <i class="bi bi-bell"></i>
+                 </button>`
+              : "";
             const actionsCell = `<td>
                 <div class="d-flex justify-content-center gap-2">
                   <button class="btn btn-sm btn-outline-success dr-add-item${disabledClass}" data-rec="${rid}" title="Add Item" ${disabledAttr}>
                     <i class="bi bi-plus-circle"></i>
                   </button>
-                  <button class="btn btn-sm btn-outline-info dr-notify${disabledClass}" data-rec="${rid}" title="Notify" ${disabledAttr}>
-                    <i class="bi bi-bell"></i>
-                  </button>
+                  ${notifyBtnHtml}
                   <button type="button" class="btn btn-sm btn-outline-danger dr-del${disabledClass}" title="Remove" ${disabledAttr}>
                     <i class="bi bi-x"></i>
                   </button>
@@ -741,11 +749,12 @@
               </td>
               <td>
                 <input type="number" class="form-control form-control-sm dr-qty" 
-                  value="${it.quantity}" min="0" step="1">
+                  value="${it.quantity}" min="0" step="1" inputmode="numeric" pattern="\\d*" required>
               </td>
               ${actionsCell}`;
 
             tb.appendChild(tr);
+            if (!notifyAddedForThisRecipient) { notifyAddedForThisRecipient = true; }
           });
         }
       });
@@ -770,6 +779,258 @@
   if (isLocked) {
     applyLock();
   }
+
+  // ==== Quantity validation against available inventory (same item + category, sum of all rows) ====
+  const availCache = (window.__invAvailCache = window.__invAvailCache || new Map());
+  function keyFor(name, category) {
+    return `${(name || '').trim()}\u0001${(category || '').trim()}`;
+  }
+  async function fetchAvailable(name, category) {
+    const k = keyFor(name, category);
+    if (availCache.has(k)) return availCache.get(k);
+    try {
+      const params = new URLSearchParams();
+      params.set('group', 'merge');
+      params.set('limit', '100');
+      if (name) params.set('q', name);
+      if (category) params.set('category', category);
+      params.set('t', String(Date.now()));
+      const url = `${API_BASE_URL}/inventory/index.php/list?${params.toString()}`;
+      const res = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } });
+      const j = await res.json().catch(() => null);
+      let available = 0;
+      if (res.ok && j?.success && Array.isArray(j?.data?.items)) {
+        for (const r of j.data.items) {
+          if (String(r.item_name || '') === String(name || '') && String(r.category || '') === String(category || '')) {
+            available += Number(r.total_quantity || 0) || 0;
+          }
+        }
+      }
+      availCache.set(k, available);
+      return available;
+    } catch (_) {
+      availCache.set(keyFor(name, category), 0);
+      return 0;
+    }
+  }
+  function groupSums(excludeEl = null) {
+    const sums = new Map();
+    container.querySelectorAll('tbody.dr-recipient tr[data-item-id]').forEach((tr) => {
+      try {
+        if (excludeEl && excludeEl.closest('tr') === tr) return; // handled separately
+        const name = tr.dataset.name || '';
+        const cat = tr.dataset.category || '';
+        const k = keyFor(name, cat);
+        const qtyEl = tr.querySelector('.dr-qty');
+        const v = parseInt(qtyEl && qtyEl.value ? qtyEl.value : '0', 10) || 0;
+        sums.set(k, (sums.get(k) || 0) + v);
+      } catch (_) {}
+    });
+    return sums;
+  }
+  async function validateAndClamp(inputEl) {
+    try {
+      const tr = inputEl.closest('tr');
+      if (!tr) return;
+      const name = tr.dataset.name || '';
+      const cat = tr.dataset.category || '';
+      if (!name) return; // cannot validate without item name
+      const k = keyFor(name, cat);
+      const otherSums = groupSums(inputEl);
+      const others = otherSums.get(k) || 0;
+      let val = parseInt(inputEl.value || '0', 10) || 0;
+      if (val < 0) val = 0;
+      const available = await fetchAvailable(name, cat);
+      const maxForThisRow = Math.max(0, available - others);
+      if (val > maxForThisRow) {
+        inputEl.value = String(maxForThisRow);
+        inputEl.classList.add('is-invalid');
+        inputEl.setAttribute('title', `Adjusted to available: ${maxForThisRow} (total available ${available})`);
+        setTimeout(() => { try { inputEl.classList.remove('is-invalid'); inputEl.removeAttribute('title'); } catch(_){} }, 1200);
+      }
+    } catch (_) {}
+  }
+  // Bind listeners
+  container.addEventListener('input', function(e){
+    const qty = e.target && e.target.classList && e.target.classList.contains('dr-qty');
+    if (!qty) return;
+    // Sanitize non-digits
+    const clean = (e.target.value || '').replace(/[^\d]/g, '');
+    if (clean !== e.target.value) e.target.value = clean;
+    validateAndClamp(e.target);
+  });
+  // Block non-digit keys for quantity fields
+  container.addEventListener('keydown', function(e){
+    const t = e.target;
+    if (!t || !t.classList || !t.classList.contains('dr-qty')) return;
+    const allowed = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'];
+    if (allowed.includes(e.key)) return;
+    if (/^[0-9]$/.test(e.key)) return;
+    // Prevent +/- . e, and any non-digit
+    e.preventDefault();
+  });
+  // Sanitize paste into quantity fields
+  container.addEventListener('paste', function(e){
+    const t = e.target;
+    if (!t || !t.classList || !t.classList.contains('dr-qty')) return;
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+    const digits = text.replace(/[^\d]/g, '');
+    const start = t.selectionStart || 0;
+    const end = t.selectionEnd || 0;
+    t.value = (t.value.substring(0, start) + digits + t.value.substring(end));
+    validateAndClamp(t);
+  });
+  // Prevent mouse wheel from changing values accidentally
+  container.addEventListener('wheel', function(e){
+    const t = e.target;
+    if (!t || !t.classList || !t.classList.contains('dr-qty')) return;
+    e.preventDefault();
+  }, { passive: false });
+  container.addEventListener('change', function(e){
+    const nameChanged = e.target && e.target.classList && e.target.classList.contains('dr-name');
+    if (!nameChanged) return;
+    const tr = e.target.closest('tr');
+    if (tr) { tr.dataset.name = String(e.target.value || ''); }
+    // Revalidate related quantities for this group
+    const cat = tr ? (tr.dataset.category || '') : '';
+    const name = tr ? (tr.dataset.name || '') : '';
+    if (name) {
+      // Clear cache for this key to refetch fresh availability next time
+      try { availCache.delete(keyFor(name, cat)); } catch(_){}
+    }
+    const qtyEl = tr && tr.querySelector('.dr-qty');
+    if (qtyEl) validateAndClamp(qtyEl);
+  });
+
+  // ==== Missing metadata scan (category, unit, weight) with Notify Admin ====
+  async function listAdmins() {
+    try {
+      const r = await fetch(`${API_BASE_URL}/users/index.php?action=list&role=admin&status=approved&t=${Date.now()}`, { credentials: 'include', headers: { Accept: 'application/json' } });
+      const j = await r.json().catch(() => null);
+      const arr = Array.isArray(j?.data?.items) ? j.data.items : [];
+      return arr.map((u) => Number(u.user_id || u.id) || 0).filter((n) => n > 0);
+    } catch (_) { return []; }
+  }
+  async function fetchGroupedRecord(name, category) {
+    try {
+      const params = new URLSearchParams();
+      params.set('group', 'merge');
+      params.set('limit', '50');
+      params.set('q', name);
+      if (category) params.set('category', category);
+      params.set('t', String(Date.now()));
+      const r = await fetch(`${API_BASE_URL}/inventory/index.php/list?${params.toString()}`, { credentials: 'include', headers: { Accept: 'application/json' } });
+      const j = await r.json().catch(() => null);
+      const rows = Array.isArray(j?.data?.items) ? j.data.items : [];
+      return rows.find((x) => String(x.item_name || '') === String(name || '') && String(x.category || '') === String(category || '')) || null;
+    } catch (_) { return null; }
+  }
+  async function anyWeightKnownFor(name) {
+    // Check report-in within this year for any non-null total weight for the product name
+    try {
+      const now = new Date();
+      const start = `${now.getFullYear()}-01-01`;
+      const end = `${now.getFullYear()}-12-31`;
+      const r = await fetch(`${API_BASE_URL}/inventory/index.php/report-in?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&t=${Date.now()}`, { credentials: 'include', headers: { Accept: 'application/json' } });
+      const j = await r.json().catch(() => null);
+      const rows = Array.isArray(j?.data?.rows) ? j.data.rows : [];
+      return rows.some((row) => String(row['PRODUCT NAME'] || '') === String(name || '') && row['TOTAL WEIGHT(KG)'] !== null);
+    } catch (_) { return false; }
+  }
+  async function scanMissing() {
+    try {
+      const uniq = new Map();
+      container.querySelectorAll('tbody.dr-recipient tr[data-item-id]').forEach((tr) => {
+        const name = (tr.dataset.name || '').trim();
+        const cat = (tr.dataset.category || '').trim();
+        if (!name) return;
+        const k = keyFor(name, cat);
+        if (!uniq.has(k)) uniq.set(k, { name, category: cat });
+      });
+      const results = [];
+      for (const { name, category } of uniq.values()) {
+        const rec = await fetchGroupedRecord(name, category);
+        const missingCategory = !category || !rec || !rec.category;
+        const missingUnit = !rec || !rec.unit;
+        const weightKnown = await anyWeightKnownFor(name);
+        const missingWeight = !weightKnown;
+        if (missingCategory || missingUnit || missingWeight) {
+          results.push({ name, category: category || '(none)', missingCategory, missingUnit, missingWeight });
+        }
+      }
+      if (results.length) {
+        // Avoid duplicate bell notifications per run in this browser session
+        try {
+          const effRunId = runId || window.__DR_RESOLVED_RUN_ID__ || 0;
+          const guardKey = `dr_missing_meta_notified_${effRunId}`;
+          if (String(sessionStorage.getItem(guardKey) || '') !== '1') {
+            const admins = await listAdmins();
+            const msg = `Products with missing metadata: ${results.map(r => r.name + ' [' + r.category + ']').join(', ')}`;
+            for (const uid of admins) {
+              try {
+                await fetch(`${API_BASE_URL}/communications/notifications.php?action=create`, {
+                  method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                  body: JSON.stringify({ user_id: uid, type: 'data_missing', message: msg })
+                });
+              } catch (_) {}
+            }
+            sessionStorage.setItem(guardKey, '1');
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+  scanMissing();
+
+  // ==== Per-recipient Notify handler (blue bell) ====
+  async function notifyRecipient(rid) {
+    try {
+      const tb = container.querySelector(`tbody.dr-recipient[data-rec="${rid}"]`);
+      // Persist: mark this recipient's allocations for current run as Notified and create notification server-side
+      const effRunId = runId || window.__DR_RESOLVED_RUN_ID__ || 0;
+      const res = await fetch(`${API_BASE_URL}/allocations/index.php?action=notify_recipient`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ run_id: effRunId, recipient_id: rid })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // Lock UI for this recipient and reflect status change
+      if (tb) {
+        tb.querySelectorAll('.dr-name, .dr-qty').forEach((el) => { try { el.disabled = true; el.readOnly = true; } catch(_){} });
+        tb.querySelectorAll('.dr-del').forEach((btn) => { try { btn.disabled = true; btn.classList.add('disabled'); } catch(_){} });
+        // Update all rows to notified status so visibility logic hides the bell
+        tb.querySelectorAll('tr').forEach((tr) => {
+          try {
+            tr.dataset.status = 'notified';
+            const tds = tr.querySelectorAll('td');
+            // columns: Recipient | Status | Created | Item | Quantity | Actions
+            if (tds && tds[1]) {
+              tds[1].innerHTML = "<span class='badge bg-info text-dark'>Notified</span>";
+            }
+          } catch (_) {}
+        });
+        const headerNotify = container.querySelector(`.dr-notify-one[data-rec="${rid}"]`);
+        if (headerNotify) headerNotify.classList.add('d-none');
+        const addBtn = container.querySelector(`.dr-add-item[data-rec="${rid}"]`);
+        if (addBtn) { try { addBtn.disabled = true; addBtn.classList.add('disabled'); } catch(_){} }
+        // Re-sync visibility based on new statuses
+        try {
+          const evt = new Event('dr-sync-notify', { bubbles: true });
+          container.dispatchEvent(evt);
+        } catch(_){}
+      }
+    } catch (e) {
+      showMsg(feedback, 'Failed to notify recipient.', 'danger');
+    }
+  }
+  container.addEventListener('click', function(e){
+    const btn = e.target && (e.target.closest && e.target.closest('.dr-notify-one'));
+    if (!btn) return;
+    const rid = parseInt(btn.getAttribute('data-rec') || '0', 10) || 0;
+    if (rid) notifyRecipient(rid);
+  });
 
   // Async status polling with exponential backoff and visibility awareness
   let __DR_POLL_TIMER__ = null;

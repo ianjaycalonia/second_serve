@@ -48,6 +48,28 @@
     return;
   }
 
+  // Inject darker hover styles for notification rows (once)
+  (function ensureHoverStyle(){
+    try {
+      if (document.getElementById('notifHoverStyle')) return;
+      const style = document.createElement('style');
+      style.id = 'notifHoverStyle';
+      style.textContent = `
+        /* Darker hover for notification rows */
+        #notificationsList .list-group-item-action:hover,
+        #notificationsList .list-group-item-action:focus {
+          background-color: #e2e6ea; /* darker than default */
+        }
+        /* Make unread stand out more on hover */
+        #notificationsList .list-group-item-action.unread:hover,
+        #notificationsList .list-group-item-action.unread:focus {
+          background-color: #cfe2ff; /* primary-tinted */
+        }
+      `;
+      document.head.appendChild(style);
+    } catch(_) {}
+  })();
+
   // State
   let pollingTimer = 0;
   let lastSig = null; // string signature of last rendered list; null means never rendered
@@ -71,20 +93,32 @@
         default: return '🔔';
       }
     })((n.type || '').toLowerCase());
-    const msgText = String(n.message || '');
+    let msgText = String(n.message || '');
     const t = (n.type || '').toLowerCase();
+    const user = getStoredUser();
+    const role = (user?.role || '').toLowerCase();
+    // Append guidance for admins on cancelled allocations
+    if (t === 'allocation_cancelled' && role === 'admin' && !/please\s+reallocate\s+items\.?$/i.test(msgText)) {
+      msgText = msgText.replace(/\s+$/,'') + ' Please reallocate items.';
+    }
     const shouldLinkToReceived = (
       t.startsWith('allocation_') ||
       /allocation\s+has\s+been\s+updated/i.test(msgText) ||
       /allocation\s+updated/i.test(msgText)
     );
+    // Destination for anchor: cancelled allocations -> DistributeItems for admins, ReceivedItems otherwise
+    let anchorHref = null;
+    if (shouldLinkToReceived) {
+      if (t === 'allocation_cancelled' && role === 'admin') anchorHref = 'DistributeItems.html';
+      else anchorHref = 'ReceivedItems.html';
+    }
     // Use a stretched-link anchor so the whole row is clickable even without JS
-    const linkHtml = shouldLinkToReceived ? '<a href="ReceivedItems.html" class="stretched-link" aria-label="Open received items"></a>' : '';
+    const linkHtml = anchorHref ? `<a href="${anchorHref}" class="stretched-link" aria-label="Open related page"></a>` : '';
     return `
-      <li class="list-group-item d-flex align-items-start position-relative ${unreadClass} clickable" style="cursor:pointer; user-select:none;" data-id="${n.id}" data-type="${n.type || ''}" data-ref-type="${n.reference_type || ''}" data-ref-id="${n.reference_id || ''}">
+      <li class="list-group-item list-group-item-action d-flex align-items-start position-relative ${unreadClass} clickable" style="cursor:pointer; user-select:none;" data-id="${n.id}" data-type="${n.type || ''}" data-ref-type="${n.reference_type || ''}" data-ref-id="${n.reference_id || ''}">
         <div class="me-2" aria-hidden="true" style="cursor:pointer; user-select:none;">${iconHtml}</div>
         <div class="flex-grow-1" style="cursor:pointer; user-select:none;">
-          <div class="fw-semibold mb-1">${escapeHtml(n.message || '')}</div>
+          <div class="fw-semibold mb-1">${escapeHtml(msgText)}</div>
           <div class="text-muted small">${fmtDate(n.created_at)}${n.reference_type && n.reference_id ? ` · ${n.reference_type} #${n.reference_id}` : ''}</div>
         </div>
         ${n.read_status ? '' : '<span class="badge bg-primary align-self-center">new</span>'}
@@ -226,6 +260,58 @@
     }
   }
 
+  function mergeAllocationUpdatePairs(items) {
+    try {
+      const byKey = new Map(); // key: allocation:<id>
+      const arr = Array.isArray(items) ? items.slice() : [];
+      // index by ref
+      arr.forEach(n => {
+        const t = String(n.type || '').toLowerCase();
+        const rt = String(n.reference_type || '').toLowerCase();
+        const rid = n.reference_id != null ? String(n.reference_id) : '';
+        if (rt === 'allocation' && rid) {
+          const key = `allocation:${rid}`;
+          if (!byKey.has(key)) byKey.set(key, []);
+          byKey.get(key).push(n);
+        }
+      });
+      const toDrop = new Set();
+      const toModify = new Map(); // id -> new message, read_status
+      byKey.forEach(list => {
+        const upd = list.filter(n => String(n.type||'').toLowerCase() === 'status_updated');
+        const ready = list.filter(n => String(n.type||'').toLowerCase() === 'allocation_ready');
+        if (!upd.length || !ready.length) return;
+        // pick closest-in-time pair
+        let best = null;
+        upd.forEach(u => {
+          ready.forEach(r => {
+            const du = new Date(u.created_at);
+            const dr = new Date(r.created_at);
+            const diffMin = Math.abs((dr - du) / 60000);
+            if (isNaN(diffMin)) return;
+            if (best === null || diffMin < best.diff) best = { u, r, diff: diffMin };
+          });
+        });
+        if (best && best.diff <= 10) { // within 10 minutes => merge
+          const r = best.r, u = best.u;
+          const already = /your\s+allocation\s+has\s+been\s+updated/i.test(String(r.message||''));
+          const mergedMsg = (already ? String(r.message||'') : ('Your allocation has been updated. ' + String(r.message||''))).trim();
+          const unread = (!r.read_status) || (!u.read_status) ? 0 : 1; // 0 => unread
+          toDrop.add(u.id);
+          toModify.set(r.id, { message: mergedMsg, read_status: unread });
+        }
+      });
+      const out = arr.filter(n => !toDrop.has(n.id)).map(n => {
+        if (toModify.has(n.id)) {
+          const m = toModify.get(n.id);
+          return Object.assign({}, n, { message: m.message, read_status: m.read_status });
+        }
+        return n;
+      });
+      return out;
+    } catch(_) { return items; }
+  }
+
   async function fetchNotifications() {
     // Let server default to current session user
     try {
@@ -248,9 +334,11 @@
         throw new Error(txt);
       }
       const json = await res.json();
-      const items = json?.data?.items || [];
+      let items = json?.data?.items || [];
+      // Merge duplicate allocation update rows into a single combined row
+      items = mergeAllocationUpdatePairs(items);
       // Compute signature by id+read_status, regardless of order
-      const sig = items.map(n => `${n.id}:${n.read_status ? 1 : 0}`).join('|');
+      const sig = items.map(n => `${n.id}:${n.read_status ? 1 : 0}:${String(n.message||'')}`).join('|');
       // Always render on first fetch, even if empty
       if (lastSig === null || sig !== lastSig) {
         render(items);
