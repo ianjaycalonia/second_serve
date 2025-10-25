@@ -25,6 +25,80 @@ try {
     // Only admins can view inventory for now
     requireRole(['admin']);
 
+    // GET /api/inventory/backfill-in?days=14
+    // Admin-only: backfill missing 'in' movements for inventory lots created within the window
+    if ($method === 'GET' && preg_match('#^/(backfill-in|backfill-in/)\z#', $sub)) {
+        $days = isset($_GET['days']) ? max(1, min(90, (int)$_GET['days'])) : 14;
+        $db = Database::getInstance();
+        // Ensure table exists (best effort)
+        try {
+            $db->query(
+                "CREATE TABLE IF NOT EXISTS `inventory_movements` (
+                    `id` int(11) NOT NULL AUTO_INCREMENT,
+                    `inventory_id` int(11) NOT NULL,
+                    `donation_item_id` int(11) DEFAULT NULL,
+                    `direction` enum('in','out') NOT NULL,
+                    `quantity` int(11) NOT NULL,
+                    `mode` varchar(32) NOT NULL,
+                    `recipient_id` int(11) DEFAULT NULL,
+                    `note` text DEFAULT NULL,
+                    `performed_by` int(11) NOT NULL,
+                    `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+                    PRIMARY KEY (`id`),
+                    KEY `im_inventory_idx` (`inventory_id`),
+                    KEY `im_recipient_idx` (`recipient_id`),
+                    KEY `im_performed_by_idx` (`performed_by`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+            );
+        } catch (Exception $e) { /* ignore */ }
+        // Select lots with no existing 'in' movement
+        $sql = "SELECT inv.inventory_id, inv.added_at, di.donation_item_id, di.quantity AS initial_qty, d.procurement_type, d.donor_id, d.admin_in_charge
+                FROM inventory inv
+                INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                INNER JOIN donations d ON d.donation_id = di.donation_id
+                LEFT JOIN inventory_movements im ON im.inventory_id = inv.inventory_id AND im.direction='in'
+                WHERE inv.added_at >= DATE_SUB(NOW(), INTERVAL ? DAY) AND im.id IS NULL";
+        $rows = $db->query($sql, [$days])->fetchAll();
+        $inserted = 0;
+        foreach ($rows as $r) {
+            try {
+                $inventoryId = (int)($r['inventory_id'] ?? 0);
+                $donationItemId = isset($r['donation_item_id']) ? (int)$r['donation_item_id'] : null;
+                $qty = (int)($r['initial_qty'] ?? 0);
+                if ($inventoryId <= 0 || $qty <= 0) { continue; }
+                $mode = ($r['procurement_type'] ?? '') === 'purchased' ? 'purchased' : 'donated';
+                // performed_by fallback: admin_in_charge -> first approved admin
+                $performedBy = 0;
+                if (!empty($r['admin_in_charge'])) { $performedBy = (int)$r['admin_in_charge']; }
+                if ($performedBy <= 0) {
+                    try {
+                        $ar = $db->query("SELECT user_id FROM users WHERE role='admin' AND status='approved' ORDER BY last_login DESC, created_at DESC LIMIT 1")->fetch();
+                        if ($ar && isset($ar['user_id'])) { $performedBy = (int)$ar['user_id']; }
+                    } catch (Exception $e2) { /* ignore */ }
+                }
+                if ($performedBy <= 0) { continue; }
+                // Insert backfilled movement with created_at = inv.added_at
+                if ($donationItemId) {
+                    $db->query(
+                        "INSERT INTO inventory_movements (inventory_id, donation_item_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
+                         VALUES (?, ?, 'in', ?, ?, NULL, NULL, ?, ?)",
+                        [$inventoryId, $donationItemId, $qty, $mode, $performedBy, $r['added_at']]
+                    );
+                } else {
+                    $db->query(
+                        "INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
+                         VALUES (?, 'in', ?, ?, NULL, NULL, ?, ?)",
+                        [$inventoryId, $qty, $mode, $performedBy, $r['added_at']]
+                    );
+                }
+                $inserted++;
+            } catch (Exception $ie) {
+                error_log('Backfill-in insert failed for inventory_id '.$r['inventory_id'].': '.$ie->getMessage());
+            }
+        }
+        sendJson(['success'=>true,'data'=>['scanned'=>count($rows),'inserted'=>$inserted,'days'=>$days]]);
+    }
+
     // GET /api/inventory/report-in - JSON rows shaped like Product In sample (one row per movement-in)
     if ($method === 'GET' && preg_match('#^/(report-in|report-in/)\z#', $sub)) {
         $db = Database::getInstance();
@@ -399,7 +473,7 @@ try {
                     im.recipient_id,
                     ur.name AS recipient_name,
                     im.performed_by,
-                    up.name AS performed_by_name,
+                    COALESCE(NULLIF(rp.organization_name, ''), up.name) AS performed_by_name,
                     im.created_at,
                     di.product_name AS item_name,
                     CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category
@@ -408,6 +482,7 @@ try {
                 LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
                 LEFT JOIN categories c ON c.category_id = di.category_id
                 LEFT JOIN users ur ON ur.user_id = im.recipient_id
+                LEFT JOIN recipient_profiles rp ON rp.user_id = im.recipient_id
                 LEFT JOIN users up ON up.user_id = im.performed_by
                 $whereSql
                 ORDER BY im.created_at DESC, im.id DESC

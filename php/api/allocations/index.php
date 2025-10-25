@@ -444,11 +444,12 @@ try {
                     $items = $db->query('SELECT ai.id, ai.inventory_id, ai.quantity,
                                                  di.product_name,
                                                  CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category,
-                                                 di.unit
+                                                 COALESCE(u.label, u.code) AS unit
                                            FROM allocation_items ai
                                            LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
                                            LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
                                            LEFT JOIN categories c ON c.category_id = di.category_id
+                                           LEFT JOIN units u ON u.unit_id = di.unit_id
                                           WHERE ai.allocation_id = ?
                                           ORDER BY ai.id ASC', [$aid])->fetchAll() ?: [];
                     $out[] = [
@@ -516,11 +517,12 @@ try {
                     $items = $db->query('SELECT ai.id, ai.inventory_id, ai.quantity,
                                                  di.product_name,
                                                  CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category,
-                                                 di.unit
+                                                 COALESCE(u.label, u.code) AS unit
                                           FROM allocation_items ai
                                           LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
                                           LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
                                           LEFT JOIN categories c ON c.category_id = di.category_id
+                                          LEFT JOIN units u ON u.unit_id = di.unit_id
                                           WHERE ai.allocation_id = ?
                                           ORDER BY ai.id ASC', [$aid])->fetchAll() ?: [];
                     $itemCount = is_array($items) ? count($items) : 0;
@@ -550,16 +552,27 @@ try {
             break;
 
         case 'list_by_recipient':
-            // Require role; if missing session, fallback to admin for robustness
-            try { requireRole(['recipient','admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            // Require proper auth; do NOT mutate session on failure (prevents role flip that breaks first pickup)
+            requireRole(['recipient','admin']);
             // Only recipient themselves unless admin
             $currentId = (int)(currentUserId() ?? 0);
             $role = (string)(currentUserRole() ?? '');
             $recipientId = $role === 'admin' ? (int)($_GET['recipient_id'] ?? 0) : $currentId;
             if ($recipientId <= 0) { sendJson(['success'=>false,'error'=>'Forbidden'], 403); }
+            $runId = isset($_GET['run_id']) ? (int)$_GET['run_id'] : null;
+            if ($runId !== null && $runId <= 0) { $runId = null; }
+            // If caller is a recipient and did not specify run_id, force alignment to latest run
+            if ($role !== 'admin' && ($runId === null)) {
+                try {
+                    $svcTmp = new Allocation();
+                    $latest = $svcTmp->latestRun();
+                    if ($latest && isset($latest['run_id']) && (int)$latest['run_id'] > 0) {
+                        $runId = (int)$latest['run_id'];
+                    }
+                } catch (Exception $e) { /* ignore; fallback to all */ }
+            }
             $svc = new Allocation();
-            $list = $svc->listByRecipient($recipientId);
+            $list = $svc->listByRecipient($recipientId, $runId);
             sendJson(['success'=>true, 'data'=>['items'=>$list]]);
             break;
 
@@ -580,12 +593,12 @@ try {
                 if (!$hdr) { sendJson(['success'=>false,'error'=>'Allocation not found'], 404); }
                 if ((int)($hdr['recipient_id'] ?? 0) !== $currentId) { sendJson(['success'=>false,'error'=>'Forbidden: allocation does not belong to this recipient'], 403); }
                 $st = strtolower((string)($hdr['status'] ?? ''));
-                if (!in_array($st, ['allocated','notified','acknowledged'], true)) {
+                if (!in_array($st, ['pending','allocated','notified','acknowledged','updated'], true)) {
                     // If already picked up/completed, return success
                     if (in_array($st, ['scheduled','picked up','completed'], true)) {
                         sendJson(['success'=>true]);
                     }
-                    sendJson(['success'=>false,'error'=>'Invalid state: allocation must be Allocated/Notified/Acknowledged to pick up'], 400);
+                    sendJson(['success'=>false,'error'=>'Invalid state: allocation must be Pending/Allocated/Notified/Acknowledged/Updated to pick up'], 400);
                 }
             } catch (Exception $e) { /* continue to service */ }
 

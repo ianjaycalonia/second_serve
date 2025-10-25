@@ -231,6 +231,13 @@ try {
             ]);
         }
 
+        // Immediately add items to inventory (idempotent per donation item) so Product In appears without waiting for status changes
+        try {
+            (new Inventory())->addFromBatchId($batchId);
+        } catch (Exception $e) {
+            error_log('Inventory add from batch failed: ' . $e->getMessage());
+        }
+
         // Notify all approved admins once for the batch submission
         try {
             $db = Database::getInstance();
@@ -453,7 +460,10 @@ try {
                 $db = Database::getInstance();
                 $params = [];
                 $where = "WHERE di.product_name IS NOT NULL AND di.product_name <> ''";
-                if ($category !== '') {
+                if ($categoryId !== null) {
+                    $where .= " AND di.category_id = ?";
+                    $params[] = $categoryId;
+                } else if ($category !== '') {
                     $catFull = preg_replace('/\s+/', ' ', trim($category));
                     $hasSecondary = (strpos($catFull, ' - ') !== false);
                     $where .= " AND (LOWER(CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))) = LOWER(?)";

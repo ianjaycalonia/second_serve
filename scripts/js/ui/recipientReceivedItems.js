@@ -222,6 +222,9 @@
         role === "admin" && recipientIdParam ? Number(recipientIdParam) : null;
 
       let items = [];
+      const runIdParam = getQueryParam("run_id");
+      let runIdFilter = runIdParam ? Number(runIdParam) : null;
+
       // Prefer AllocationsAPI if available; fallback to existing fetchJson
       if (
         window.AllocationsAPI &&
@@ -262,6 +265,41 @@
         items = Array.isArray(j?.data?.items) ? j.data.items : [];
       }
 
+      // If no explicit run in URL and user is admin, resolve the latest run; recipients skip this to avoid 403 noise
+      if (!runIdFilter) {
+        const user = getStoredUser();
+        const role = user && user.role ? String(user.role).toLowerCase() : "";
+        if (role === "admin") {
+          try {
+            const latest = await fetchJson(
+              `${API_BASE_URL}/allocations/index.php?action=latest_run&t=${Date.now()}`,
+              { credentials: "include", headers: { Accept: "application/json" } }
+            );
+            const r = latest?.data || latest;
+            const ridVal = Number(r?.run_id || 0);
+            if (Number.isFinite(ridVal) && ridVal > 0) {
+              runIdFilter = ridVal;
+            }
+          } catch (_) {
+            // ignore if endpoint restricted
+          }
+        }
+      }
+
+      // Determine the effective run to display
+      if (!runIdFilter && Array.isArray(items) && items.length) {
+        const runIds = items
+          .map((a) => Number(a.run_id || 0))
+          .filter((n) => Number.isFinite(n) && n > 0);
+        if (runIds.length) {
+          runIdFilter = Math.max.apply(null, runIds);
+        }
+      }
+      // Filter items to the effective run to prevent mismatch with admin run
+      if (runIdFilter && Array.isArray(items) && items.length) {
+        items = items.filter((a) => Number(a.run_id || 0) === runIdFilter);
+      }
+
       try {
         console.debug(
           "[receivedItems] refreshAllocations: items count:",
@@ -276,7 +314,9 @@
       const rowsHtml = items
         .map((a, idx) => {
           const id = Number(a.allocation_id);
+          const runId = Number(a.run_id || 0);
           const status = String(a.status || "Allocated");
+
           const createdAt = a.created_at ? fmtDate(a.created_at) : "";
           const pickupAt = a.scheduled_pickup_at
             ? fmtDate(a.scheduled_pickup_at)
@@ -331,7 +371,7 @@
             actionsHtml = `<span class="text-muted">No actions</span>`;
           }
           return `
-          <tr data-aid="${id}">
+          <tr data-aid="${id}" data-run-id="${runId}">
             <td>${createdAt}</td>
             <td>
               <button class="btn btn-sm btn-outline-secondary alloc-toggle" type="button" aria-expanded="false" aria-label="View items">
@@ -606,13 +646,13 @@
             scheduleBtn.disabled = true;
             let ok = false,
               msg = "";
-            try {
+            const attempt = async () => {
               if (
                 window.AllocationsAPI &&
                 typeof window.AllocationsAPI.schedule === "function"
               ) {
                 await window.AllocationsAPI.schedule(aid);
-                ok = true;
+                return true;
               } else {
                 const url = `${API_BASE_URL}/allocations/index.php?action=pickup&allocation_id=${encodeURIComponent(String(aid))}`;
                 const res = await fetch(url, {
@@ -625,12 +665,16 @@
                   body: JSON.stringify({ allocation_id: aid }),
                 });
                 const j = await res.json().catch(() => null);
-                ok = !!(res.ok && j?.success);
-                if (!ok) msg = (j && (j.error || j.message)) || `HTTP ${res.status}`;
+                if (res.ok && j?.success) return true;
+                msg = (j && (j.error || j.message)) || `HTTP ${res.status}`;
+                return false;
               }
-            } catch (e) {
-              ok = false;
-              msg = e?.message || "Failed";
+            };
+            ok = await attempt();
+            if (!ok) {
+              // silent one-time retry to smooth out first-attempt races
+              await new Promise((r) => setTimeout(r, 200));
+              ok = await attempt();
             }
             if (!ok) {
               showToast(`Failed to pick up items. ${msg}`);

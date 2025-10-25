@@ -160,7 +160,11 @@ class Allocation
         $rows = $preview['allocations'] ?? [];
         if (empty($rows)) return ['allocated'=>0, 'already_allocated'=>false];
         $allocated = 0;
-        $this->db->beginTransaction();
+        $startedTxn = false;
+        if (!$this->db->inTransaction()) {
+            $this->db->beginTransaction();
+            $startedTxn = true;
+        }
         try {
             // Create allocation run (idempotent per period_key)
             try {
@@ -486,28 +490,37 @@ class Allocation
         }
     }
 
-    public function listByRecipient(int $recipientId): array
+    public function listByRecipient(int $recipientId, ?int $runId = null): array
     {
-        $rows = $this->db->query(
-            'SELECT a.* FROM allocations a WHERE a.recipient_id = ? ORDER BY a.created_at DESC, a.allocation_id DESC',
-            [ $recipientId ]
-        )->fetchAll();
+        if ($runId !== null && $runId > 0) {
+            $rows = $this->db->query(
+                'SELECT a.* FROM allocations a WHERE a.recipient_id = ? AND a.run_id = ? ORDER BY a.created_at DESC, a.allocation_id DESC',
+                [ $recipientId, $runId ]
+            )->fetchAll();
+        } else {
+            $rows = $this->db->query(
+                'SELECT a.* FROM allocations a WHERE a.recipient_id = ? ORDER BY a.created_at DESC, a.allocation_id DESC',
+                [ $recipientId ]
+            )->fetchAll();
+        }
         $out = [];
         foreach ($rows as $r){
             $aid = (int)$r['allocation_id'];
 
-            // Use normalized schema: inventory -> donation_items for product fields
+            // Use normalized schema: inventory -> donation_items with categories/units joins
             $items = $this->db->query('
                 SELECT
                     ai.id,
                     ai.inventory_id,
                     ai.quantity,
                     di.product_name,
-                    di.product_category,
-                    di.unit
+                    CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category,
+                    COALESCE(u.label, u.code) AS unit
                 FROM allocation_items ai
                 LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
                 LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                LEFT JOIN categories c ON c.category_id = di.category_id
+                LEFT JOIN units u ON u.unit_id = di.unit_id
                 WHERE ai.allocation_id = ?
                 ORDER BY ai.id ASC
             ', [$aid])->fetchAll();
@@ -515,6 +528,7 @@ class Allocation
             $out[] = [
                 'allocation_id' => $aid,
                 'recipient_id' => (int)$r['recipient_id'],
+                'run_id' => isset($r['run_id']) ? (int)$r['run_id'] : null,
                 'status' => $r['status'] ?? 'Allocated',
                 'scheduled_pickup_at' => $r['scheduled_pickup_at'] ?? null,
                 'acknowledged_at' => $r['acknowledged_at'] ?? null,
@@ -865,101 +879,76 @@ class Allocation
 
     public function schedule(int $allocationId, int $recipientId): bool
     {
-        // Allow schedule if owned by recipient and in Allocated/Notified/Acknowledged status
+        // Allow schedule if owned by recipient and in Pending/Allocated/Notified/Acknowledged/Updated status
         $row = $this->db->query('SELECT status, recipient_id FROM allocations WHERE allocation_id = ?', [$allocationId])->fetch();
         if (!$row || (int)$row['recipient_id'] !== $recipientId) return false;
         $st = strtolower((string)$row['status']);
-        if (!in_array($st, ['allocated','notified','acknowledged'], true)) return false;
+        if (!in_array($st, ['pending','allocated','notified','acknowledged','updated'], true)) return false;
 
         // If not yet acknowledged, auto-acknowledge now
         if ($st !== 'acknowledged'){
             $this->db->query('UPDATE allocations SET status = "Acknowledged", acknowledged_at = NOW(), updated_at = NOW() WHERE allocation_id = ?', [$allocationId]);
         }
 
-        // Get allocation items to deduct from inventory
+        // Deduct inventory lots exactly as allocated and log Product Out movements.
+        // If any lot is missing or has insufficient quantity, rollback and return false.
         $items = $this->db->query('SELECT inventory_id, quantity FROM allocation_items WHERE allocation_id = ? ORDER BY id ASC', [$allocationId])->fetchAll();
-        if (!$items) return false;
+        if (!$items) { return false; }
 
         $this->db->beginTransaction();
         try {
-            // Try to deduct from inventory if table exists
-            $inventoryExists = false;
+            // Ensure movements table exists (Allocation cannot call Inventory::ensureTables which is private)
             try {
-                // First check if inventory table exists at all
-                $this->db->query('SELECT 1 FROM inventory LIMIT 1')->fetch();
-                $inventoryExists = true;
-            } catch (Exception $e) {
-                $inventoryExists = false;
-                try { error_log("Inventory table check failed: " . $e->getMessage()); } catch(_) {}
-            }
-
-            if ($inventoryExists) {
-                // Check if allocation_items has inventory_id column (new schema)
-                $hasInventoryId = false;
+                $this->db->query(
+                    "CREATE TABLE IF NOT EXISTS `inventory_movements` (
+                        `id` int(11) NOT NULL AUTO_INCREMENT,
+                        `inventory_id` int(11) NOT NULL,
+                        `donation_item_id` int(11) DEFAULT NULL,
+                        `direction` enum('in','out') NOT NULL,
+                        `quantity` int(11) NOT NULL,
+                        `mode` varchar(32) NOT NULL,
+                        `recipient_id` int(11) DEFAULT NULL,
+                        `note` text DEFAULT NULL,
+                        `performed_by` int(11) NOT NULL,
+                        `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+                        PRIMARY KEY (`id`),
+                        KEY `im_inventory_idx` (`inventory_id`),
+                        KEY `im_recipient_idx` (`recipient_id`),
+                        KEY `im_performed_by_idx` (`performed_by`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+                );
+            } catch (Exception $e) { /* ignore ensure errors */ }
+            foreach ($items as $it) {
+                $inventoryId = (int)($it['inventory_id'] ?? 0);
+                $need = (int)($it['quantity'] ?? 0);
+                if ($inventoryId <= 0 || $need <= 0) { continue; }
+                // Lock current lot
+                $invRow = $this->db->query('SELECT quantity FROM inventory WHERE inventory_id = ? FOR UPDATE', [$inventoryId])->fetch();
+                if (!$invRow) { if ($startedTxn && $this->db->inTransaction()) { $this->db->rollBack(); } return false; }
+                $have = (int)$invRow['quantity'];
+                if ($have < $need) { if ($startedTxn && $this->db->inTransaction()) { $this->db->rollBack(); } return false; }
+                // Deduct
+                $this->db->query('UPDATE inventory SET quantity = quantity - ? WHERE inventory_id = ?', [$need, $inventoryId]);
+                // Log movement as Product Out to recipient (best effort)
                 try {
-                    // Test if we can access inventory_id column
-                    $testQuery = $this->db->query('SELECT inventory_id FROM allocation_items WHERE allocation_id = ? LIMIT 1', [$allocationId])->fetch();
-                    $hasInventoryId = true;
-                } catch (Exception $e) {
-                    $hasInventoryId = false;
-                }
-
-                if ($hasInventoryId) {
-                    // New schema: allocation_items has inventory_id
-                    foreach ($items as $it){
-                        $inventoryId = (int)($it['inventory_id'] ?? 0);
-                        $need = (int)($it['quantity'] ?? 0);
-                        if ($inventoryId <= 0 || $need <= 0) continue;
-
-                        // Get current inventory quantity (only columns guaranteed to exist)
-                        $invRow = $this->db->query('SELECT quantity FROM inventory WHERE inventory_id = ?', [$inventoryId])->fetch();
-                        if (!$invRow) {
-                            // Inventory item not found
-                            if ($this->db->inTransaction()) $this->db->rollBack();
-                            return false;
-                        }
-
-                        $have = (int)$invRow['quantity'];
-                        if ($have < $need) {
-                            // Not enough stock
-                            if ($this->db->inTransaction()) $this->db->rollBack();
-                            return false;
-                        }
-
-                        // Deduct from inventory
-                        $this->db->query('UPDATE inventory SET quantity = quantity - ? WHERE inventory_id = ?', [$need, $inventoryId]);
-
-                        // Log movement
-                        try {
-                            $this->db->query(
-                                'INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, performed_by, created_at) VALUES (?,?,?,?,?,?, NOW())',
-                                [ $inventoryId, 'out', $need, 'recipient', $recipientId, null ]
-                            );
-                        } catch (Exception $e) {
-                            // If inventory_movements table has issues, just log to error log
-                            try { error_log("Inventory movement failed: " . $e->getMessage()); } catch(_) {}
-                        }
-                    }
-                } else {
-                    // Old schema: allocation_items has item_name, category, unit - skip inventory deduction
-                    // Just mark as picked up without inventory changes
-                }
+                    $this->db->query(
+                        'INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at) VALUES (?, "out", ?, "recipient", ?, NULL, ?, NOW())',
+                        [ $inventoryId, $need, $recipientId, $recipientId ]
+                    );
+                } catch (Exception $e) { /* ignore movement log errors but keep deduction */ }
             }
-
-            // All items fulfilled; mark as Picked Up
+            // Mark picked up
             $this->db->query('UPDATE allocations SET status = "Picked Up", updated_at = NOW() WHERE allocation_id = ?', [$allocationId]);
-            $this->db->commit();
-
-            // Notify admins
+            if ($startedTxn && $this->db->inTransaction()) { $this->db->commit(); }
+            // Notify admins (best effort)
             try {
                 $rec = $this->db->query('SELECT u.name, rp.organization_name FROM users u LEFT JOIN recipient_profiles rp ON u.user_id = rp.user_id WHERE u.user_id = ?', [$recipientId])->fetch();
                 $rname = $rec && $rec['organization_name'] ? $rec['organization_name'] : ($rec ? ($rec['name'] ?? ('Recipient '.$recipientId)) : ('Recipient '.$recipientId));
-                $msg = $inventoryExists ? "Allocation picked up by {$rname} and inventory deducted." : "Allocation picked up by {$rname}.";
-                $this->notifyAdmins('allocation_picked_up', 'allocation', $allocationId, $msg);
+                $this->notifyAdmins('allocation_picked_up', 'allocation', $allocationId, "Allocation picked up by {$rname} and inventory deducted.");
             } catch (Exception $e) { /* ignore notification errors */ }
             return true;
-        } catch (Exception $e){
-            if ($this->db->inTransaction()) $this->db->rollBack();
+        } catch (Exception $e) {
+            if ($startedTxn && $this->db->inTransaction()) { $this->db->rollBack(); }
             throw $e;
         }
     }

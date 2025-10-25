@@ -239,8 +239,8 @@
       if (!resp.ok || jr?.success === false) {
         throw new Error(jr?.error || `HTTP ${resp.status}`);
       }
-      // Save last successful discard for immediate UI update on modal close
-      window.__discardLast = { itemName: ctx.itemName, category: ctx.category, qty };
+      // Save last successful discard for immediate UI update on modal close (disabled; use fresh reload)
+      window.__discardLast = null;
       // Close discard modal and show success
       try {
         const dm = document.getElementById("discardModal");
@@ -257,8 +257,18 @@
           bootstrap.Modal.getOrCreateInstance(sm).show();
         }
       } catch (_) {}
-      // Refresh table
-      await loadAndRender(1);
+      // Invalidate any cached non-expired collection to avoid stale totals
+      try {
+        if (window.__invNonExpiredCache) {
+          window.__invNonExpiredCache = {};
+        }
+      } catch (_) {}
+      // Refresh table: keep current page and add small delay to allow DB commit
+      const curPage = (window.__inventoryLast && window.__inventoryLast.pagination && window.__inventoryLast.pagination.page) ? Number(window.__inventoryLast.pagination.page) : 1;
+      await new Promise(r => setTimeout(r, 250));
+      await loadAndRender(curPage || 1);
+      // Safety: follow-up refresh to eliminate transient race conditions
+      setTimeout(() => { try { loadAndRender(curPage || 1); } catch(_){} }, 700);
     } catch (err) {
       const fb = document.getElementById("discardFeedback");
       if (fb) fb.textContent = err?.message || "Failed to discard.";
@@ -959,12 +969,20 @@
   }
 
   function bindImportModal() {
-    const fileInput = document.getElementById("importFileInput");
+    let fileInput = document.getElementById("importFileInput");
     const headEl = document.getElementById("importPreviewHead");
     const bodyEl = document.getElementById("importPreviewBody");
     const statusEl = document.getElementById("importParseStatus");
-    const submitBtn = document.getElementById("importInventorySubmitBtn");
+    let submitBtn = document.getElementById("importInventorySubmitBtn");
     if (!fileInput || !headEl || !bodyEl || !submitBtn) return;
+
+    // Replace elements with clones to remove any previously attached listeners
+    const fileClone = fileInput.cloneNode(true);
+    fileInput.parentNode.replaceChild(fileClone, fileInput);
+    fileInput = fileClone;
+    const submitClone = submitBtn.cloneNode(true);
+    submitBtn.parentNode.replaceChild(submitClone, submitBtn);
+    submitBtn = submitClone;
 
     submitBtn.disabled = true;
     let previewData = { header: [], rows: [] };
@@ -1210,9 +1228,15 @@
   try {
     const importModal = document.getElementById("importInventoryModal");
     if (importModal) {
-      importModal.addEventListener("shown.bs.modal", () => {
-        try { bindImportModal(); } catch (_) {}
-      });
+      importModal.addEventListener(
+        "shown.bs.modal",
+        () => {
+          try {
+            bindImportModal();
+          } catch (_) {}
+        },
+        { once: true }
+      );
     }
   } catch (_) {}
 

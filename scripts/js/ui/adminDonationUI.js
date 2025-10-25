@@ -12,6 +12,30 @@
   function getEl(id) {
     return document.getElementById(id);
   }
+  function ensureToastContainer() {
+    try {
+      let cont = document.getElementById('globalToastContainer');
+      if (!cont) {
+        cont = document.createElement('div');
+        cont.id = 'globalToastContainer';
+        cont.className = 'toast-container position-fixed top-0 end-0 p-3';
+        document.body.appendChild(cont);
+      }
+      return cont;
+    } catch (_) { return null; }
+  }
+  function showError(message){
+    try{
+      const cont = ensureToastContainer();
+      const toast = document.createElement('div');
+      toast.className = 'toast align-items-center text-white bg-danger border-0';
+      toast.setAttribute('role','alert'); toast.setAttribute('aria-live','assertive'); toast.setAttribute('aria-atomic','true');
+      toast.innerHTML = `<div class="d-flex"><div class="toast-body">${(message||'').toString()}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+      cont && cont.appendChild(toast);
+      if (window.bootstrap?.Toast) { new bootstrap.Toast(toast, { delay: 2500 }).show(); }
+      else { toast.style.display='block'; setTimeout(()=>{ try{ toast.remove(); }catch(_){} }, 3000); }
+    } catch(_) { try { console.error(message); } catch(_){} }
+  }
   // debounce helper
   function debounce(fn, wait) {
     let t;
@@ -950,16 +974,10 @@
       if (
         result === "passed" &&
         !(receipt && receipt.files && receipt.files.length)
-      ) {
-        alert("Receipt image is required for a Passed check.");
-        return;
-      }
+      ) { showError("Receipt image is required for a Passed check."); return; }
       if (result === "failed") {
         const reason = (getEl("fsFailReasonHidden")?.value || "").trim();
-        if (!reason) {
-          alert("Failure reason is required when marking as Failed.");
-          return;
-        }
+        if (!reason) { showError("Failure reason is required when marking as Failed."); return; }
         fd.set("fail_reason", reason);
       }
       const st = getEl("fsStorage"),
@@ -1086,7 +1104,7 @@
         } catch (_) {}
       } catch (err) {
         console.error("Food safety submit failed:", err);
-        alert("Failed to submit food safety check: " + err.message);
+        showError("Failed to submit food safety check: " + err.message);
       } finally {
         if (btnSubmit) btnSubmit.disabled = false;
         if (btnFail) btnFail.disabled = false;
@@ -1136,10 +1154,7 @@
           }
           btn.addEventListener("click", async () => {
             const reason = (fin?.value || "").trim();
-            if (!reason) {
-              alert("Failure reason is required.");
-              return;
-            }
+            if (!reason) { showError("Failure reason is required."); return; }
             if (hid) hid.value = reason;
             try {
               m.hide();
@@ -1273,10 +1288,7 @@
           }
         } catch (err) {
           console.error("Acknowledge failed:", err);
-          alert(
-            "Failed to acknowledge donation: " +
-              (err?.message || "Unknown error")
-          );
+          showError("Failed to acknowledge donation: " + (err?.message || "Unknown error"));
         }
         return;
       }
@@ -1409,7 +1421,7 @@
       } catch (_) {}
     } catch (err) {
       console.error("Failed to update status:", err);
-      alert("Failed to update status: " + (err?.message || "Unknown error"));
+      showError("Failed to update status: " + (err?.message || "Unknown error"));
     }
   }
   function bindReceiveConfirm() {

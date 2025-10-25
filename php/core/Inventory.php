@@ -121,10 +121,17 @@ class Inventory
         try {
             $this->ensureTables();
             $invId = (int)$this->db->lastInsertId();
-            // Attribution: the admin performing the import/entry is the receiver
+            // Attribution priority: session user -> admin_in_charge -> donor_id -> any approved admin
             $performedBy = 0;
             try { $performedBy = (int)currentUserId(); } catch (Exception $e) { $performedBy = 0; }
-            if (empty($performedBy) && !empty($adminInCharge)) { $performedBy = (int)$adminInCharge; }
+            if ($performedBy <= 0 && !empty($adminInCharge)) { $performedBy = (int)$adminInCharge; }
+            if ($performedBy <= 0 && !empty($donorId)) { $performedBy = (int)$donorId; }
+            if ($performedBy <= 0) {
+                try {
+                    $ar = $this->db->query("SELECT user_id FROM users WHERE role='admin' AND status='approved' ORDER BY last_login DESC, created_at DESC LIMIT 1")->fetch();
+                    if ($ar && isset($ar['user_id'])) { $performedBy = (int)$ar['user_id']; }
+                } catch (Exception $e) { /* ignore */ }
+            }
             if ($invId > 0 && $qty > 0 && $performedBy > 0) {
                 // mode uses a broader string to indicate source
                 if ($donationItemId) {

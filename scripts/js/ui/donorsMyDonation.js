@@ -25,6 +25,41 @@
           status || "Unknown"
         }</span>`;
     }
+
+  function ensureToastContainer() {
+    let cont = document.getElementById("globalToastContainer");
+    if (!cont) {
+      cont = document.createElement("div");
+      cont.id = "globalToastContainer";
+      cont.className = "toast-container position-fixed top-0 end-0 p-3";
+      document.body.appendChild(cont);
+    }
+    return cont;
+  }
+  function showError(message) {
+    try {
+      const cont = ensureToastContainer();
+      const toast = document.createElement("div");
+      toast.className = "toast align-items-center text-white bg-danger border-0";
+      toast.setAttribute("role", "alert");
+      toast.setAttribute("aria-live", "assertive");
+      toast.setAttribute("aria-atomic", "true");
+      toast.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${(message||'').toString()}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>`;
+      cont.appendChild(toast);
+      if (window.bootstrap?.Toast) {
+        const t = new bootstrap.Toast(toast, { delay: 2500 });
+        t.show();
+      } else {
+        // Fallback: simple non-blocking removal
+        toast.style.display = 'block';
+        setTimeout(()=>{ try{ toast.remove(); }catch(_){} }, 3000);
+      }
+    } catch (_) { try { console.error(message); } catch(_){} }
+  }
   }
 
   function batchItemRowTemplate(it) {
@@ -138,7 +173,7 @@
       m.show();
     } catch (e) {
       console.error("Failed to open batch edit", e);
-      alert("Failed to open batch editor: " + (e?.message || "Unknown error"));
+      showError("Failed to open batch editor: " + (e?.message || "Unknown error"));
     }
   }
 
@@ -162,9 +197,7 @@
         const qty = parseInt(row.querySelector(".batch-item-qty").value, 10);
         const expiry = row.querySelector(".batch-item-expiry").value;
         if (!name || !qty || qty < 1 || !expiry) {
-          alert(
-            "Please ensure all items have name, quantity (>=1), and expiry."
-          );
+          showError("Please ensure all items have name, quantity (>=1), and expiry.");
           return;
         }
         items.push({
@@ -207,7 +240,7 @@
         await reloadList();
         showSuccess("Batch updated");
       } catch (err) {
-        alert("Failed to save batch: " + (err?.message || "Unknown error"));
+        showError("Failed to save batch: " + (err?.message || "Unknown error"));
       } finally {
         btn.disabled = false;
       }
@@ -649,13 +682,8 @@
           quantity: parseInt(document.getElementById("editQuantity").value, 10),
           expiry_date: expiryVal,
         };
-        if (
-          !payload.name ||
-          !payload.quantity ||
-          payload.quantity < 1 ||
-          !expiryVal
-        ) {
-          alert("Please provide a valid name, quantity, and expiry date.");
+        if (!payload.name || !payload.quantity || payload.quantity < 1 || !expiryVal) {
+          showError("Please provide a valid name, quantity, and expiry date.");
           return;
         }
         saveBtn.disabled = true;
@@ -691,9 +719,7 @@
           await reloadList();
           showSuccess("Donation updated");
         } catch (err) {
-          alert(
-            "Failed to update donation: " + (err?.message || "Unknown error")
-          );
+          showError("Failed to update donation: " + (err?.message || "Unknown error"));
         } finally {
           saveBtn.disabled = false;
         }
@@ -713,10 +739,7 @@
         const reason = (
           document.getElementById("cancelReason").value || ""
         ).trim();
-        if (!reason) {
-          alert("Please provide a reason for cancellation.");
-          return;
-        }
+        if (!reason) { showError("Please provide a reason for cancellation."); return; }
         confirmCancel.disabled = true;
         try {
           if (batchId) {
@@ -782,19 +805,14 @@
                 msg + (j._raw ? `\nServer said: ${j._raw.slice(0, 200)}` : "")
               );
             }
-          } else {
-            alert("Nothing to cancel.");
-            return;
-          }
+          } else { showError("Nothing to cancel."); return; }
           bootstrap.Modal.getInstance(
             document.getElementById("cancelDonationModal")
           ).hide();
           await reloadList();
           showSuccess(batchId ? "Batch cancelled" : "Donation cancelled");
         } catch (err) {
-          alert(
-            "Failed to cancel donation(s): " + (err?.message || "Unknown error")
-          );
+          showError("Failed to cancel donation(s): " + (err?.message || "Unknown error"));
         } finally {
           confirmCancel.disabled = false;
         }
