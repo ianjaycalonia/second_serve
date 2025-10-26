@@ -120,6 +120,33 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
     const ids = Array.isArray(window.__diAllocIds)?window.__diAllocIds:[];
     return ids[idx] || null;
   }
+  async function resolveMaxAvailable(cat, name){
+    try {
+      const params = new URLSearchParams({ group: 'merge', page: '1', limit: '1' });
+      if (cat) params.set('category', cat);
+      if (name) params.set('q', name);
+      const res = await fetch(`/Capstone%20Project/php/api/inventory/index.php/list?${params.toString()}`, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' }
+      });
+      if (!res.ok) return null;
+      const j = await res.json().catch(()=>null);
+      const it = Array.isArray(j?.data?.items) ? j.data.items[0] : null;
+      if (!it) return null;
+      const qty = parseInt(it?.total_quantity ?? it?.quantity ?? 0, 10) || 0;
+      const unit = (it?.unit ?? it?.unit_label ?? '').trim();
+      return { qty, unit };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function cacheKey(cat, name){
+    return `${(cat||'').toLowerCase()}::${(name||'').toLowerCase()}`;
+  }
+
+  const maxCache = new Map();
+
   function addAllocItemToRecipient(recipientId, cat, name, qty, unit, statusLabel){
     try{
       if (!recipientId) return;
@@ -129,6 +156,8 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       if (!list){ list = document.createElement('ul'); list.className = 'list-unstyled mb-0'; host.appendChild(list); }
       const li = document.createElement('li');
       li.className = 'd-flex align-items-center border-bottom py-1 small px-2';
+      li.dataset.category = (cat || '').toLowerCase();
+      li.dataset.name = (name || '').toLowerCase();
       const label = [cat||'', name||''].filter(Boolean).join(' • ');
       const statusBadge = (statusLabel && String(statusLabel).trim()) ? `<span class="badge bg-warning text-dark ms-2">${statusLabel}</span>` : '';
       const q = Math.max(1, parseInt(qty||1,10)||1);
@@ -136,7 +165,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       li.innerHTML = `
         <span class="alloc-label flex-grow-1">${label} ${statusBadge}</span>
         <div class="d-flex align-items-center gap-2" style="width:90px; justify-content:flex-end">
-          <input type="number" class="form-control form-control-sm alloc-qty-input" min="1" value="${q}" style="width:80px" />
+          <input type="number" class="form-control form-control-sm alloc-qty-input" min="0" value="${q}" style="width:80px" />
         </div>
         <span class="alloc-unit text-center" style="width:120px">${u}</span>
         <button type="button" class="btn btn-sm p-0 alloc-del-btn ms-2" aria-label="Remove">
@@ -148,8 +177,51 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       if (qtyInput){
         // Allow normal input focus/editing; only stop propagation so carousel doesn't slide
         const stopBubble = (e)=>{ try{ e.stopImmediatePropagation(); }catch(_){} try{ e.stopPropagation(); }catch(_){} };
-        qtyInput.addEventListener('input', (e)=>{ const v = Math.max(1, parseInt(e.target.value||'1',10)||1); e.target.value = String(v); });
+        qtyInput.addEventListener('input', (e)=>{ const v = Math.max(0, parseInt(e.target.value||'0',10)||0); e.target.value = String(v); });
         ['click','mousedown','pointerdown','touchstart'].forEach(ev=> qtyInput.addEventListener(ev, stopBubble));
+        const key = cacheKey(cat, name);
+        const enforceMax = async ()=>{
+          try {
+            const current = Math.max(0, parseInt(qtyInput.value || '0', 10) || 0);
+            let cached = maxCache.get(key);
+            if (!cached) {
+              cached = await resolveMaxAvailable(cat, name);
+              if (cached) maxCache.set(key, cached);
+            }
+            const max = cached?.qty ?? null;
+            if (max !== null && max >= 0) {
+              let others = 0;
+              try {
+                const allInputs = document.querySelectorAll('.alloc-qty-input');
+                allInputs.forEach((inp)=>{
+                  if (inp === qtyInput) return;
+                  const liNode = inp.closest('li');
+                  if (!liNode) return;
+                  const liCat = (liNode.dataset.category || '').toLowerCase();
+                  const liName = (liNode.dataset.name || '').toLowerCase();
+                  if (liCat === (cat || '').toLowerCase() && liName === (name || '').toLowerCase()) {
+                    const val = Math.max(0, parseInt(inp.value || '0', 10) || 0);
+                    others += val;
+                  }
+                });
+              } catch(_) {}
+              const remaining = Math.max(0, max - others);
+              if (current > remaining) {
+                qtyInput.value = String(remaining);
+              }
+            }
+            if (!unit && cached?.unit) {
+              try { qtyInput.closest('li').querySelector('.alloc-unit').textContent = cached.unit; } catch(_){ }
+            }
+          } catch (_) {}
+        };
+        qtyInput.addEventListener('blur', enforceMax);
+        qtyInput.addEventListener('change', enforceMax);
+        qtyInput.addEventListener('keyup', (ev)=>{
+          if (ev.key === 'Enter') enforceMax();
+        });
+        // Immediately enforce on create
+        enforceMax();
       }
       const delBtn = li.querySelector('.alloc-del-btn');
       if (delBtn){
