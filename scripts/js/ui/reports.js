@@ -55,6 +55,47 @@
     return data;
   }
 
+  function ensureToastContainer() {
+    let container = document.getElementById("reportsToastContainer");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "reportsToastContainer";
+      container.className = "toast-container position-fixed top-0 end-0 p-3";
+      document.body.appendChild(container);
+    }
+    return container;
+  }
+
+  function showToast(message, variant = "success", delayMs = 2400) {
+    try {
+      const container = ensureToastContainer();
+      const color = variant === "danger" ? "danger" : variant === "warning" ? "warning" : "success";
+      const toastEl = document.createElement("div");
+      toastEl.className = `toast align-items-center text-bg-${color} border-0 shadow`;
+      toastEl.setAttribute("role", "alert");
+      toastEl.setAttribute("aria-live", "assertive");
+      toastEl.setAttribute("aria-atomic", "true");
+      toastEl.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${message}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      `;
+      container.appendChild(toastEl);
+      const toast = bootstrap.Toast.getOrCreateInstance(toastEl, {
+        delay: delayMs,
+        autohide: true,
+      });
+      toastEl.addEventListener("hidden.bs.toast", () => {
+        toast.dispose();
+        toastEl.remove();
+      });
+      toast.show();
+    } catch (err) {
+      console.warn("Toast display failed", err);
+    }
+  }
+
   function formatIsoDate(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -147,13 +188,59 @@
       ];
       const aoa = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+      const headerStyle = {
+        fill: {
+          patternType: "solid",
+          fgColor: { rgb: "C6EFCE" },
+        },
+        font: {
+          bold: true,
+          color: { rgb: "000000" },
+        },
+        alignment: {
+          horizontal: "center",
+          vertical: "center",
+        },
+      };
+      headers.forEach((_, idx) => {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: idx });
+        const cell = ws[cellAddress];
+        if (cell) {
+          cell.s = headerStyle;
+        }
+      });
+
+      ws["!cols"] = [
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 24 },
+        { wch: 18 },
+        { wch: 28 },
+        { wch: 26 },
+        { wch: 10 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 22 },
+      ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Product In");
       const fname = `product_in_${resp?.data?.start || ""}_${
         resp?.data?.end || ""
       }.xlsx`.replace(/[^a-zA-Z0-9_.-]/g, "_");
-      XLSX.writeFile(wb, fname);
+      XLSX.writeFile(wb, fname, { cellStyles: true });
+      const modalEl = document.getElementById("exportModal");
+      if (modalEl) {
+        const modalInstance =
+          bootstrap.Modal.getInstance(modalEl) ||
+          bootstrap.Modal.getOrCreateInstance(modalEl);
+        modalInstance.hide();
+      }
+      showToast("Product In report exported.");
     } catch (err) {
+      console.error("Export Product In failed", err);
       alert(`Export In failed: ${err?.message || "Unknown error"}`);
     }
   }
@@ -171,22 +258,77 @@
       const resp = await fetchJson(url.toString());
       const rows = Array.isArray(resp?.data?.rows) ? resp.data.rows : [];
       const headers = [
-        "DATE OUT",
-        "ITEM",
-        "CATEGORY",
+        "DATE",
+        "BENEFICIARY AGENCY",
+        "PRODUCT NAME",
+        "PRODUCT CATEGORY",
         "QUANTITY",
-        "MODE",
-        "NOTE",
-        "PERFORMED BY",
+        "UNIT",
+        "TOTAL WEIGHT (KG)",
+        "ENTRY BY",
       ];
-      const aoa = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))];
+      const aoa = [
+        headers,
+        ...rows.map((r) =>
+          headers.map((h) => {
+            if (h === "TOTAL WEIGHT (KG)") {
+              const raw = r[h];
+              if (typeof raw === "number" && Number.isFinite(raw)) {
+                return Number(raw.toFixed(3));
+              }
+              const parsed = parseFloat(raw);
+              return Number.isFinite(parsed) ? Number(parsed.toFixed(3)) : "";
+            }
+            return r[h] ?? "";
+          })
+        ),
+      ];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const headerStyle = {
+        fill: {
+          patternType: "solid",
+          fgColor: { rgb: "BDD7EE" },
+        },
+        font: {
+          bold: true,
+          color: { rgb: "000000" },
+        },
+        alignment: {
+          horizontal: "center",
+          vertical: "center",
+        },
+      };
+      headers.forEach((_, idx) => {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: idx });
+        const cell = ws[cellAddress];
+        if (cell) {
+          cell.s = headerStyle;
+        }
+      });
+      ws["!cols"] = [
+        { wch: 12 },
+        { wch: 28 },
+        { wch: 24 },
+        { wch: 26 },
+        { wch: 12 },
+        { wch: 10 },
+        { wch: 16 },
+        { wch: 26 },
+      ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Product Out");
       const fname = `product_out_${resp?.data?.start || ""}_${
         resp?.data?.end || ""
       }.xlsx`.replace(/[^a-zA-Z0-9_.-]/g, "_");
-      XLSX.writeFile(wb, fname);
+      XLSX.writeFile(wb, fname, { cellStyles: true });
+      const modalEl = document.getElementById("exportModal");
+      if (modalEl) {
+        const modalInstance =
+          bootstrap.Modal.getInstance(modalEl) ||
+          bootstrap.Modal.getOrCreateInstance(modalEl);
+        modalInstance.hide();
+      }
+      showToast("Product Out report exported.");
     } catch (err) {
       alert(`Export Out failed: ${err?.message || "Unknown error"}`);
     }

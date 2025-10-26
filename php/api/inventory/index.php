@@ -113,13 +113,49 @@ try {
         $startDt = date('Y-m-d H:i:s', $startTs);
         $endDt   = date('Y-m-d H:i:s', $endTs);
 
+        $categoryExpr = 'c.name';
+        try {
+            $colRows = $db->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='categories' AND COLUMN_NAME IN ('primary_name','secondary_name')")->fetchAll();
+            $cols = [];
+            foreach ($colRows as $row) {
+                $name = isset($row['COLUMN_NAME']) ? (string)$row['COLUMN_NAME'] : null;
+                if ($name !== null && $name !== '') {
+                    $cols[] = strtolower($name);
+                }
+            }
+            $hasPrimary = in_array('primary_name', $cols, true);
+            $hasSecondary = in_array('secondary_name', $cols, true);
+            if ($hasPrimary) {
+                if ($hasSecondary) {
+                    $categoryExpr = "CONCAT(c.primary_name, CASE WHEN c.secondary_name IS NULL OR c.secondary_name = '' THEN '' ELSE CONCAT(' - ', c.secondary_name) END)";
+                } else {
+                    $categoryExpr = 'c.primary_name';
+                }
+            }
+        } catch (Exception $e) { /* fallback to legacy column */ }
+
+        $donorCategoryParts = ['dc.name', 'dc2.name'];
+        $hasLegacyDonorCategory = false;
+        try {
+            $chk = $db->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='donor_profiles' AND COLUMN_NAME='donor_category' LIMIT 1")->fetch();
+            $hasLegacyDonorCategory = (bool)$chk;
+        } catch (Exception $e) {
+            $hasLegacyDonorCategory = false;
+        }
+        if ($hasLegacyDonorCategory) {
+            $donorCategoryParts[] = 'dprof.donor_category';
+            $donorCategoryParts[] = 'dprof_name.donor_category';
+        }
+        $donorCategoryExpr = "COALESCE(" . implode(', ', $donorCategoryParts) . ")";
+        $donorNameExpr = "COALESCE(dprof.organization_name, du.name, dprof_name.organization_name, d.donor_name)";
+
         $sql = "SELECT 
                     DATE(im.created_at) AS entry_date,
                     COALESCE(NULLIF(d.procurement_type, ''), NULLIF(im.mode, '')) AS donated_or_purchased,
-                    COALESCE(dp.organization_name, du.name) AS donor_name,
-                    dc.name AS donor_category,
+                    {$donorNameExpr} AS donor_name,
+                    {$donorCategoryExpr} AS donor_category,
                     di.product_name,
-                    CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS product_category,
+                    {$categoryExpr} AS product_category,
                     im.quantity,
                     COALESCE(u.label, u.code) AS packed_by,
                     di.total_weight,
@@ -135,10 +171,17 @@ try {
                 LEFT JOIN users du ON du.user_id = d.donor_id
                 LEFT JOIN donor_profiles dprof ON dprof.user_id = du.user_id
                 LEFT JOIN donor_categories dc ON dc.id = dprof.donor_category_id
+                LEFT JOIN donor_profiles dprof_name ON dprof_name.organization_name = d.donor_name
+                LEFT JOIN donor_categories dc2 ON dc2.id = dprof_name.donor_category_id
                 LEFT JOIN users up ON up.user_id = im.performed_by
                 WHERE im.direction = 'in' AND im.created_at BETWEEN ? AND ?
                 ORDER BY im.created_at ASC, im.id ASC";
-        $rows = $db->query($sql, [$startDt, $endDt])->fetchAll();
+        try {
+            $rows = $db->query($sql, [$startDt, $endDt])->fetchAll();
+        } catch (Exception $e) {
+            error_log('report-in query failed: ' . $e->getMessage());
+            sendJson(['success'=>false,'error'=>'report-in query failed: '.$e->getMessage()], 500);
+        }
         // Fallback: use current admin's name when entry_by is missing
         $currentAdminName = '';
         try {
@@ -179,32 +222,77 @@ try {
         $startDt = date('Y-m-d H:i:s', $startTs);
         $endDt   = date('Y-m-d H:i:s', $endTs);
 
+        $categoryExpr = "CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), ''))";
+        try {
+            $colRows = $db->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='categories' AND COLUMN_NAME IN ('primary_name','secondary_name','name')")->fetchAll();
+            $cols = [];
+            foreach ($colRows as $row) {
+                $nm = isset($row['COLUMN_NAME']) ? strtolower((string)$row['COLUMN_NAME']) : null;
+                if ($nm) { $cols[$nm] = true; }
+            }
+            $hasPrimary = isset($cols['primary_name']);
+            $hasSecondary = isset($cols['secondary_name']);
+            if ($hasPrimary) {
+                if ($hasSecondary) {
+                    $categoryExpr = "CONCAT(c.primary_name, CASE WHEN c.secondary_name IS NULL OR c.secondary_name = '' THEN '' ELSE CONCAT(' - ', c.secondary_name) END)";
+                } else {
+                    $categoryExpr = 'c.primary_name';
+                }
+            } elseif (isset($cols['name'])) {
+                $categoryExpr = 'c.name';
+            }
+        } catch (Exception $e) { /* fallback */ }
+
+        $unitBase = "COALESCE(u.label, u.code)";
+        $weightSelect = "MAX(CASE
+                            WHEN di.total_weight IS NULL THEN NULL
+                            WHEN di.quantity IS NULL OR di.quantity = 0 THEN di.total_weight
+                            ELSE ROUND((di.total_weight / NULLIF(di.quantity,0)) * im.quantity, 3)
+                        END) AS total_weight";
+        $beneficiarySelect = "COALESCE(
+                                MAX(rp.organization_name),
+                                MAX(alrp.organization_name),
+                                MAX(ru.name),
+                                MAX(alru.name)
+                             ) AS beneficiary_agency";
+
         $sql = "SELECT 
-                    im.created_at AS date_out,
-                    di.product_name AS item,
-                    CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category,
-                    im.quantity,
-                    im.mode,
-                    im.note,
-                    up.name AS performed_by
+                    im.id AS movement_id,
+                    DATE(im.created_at) AS date_out,
+                    im.quantity AS quantity,
+                    {$beneficiarySelect},
+                    MAX(di.product_name) AS item_name,
+                    MAX({$categoryExpr}) AS product_category,
+                    MAX({$unitBase}) AS unit_label,
+                    {$weightSelect},
+                    MAX(up.name) AS entry_by
                 FROM inventory_movements im
                 LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
                 LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
                 LEFT JOIN categories c ON c.category_id = di.category_id
+                LEFT JOIN units u ON u.unit_id = di.unit_id
                 LEFT JOIN users up ON up.user_id = im.performed_by
+                LEFT JOIN users ru ON ru.user_id = im.recipient_id
+                LEFT JOIN recipient_profiles rp ON rp.user_id = ru.user_id
+                LEFT JOIN allocation_items ai ON ai.inventory_id = im.inventory_id
+                LEFT JOIN allocations alloc ON alloc.allocation_id = ai.allocation_id
+                LEFT JOIN users alru ON alru.user_id = alloc.recipient_id
+                LEFT JOIN recipient_profiles alrp ON alrp.user_id = alloc.recipient_id
                 WHERE im.direction = 'out' AND im.created_at BETWEEN ? AND ?
+                GROUP BY im.id
                 ORDER BY im.created_at ASC, im.id ASC";
         $rows = $db->query($sql, [$startDt, $endDt])->fetchAll();
         $data = [];
         foreach ($rows as $r) {
             $data[] = [
-                'DATE OUT' => $r['date_out'] ?? '',
-                'ITEM' => $r['item'] ?? '',
-                'CATEGORY' => $r['category'] ?? '',
+                'DATE' => $r['date_out'] ?? '',
+                'BENEFICIARY AGENCY' => $r['beneficiary_agency'] ?? '',
+                'PRODUCT NAME' => $r['item_name'] ?? '',
+                'PRODUCT CATEGORY' => $r['product_category'] ?? '',
                 'QUANTITY' => (int)($r['quantity'] ?? 0),
-                'MODE' => $r['mode'] ?? '',
-                'NOTE' => $r['note'] ?? '',
-                'PERFORMED BY' => $r['performed_by'] ?? '',
+                'UNIT' => $r['unit_label'] ?? '',
+                'TOTAL WEIGHT (KG)' => isset($r['total_weight']) ? (float)$r['total_weight'] : null,
+                'ENTRY BY' => $r['entry_by'] ?? '',
             ];
         }
         sendJson(['success'=>true,'data'=>['rows'=>$data,'start'=>$start,'end'=>$end]]);

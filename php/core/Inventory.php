@@ -373,6 +373,16 @@ class Inventory
             } catch (Exception $e) { /* ignore lookup errors */ }
 
             // Auto-create donor if not found and at least one identifier is present
+            $donorCategoryId = null;
+            if ($donCategory !== '') {
+                try {
+                    $rowCat = $this->db->query("SELECT id FROM donor_categories WHERE name = ? LIMIT 1", [$donCategory])->fetch();
+                    if ($rowCat && isset($rowCat['id'])) {
+                        $donorCategoryId = (int)$rowCat['id'];
+                    }
+                } catch (Exception $e) { /* ignore */ }
+            }
+
             if (($donorId === null || $donorId <= 0) && ($donOrg !== '' || $donEmail !== '' || $donName !== '')) {
                 try {
                     $orgName = $donOrg !== '' ? $donOrg : ($donName !== '' ? $donName : 'Imported Donor');
@@ -412,22 +422,27 @@ class Inventory
                         [$orgName, $email, $hash]
                     );
                     $newUid = (int)$this->db->lastInsertId();
-                    // Create donor profile with organization_name and optional donor_category
-                    $this->db->query(
-                        "INSERT INTO donor_profiles (user_id, organization_name, donor_category, contact_number, address, notes) VALUES (?, ?, ?, NULL, NULL, NULL)",
-                        [$newUid, $orgName, ($donCategory !== '' ? $donCategory : null)]
-                    );
                     $donorId = $newUid;
+                    try {
+                        // Create donor profile with organization_name and optional donor_category reference
+                        $this->db->query(
+                            "INSERT INTO donor_profiles (user_id, organization_name, donor_category_id, contact_number, address, notes) VALUES (?, ?, ?, NULL, NULL, NULL)",
+                            [$newUid, $orgName, $donorCategoryId]
+                        );
+                    } catch (Exception $profileEx) {
+                        // Profile creation failure should not clear donor reference
+                        error_log('Donor profile creation failed for auto-imported donor '.$newUid.': '.$profileEx->getMessage());
+                    }
                 } catch (Exception $e) {
-                    // If creation fails, proceed with null donor_id
+                    // If creation fails before user is created, proceed with null donor_id
                     $donorId = null;
                 }
             }
 
             // If donor_category provided and donor found, update donor_profiles.donor_category (best effort)
-            if ($donorId !== null && $donorId > 0 && $donCategory !== '') {
+            if ($donorId !== null && $donorId > 0 && $donorCategoryId !== null) {
                 try {
-                    $this->db->query("UPDATE donor_profiles SET donor_category = ? WHERE user_id = ?", [$donCategory, $donorId]);
+                    $this->db->query("UPDATE donor_profiles SET donor_category_id = ? WHERE user_id = ?", [$donorCategoryId, $donorId]);
                 } catch (Exception $e) { /* ignore */ }
             }
 
@@ -494,15 +509,9 @@ class Inventory
                 elseif (isset($r['donatedPurchased'])) { $dopRaw = $r['donatedPurchased']; }
                 if ($dopRaw !== null) {
                     $v = strtolower(trim((string)$dopRaw));
-                    if ($v === 'donated' || $v === 'donation' || $v === 'donate') { $procType = 'donated'; }
-                    elseif ($v === 'purchased' || $v === 'purchase' || $v === 'bought') { $procType = 'purchased'; }
-                    else {
-                        // Unknown value: fallback to previous rule using total_cost
-                        if ($tc !== null && $tc > 0) { $procType = 'purchased'; }
+                    if ($v === 'purchased' || $v === 'purchase' || $v === 'bought') {
+                        $procType = 'purchased';
                     }
-                } else {
-                    // No column present: fallback to previous rule using total_cost
-                    if ($tc !== null && $tc > 0) { $procType = 'purchased'; }
                 }
                 $donorDisplay = ($donOrg !== '' ? $donOrg : $donName);
                 $this->db->query(
