@@ -45,6 +45,8 @@ class Inventory
         $donorId = isset($donation['donor_id']) ? (int)$donation['donor_id'] : null;
         $batchId = $donation['batch_id'] ?? null;
         $adminInCharge = isset($donation['admin_in_charge']) ? (int)$donation['admin_in_charge'] : null;
+        $procType = isset($donation['procurement_type']) ? strtolower(trim((string)$donation['procurement_type'])) : 'donated';
+        if ($procType !== 'purchased') { $procType = 'donated'; }
 
         // Resolve category_id and upsert if needed (supports both schemas)
         $categoryId = null;
@@ -135,18 +137,17 @@ class Inventory
                 } catch (Exception $e) { /* ignore */ }
             }
             if ($invId > 0 && $qty > 0 && $performedBy > 0) {
-                // mode uses a broader string to indicate source
                 if ($donationItemId) {
                     $this->db->query(
                         "INSERT INTO inventory_movements (inventory_id, donation_item_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
-                         VALUES (?, ?, 'in', ?, 'donated', NULL, NULL, ?, NOW())",
-                        [$invId, $donationItemId, (int)$qty, (int)$performedBy]
+                         VALUES (?, ?, 'in', ?, ?, NULL, NULL, ?, NOW())",
+                        [$invId, $donationItemId, (int)$qty, $procType, (int)$performedBy]
                     );
                 } else {
                     $this->db->query(
                         "INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
-                         VALUES (?, 'in', ?, 'donated', NULL, NULL, ?, NOW())",
-                        [$invId, (int)$qty, (int)$performedBy]
+                         VALUES (?, 'in', ?, ?, NULL, NULL, ?, NOW())",
+                        [$invId, (int)$qty, $procType, (int)$performedBy]
                     );
                 }
             }
@@ -165,7 +166,7 @@ class Inventory
                     di.quantity,
                     COALESCE(u.label, u.code) AS unit,
                     di.expiry_date,
-                    d.donation_id AS id, d.donor_id, d.batch_id, d.admin_in_charge
+                    d.donation_id AS id, d.donor_id, d.batch_id, d.admin_in_charge, d.procurement_type
              FROM donation_items di
              INNER JOIN donations d ON d.donation_id = di.donation_id
              LEFT JOIN categories c ON c.category_id = di.category_id
@@ -185,6 +186,7 @@ class Inventory
                 'donor_id' => isset($r['donor_id']) ? (int)$r['donor_id'] : null,
                 'batch_id' => $r['batch_id'] ?? null,
                 'admin_in_charge' => isset($r['admin_in_charge']) ? (int)$r['admin_in_charge'] : null,
+                'procurement_type' => $r['procurement_type'] ?? 'donated',
             ]);
         }
     }
@@ -219,6 +221,7 @@ class Inventory
                 'donor_id' => isset($r['donor_id']) ? (int)$r['donor_id'] : null,
                 'batch_id' => $r['batch_id'] ?? null,
                 'admin_in_charge' => isset($r['admin_in_charge']) ? (int)$r['admin_in_charge'] : null,
+                'procurement_type' => $r['procurement_type'] ?? 'donated',
             ]);
             $count++;
         }

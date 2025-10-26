@@ -137,6 +137,156 @@ try {
         sendJson(['success'=>true]);
     }
 
+    // GET /taxonomy/missing-metadata
+    if ($method === 'GET' && preg_match('#^/(missing-metadata|missing-metadata/)\z#', $sub)) {
+        requireRole(['admin']);
+        $db = Database::getInstance();
+        $limit = isset($_GET['limit']) ? max(1, min(500, (int)$_GET['limit'])) : 200;
+        $rows = $db->query(
+            "SELECT di.donation_item_id,
+                    di.product_name,
+                    di.quantity,
+                    di.total_weight,
+                    di.unit_id,
+                    di.category_id,
+                    di.expiry_date,
+                    d.created_at AS submitted_at,
+                    d.donation_id,
+                    COALESCE(dp.organization_name, u.name, d.donor_name) AS donor_name,
+                    CASE WHEN di.category_id IS NULL THEN 1 ELSE 0 END AS missing_category,
+                    CASE WHEN di.unit_id IS NULL THEN 1 ELSE 0 END AS missing_unit,
+                    CASE WHEN di.total_weight IS NULL THEN 1 ELSE 0 END AS missing_weight
+             FROM donation_items di
+             INNER JOIN donations d ON d.donation_id = di.donation_id
+             LEFT JOIN users u ON u.user_id = d.donor_id
+             LEFT JOIN donor_profiles dp ON dp.user_id = d.donor_id
+             WHERE (di.category_id IS NULL OR di.unit_id IS NULL OR di.total_weight IS NULL)
+               AND d.deleted_at IS NULL
+             ORDER BY d.created_at DESC
+             LIMIT $limit"
+        )->fetchAll();
+
+        $items = array_map(function($row){
+            $missing = [];
+            if (!empty($row['missing_category'])) { $missing[] = 'Category'; }
+            if (!empty($row['missing_unit'])) { $missing[] = 'Unit'; }
+            if (!empty($row['missing_weight'])) { $missing[] = 'Weight'; }
+            return [
+                'donation_item_id' => (int)$row['donation_item_id'],
+                'donation_id' => (int)$row['donation_id'],
+                'product_name' => $row['product_name'],
+                'quantity' => (int)$row['quantity'],
+                'expiry_date' => $row['expiry_date'],
+                'submitted_at' => $row['submitted_at'],
+                'donor_name' => $row['donor_name'],
+                'missing' => $missing,
+            ];
+        }, $rows);
+
+        sendJson(['success'=>true, 'items'=>$items, 'count'=>count($items)]);
+    }
+
+    // PUT /taxonomy/missing-metadata/{donation_item_id}
+    if ($method === 'PUT' && preg_match('#^/missing-metadata/(\\d+)(/)?\\z#', $sub, $m)) {
+        requireRole(['admin']);
+        $donationItemId = (int)$m[1];
+        $db = Database::getInstance();
+        $input = getJsonInputSafe();
+
+        $categoryId = isset($input['category_id']) ? (int)$input['category_id'] : null;
+        $categoryLabel = isset($input['category_label']) ? trim((string)$input['category_label']) : '';
+        $unitId = isset($input['unit_id']) ? (int)$input['unit_id'] : null;
+        $unitLabel = isset($input['unit_label']) ? trim((string)$input['unit_label']) : '';
+        $weight = isset($input['weight']) && $input['weight'] !== '' ? (float)$input['weight'] : null;
+
+        if ($categoryId === null && $categoryLabel === '' && $unitId === null && $unitLabel === '' && $weight === null) {
+            sendJson(['success'=>false,'error'=>'No metadata supplied'], 400);
+        }
+
+        $db->beginTransaction();
+        try {
+            // Get the product_name for this item
+            $itemRow = $db->query('SELECT product_name FROM donation_items WHERE donation_item_id = ?', [$donationItemId])->fetch();
+            if (!$itemRow) {
+                $db->rollBack();
+                sendJson(['success'=>false,'error'=>'Item not found'], 404);
+            }
+            $productName = $itemRow['product_name'];
+
+            // Upsert category if needed
+            if ($categoryId === null && $categoryLabel !== '') {
+                $parts = array_map('trim', preg_split('/\\s*-\\s*/', $categoryLabel));
+                $primary = $parts[0] ?? $categoryLabel;
+                $secondary = $parts[1] ?? null;
+                $existing = $db->query(
+                    'SELECT category_id FROM categories WHERE LOWER(primary_name) = ? AND LOWER(COALESCE(secondary_name, "")) = ? LIMIT 1',
+                    [strtolower($primary), strtolower($secondary ?? '')]
+                )->fetch();
+                if ($existing) {
+                    $categoryId = (int)$existing['category_id'];
+                } else {
+                    $db->query(
+                        'INSERT INTO categories (primary_name, secondary_name, is_active, created_at) VALUES (?,?,1,NOW())',
+                        [$primary, $secondary]
+                    );
+                    $categoryId = (int)$db->lastInsertId();
+                }
+            }
+
+            // Upsert unit if needed
+            if ($unitId === null && $unitLabel !== '') {
+                $code = strtoupper(preg_replace('/[^A-Z0-9]+/', '', substr($unitLabel, 0, 6)) ?: 'UNIT');
+                $existing = $db->query('SELECT unit_id, code FROM units WHERE LOWER(code) = ? LIMIT 1', [strtolower($unitLabel)])->fetch();
+                if ($existing) {
+                    $unitId = (int)$existing['unit_id'];
+                } else {
+                    // ensure unique code by suffixing if necessary
+                    $baseCode = $code;
+                    $suffix = 1;
+                    while (true) {
+                        $row = $db->query('SELECT unit_id FROM units WHERE code = ? LIMIT 1', [$code])->fetch();
+                        if (!$row) break;
+                        $code = $baseCode . $suffix;
+                        $suffix++;
+                    }
+                    $db->query(
+                        'INSERT INTO units (code, label, is_active, created_at) VALUES (?,?,1,NOW())',
+                        [$code, $unitLabel]
+                    );
+                    $unitId = (int)$db->lastInsertId();
+                }
+            }
+
+            // Update all donation_items with the same product_name that are missing metadata
+            $fields = [];
+            $params = [];
+            if ($categoryId !== null) {
+                $fields[] = 'category_id = ?';
+                $params[] = $categoryId;
+            }
+            if ($unitId !== null) {
+                $fields[] = 'unit_id = ?';
+                $params[] = $unitId;
+            }
+            if ($weight !== null || array_key_exists('weight', $input)) {
+                $fields[] = 'total_weight = ?';
+                $params[] = ($weight !== null ? $weight : null);
+            }
+            if (!$fields) {
+                $db->rollBack();
+                sendJson(['success'=>false,'error'=>'Nothing to update'], 400);
+            }
+            $params[] = $productName;
+            $db->query('UPDATE donation_items SET ' . implode(',', $fields) . ' WHERE product_name = ? AND (category_id IS NULL OR unit_id IS NULL OR total_weight IS NULL)', $params);
+
+            $db->commit();
+            sendJson(['success'=>true, 'category_id'=>$categoryId, 'unit_id'=>$unitId, 'weight'=>$weight]);
+        } catch (Exception $e) {
+            $db->rollBack();
+            sendJson(['success'=>false,'error'=>$e->getMessage()], 500);
+        }
+    }
+
     sendJson(['success'=>false,'error'=>'Not found'],404);
 } catch (Exception $e) {
     sendJson(['success'=>false,'error'=>$e->getMessage()], 400);

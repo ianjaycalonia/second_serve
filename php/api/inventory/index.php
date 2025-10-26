@@ -489,7 +489,20 @@ try {
                     im.inventory_id,
                     im.direction,
                     im.quantity,
-                    im.mode,
+                    CASE 
+                        WHEN im.direction = 'in' THEN 
+                            CASE LOWER(COALESCE(im.mode, ''))
+                                WHEN 'purchased' THEN 'Purchased'
+                                ELSE 'Donated'
+                            END
+                        ELSE 
+                            CASE LOWER(COALESCE(im.mode, ''))
+                                WHEN 'recipient' THEN 'Recipient'
+                                WHEN 'onsite' THEN 'On-site'
+                                WHEN 'discarded' THEN 'Discarded'
+                                ELSE COALESCE(im.mode, '')
+                            END
+                    END AS mode,
                     im.recipient_id,
                     ur.name AS recipient_name,
                     im.performed_by,

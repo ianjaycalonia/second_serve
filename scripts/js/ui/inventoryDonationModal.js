@@ -13,6 +13,7 @@
     const $submitBtn = $("#submitDonationBtn");
     const $itemsContainer = $("#itemsContainer");
     const $addItemBtn = $("#addItemBtn");
+    const $donorSelect = $("#donationDonorSelect");
 
     function showToast(msg, variant) {
       try {
@@ -67,6 +68,52 @@
       });
     }
 
+    function initDonorSelect() {
+      if (!$donorSelect.length || !$.fn.select2) return;
+      if ($donorSelect.hasClass("select2-hidden-accessible")) return;
+      $donorSelect.select2({
+        width: "100%",
+        placeholder: $donorSelect.data("placeholder") || "Select donor (optional)",
+        dropdownParent: $modal,
+        allowClear: true,
+        minimumInputLength: 0,
+        ajax: {
+          delay: 250,
+          url: `${API_BASE_URL}/users/index.php`,
+          dataType: "json",
+          data: function (params) {
+            return {
+              action: "list",
+              role: "donor",
+              status: "approved",
+              q: params.term || "",
+            };
+          },
+          processResults: function (resp) {
+            const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
+            return {
+              results: items.map(function (item) {
+                const org = (item.organization_name || "").trim();
+                const fallback = (item.name || "Unknown donor").trim();
+                return {
+                  id: item.user_id,
+                  text: org !== "" ? org : fallback,
+                };
+              }),
+            };
+          },
+          xhrFields: { withCredentials: true },
+          cache: true,
+        },
+      });
+      $donorSelect.on('select2:open', function(){
+        const $search = $(".select2-container--open .select2-search__field");
+        if ($search.length) { $search.trigger('input'); }
+      });
+    }
+
+    initDonorSelect();
+
     function setSubmitting(isLoading) {
       if (isLoading) {
         $submitBtn
@@ -92,27 +139,7 @@
           delay: 250,
           url: `${API_BASE_URL}/donations/index.php/items`,
           dataType: "json",
-          data: function (params) {
-            const $row = $el.closest(".item-row");
-            // Pass category label text (not ID) for backend filtering
-            let catLabel = '';
-            const $sel = $row.find('.item-cat');
-            if ($sel.length) {
-              try {
-                const data = $sel.select2('data');
-                if (Array.isArray(data) && data.length && data[0] && data[0].text) {
-                  catLabel = String(data[0].text).trim();
-                } else {
-                  const opt = $sel.find('option:selected');
-                  if (opt && opt.length) { catLabel = String(opt.text() || '').trim(); }
-                }
-              } catch(_) {
-                const opt = $sel.find('option:selected');
-                if (opt && opt.length) { catLabel = String(opt.text() || '').trim(); }
-              }
-            }
-            return { q: params.term || "", limit: 20, category: catLabel };
-          },
+          data: function (params) { return { q: params.term || "", limit: 20 }; },
           processResults: function (data) {
             const items = data && data.items ? data.items : [];
             return { results: items.map((n) => ({ id: n, text: n })) };
@@ -181,14 +208,7 @@
         <div class="row g-3 gap-2 align-items-center">
           <div class="col-12">
             <div class="row g-3">
-              <div class="col-6">
-                <label class="form-label mb-1">Category</label>
-                <select class="form-select form-select-sm item-cat" required>
-                  <option value="">Select category</option>
-                </select>
-                <div class="invalid-feedback">Category is required.</div>
-              </div>
-              <div class="col-6">
+              <div class="col-5">
                 <label class="form-label mb-1">Item Name</label>
                   <select
                     class="form-select item-name-select"
@@ -197,32 +217,27 @@
                   ></select>
                   <div class="invalid-feedback">Item name is required.</div>
               </div>
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="row g-3">
-              <div class="col-6">
+              <div class="col-3">
                 <label class="form-label mb-1">Quantity</label>
                 <input type="number" class="form-control form-control-sm item-qty" min="1" required />
                 <div class="invalid-feedback">Min 1</div>
               </div>
-              <div class="col-6">
-                <label class="form-label mb-1">Unit</label>
-                <select class="form-select form-select-sm item-unit"></select>
+              <div class="col-4">
+                <label class="form-label mb-1">Mode</label>
+                <select class="form-select form-select-sm item-mode">
+                  <option value="donated" selected>Donated</option>
+                  <option value="purchased">Purchased</option>
+                </select>
               </div>
             </div>
           </div>
           <div class="col-12">
             <div class="row g-3">
-              <div class="col-4">
-                <label class="form-label mb-1">Weight (kg)</label>
-                <input type="number" step="0.001" min="0" class="form-control form-control-sm item-weight" placeholder="e.g., 2.5" />
-              </div>
-              <div class="col-4">
+              <div class="col-6">
                 <label class="form-label mb-1">Cost (₱)</label>
                 <input type="number" step="0.01" min="0" class="form-control form-control-sm item-cost" placeholder="e.g., 150.00" />
               </div>
-              <div class="col-4">
+              <div class="col-6">
                 <label class="form-label">Expiry Date</label>
                 <input type="date" class="form-control form-control-sm item-expiry" required />
                 <div class="invalid-feedback">Expiry date is required.</div>
@@ -248,9 +263,7 @@
       const id = __rowId++;
       $itemsContainer.append(itemRowTemplate(id));
       const $row = $itemsContainer.find(`.item-row[data-id="${id}"]`);
-      initRowCategorySelect2($row);
       initSelect2($row.find(".item-name-select"));
-      initRowUnitSelect2($row);
     }
     function removeItemRow(btn) {
       $(btn).closest(".item-row").remove();
@@ -261,19 +274,7 @@
       removeItemRow(this);
     });
 
-    // Category affects item name suggestions
-    $itemsContainer.on("change", ".item-cat", function () {
-      const $row = $(this).closest(".item-row");
-      const $name = $row.find(".item-name-select");
-      $name.val(null).trigger("change");
-      if ($name.hasClass('select2-hidden-accessible')) {
-        $name.select2('open');
-        setTimeout(()=>{
-          const $search = $(".select2-container--open .select2-search__field");
-          if ($search.length) { $search.trigger('input'); }
-        }, 0);
-      }
-    });
+    // Removed category-dependent item suggestion handler
 
     // OCR logic (same endpoints and UX)
     function parseLineToNameQty(raw) {
@@ -391,11 +392,10 @@
         const name = String($row.find(".item-name-select").val() || "").trim();
         const qty = parseInt($row.find(".item-qty").val(), 10);
         const expiry = String($row.find(".item-expiry").val() || "").trim();
-        const cat = String($row.find(".item-cat").val() || "").trim();
         if (!name || name.length < 1) { $row.find(".item-name-select").addClass("is-invalid"); ok = false; }
         if (!qty || qty < 1) { $row.find(".item-qty").addClass("is-invalid"); ok = false; }
         if (!expiry) { $row.find(".item-expiry").addClass("is-invalid"); ok = false; }
-        if (!cat) { $row.find(".item-cat").addClass("is-invalid"); ok = false; }
+        // Category removed from form
       });
       return ok;
     }
@@ -405,36 +405,24 @@
       const rows = $itemsContainer.find(".item-row");
       setSubmitting(true);
       const fd = new FormData();
+      const donorIdVal = $donorSelect.length ? String($donorSelect.val() || "").trim() : "";
+      if (donorIdVal !== "") {
+        fd.append("donor_id", donorIdVal);
+      }
       rows.each(function () {
         const $row = $(this);
         fd.append("name[]", String($row.find(".item-name-select").val() || "").trim());
         fd.append("quantity[]", $row.find(".item-qty").val());
-        const unitId = String($row.find(".item-unit").val() || "").trim();
-        let unitText = '';
+        // Per-item procurement_type
         try {
-          const ud = $row.find('.item-unit').select2('data');
-          if (Array.isArray(ud) && ud.length && ud[0] && ud[0].text) unitText = String(ud[0].text).trim();
-        } catch (_) {}
-        if (unitText) fd.append("unit[]", unitText);
-        if (unitId) fd.append("unit_id[]", unitId);
+          const mode = String($row.find('.item-mode').val() || 'donated').toLowerCase();
+          fd.append('procurement_type[]', (mode === 'purchased' ? 'purchased' : 'donated'));
+        } catch (_) {
+          fd.append('procurement_type[]', 'donated');
+        }
         const expiry = $row.find(".item-expiry").val();
         fd.append("expiry_date[]", expiry);
-        // Send both label (type[]) and stable id (category_id[]) for compatibility
-        const catId = String($row.find(".item-cat").val() || "").trim();
-        let catLabel = '';
-        try {
-          const data = $row.find('.item-cat').select2('data');
-          if (Array.isArray(data) && data.length && data[0] && data[0].text) {
-            catLabel = String(data[0].text).trim();
-          }
-        } catch(_) {
-          const opt = $row.find('.item-cat option:selected');
-          if (opt && opt.length) { catLabel = String(opt.text() || '').trim(); }
-        }
-        if (catLabel) fd.append("type[]", catLabel);
-        if (catId) fd.append("category_id[]", catId);
-        const w = $row.find(".item-weight").val();
-        if (w !== null && w !== undefined && String(w) !== "") fd.append("total_weight[]", w); else fd.append("total_weight[]", "");
+        // Removed category/unit/weight fields
         const c = $row.find(".item-cost").val();
         if (c !== null && c !== undefined && String(c) !== "") fd.append("total_cost[]", c); else fd.append("total_cost[]", "");
         fd.append("remarks[]", String($row.find(".item-remarks").val() || "").trim());
@@ -451,6 +439,9 @@
         success: function () {
           showToast("Donation submitted successfully", "success");
           try { $form[0].reset(); } catch (_) {}
+          if ($donorSelect.length) {
+            $donorSelect.val(null).trigger("change");
+          }
           $itemsContainer.empty();
           addItemRow();
           const modal = bootstrap.Modal.getInstance($modal[0]);
@@ -474,15 +465,14 @@
 
     // Ensure at least one row when modal opens and init selects
     $modal.on("shown.bs.modal", function () {
+      initDonorSelect();
       if ($itemsContainer.find(".item-row").length === 0) addItemRow();
       $itemsContainer.find(".item-row").each(function () {
         const $row = $(this);
-        initRowCategorySelect2($row);
         const $name = $row.find(".item-name-select");
         if ($name.length && !$name.hasClass("select2-hidden-accessible")) {
           initSelect2($name);
         }
-        initRowUnitSelect2($row);
       });
     });
 

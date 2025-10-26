@@ -169,64 +169,156 @@ try {
             if (stripos($e->getMessage(), 'Duplicate') === false) { throw $e; }
         }
 
-        // Create header once
-        $donationId = $service->createHeader([
-            'donor_id' => $donorId,
-            'batch_id' => $batchId,
-            'remarks' => $remarks,
-            'procurement_type' => 'donated',
-        ]);
+        // Determine per-item procurement types if provided (via procurement_type[])
+        $procRaw = $_POST['procurement_type'] ?? null; // can be scalar or array depending on client
+        $procArray = [];
+        if (is_array($procRaw)) {
+            $procArray = array_map(function($v){
+                $x = strtolower(trim((string)$v));
+                return ($x === 'purchased') ? 'purchased' : 'donated';
+            }, $procRaw);
+        }
 
-        // Insert items sequentially under this header
-        $itemIds = [];
+        // Build groups by mode: if no per-item array, fall back to single scalar or default donated
+        $scalarProc = null;
+        if (!is_array($procRaw)) {
+            $scalarProc = isset($procRaw) ? strtolower(trim((string)$procRaw)) : 'donated';
+            if ($scalarProc !== 'purchased') { $scalarProc = 'donated'; }
+        }
+
+        $groups = ['donated' => [], 'purchased' => []];
         for ($i = 0; $i < $count; $i++) {
-            $name = isset($names[$i]) ? normalize_input($names[$i]) : null;
-            $qty = isset($quantities[$i]) ? (int)$quantities[$i] : null;
-            $expiryRaw = isset($expiries[$i]) ? $expiries[$i] : '';
-            $expiry = ($expiryRaw === null || $expiryRaw === '') ? null : normalize_input($expiryRaw);
-            $typeVal = isset($typeArr[$i]) ? normalize_input((string)$typeArr[$i]) : ($typeSingle ?? '');
-            $catIdVal = isset($catIdArr[$i]) ? (int)$catIdArr[$i] : ($catIdSingle ?? null);
-            $wVal = isset($weights[$i]) && $weights[$i] !== '' ? (float)$weights[$i] : null;
-            $cVal = isset($costs[$i]) && $costs[$i] !== '' ? (float)$costs[$i] : null;
-            $remarksVal = isset($remarksItems[$i]) ? normalize_input((string)$remarksItems[$i]) : null;
-            $unitVal = isset($units[$i]) ? normalize_input((string)$units[$i]) : (isset($_POST['unit']) && !is_array($_POST['unit']) ? normalize_input((string)$_POST['unit']) : '');
-            // Accept unit_id[] in addition to unit label
-            $unitIdSingle = isset($_POST['unit_id']) && !is_array($_POST['unit_id']) ? (int)$_POST['unit_id'] : null;
-            $unitIdArr = isset($_POST['unit_id']) && is_array($_POST['unit_id']) ? array_map('intval', $_POST['unit_id']) : [];
-            $unitIdVal = isset($unitIdArr[$i]) ? (int)$unitIdArr[$i] : ($unitIdSingle ?? null);
-            // Derive unit label from unit_id if label missing
-            if (($unitVal === '' || $unitVal === null) && $unitIdVal) {
-                try {
-                    $ur = Database::getInstance()->query('SELECT COALESCE(NULLIF(label,\'\'), code) AS name FROM units WHERE unit_id = ?', [$unitIdVal])->fetch();
-                    if ($ur && !empty($ur['name'])) { $unitVal = $ur['name']; }
-                } catch (Exception $e) { /* ignore */ }
-            }
-            // Allow either label (type) or stable id (category_id). If label missing but id present, derive label for readability.
-            if ($typeVal === '' && $catIdVal) {
-                try {
-                    $row = Database::getInstance()->query('SELECT primary_name, secondary_name FROM categories WHERE category_id = ?', [$catIdVal])->fetch();
-                    if ($row) {
-                        $typeVal = ($row['secondary_name'] !== null && $row['secondary_name'] !== '')
-                            ? ($row['primary_name'] . ' - ' . $row['secondary_name'])
-                            : $row['primary_name'];
-                    }
-                } catch (Exception $e) { /* ignore label derivation failure */ }
-            }
-            if (!$name || !$qty || $qty < 1 || !$expiry) {
-                sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, quantity (>=1), and expiry_date are required'], 400);
-            }
-            $itemIds[] = $service->addItem($donationId, [
-                'product_category' => $typeVal,
-                'product_name' => $name,
-                'quantity' => $qty,
-                'unit' => ($unitVal !== '' ? $unitVal : null),
-                'expiry_date' => $expiry,
-                'total_weight' => $wVal,
-                'total_cost' => $cVal,
-                'tags' => $remarksVal,
-                'category_id' => $catIdVal ?: null,
-                'unit_id' => $unitIdVal ?: null,
+            $mode = $scalarProc ?? ($procArray[$i] ?? 'donated');
+            if ($mode !== 'purchased') { $mode = 'donated'; }
+            $groups[$mode][] = $i;
+        }
+
+        $itemIds = [];
+        $missingMetaAlerts = [];
+        foreach ($groups as $mode => $indices) {
+            if (empty($indices)) continue;
+            // Create a header for this mode
+            $donationId = $service->createHeader([
+                'donor_id' => $donorId,
+                'batch_id' => $batchId,
+                'remarks' => $remarks,
+                'procurement_type' => $mode,
             ]);
+            // Insert this group's items
+            foreach ($indices as $i) {
+                $name = isset($names[$i]) ? normalize_input($names[$i]) : null;
+                $qty = isset($quantities[$i]) ? (int)$quantities[$i] : null;
+                $expiryRaw = isset($expiries[$i]) ? $expiries[$i] : '';
+                $expiry = ($expiryRaw === null || $expiryRaw === '') ? null : normalize_input($expiryRaw);
+                $typeVal = isset($typeArr[$i]) ? normalize_input((string)$typeArr[$i]) : ($typeSingle ?? '');
+                $catIdVal = isset($catIdArr[$i]) ? (int)$catIdArr[$i] : ($catIdSingle ?? null);
+                $wVal = isset($weights[$i]) && $weights[$i] !== '' ? (float)$weights[$i] : null;
+                $cVal = isset($costs[$i]) && $costs[$i] !== '' ? (float)$costs[$i] : null;
+                $remarksVal = isset($remarksItems[$i]) ? normalize_input((string)$remarksItems[$i]) : null;
+                $unitVal = isset($units[$i]) ? normalize_input((string)$units[$i]) : (isset($_POST['unit']) && !is_array($_POST['unit']) ? normalize_input((string)$_POST['unit']) : '');
+                // Accept unit_id[] in addition to unit label
+                $unitIdSingle = isset($_POST['unit_id']) && !is_array($_POST['unit_id']) ? (int)$_POST['unit_id'] : null;
+                $unitIdArr = isset($_POST['unit_id']) && is_array($_POST['unit_id']) ? array_map('intval', $_POST['unit_id']) : [];
+                $unitIdVal = isset($unitIdArr[$i]) ? (int)$unitIdArr[$i] : ($unitIdSingle ?? null);
+                // Derive unit label from unit_id if label missing
+                if (($unitVal === '' || $unitVal === null) && $unitIdVal) {
+                    try {
+                        $ur = Database::getInstance()->query('SELECT COALESCE(NULLIF(label,\'\'), code) AS name FROM units WHERE unit_id = ?', [$unitIdVal])->fetch();
+                        if ($ur && !empty($ur['name'])) { $unitVal = $ur['name']; }
+                    } catch (Exception $e) { /* ignore */ }
+                }
+                // Allow either label (type) or stable id (category_id)
+                if ($typeVal === '' && $catIdVal) {
+                    try {
+                        $row = Database::getInstance()->query('SELECT primary_name, secondary_name FROM categories WHERE category_id = ?', [$catIdVal])->fetch();
+                        if ($row) {
+                            $typeVal = ($row['secondary_name'] !== null && $row['secondary_name'] !== '')
+                                ? ($row['primary_name'] . ' - ' . $row['secondary_name'])
+                                : $row['primary_name'];
+                        }
+                    } catch (Exception $e) { /* ignore */ }
+                }
+                if (!$name || !$qty || $qty < 1 || !$expiry) {
+                    sendJson(['success' => false, 'error' => 'Invalid item at index ' . $i . ': name, quantity (>=1), and expiry_date are required'], 400);
+                }
+                $donationItemId = $service->addItem($donationId, [
+                    'product_category' => $typeVal,
+                    'product_name' => $name,
+                    'quantity' => $qty,
+                    'unit' => ($unitVal !== '' ? $unitVal : null),
+                    'expiry_date' => $expiry,
+                    'total_weight' => $wVal,
+                    'total_cost' => $cVal,
+                    'tags' => $remarksVal,
+                    'category_id' => $catIdVal ?: null,
+                    'unit_id' => $unitIdVal ?: null,
+                ]);
+                $itemIds[] = $donationItemId;
+
+                // Collect metadata gaps for admin notification
+                try {
+                    $rowMeta = Database::getInstance()->query(
+                        'SELECT category_id, unit_id, total_weight FROM donation_items WHERE donation_item_id = ?',
+                        [$donationItemId]
+                    )->fetch();
+                    $missingFields = [];
+                    if (!$rowMeta || $rowMeta['category_id'] === null) { $missingFields[] = 'Category'; }
+                    if (!$rowMeta || $rowMeta['unit_id'] === null) { $missingFields[] = 'Unit'; }
+                    if (!$rowMeta || $rowMeta['total_weight'] === null) { $missingFields[] = 'Weight'; }
+                    if (!empty($missingFields)) {
+                        $missingMetaAlerts[] = [
+                            'donation_item_id' => $donationItemId,
+                            'donation_id' => $donationId,
+                            'name' => $name,
+                            'missing' => $missingFields,
+                        ];
+                    }
+                } catch (Exception $e) {
+                    error_log('Failed to inspect donation metadata: ' . $e->getMessage());
+                }
+            }
+        }
+
+        if (!empty($missingMetaAlerts)) {
+            try {
+                $dbNotify = Database::getInstance();
+                $admins = $dbNotify->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll();
+                if ($admins) {
+                    $notif = new Notification();
+                    foreach ($missingMetaAlerts as $alert) {
+                        $label = ($alert['name'] !== null && $alert['name'] !== '')
+                            ? $alert['name']
+                            : ('Donation #' . (int)$alert['donation_id']);
+                        $missingLabel = implode(', ', $alert['missing']);
+                        foreach ($admins as $admin) {
+                            if (empty($admin['user_id'])) { continue; }
+                            try {
+                                $notif->create([
+                                    'user_id' => (int)$admin['user_id'],
+                                    'type' => 'donation_missing_metadata',
+                                    'reference_type' => 'donation_item',
+                                    'reference_id' => (int)$alert['donation_item_id'],
+                                    'message' => sprintf('Donation item "%s" is missing: %s.', $label, $missingLabel),
+                                ]);
+                            } catch (Exception $eNotif) {
+                                error_log('Failed to create metadata notification: ' . $eNotif->getMessage());
+                            }
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                error_log('Failed to enqueue metadata notifications: ' . $e->getMessage());
+            }
+        }
+
+        // If an admin submitted this batch, immediately convert to inventory so movements appear
+        if ($role === 'admin') {
+            try {
+                $inventorySvc = new Inventory();
+                $inventorySvc->addFromBatchId($batchId);
+            } catch (Exception $e) {
+                error_log('Auto inventory add from batch failed: ' . $e->getMessage());
+            }
         }
 
         // Do not add to inventory at creation time; inventory should reflect physical pickup events.
@@ -245,33 +337,35 @@ try {
             }
         }
 
-        // Notify all approved admins once for the batch submission
-        try {
-            $db = Database::getInstance();
-            $admins = $db->query("SELECT user_id, name FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll();
-            if ($admins) {
-                $notif = new Notification();
-                // Try to get donor org name (fallback to person name) for message context
-                $donorName = '';
-                try {
-                    $row = $db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [$donorId])->fetch();
-                    if ($row) {
-                        $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : '');
+        // Notify all approved admins once for the batch submission (donor-submitted only)
+        if ($role !== 'admin') {
+            try {
+                $db = Database::getInstance();
+                $admins = $db->query("SELECT user_id, name FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll();
+                if ($admins) {
+                    $notif = new Notification();
+                    // Try to get donor org name (fallback to person name) for message context
+                    $donorName = '';
+                    try {
+                        $row = $db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [$donorId])->fetch();
+                        if ($row) {
+                            $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : '');
+                        }
+                    } catch (Exception $e) { /* ignore */ }
+                    $countItems = count($itemIds);
+                    foreach ($admins as $admin) {
+                        $notif->create([
+                            'user_id' => (int)$admin['user_id'],
+                            'type' => 'donation_created',
+                            'reference_type' => 'batch',
+                            'reference_id' => null,
+                            'message' => ($donorName ? ($donorName . ' ') : '') . 'submitted a new donation batch (' . $countItems . ' items)',
+                        ]);
                     }
-                } catch (Exception $e) { /* ignore */ }
-                $countItems = count($itemIds);
-                foreach ($admins as $admin) {
-                    $notif->create([
-                        'user_id' => (int)$admin['user_id'],
-                        'type' => 'donation_created',
-                        'reference_type' => 'batch',
-                        'reference_id' => null,
-                        'message' => ($donorName ? ($donorName . ' ') : '') . 'submitted a new donation batch (' . $countItems . ' items)',
-                    ]);
                 }
+            } catch (Exception $e) {
+                error_log('Failed to create admin notifications for donation batch: ' . $e->getMessage());
             }
-        } catch (Exception $e) {
-            error_log('Failed to create admin notifications for donation batch: ' . $e->getMessage());
         }
 
         sendJson(['success' => true, 'donation_id' => (int)$donationId, 'item_ids' => $itemIds, 'created_count' => count($itemIds), 'batch_id' => $batchId]);

@@ -939,6 +939,18 @@
             <div class="tab-content pt-3" id="donationTabsContent">
               <div class="tab-pane fade show active" id="tab-entry" role="tabpanel" aria-labelledby="tab-entry-tab">
                 <form id="donationForm" enctype="multipart/form-data" novalidate>
+                  <div class="row g-3 mb-3">
+                    <div class="col-12 col-md-6">
+                      <label for="donationDonorSelect" class="form-label mb-1">Organization</label>
+                      <select
+                        id="donationDonorSelect"
+                        class="form-select form-select-sm"
+                        data-placeholder="Search donor organization"
+                      ></select>
+                      <div class="form-text">Optional. Select the donor to credit this batch.</div>
+                    </div>
+                  </div>
+                  
                   <div class="d-flex align-items-center justify-content-between mb-2">
                     <label class="form-label mb-0">Donation Items</label>
                     <button type="button" id="addItemBtn" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2">
