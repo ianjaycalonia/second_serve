@@ -597,7 +597,13 @@
             }
             // Refresh data from server
             await refreshAllocations();
-            showToast("Allocation acknowledged. Schedule pickup in messages.");
+            showToast("Please chat the foodbank to setup your pickup schedule", { delay: 6000 });
+            setTimeout(() => {
+              const trigger = document.querySelector('[data-messages-trigger], [data-bs-target="#messagesModal"]');
+              if (trigger) {
+                trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+              }
+            }, 150);
           } catch (e) {
             ackBtn.disabled = false;
             showToast("Failed to acknowledge.");
@@ -943,16 +949,17 @@
     return "bg-info"; // Allocated
   }
 
-  function showToast(msg) {
+  function showToast(msg, options) {
     try {
       try {
         console.debug("[receivedItems] showToast:", msg);
       } catch (_) {}
       const toastEl = document.getElementById("feedbackToast");
       if (toastEl) {
-        const body = document.getElementById("toastBody");
-        if (body) body.textContent = msg;
-        const t = bootstrap.Toast.getOrCreateInstance(toastEl);
+        const body = toastEl.querySelector(".toast-body");
+        if (body) body.textContent = msg || "Done.";
+        const delay = (options && typeof options.delay === "number") ? options.delay : 3500;
+        const t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay });
         t.show();
       } else {
         try {

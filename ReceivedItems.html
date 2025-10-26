@@ -821,32 +821,10 @@
     <script src="scripts/js/ui/dropdownFilters.js"></script>
 
     <!-- Toast for feedback messages -->
-    <div
-      aria-live="polite"
-      aria-atomic="true"
-      class="position-relative"
-      style="z-index: 1080"
-    >
-      <div class="toast-container position-fixed bottom-0 end-0 p-3">
-        <div
-          id="feedbackToast"
-          class="toast"
-          role="status"
-          aria-live="assertive"
-          aria-atomic="true"
-          data-bs-delay="2500"
-        >
-          <div class="toast-header">
-            <strong class="me-auto">Notice</strong>
-            <small>Just now</small>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="toast"
-              aria-label="Close"
-            ></button>
-          </div>
-          <div class="toast-body" id="toastBody">Action completed.</div>
+    <div aria-live="polite" aria-atomic="true" class="position-relative" style="z-index: 1080">
+      <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;">
+        <div id="feedbackToast" class="toast text-bg-success" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="6000">
+          <div class="toast-body">Action completed.</div>
         </div>
       </div>
     </div>

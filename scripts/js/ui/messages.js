@@ -181,26 +181,11 @@
       function buildUI(){
         const body = qsM('.modal-body'); if (!body) return; ensureTheme();
         const role = (window.CURRENT_USER_ROLE||'').toLowerCase();
-        const path = (location.pathname||'').toLowerCase();
-        const hidePinnedOnThisPage = /(^|\/)recipientdashboard\.html$/i.test(path) || /(^|\/)mydonations\.html$/i.test(path);
-        const showFoodBankPinned = (role === 'recipient') && !hidePinnedOnThisPage;
         const leftPanel = (role && role !== 'admin')
-          ? (
-              showFoodBankPinned
-                ? `
-                    <div class="mb-2 fw-semibold">Conversations</div>
-                    <div id="mm-pinned" class="list-group small mb-2">
-                      <a href="#" id="mm-foodbank" class="list-group-item list-group-item-action active">
-                        <i class="bi bi-shield-lock me-1"></i> Food Bank
-                      </a>
-                    </div>
-                    <div id="mm-conversations" class="list-group small"></div>
-                  `
-                : `
-                    <div class="mb-2 fw-semibold">Conversations</div>
-                    <div id="mm-conversations" class="list-group small"></div>
-                  `
-            )
+          ? `
+              <div class="mb-2 fw-semibold">Conversations</div>
+              <div id="mm-conversations" class="list-group small"></div>
+            `
           : `
               <div class="mb-2">
                 <input id="mm-search" class="form-control form-control-sm" placeholder="Search donors or recipients..."/>
@@ -338,7 +323,6 @@
         const sendBtn=qsM('#mm-send'); const input=qsM('#mm-input');
         if (sendBtn) sendBtn.addEventListener('click', send);
         if (input) input.addEventListener('keydown',(e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
-        const fb=qsM('#mm-foodbank'); if (fb) fb.addEventListener('click', async (e)=>{ e.preventDefault(); const res = await apiPost('get_or_create_direct', {}); if (res.success){ await loadConversations(); await selectConversation(res.data.conversation.id); } });
         // Admin search across donors and recipients
         const searchInput = qsM('#mm-search'); const resultsBox = qsM('#mm-search-results'); let searchTimer=0;
         async function queryUsers(role, q){
