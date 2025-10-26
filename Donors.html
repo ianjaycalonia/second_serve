@@ -383,11 +383,8 @@
                       >
                         <option selected>All</option>
                         <option>Pending</option>
-                        <option>Acknowledged</option>
-                        <option>Picked Up</option>
-                        <option>Completed</option>
-                        <option>Failed Safety</option>
-                        <option>Cancelled</option>
+                        <option>Active</option>
+                        <option>Inactive</option>
                       </select>
                     </div>
 
@@ -595,6 +592,122 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
             <button type="button" class="btn btn-primary" id="addDonorSubmitBtn">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="modal fade"
+      id="viewDonorModal"
+      tabindex="-1"
+      aria-labelledby="viewDonorModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="viewDonorModalLabel">Donor Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <dl class="row" id="viewDonorDetails"></dl>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="modal fade"
+      id="editDonorModal"
+      tabindex="-1"
+      aria-labelledby="editDonorModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form id="editDonorForm">
+            <div class="modal-header">
+              <h5 class="modal-title" id="editDonorModalLabel">Edit Donor</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label" for="editDonorOrg">Organization Name</label>
+                <input type="text" id="editDonorOrg" class="form-control" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="editDonorName">Contact Person</label>
+                <input type="text" id="editDonorName" class="form-control" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="editDonorEmail">Email</label>
+                <input type="email" id="editDonorEmail" class="form-control" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="editDonorPhone">Contact Number</label>
+                <input type="text" id="editDonorPhone" class="form-control" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="editDonorAddress">Address</label>
+                <input type="text" id="editDonorAddress" class="form-control" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="editDonorCategory">Donor Category</label>
+                <select id="editDonorCategory" class="form-select" style="width:100%"></select>
+              </div>
+              <div id="editDonorFeedback" class="small text-danger"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary" id="editDonorSaveBtn">Save changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="modal fade"
+      id="donorConfirmModal"
+      tabindex="-1"
+      aria-labelledby="donorConfirmModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="donorConfirmModalLabel">Confirm Action</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="donorConfirmModalBody"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="donorConfirmModalBtn">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="modal fade"
+      id="donorMessageModal"
+      tabindex="-1"
+      aria-labelledby="donorMessageModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="donorMessageModalLabel">Notice</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="donorMessageModalBody"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
           </div>
         </div>
       </div>

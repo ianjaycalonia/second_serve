@@ -8,13 +8,95 @@ document.addEventListener("DOMContentLoaded", () => {
   // In-memory datasets and derived index
   let donorsData = [];
   let donationsData = [];
+  let currentEditDonorId = null;
+  let confirmActionCallback = null;
+
+  function getModalInstance(id) {
+    const el = document.getElementById(id);
+    if (!el || !window.bootstrap || !bootstrap.Modal) return null;
+    return bootstrap.Modal.getOrCreateInstance(el);
+  }
+
+  function setModalContent(el, text) {
+    if (!el) return;
+    const safe = escapeHtml(String(text ?? ""));
+    el.innerHTML = safe.replace(/\n/g, "<br>");
+  }
+
+  function showMessageModal(title, message) {
+    const titleEl = document.getElementById("donorMessageModalLabel");
+    const bodyEl = document.getElementById("donorMessageModalBody");
+    if (titleEl) titleEl.textContent = String(title ?? "Notice");
+    setModalContent(bodyEl, message ?? "");
+    const modal = getModalInstance("donorMessageModal");
+    modal?.show();
+  }
+
+  function showConfirmModal({
+    title = "Confirm Action",
+    message = "Are you sure?",
+    confirmText = "Confirm",
+    confirmVariant = "primary",
+    onConfirm = null,
+  } = {}) {
+    const titleEl = document.getElementById("donorConfirmModalLabel");
+    const bodyEl = document.getElementById("donorConfirmModalBody");
+    const btn = document.getElementById("donorConfirmModalBtn");
+    if (titleEl) titleEl.textContent = String(title);
+    setModalContent(bodyEl, message);
+    if (btn) {
+      btn.textContent = String(confirmText);
+      btn.className = `btn btn-${confirmVariant}`;
+    }
+    confirmActionCallback = typeof onConfirm === "function" ? onConfirm : null;
+    const modal = getModalInstance("donorConfirmModal");
+    modal?.show();
+  }
+
+  function formatUserStatus(status) {
+    const s = String(status || "").toLowerCase();
+    if (!s) return "—";
+    if (s === "approved") return "Active";
+    if (s === "inactive") return "Inactive";
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function formatDetailValue(value) {
+    if (value === undefined || value === null) return "&mdash;";
+    const str = String(value).trim();
+    return str ? escapeHtml(str) : "&mdash;";
+  }
+
+  function showDonorDetails(donor) {
+    const details = document.getElementById("viewDonorDetails");
+    if (details) {
+      const rows = [
+        ["Organization", donor.organization_name],
+        ["Contact Person", donor.name],
+        ["Email", donor.email],
+        ["Contact Number", donor.contact_number],
+        ["Address", donor.address],
+        ["Category", donor.donor_category || donor.donor_category_id],
+        ["Status", formatUserStatus(donor.status)],
+        ["Notes", donor.notes],
+      ];
+      details.innerHTML = rows
+        .map(
+          ([label, value]) =>
+            `<dt class="col-sm-4">${escapeHtml(label)}</dt><dd class="col-sm-8">${formatDetailValue(value)}</dd>`
+        )
+        .join("");
+    }
+    const modal = getModalInstance("viewDonorModal");
+    modal?.show();
+  }
 
   // Fetch donors (approved) and donations list, then render donors table
   init();
 
   async function fetchDonors() {
     const res = await fetch(
-      `${API_BASE_URL}/users/index.php?action=list&role=donor&status=active&t=${Date.now()}`,
+      `${API_BASE_URL}/users/index.php?action=list&role=donor&t=${Date.now()}`,
       {
         method: "GET",
         credentials: "include",
@@ -78,12 +160,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const agg = byDonor.get(u.user_id) || { batches: new Set(), last: null, lastStatus: null };
       const total = agg.batches.size; // total completed batches
       const last = agg.last ? agg.last.toLocaleDateString() : "—";
+      const statusLower = String(u.status || '').toLowerCase();
       const status =
-        u.status === "approved"
+        statusLower === "approved"
           ? badge("Active", "success")
-          : u.status === "pending"
-          ? badge("Pending", "warning")
-          : badge("Inactive", "secondary");
+          : statusLower === "inactive"
+          ? badge("Inactive", "secondary")
+          : badge("Pending", "warning");
+      const isApproved = statusLower === 'approved';
+      const isInactive = statusLower === 'inactive';
+      const actionsMenu = `
+        <div class="dropdown-menu dropdown-menu-end p-2" style="min-width:auto;">
+          <div class="d-flex align-items-center justify-content-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary edit-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit" data-user-id="${u.user_id}">
+              <i class="bi bi-pencil-square"></i>
+            </button>
+            ${isApproved ? `
+            <button class="btn btn-sm btn-outline-danger deactivate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate" data-user-id="${u.user_id}">
+              <i class="bi bi-person-x"></i>
+            </button>` : ''}
+            ${!isApproved ? `
+            <button class="btn btn-sm btn-outline-success activate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate" data-user-id="${u.user_id}">
+              <i class="bi bi-person-check"></i>
+            </button>` : ''}
+          </div>
+        </div>`;
       return `
         <tr>
           <td>${escapeHtml(name)}</td>
@@ -92,12 +193,30 @@ document.addEventListener("DOMContentLoaded", () => {
           <td>${total}</td>
           <td>${last}</td>
           <td>${status}</td>
-          <td><a href="#" data-user-id="${u.user_id}">View / Edit</a></td>
+          <td class="text-end">
+            <div class="dropdown recipient-actions d-inline-flex align-items-center">
+              <a href="#" class="btn btn-outline-primary btn-sm me-1 view-btn" data-user-id="${u.user_id}">
+                <i class="bi bi-eye-fill"></i>
+              </a>
+              <button class="btn btn-link p-0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              ${actionsMenu}
+            </div>
+          </td>
         </tr>
       `;
     });
     tbody.innerHTML = rows.join("");
-    // Donor names are plain text now. Removed chat-open click handler on donor name.
+    // Initialize tooltips for dynamically added action icons
+    try {
+      const tips = Array.from(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tips.forEach((el) => {
+        if (window.bootstrap && bootstrap.Tooltip) {
+          bootstrap.Tooltip.getOrCreateInstance(el);
+        }
+      });
+    } catch (_) {}
   }
 
   function escapeHtml(str) {
@@ -174,8 +293,16 @@ document.addEventListener("DOMContentLoaded", () => {
       if (activity === 'High' && !(total >= 10)) return false;
       // Status filter (based on last donation status when available)
       if (statusFilter && statusFilter !== 'All') {
-        const lastStatus = agg.lastStatus || '';
-        if (lastStatus !== statusFilter) return false;
+        const statusToCheck = statusFilter.toLowerCase();
+        const userStatus = String(u.status || '').toLowerCase();
+        const lastStatus = String(agg.lastStatus || '').toLowerCase();
+        if (statusToCheck === 'inactive') {
+          if (userStatus !== 'inactive') return false;
+        } else if (statusToCheck === 'pending') {
+          if (userStatus !== 'pending' && lastStatus !== 'pending') return false;
+        } else {
+          if (userStatus !== statusToCheck && lastStatus !== statusToCheck) return false;
+        }
       }
       return true;
     });
@@ -294,7 +421,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (!file) return;
           try{
             if (typeof XLSX === 'undefined'){
-              alert('XLSX library not loaded.');
+              showMessageModal('Import Donors', 'XLSX library not loaded.');
               return;
             }
             const data = await file.arrayBuffer();
@@ -313,7 +440,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const j = await res.json();
             if (!j?.success) throw new Error(j?.error || 'Import failed');
             const summary = j.data || {};
-            alert(`Import completed. Inserted: ${summary.inserted || 0}${(summary.errors && summary.errors.length) ? `, Errors: ${summary.errors.length}` : ''}`);
+            const msg = `Import completed. Inserted: ${summary.inserted || 0}${(summary.errors && summary.errors.length) ? `, Errors: ${summary.errors.length}` : ''}`;
+            showMessageModal('Import Donors', msg);
 
             const [freshDonors, freshDonations] = await Promise.all([ fetchDonors(), fetchDonations() ]);
             donorsData = freshDonors; donationsData = freshDonations;
@@ -332,14 +460,36 @@ document.addEventListener("DOMContentLoaded", () => {
       if (addBtn) {
         // Initialize Select2 for donor category with backend lookups
         try {
-          const sel = document.getElementById('addDonorCategory');
-          const modalEl = document.getElementById('addDonorModal');
-          if (sel && window.$ && $.fn.select2) {
-            $(sel).select2({
+          const addSel = document.getElementById('addDonorCategory');
+          const addModalEl = document.getElementById('addDonorModal');
+          if (addSel && window.$ && $.fn.select2) {
+            $(addSel).select2({
               width: '100%',
               placeholder: 'Select a category',
               allowClear: true,
-              dropdownParent: modalEl ? $(modalEl) : undefined,
+              dropdownParent: addModalEl ? $(addModalEl) : undefined,
+              ajax: {
+                url: `${API_BASE_URL}/lookups/index.php/donor-categories`,
+                dataType: 'json',
+                delay: 250,
+                data: (params) => ({ q: params.term || '', limit: 20, active: 1 }),
+                processResults: (data) => ({
+                  results: Array.isArray(data?.items)
+                    ? data.items.map((it) => ({ id: it.id, text: it.name }))
+                    : []
+                })
+              }
+            });
+          }
+
+          const editSel = document.getElementById('editDonorCategory');
+          const editModalEl = document.getElementById('editDonorModal');
+          if (editSel && window.$ && $.fn.select2) {
+            $(editSel).select2({
+              width: '100%',
+              placeholder: 'Select a category',
+              allowClear: true,
+              dropdownParent: editModalEl ? $(editModalEl) : undefined,
               ajax: {
                 url: `${API_BASE_URL}/lookups/index.php/donor-categories`,
                 dataType: 'json',
@@ -397,8 +547,9 @@ document.addEventListener("DOMContentLoaded", () => {
             populateFilters();
             applyFiltersAndSort();
             // Show temp password
-            const tmp = data.temporary_password ? `Temporary password: ${escapeHtml(data.temporary_password)}` : '';
-            alert(`Donor created. ${tmp}`.trim());
+            try { showToast('Donor created successfully.', 'success'); } catch (_){
+              showMessageModal('Add Donor', 'Donor created successfully.');
+            }
           } catch(err){
             if (fb) fb.textContent = err?.message || 'Failed to create donor';
           } finally {
@@ -414,5 +565,188 @@ document.addEventListener("DOMContentLoaded", () => {
           err.message
         )})</td></tr>`;
     }
+  }
+
+  async function openDonorModal(userId) {
+    const donor = donorsData.find((d) => Number(d.user_id) === Number(userId));
+    if (!donor) {
+      showMessageModal('View Donor', 'Donor not found.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/index.php?action=getProfile`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+      const data = j?.data?.user || donor;
+      showDonorDetails(data);
+    } catch (err) {
+      showMessageModal('View Donor', `Failed to load donor profile: ${escapeHtml(err?.message || 'Unknown error')}`);
+    }
+  }
+
+  async function openEditDonor(userId) {
+    const donor = donorsData.find((d) => Number(d.user_id) === Number(userId));
+    if (!donor) {
+      showMessageModal('Edit Donor', 'Donor not found.');
+      return;
+    }
+    currentEditDonorId = Number(userId);
+    const orgInput = document.getElementById('editDonorOrg');
+    const nameInput = document.getElementById('editDonorName');
+    const emailInput = document.getElementById('editDonorEmail');
+    const phoneInput = document.getElementById('editDonorPhone');
+    const addrInput = document.getElementById('editDonorAddress');
+    const fb = document.getElementById('editDonorFeedback');
+    const categorySel = document.getElementById('editDonorCategory');
+    if (fb) fb.textContent = '';
+    if (orgInput) orgInput.value = donor.organization_name || '';
+    if (nameInput) nameInput.value = donor.name || '';
+    if (emailInput) emailInput.value = donor.email || '';
+    if (phoneInput) phoneInput.value = donor.contact_number || '';
+    if (addrInput) addrInput.value = donor.address || '';
+    if (categorySel && window.$ && $.fn.select2) {
+      const val = donor.donor_category_id || null;
+      if (val) {
+        const option = new Option(donor.donor_category || `Category ${val}`, val, true, true);
+        $(categorySel).html(option).trigger('change');
+      } else {
+        $(categorySel).val(null).trigger('change');
+      }
+    }
+    const modal = getModalInstance('editDonorModal');
+    modal?.show();
+  }
+
+  async function updateDonorStatus(userId, status) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/index.php?action=setStatus`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ user_id: Number(userId), status }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+      const [freshDonors, freshDonations] = await Promise.all([ fetchDonors(), fetchDonations() ]);
+      donorsData = freshDonors;
+      donationsData = freshDonations;
+      populateFilters();
+      applyFiltersAndSort();
+      showMessageModal('Update Donor Status', `Donor ${status === "inactive" ? "deactivated" : "activated"} successfully.`);
+    } catch (err) {
+      showMessageModal('Update Donor Status', `Failed to update donor status: ${escapeHtml(err?.message || 'Unknown error')}`);
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    const view = e.target.closest?.(".view-btn");
+    if (view) {
+      e.preventDefault();
+      const id = Number(view.getAttribute("data-user-id"));
+      if (id) openDonorModal(id);
+      return;
+    }
+    const edit = e.target.closest?.(".edit-btn");
+    if (edit) {
+      e.preventDefault();
+      const id = Number(edit.getAttribute("data-user-id"));
+      if (id) openEditDonor(id);
+      return;
+    }
+    const deactivate = e.target.closest?.(".deactivate-btn");
+    if (deactivate) {
+      e.preventDefault();
+      const id = Number(deactivate.getAttribute("data-user-id"));
+      if (!id) return;
+      showConfirmModal({
+        title: 'Deactivate Donor',
+        message: 'Are you sure you want to deactivate this donor? They will remain visible but marked as inactive.',
+        confirmText: 'Deactivate',
+        confirmVariant: 'danger',
+        onConfirm: () => updateDonorStatus(id, "inactive"),
+      });
+      return;
+    }
+    const activate = e.target.closest?.(".activate-btn");
+    if (activate) {
+      e.preventDefault();
+      const id = Number(activate.getAttribute("data-user-id"));
+      if (!id) return;
+      showConfirmModal({
+        title: 'Activate Donor',
+        message: 'Reactivate this donor and mark them as active?',
+        confirmText: 'Activate',
+        confirmVariant: 'success',
+        onConfirm: () => updateDonorStatus(id, "approved"),
+      });
+    }
+  });
+
+  const confirmBtn = document.getElementById('donorConfirmModalBtn');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => {
+      if (confirmActionCallback) {
+        const fn = confirmActionCallback;
+        confirmActionCallback = null;
+        try {
+          fn();
+        } catch (_) {}
+      }
+      getModalInstance('donorConfirmModal')?.hide();
+    });
+  }
+
+  const editForm = document.getElementById('editDonorForm');
+  if (editForm) {
+    editForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentEditDonorId) return;
+      const orgInput = document.getElementById('editDonorOrg');
+      const nameInput = document.getElementById('editDonorName');
+      const emailInput = document.getElementById('editDonorEmail');
+      const phoneInput = document.getElementById('editDonorPhone');
+      const addrInput = document.getElementById('editDonorAddress');
+      const fb = document.getElementById('editDonorFeedback');
+      const categorySel = document.getElementById('editDonorCategory');
+      const saveBtn = document.getElementById('editDonorSaveBtn');
+      if (fb) fb.textContent = '';
+      const payload = {
+        user_id: Number(currentEditDonorId),
+        organization_name: orgInput?.value.trim() || null,
+        name: nameInput?.value.trim() || null,
+        email: emailInput?.value.trim() || null,
+        contact_number: phoneInput?.value.trim() || null,
+        address: addrInput?.value.trim() || null,
+        donor_category_id: categorySel && $(categorySel).val() ? Number($(categorySel).val()) : null,
+      };
+      if (saveBtn) saveBtn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE_URL}/users/index.php?action=adminUpdateProfile`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+        currentEditDonorId = null;
+        getModalInstance('editDonorModal')?.hide();
+        const [freshDonors, freshDonations] = await Promise.all([ fetchDonors(), fetchDonations() ]);
+        donorsData = freshDonors;
+        donationsData = freshDonations;
+        populateFilters();
+        applyFiltersAndSort();
+        showMessageModal('Edit Donor', 'Donor updated successfully.');
+      } catch (err) {
+        if (fb) fb.textContent = err?.message || 'Failed to update donor';
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    });
   }
 });

@@ -234,10 +234,17 @@ main {
 
       .card-text {
         flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
 
         h3 {
-          font-size: 3em;
+          font-size: clamp(1.75rem, 4vw, 3rem);
           font-weight: bold;
+          line-height: 1.1;
+          max-width: 100%;
+          overflow-wrap: anywhere;
         }
 
         small {

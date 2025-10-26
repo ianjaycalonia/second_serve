@@ -514,7 +514,7 @@ class User
         $email = $data['email'] ?? $this->generatePlaceholderEmail($organization);
         $email = $this->ensureUniqueEmail($email);
 
-        $plain = bin2hex(random_bytes(6));
+        $plain = 'donor123';
         $hash = password_hash($plain, PASSWORD_DEFAULT);
         $plainPassword = $plain;
 
@@ -534,11 +534,28 @@ class User
         }
 
         // donor_profiles
-        $donorCategory = $data['donor_category'] ?? ($data['donor_category_id'] ?? ($data['type'] ?? null));
+        $donorCategory = $data['donor_category'] ?? ($data['type'] ?? null);
+        $donorCategoryId = null;
+        if (isset($data['donor_category_id']) && $data['donor_category_id'] !== '') {
+            $donorCategoryId = (int)$data['donor_category_id'];
+        } elseif ($donorCategory !== null && $donorCategory !== '') {
+            if (is_numeric($donorCategory)) {
+                $donorCategoryId = (int)$donorCategory;
+            } else {
+                try {
+                    $catRow = $this->db->query('SELECT id FROM donor_categories WHERE name = ? LIMIT 1', [$donorCategory])->fetch();
+                    if ($catRow && isset($catRow['id'])) {
+                        $donorCategoryId = (int)$catRow['id'];
+                    }
+                } catch (Exception $e) {
+                    // ignore lookup failures and default to null
+                }
+            }
+        }
         $notes = $data['notes'] ?? null;
         $this->db->query(
-            "INSERT INTO donor_profiles (user_id, organization_name, donor_category, contact_number, address, notes) VALUES (?,?,?,?,?,?)",
-            [$userId, $organization, $donorCategory, $contactNumber, $address, $notes]
+            "INSERT INTO donor_profiles (user_id, organization_name, donor_category_id, contact_number, address, notes) VALUES (?,?,?,?,?,?)",
+            [$userId, $organization, $donorCategoryId, $contactNumber, $address, $notes]
         );
 
         return $userId;

@@ -30,6 +30,22 @@ try {
     )->fetch();
     $totalMeals = (int)($row['total_meals'] ?? 0);
 
+    // Total recorded weight (kg): weight per item * quantity for picked up/completed donations
+    $row = $db->query(
+        "SELECT COALESCE(SUM(
+                CASE
+                    WHEN di.total_weight IS NOT NULL THEN di.total_weight
+                    WHEN di.quantity IS NOT NULL THEN di.quantity
+                    ELSE 0
+                END
+            ), 0) AS total_weight
+           FROM donation_items di
+           INNER JOIN donations d ON d.donation_id = di.donation_id
+          WHERE d.status IN ('Picked Up','Completed')
+            AND d.deleted_at IS NULL"
+    )->fetch();
+    $totalWeightKg = (float)($row['total_weight'] ?? 0);
+
     // Total successful donations by batches (count DISTINCT completed batches)
     $row = $db->query(
         "SELECT COUNT(DISTINCT batch_id) AS c
@@ -101,6 +117,7 @@ try {
         'data' => [
             'totals' => [
                 'meals' => $totalMeals,
+                'total_weight_kg' => $totalWeightKg,
                 'upcoming_pickups' => $upcomingPickups,
                 'active_donors' => $activeDonors,
                 'active_recipients' => $activeRecipients,

@@ -204,6 +204,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 /(^|\/)scheduling\.html$/i,
                 // Protect Inventory page for admins only
                 /(^|\/)inventory\.html$/i,
+                /(^|\/)inventorymovements\.html$/i,
+                /(^|\/)taxonomy\.html$/i,
+                /(^|\/)recipientslist\.html$/i,
+                /(^|\/)distributeitems\.html$/i,
+                /(^|\/)distributeresult\.html$/i,
                 // Admin profile/settings
                 /(^|\/)adminprofile\.html$/i,
                 /(^|\/)adminsettings\.html$/i,

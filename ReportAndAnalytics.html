@@ -338,8 +338,8 @@
                   <i class="bi bi-truck"></i>
                 </div>
                 <div class="card-text">
-                  <h3 class="mb-0" id="upcomingDonations">0</h3>
-                  <small class="text-muted">Pickuped</small>
+                  <h3 class="mb-0" id="totalPickups">0</h3>
+                  <small class="text-muted">Picked Up</small>
                 </div>
               </div>
             </div>
@@ -356,7 +356,7 @@
                   <i class="bi bi-bar-chart-line-fill"></i>
                 </div>
                 <div class="card-text">
-                  <h3 class="mb-0" id="activeRecipients">0</h3>
+                  <h3 class="mb-0" id="avgDonationValue">0</h3>
                   <small class="text-muted">Average</small>
                 </div>
               </div>
@@ -424,218 +424,6 @@
           </div>
         </div>
 
-        <div class="col-12 col-md-12 col-lg-12">
-          <div class="card card-accent p-4">
-            <div class="d-flex justify-content-between mb-3">
-              <h6>Reports Log</h6>
-
-              <div class="d-flex align-items-center gap-3">
-                <div class="d-flex align-items-center search-box">
-                  <input
-                    type="text"
-                    id="donationSearch"
-                    class="form-control form-control-sm"
-                    placeholder="Search..."
-                    aria-label="Search"
-                  />
-                </div>
-                <div class="dropdown">
-                  <button
-                    class="dropdown-toggle"
-                    type="button"
-                    id="filtersDropdownBtn"
-                    data-bs-toggle="dropdown"
-                    data-bs-auto-close="false"
-                    aria-expanded="false"
-                  >
-                    <i class="bi bi-funnel-fill fs-5"></i>
-                  </button>
-                  <div class="dropdown-menu">
-                    <form id="filterForm" class="px-3 py-2">
-                      <h5>Filter by</h5>
-                      <div class="row g-3">
-                        <div class="col-12">
-                          <div class="form-label mb-1">Last Donated</div>
-                          <div class="row g-3 date-range-inputs">
-                            <div class="col-6">
-                              <label for="fromDate" class="form-label"
-                                >From</label
-                              >
-                              <input
-                                type="date"
-                                id="fromDate"
-                                class="form-control form-control-sm"
-                              />
-                            </div>
-                            <div class="col-6">
-                              <label for="toDate" class="form-label">To</label>
-                              <input
-                                type="date"
-                                id="toDate"
-                                class="form-control form-control-sm"
-                              />
-                            </div>
-                          </div>
-
-                          <div
-                            class="d-flex justify-content-between align-items-center mt-3 gap-2"
-                            id="quickRangeBtns"
-                          >
-                            <button
-                              type="button"
-                              class="btn btn-outline-secondary btn-sm w-100"
-                              data-range="today"
-                            >
-                              Today
-                            </button>
-                            <button
-                              type="button"
-                              class="btn btn-outline-secondary btn-sm w-100"
-                              data-range="week"
-                            >
-                              This Week
-                            </button>
-                            <button
-                              type="button"
-                              class="btn btn-outline-secondary btn-sm w-100"
-                              data-range="month"
-                            >
-                              This Month
-                            </button>
-                          </div>
-                        </div>
-
-                        <div class="col-6">
-                          <label
-                            class="form-label mb-1"
-                            for="reportsStatusSelectMobile"
-                            >Status</label
-                          >
-                          <select
-                            id="reportsStatusSelectMobile"
-                            class="form-select form-select-sm"
-                          >
-                            <option selected>All</option>
-                            <option>Pending</option>
-                            <option>Acknowledged</option>
-                            <option>Picked Up</option>
-                            <option>Completed</option>
-                            <option>Failed Safety</option>
-                            <option>Cancelled</option>
-                          </select>
-                    <div
-                      class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
-                    >
-                      <button class="btn btn-sm btn-outline-secondary">
-                        Reset
-                      </button>
-                      <button class="btn btn-sm btn-primary">Apply</button>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="dropdown">
-                  <button
-                    class="dropdown-toggle"
-                    type="button"
-                    id="sortsDropdownBtn"
-                    data-bs-toggle="dropdown"
-                    data-bs-auto-close="false"
-                    aria-expanded="false"
-                  >
-                    <i class="bi bi-arrow-down-up fs-5"></i>
-                  </button>
-                  <div class="dropdown-menu">
-                    <form id="sortForm" class="px-3 py-2">
-                      <h5>Sort by</h5>
-                      <div class="mb-3">
-                        <label
-                          class="form-label mb-1"
-                          for="reportsQuantityOrderSelectMobile"
-                          >Quantity</label
-                        >
-                        <select
-                          id="reportsQuantityOrderSelectMobile"
-                          class="form-select form-select-sm"
-                        >
-                          <option selected>None</option>
-                          <option>High to Low</option>
-                          <option>Low to High</option>
-                        </select>
-                      </div>
-
-                      <div class="mb-3">
-                        <label
-                          class="form-label mb-1"
-                          for="reportsSubmissionDateSelectMobile"
-                          >Submission Date</label
-                        >
-                        <select
-                          id="reportsSubmissionDateSelectMobile"
-                          class="form-select form-select-sm"
-                        >
-                          <option selected>None</option>
-                          <option>Newest First</option>
-                          <option>Oldest First</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label
-                          class="form-label mb-1"
-                          for="reportsDonorOrderSelectMobile"
-                          >Donor</label
-                        >
-                        <select
-                          id="reportsDonorOrderSelectMobile"
-                          class="form-select form-select-sm"
-                        >
-                          <option selected>None</option>
-                          <option>Ascending</option>
-                          <option>Descending</option>
-                        </select>
-                      </div>
-                    </form>
-                    <div class="dropdown-divider"></div>
-                    <div
-                      class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
-                    >
-                      <button class="btn btn-sm btn-outline-secondary">
-                        Reset
-                      </button>
-                      <button class="btn btn-sm btn-primary">Apply</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="table-responsive">
-              <table
-                class="table table-bordered align-middle table-sm table-striped"
-              >
-                <thead class="table-light">
-                  <tr>
-                    <th>Date</th>
-                    <th>Donor</th>
-                    <th>Recipient</th>
-                    <th>Items</th>
-                    <th>Volume</th>
-                    <th>Status</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td colspan="7" class="text-center text-muted">
-                      No data available
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
       </div>
     </main>
 
@@ -701,6 +489,7 @@
     <script src="scripts/js/ui/sidebar.js"></script>
     <script src="scripts/js/ui/dropdownFilters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="scripts/js/ui/reports.js"></script>
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animation.js"></script>

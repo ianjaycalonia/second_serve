@@ -605,27 +605,6 @@ CREATE TABLE `distribution_selection_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- =========================
--- Seed: minimal inventory sample so UI has data on fresh import
--- =========================
--- Create a donation header (donated, picked up)
-INSERT INTO `donations` (`donor_id`, `admin_in_charge`, `procurement_type`, `donor_name`, `entry_date`, `remarks`, `status`, `created_at`)
-VALUES (NULL, 1, 'donated', 'Sample Donor', NOW(), NULL, 'Picked Up', NOW());
-SET @seed_donation_id := LAST_INSERT_ID();
-
--- Create a donation item (normalized: use unit_id/category_id)
-INSERT INTO `donation_items` (
-  `donation_id`, `product_name`, `category_id`, `quantity`, `unit_id`, `total_weight`, `total_cost`, `expiry_date`, `tags`, `created_at`
-) VALUES (
-  @seed_donation_id, 'Bottled Water', NULL, 10,
-  (SELECT unit_id FROM units WHERE code = 'bottle' LIMIT 1),
-  NULL, NULL, DATE_ADD(CURDATE(), INTERVAL 365 DAY), NULL, NOW()
-);
-SET @seed_donation_item_id := LAST_INSERT_ID();
-
--- Create the inventory lot referencing the donation item
-INSERT INTO `inventory` (`donation_item_id`, `quantity`, `added_at`) VALUES (@seed_donation_item_id, 10, NOW());
-
--- =========================
 -- Seed legacy profiles (placed here so tables already exist)
 -- =========================
 INSERT INTO `admin_profiles` (`user_id`, `organization_name`, `contact_number`, `address`) VALUES
