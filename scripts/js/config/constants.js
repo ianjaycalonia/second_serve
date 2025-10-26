@@ -21,15 +21,18 @@
     if (!window.__GLOBAL_ERROR_HANDLER_BOUND__){
       window.__GLOBAL_ERROR_HANDLER_BOUND__ = true;
       const showOnce = (function(){
-        let last = 0; const cooldownMs = 8000; // avoid alert storms
-        return function(){
+        let last = 0; const cooldownMs = 8000; // avoid log storms
+        return function(err){
           const now = Date.now();
-          if (now - last < cooldownMs) return; last = now;
-          try { alert('Something went wrong, please try again.'); } catch(_){ }
+          if (now - last < cooldownMs) return;
+          last = now;
+          if (window.__DEBUG && console && typeof console.error === 'function') {
+            console.error('Global error caught', err);
+          }
         };
       })();
-      window.addEventListener('unhandledrejection', function(){ showOnce(); });
-      window.addEventListener('error', function(){ showOnce(); }, true);
+      window.addEventListener('unhandledrejection', function(evt){ showOnce(evt && evt.reason); });
+      window.addEventListener('error', function(evt){ showOnce(evt && evt.error); }, true);
     }
   }catch(_){ /* ignore */ }
 })();

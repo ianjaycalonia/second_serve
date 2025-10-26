@@ -102,18 +102,15 @@
     if (t === 'allocation_cancelled' && role === 'admin' && !/please\s+reallocate\s+items\.?$/i.test(msgText)) {
       msgText = msgText.replace(/\s+$/,'') + ' Please reallocate items.';
     }
-    const shouldLinkToReceived = (
+    const shouldLinkToAllocation = (
       t.startsWith('allocation_') ||
       /allocation\s+has\s+been\s+updated/i.test(msgText) ||
       /allocation\s+updated/i.test(msgText)
     );
     // Destination for anchor: adjust per notification type
     let anchorHref = null;
-    if (t === 'allocation_acknowledged') {
+    if (shouldLinkToAllocation) {
       anchorHref = 'DistributeResult.html';
-    } else if (shouldLinkToReceived) {
-      if (t === 'allocation_cancelled' && role === 'admin') anchorHref = 'DistributeItems.html';
-      else anchorHref = 'ReceivedItems.html';
     }
     // Use a stretched-link anchor so the whole row is clickable even without JS
     const linkHtml = anchorHref ? `<a href="${anchorHref}" class="stretched-link" aria-label="Open related page"></a>` : '';
@@ -213,17 +210,14 @@
             else if (role === 'admin') dest = 'Donation.html';
           } else if (nType === 'donation_missing_metadata') {
             if (role === 'admin') dest = 'taxonomy.html#assignment';
-          } else if (nType === 'allocation_acknowledged') {
-            dest = 'DistributeResult.html';
           } else if (nType.startsWith('allocation_')) {
-            // Any other allocation-related notification defaults to ReceivedItems.html
-            dest = 'ReceivedItems.html';
+            dest = 'DistributeResult.html';
           } else if (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated') {
             // Normalize generic updated notifications to ReceivedItems for recipients
             if (role === 'recipient' || refType === 'allocation') dest = 'ReceivedItems.html';
           }
           // Fallbacks by reference_type if not set above
-          if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
+          if (!dest && refType === 'allocation') dest = 'DistributeResult.html';
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
           if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
 
@@ -252,9 +246,9 @@
           const nType = (li.getAttribute('data-type') || '').toLowerCase();
           const refType = (li.getAttribute('data-ref-type') || '').toLowerCase();
           let dest = null;
-          if (nType.startsWith('allocation_')) dest = 'ReceivedItems.html';
+          if (nType.startsWith('allocation_')) dest = 'DistributeResult.html';
           if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) dest = 'ReceivedItems.html';
-          if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
+          if (!dest && refType === 'allocation') dest = 'DistributeResult.html';
           if (dest) {
             try {
               const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);

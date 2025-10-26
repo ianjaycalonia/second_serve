@@ -619,10 +619,7 @@ try {
                     foreach ($admins as $ad){
                         $aid = (int)($ad['user_id'] ?? 0);
                         if ($aid>0){
-                            $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_picked_up", ?, NOW())', [
-                                $aid,
-                                'A recipient picked up their allocation.'
-                            ]);
+                            // Legacy notification removed per UX request
                         }
                     }
                 } catch (Exception $e) { /* ignore notification errors */ }
