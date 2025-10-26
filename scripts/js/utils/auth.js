@@ -31,6 +31,34 @@ document.addEventListener('DOMContentLoaded', function(){
     updateVis();
 });
 
+function setupCapsLockDetection(inputId, hintId) {
+    const input = document.getElementById(inputId);
+    const hint = document.getElementById(hintId);
+    if (!input || !hint) return;
+
+    const set = (on) => {
+        if (on) {
+            hint.classList.remove('d-none');
+        } else {
+            hint.classList.add('d-none');
+        }
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (typeof e.getModifierState === 'function') {
+            set(e.getModifierState('CapsLock'));
+        }
+    });
+    input.addEventListener('keyup', (e) => {
+        if (typeof e.getModifierState === 'function') {
+            set(e.getModifierState('CapsLock'));
+        } else {
+            set(false);
+        }
+    });
+    input.addEventListener('blur', () => set(false));
+}
+
 // Show error message in form
 function showError(elementId, message) {
     let errorElement = document.getElementById(`${elementId}Error`);
@@ -134,6 +162,36 @@ document.addEventListener('DOMContentLoaded', function() {
     // Route guard: enforce session + role-based access on protected pages
     const path = (location.pathname || '').toLowerCase();
 
+    setupCapsLockDetection('loginPassword', 'loginPasswordCapsHint');
+    setupCapsLockDetection('registerPassword', 'registerPasswordCapsHint');
+    setupCapsLockDetection('registerConfirmPassword', 'registerConfirmCapsHint');
+
+    const attachPasswordToggles = () => {
+        document.querySelectorAll('[data-password-toggle]').forEach(btn => {
+            if (btn.dataset.toggleBound === '1') return;
+            btn.dataset.toggleBound = '1';
+            btn.addEventListener('click', () => {
+                const targetId = btn.getAttribute('data-password-toggle');
+                const input = targetId ? document.getElementById(targetId) : null;
+                if (!input) return;
+                const isHidden = input.getAttribute('type') === 'password';
+                input.setAttribute('type', isHidden ? 'text' : 'password');
+                const icon = btn.querySelector('i');
+                if (icon) {
+                    icon.classList.toggle('bi-eye', !isHidden);
+                    icon.classList.toggle('bi-eye-slash', isHidden);
+                }
+                btn.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
+            });
+        });
+    };
+    attachPasswordToggles();
+
+    const authModalEl = document.getElementById('authModal');
+    if (authModalEl) {
+        authModalEl.addEventListener('shown.bs.modal', attachPasswordToggles, { once: false });
+    }
+
     const getRequiredRoleByPath = (p) => {
         const RULES = [
             // Admin pages (anchor to exact filenames)
@@ -201,9 +259,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
     }
-    const authModal = document.getElementById('authModal');
-    if (authModal) {
-        authModal.addEventListener('show.bs.modal', function(event) {
+    if (authModalEl) {
+        authModalEl.addEventListener('show.bs.modal', function(event) {
             const button = event.relatedTarget;
             const authMode = button?.getAttribute('data-auth-mode');
             const preRole = button?.getAttribute('data-role');

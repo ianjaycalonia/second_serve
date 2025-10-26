@@ -670,19 +670,6 @@ try {
                     sendJson(['success'=>false,'error'=>'Unable to acknowledge'], 400);
                 }
             }
-            // Notify admins
-            try {
-                $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll() ?: [];
-                foreach ($admins as $ad){
-                    $aid = (int)($ad['user_id'] ?? 0);
-                    if ($aid>0){
-                        $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "allocation_acknowledged", ?, NOW())', [
-                            $aid,
-                            'A recipient acknowledged their allocation.'
-                        ]);
-                    }
-                }
-            } catch (Exception $e) { /* ignore */ }
             sendJson(['success'=>true]);
             break;
 

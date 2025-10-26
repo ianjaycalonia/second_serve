@@ -107,9 +107,11 @@
       /allocation\s+has\s+been\s+updated/i.test(msgText) ||
       /allocation\s+updated/i.test(msgText)
     );
-    // Destination for anchor: cancelled allocations -> DistributeItems for admins, ReceivedItems otherwise
+    // Destination for anchor: adjust per notification type
     let anchorHref = null;
-    if (shouldLinkToReceived) {
+    if (t === 'allocation_acknowledged') {
+      anchorHref = 'DistributeResult.html';
+    } else if (shouldLinkToReceived) {
       if (t === 'allocation_cancelled' && role === 'admin') anchorHref = 'DistributeItems.html';
       else anchorHref = 'ReceivedItems.html';
     }
@@ -211,8 +213,10 @@
             else if (role === 'admin') dest = 'Donation.html';
           } else if (nType === 'donation_missing_metadata') {
             if (role === 'admin') dest = 'taxonomy.html#assignment';
+          } else if (nType === 'allocation_acknowledged') {
+            dest = 'DistributeResult.html';
           } else if (nType.startsWith('allocation_')) {
-            // Any allocation-related notification opens ReceivedItems.html (role-agnostic to ensure navigation works)
+            // Any other allocation-related notification defaults to ReceivedItems.html
             dest = 'ReceivedItems.html';
           } else if (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated') {
             // Normalize generic updated notifications to ReceivedItems for recipients
@@ -338,6 +342,14 @@
       }
       const json = await res.json();
       let items = json?.data?.items || [];
+      items = items.filter(n => {
+        const type = String(n.type || '').toLowerCase();
+        const msg = String(n.message || '').trim().toLowerCase();
+        if (type === 'allocation_acknowledged' && msg === 'a recipient acknowledged their allocation.') {
+          return false;
+        }
+        return true;
+      });
       // Merge duplicate allocation update rows into a single combined row
       items = mergeAllocationUpdatePairs(items);
       // Compute signature by id+read_status, regardless of order

@@ -938,6 +938,34 @@
       return rows.some((row) => String(row['PRODUCT NAME'] || '') === String(name || '') && row['TOTAL WEIGHT(KG)'] !== null);
     } catch (_) { return false; }
   }
+
+  async function fetchMissingMetadataIndex(){
+    try {
+      const res = await fetch(`${API_BASE_URL}/taxonomy/index.php/missing-metadata?limit=500`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/json' }
+      });
+      const json = await res.json().catch(() => null);
+      const items = Array.isArray(json?.items) ? json.items : [];
+      const map = new Map();
+      items.forEach((it) => {
+        const key = (it?.product_name || '').trim().toLowerCase();
+        if (!key) return;
+        let entry = map.get(key);
+        if (!entry) {
+          entry = { missingSet: new Set(), sample: it };
+          map.set(key, entry);
+        }
+        const missing = Array.isArray(it?.missing) ? it.missing : [];
+        missing.forEach((label) => entry.missingSet.add(String(label || '').toLowerCase()));
+      });
+      return map;
+    } catch (_) {
+      return new Map();
+    }
+  }
+
   async function scanMissing() {
     try {
       const uniq = new Map();
@@ -948,15 +976,17 @@
         const k = keyFor(name, cat);
         if (!uniq.has(k)) uniq.set(k, { name, category: cat });
       });
+      const missingIndex = await fetchMissingMetadataIndex();
       const results = [];
       for (const { name, category } of uniq.values()) {
-        const rec = await fetchGroupedRecord(name, category);
-        const missingCategory = !category || !rec || !rec.category;
-        const missingUnit = !rec || !rec.unit;
-        const weightKnown = await anyWeightKnownFor(name);
-        const missingWeight = !weightKnown;
-        if (missingCategory || missingUnit || missingWeight) {
-          results.push({ name, category: category || '(none)', missingCategory, missingUnit, missingWeight });
+        const entry = missingIndex.get(name.toLowerCase());
+        if (entry && entry.missingSet && entry.missingSet.size) {
+          const missingCategory = entry.missingSet.has('category');
+          const missingUnit = entry.missingSet.has('unit');
+          const missingWeight = entry.missingSet.has('weight');
+          if (missingCategory || missingUnit || missingWeight) {
+            results.push({ name, category: category || '(none)', missingCategory, missingUnit, missingWeight });
+          }
         }
       }
       if (results.length) {
@@ -966,7 +996,13 @@
           const guardKey = `dr_missing_meta_notified_${effRunId}`;
           if (String(sessionStorage.getItem(guardKey) || '') !== '1') {
             const admins = await listAdmins();
-            const msg = `Products with missing metadata: ${results.map(r => r.name + ' [' + r.category + ']').join(', ')}`;
+            const msg = `Products with missing metadata: ${results.map(r => {
+              const issues = [];
+              if (r.missingCategory) issues.push('category');
+              if (r.missingUnit) issues.push('unit');
+              if (r.missingWeight) issues.push('weight');
+              return `${r.name} [${r.category}] (${issues.join('/')})`;
+            }).join(', ')}`;
             for (const uid of admins) {
               try {
                 await fetch(`${API_BASE_URL}/communications/notifications.php?action=create`, {

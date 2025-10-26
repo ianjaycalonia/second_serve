@@ -165,7 +165,13 @@
                 </div>
                 <div class="mb-3">
                   <label for="loginPassword" class="form-label">Password</label>
-                  <input type="password" class="form-control" id="loginPassword" required>
+                  <div class="input-group">
+                    <input type="password" class="form-control" id="loginPassword" required>
+                    <button type="button" class="btn btn-outline-secondary" id="loginPasswordToggle" data-password-toggle="loginPassword" aria-label="Toggle password visibility">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                  </div>
+                  <div id="loginPasswordCapsHint" class="form-text text-danger d-none">Caps Lock is on</div>
                 </div>
                 <div class="mb-3">
                   <label for="loginRole" class="form-label">Login as</label>
@@ -195,11 +201,23 @@
                 </div>
                 <div class="mb-3">
                   <label for="registerPassword" class="form-label">Password</label>
-                  <input type="password" class="form-control" id="registerPassword" required>
+                  <div class="input-group">
+                    <input type="password" class="form-control" id="registerPassword" required>
+                    <button type="button" class="btn btn-outline-secondary" id="registerPasswordToggle" data-password-toggle="registerPassword" aria-label="Toggle password visibility">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                  </div>
+                  <div id="registerPasswordCapsHint" class="form-text text-danger d-none">Caps Lock is on</div>
                 </div>
                 <div class="mb-3">
                   <label for="registerConfirmPassword" class="form-label">Confirm Password</label>
-                  <input type="password" class="form-control" id="registerConfirmPassword" required>
+                  <div class="input-group">
+                    <input type="password" class="form-control" id="registerConfirmPassword" required>
+                    <button type="button" class="btn btn-outline-secondary" id="registerConfirmPasswordToggle" data-password-toggle="registerConfirmPassword" aria-label="Toggle password visibility">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                  </div>
+                  <div id="registerConfirmCapsHint" class="form-text text-danger d-none">Caps Lock is on</div>
                 </div>
                 <div class="mb-3">
                   <label for="registerRole" class="form-label">Register as</label>
