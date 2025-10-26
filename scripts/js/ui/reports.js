@@ -267,6 +267,16 @@
         "TOTAL WEIGHT (KG)",
         "ENTRY BY",
       ];
+      const currentUserName = (() => {
+        try {
+          const stored = sessionStorage.getItem("user");
+          if (!stored) return "";
+          const parsed = JSON.parse(stored);
+          return parsed?.name || "";
+        } catch (_) {
+          return "";
+        }
+      })();
       const aoa = [
         headers,
         ...rows.map((r) =>
@@ -278,6 +288,9 @@
               }
               const parsed = parseFloat(raw);
               return Number.isFinite(parsed) ? Number(parsed.toFixed(3)) : "";
+            }
+            if (h === "ENTRY BY") {
+              return currentUserName || r[h] || "";
             }
             return r[h] ?? "";
           })
