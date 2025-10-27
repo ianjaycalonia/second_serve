@@ -1,6 +1,7 @@
 (function(){
   'use strict';
   const Allocation = {};
+  let distributableFraction = 0.9;
 
   // Create an in-memory allocation state for the given recipient IDs
   Allocation.createState = function(recipientIds){
@@ -129,7 +130,7 @@
       const recs = Array.isArray(recipients)? recipients.slice() : [];
       if (!recs.length) return [];
       const total = Math.max(0, parseFloat(totalItems||0));
-      const allocatable = Math.floor(total * 0.9); // reserve 10%
+      const allocatable = Math.floor(total * distributableFraction);
       if (allocatable <= 0) return recs.map(r => ({ id: String(r.id), allocation: 0 }));
 
       // Baseline based on a fixed 10-bucket policy
@@ -178,11 +179,27 @@
       const recs = Array.isArray(recipients)? recipients.slice() : [];
       if (!recs.length) return [];
       const total = Math.max(0, parseFloat(totalItems||0));
-      const allocatable = Math.floor(total * 0.9);
+      const allocatable = Math.floor(total * distributableFraction);
       const base = allocatable / recs.length;
       const ints = largestRemainderRound(recs.map(()=>base), allocatable);
       return recs.map((r,i)=> ({ id: String(r.id), allocation: ints[i] }));
     }
+  };
+
+  Allocation.setDistributableFraction = function (fraction) {
+    try {
+      const val = Number(fraction);
+      if (!Number.isFinite(val)) return distributableFraction;
+      const clamped = Math.min(Math.max(val, 0), 1);
+      distributableFraction = clamped;
+      return distributableFraction;
+    } catch (_) {
+      return distributableFraction;
+    }
+  };
+
+  Allocation.getDistributableFraction = function () {
+    return distributableFraction;
   };
 
   try { window.Allocation = Object.assign({}, window.Allocation||{}, Allocation); } catch(_){ }

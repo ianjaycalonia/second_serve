@@ -1,3 +1,77 @@
+function diLogError(context, error){
+  try {
+    console.error(`[DI] ${context}`, error);
+  } catch(_){ }
+}
+
+function diResolveApiBase(){
+  return (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
+    ? window.API_BASE_URL
+    : '/Capstone%20Project/php/api';
+}
+
+let DI_API_BASE = diResolveApiBase();
+let INVENTORY_API_BASE = `${DI_API_BASE}/inventory/index.php`;
+
+let diDistributablePercent = 90;
+let diDistributableFraction = 0.9;
+let diDistributableLoaded = false;
+let diDistributablePromise = null;
+
+function getDistributableFraction(){
+  return diDistributableFraction;
+}
+
+function applyDistributableFraction(percent){
+  const pct = Number(percent);
+  if (!Number.isFinite(pct)) return diDistributableFraction;
+  const clamped = Math.min(Math.max(pct, 0), 100);
+  diDistributablePercent = clamped;
+  diDistributableFraction = clamped / 100;
+  try {
+    if (window.Allocation && typeof window.Allocation.setDistributableFraction === 'function'){
+      window.Allocation.setDistributableFraction(diDistributableFraction);
+    }
+  } catch(_){ }
+  return diDistributableFraction;
+}
+
+async function loadDistributableSettings(){
+  if (diDistributableLoaded) return diDistributableFraction;
+  if (diDistributablePromise) return diDistributablePromise;
+  diDistributablePromise = (async ()=>{
+    try {
+      DI_API_BASE = diResolveApiBase();
+      INVENTORY_API_BASE = `${DI_API_BASE}/inventory/index.php`;
+      const url = `${DI_API_BASE}/system/settings.php?action=get&key=distribution_distributable_percent&t=${Date.now()}`;
+      const res = await fetch(url, { credentials:'include', headers:{ 'Accept':'application/json' } });
+      if (res.ok){
+        const data = await res.json().catch(()=>null);
+        const valRaw = data?.data?.value ?? data?.data ?? data?.value ?? null;
+        const parsed = parseInt(valRaw, 10);
+        if (Number.isFinite(parsed)){
+          applyDistributableFraction(parsed);
+        }
+      }
+    } catch(err){
+      diLogError('Failed to load distributable setting', err);
+    }
+    diDistributableLoaded = true;
+    return diDistributableFraction;
+  })();
+  try {
+    return await diDistributablePromise;
+  } finally {
+    diDistributablePromise = null;
+  }
+}
+
+try {
+  if (typeof window.getDistributableFraction !== 'function') {
+    window.getDistributableFraction = getDistributableFraction;
+  }
+} catch(_){ }
+
 // Lightweight DOM helpers (global so top-level functions can use them)
 const qs = (s, r=document)=> r.querySelector(s);
 const qsa = (s, r=document)=> Array.from(r.querySelectorAll(s));
@@ -285,11 +359,15 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       });
     }
     if (autoAllBtn){
+      try { console.log('[DI][alloc] auto-all controls attached'); } catch(_){ }
       autoAllBtn.addEventListener('click', ()=>{
+        try { console.log('[DI][alloc] auto-all clicked', { selectedIds: window.__diAllocIds }); } catch(_){ }
         const cat = getSelectLabel(selCat); // optional filter
         const ids = Array.isArray(window.__diAllocIds)?window.__diAllocIds:[];
         if (!ids.length){
-          const meta = qs('#diAllocMeta'); if (meta) meta.textContent = 'Please select recipients first.';
+          const meta = qs('#diAllocMeta');
+          if (meta) meta.textContent = 'Please select recipients first.';
+          else try { console.warn('[DI][alloc] auto-all: meta node missing'); } catch(_){ }
           return;
         }
         // Clear existing auto-added rows so each run shows fresh results
@@ -298,17 +376,55 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
             const host = document.getElementById('alloc-items-' + rid);
             if (host) host.innerHTML = '';
           });
-        } catch(_) { }
-        tryAutoAllAllItems(cat, ids).then(res => {
           const meta = qs('#diAllocMeta');
-          if (meta) meta.textContent = '';
-        });
+          if (meta) {
+            const pct = Math.round(getDistributableFraction() * 100);
+            meta.textContent = pct ? `Auto allocating ${pct}% of available quantity...` : 'Auto allocating with reserve disabled (100%).';
+          } else {
+            try { console.warn('[DI][alloc] auto-all: meta node missing before run'); } catch(_){ }
+          }
+          tryAutoAllAllItems(cat, ids)
+            .then(res => {
+              const metaNode = qs('#diAllocMeta');
+              if (!metaNode) {
+                try { console.warn('[DI][alloc] auto-all: meta node missing after run'); } catch(_){ }
+                return;
+              }
+              if (res?.applied) {
+                const pct = Math.round(getDistributableFraction() * 100);
+                const itemsLabel = res.itemsProcessed === 1 ? 'item' : 'items';
+                metaNode.textContent = `Added ${res.totalUnits} unit${res.totalUnits === 1 ? '' : 's'} from ${res.itemsProcessed} ${itemsLabel} using ${pct}% distributable inventory.`;
+              } else {
+                const reason = res?.reason || 'no_match';
+                if (reason === 'no_items') {
+                  metaNode.textContent = 'No inventory items matched the selected filters.';
+                } else if (reason === 'no_allocations') {
+                  metaNode.textContent = `Fetched ${res?.scanned ?? 0} items but none met the minimum allocation threshold.`;
+                } else {
+                  metaNode.textContent = 'No distributable inventory matched the current selection.';
+                }
+              }
+              try { console.log('[DI][alloc] auto-all result', res); } catch(_){ }
+            })
+            .catch(err => {
+              const metaNode = qs('#diAllocMeta');
+              if (metaNode) metaNode.textContent = 'Auto allocation failed. Please try again.';
+              try { console.error('[DI][alloc] auto-all failed', err); } catch(_){ }
+            });
+        } catch(err) {
+          try { console.error('[DI][alloc] auto-all exception', err); } catch(_){ }
+        }
       });
     }
   }
 
   // Try algorithmic allocation by fetching total available for item/category from Inventory API
-  function tryAlgorithmicAutoAll(cat, name, ids){
+  async function tryAlgorithmicAutoAll(cat, name, ids){
+    try {
+      await loadDistributableSettings();
+    } catch(err){
+      diLogError('DIP preload (simpleInit)', err);
+    }
     return new Promise((resolve)=>{
       if (!(window.Allocation && typeof window.Allocation.allocateItems === 'function')){ resolve({ applied:false }); return; }
       const params = new URLSearchParams({ q: name, group: 'merge', page: '1', limit: '1' });
@@ -324,10 +440,12 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           if (window.Allocation && typeof window.Allocation.buildPopulationMap === 'function'){
             return window.Allocation.buildPopulationMap(list||[]);
           }
-        } catch(_){ }
+        } catch(err) {
+          diLogError('ensurePop (single auto)', err);
+        }
         return new Map();
       };
-      fetch(`php/api/inventory/index.php/list?${params.toString()}`, { credentials: 'include' })
+      fetch(`${INVENTORY_API_BASE}/list?${params.toString()}`, { credentials: 'include' })
         .then(r=>r.json()).then(data => {
           const items = data?.data?.items || [];
           const it = items[0] || {};
@@ -336,9 +454,10 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           try {
             const status = String(it?.derived_status || '').toLowerCase();
             const isSoon = (status === 'expiring soon' || status === 'soon to expire');
-            if (!isSoon && totalQty < 20){ resolve({ applied:false }); return; }
+            if (!isSoon && totalQty < 20){ resolve({ applied:false, reason: 'below_threshold' }); return; }
+            if (!isSoon && totalQty < 30){ resolve({ applied:false, reason: 'below_threshold' }); return; }
           } catch(_) {
-            if (totalQty < 20){ resolve({ applied:false }); return; }
+            if (totalQty < 20){ resolve({ applied:false, reason: 'below_threshold' }); return; }
           }
           // Skip expired goods
           try {
@@ -359,142 +478,172 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
             eligibleIds = ids.filter(id => hasTagIntersect(itemTags, tagMap.get(Number(id))));
             if (!eligibleIds.length){ resolve({ applied:false }); return; }
           }
-          const allocatableTotal = Math.floor(totalQty * 0.9);
+          const fraction = getDistributableFraction();
+          const allocatableTotal = Math.floor(totalQty * fraction);
           ensurePop().then((popMap)=>{
             const recipients = (window.Allocation && typeof window.Allocation.recipientsWithPopulation==='function')
               ? window.Allocation.recipientsWithPopulation(eligibleIds, popMap)
               : eligibleIds.map(id => ({ id, population: popMap.get(Number(id)) }));
             try { console.log('[DI][alloc] recipients (algo one)', recipients); } catch(_){ }
-            const allocs = window.Allocation.allocateItems(allocatableTotal/0.9, recipients);
+            const allocs = window.Allocation.allocateItems(totalQty, recipients);
             if (!Array.isArray(allocs) || !allocs.length){ resolve({ applied:false }); return; }
             let sum = 0;
             const statusLabel = (String(it?.derived_status||'').toLowerCase()==='expiring soon' || String(it?.derived_status||'').toLowerCase()==='soon to expire') ? 'Soon To Expire' : '';
             allocs.forEach(a => {
               const n = Math.max(0, parseInt(a.allocation||0,10)||0);
-              const minPerRecipient = (totalQty < 30) ? 3 : 1;
+              const minPerRecipient = (totalQty < 30)
+                ? Math.max(1, Math.floor(3 * fraction) || 1)
+                : 1;
               if (n < minPerRecipient) return;
               addAllocItemToRecipient(a.id, cat, name, n, (it.unit||''), statusLabel);
               sum += n;
             });
             resolve({ applied:true, sum });
+          }).catch(err=>{
+            diLogError('ensurePop (single auto allocate)', err);
+            resolve({ applied:false });
           });
-        }).catch(()=> resolve({ applied:false }));
+        }).catch(err=>{ diLogError('fetch inventory (single auto)', err); resolve({ applied:false }); });
     });
   }
 
   // Allocate ALL available inventory items (optionally filtered by category) across recipients
-  function tryAutoAllAllItems(cat, ids){
-    return new Promise((resolve)=>{
-      if (!(Array.isArray(ids) && ids.length && window.Allocation && typeof window.Allocation.allocateItems==='function')){
-        resolve({ applied:false }); return;
+  async function tryAutoAllAllItems(cat, ids){
+    try {
+      await loadDistributableSettings();
+    } catch(err){
+      diLogError('DIP preload (auto-all)', err);
+    }
+    if (!(Array.isArray(ids) && ids.length && window.Allocation && typeof window.Allocation.allocateItems === 'function')){
+      try { console.warn('[DI][alloc] auto-all: no recipients passed'); } catch(_){ }
+      return { applied:false, reason: 'no_recipients' };
+    }
+    const params = new URLSearchParams({ group: 'merge', page: '1', limit: '100' });
+    if (cat) params.set('category', cat);
+
+    const ensurePopAll = async ()=>{
+      try{
+        let list = Array.isArray(window.__diAllRecipients) ? window.__diAllRecipients : [];
+        if ((!list || list.length===0) && typeof fetchRecipients === 'function'){
+          list = await fetchRecipients();
+          if (Array.isArray(list)) window.__diAllRecipients = list;
+        }
+        if (window.Allocation && typeof window.Allocation.buildPopulationMap === 'function'){
+          return window.Allocation.buildPopulationMap(list||[]);
+        }
+      } catch(err){ diLogError('ensurePopAll', err); }
+      return new Map();
+    };
+
+    let data;
+    try {
+      const res = await fetch(`${INVENTORY_API_BASE}/list?${params.toString()}`, { credentials: 'include' });
+      data = await res.json().catch(()=>null);
+    } catch(err){
+      diLogError('fetch inventory (auto-all)', err);
+      return { applied:false, reason: 'fetch_error', error: err?.message };
+    }
+    if (!data){
+      diLogError('inventory response empty (auto-all)', null);
+      return { applied:false, reason: 'no_response' };
+    }
+
+    let items = data?.data?.items || [];
+    const pages = parseInt(data?.data?.pagination?.pages || 1, 10) || 1;
+    if (pages > 1) {
+      for (let p = 2; p <= pages; p++) {
+        try {
+          const pParams = new URLSearchParams(params);
+          pParams.set('page', String(p));
+          const res = await fetch(`${INVENTORY_API_BASE}/list?${pParams.toString()}`, { credentials: 'include' });
+          const dd = await res.json().catch(()=>null);
+          const arr = Array.isArray(dd?.data?.items) ? dd.data.items : [];
+          if (arr.length) items = items.concat(arr);
+        } catch(err){ diLogError('fetch inventory page (auto-all)', err); }
       }
-      const params = new URLSearchParams({ group: 'merge', page: '1', limit: '100' });
-      if (cat) params.set('category', cat);
-      // Ensure we have a fresh population map from the Allocation module
-      const ensurePopAll = async ()=>{
-        try{
-          let list = Array.isArray(window.__diAllRecipients) ? window.__diAllRecipients : [];
-          if ((!list || list.length===0) && typeof fetchRecipients === 'function'){
-            list = await fetchRecipients();
-            if (Array.isArray(list)) window.__diAllRecipients = list;
-          }
-          if (window.Allocation && typeof window.Allocation.buildPopulationMap === 'function'){
-            return window.Allocation.buildPopulationMap(list||[]);
-          }
-        } catch(_){ }
-        return new Map();
+    }
+    if (!items.length){
+      try { console.warn('[DI][alloc] auto-all: no items returned', { category: cat, idsCount: ids.length }); } catch(_){ }
+      return { applied:false, reason: 'no_items' };
+    }
+
+    try {
+      const toDateVal = (it)=>{
+        const s = (it.earliest_expiry || it.expiry_date || '').trim();
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? new Date('9999-12-31') : d;
       };
-      fetch(`php/api/inventory/index.php/list?${params.toString()}`, { credentials: 'include' })
-        .then(r=>r.json())
-        .then(async data => {
-          let items = data?.data?.items || [];
-          const pages = parseInt(data?.data?.pagination?.pages || 1, 10) || 1;
-          if (pages > 1) {
-            const fetches = [];
-            for (let p = 2; p <= pages; p++) {
-              const pParams = new URLSearchParams(params);
-              pParams.set('page', String(p));
-              fetches.push(
-                fetch(`php/api/inventory/index.php/list?${pParams.toString()}`, { credentials: 'include' })
-                  .then(rr => rr.json())
-                  .then(dd => (dd?.data?.items || []))
-                  .catch(()=>[])
-              );
-            }
-            const rest = await Promise.all(fetches);
-            rest.forEach(arr => { items = items.concat(arr); });
-          }
-          if (!items.length){ resolve({ applied:false }); return; }
-          // Prioritize soon-to-expire first, then nearest expiry
-          try {
-            const toDateVal = (it)=>{
-              const s = (it.earliest_expiry || it.expiry_date || '').trim();
-              const d = new Date(s);
-              return isNaN(d.getTime()) ? new Date('9999-12-31') : d;
-            };
-            items.sort((a,b)=>{
-              const sa = String(a.derived_status||'').toLowerCase();
-              const sb = String(b.derived_status||'').toLowerCase();
-              const aSoon = (sa === 'expiring soon' || sa === 'soon to expire');
-              const bSoon = (sb === 'expiring soon' || sb === 'soon to expire');
-              if (aSoon !== bSoon) return aSoon ? -1 : 1;
-              const da = toDateVal(a).getTime();
-              const db = toDateVal(b).getTime();
-              return da - db;
-            });
-          } catch(_) { }
-          ensurePopAll().then((popMap)=>{
-            const recipients = (window.Allocation && typeof window.Allocation.recipientsWithPopulation==='function')
-              ? window.Allocation.recipientsWithPopulation(ids, popMap)
-              : ids.map(id => ({ id, population: popMap.get(Number(id)) }));
-            try { console.log('[DI][alloc] recipients (all items)', recipients); } catch(_){ }
-            let totalUnits = 0, itemsProcessed = 0;
-            const scanned = items.length;
-            // Constraints: exclude expired; per-recipient minimum is conditional (>=3 only if totalQty < 30)
-            items.forEach(it => {
-              const name = (it.item_name ?? it.product_name ?? '').trim();
-              const category = (it.category ?? it.product_category ?? '').trim();
-              const totalQty = parseInt(it.total_quantity ?? it.quantity ?? 0, 10) || 0;
-              if (!name || totalQty <= 0) return;
-              // Exclude expired items (by derived_status or date)
-              try {
-                const st = String(it.derived_status || '').toLowerCase();
-                const expRaw2 = (it.earliest_expiry || it.expiry_date || '').trim();
-                if (st === 'expired') return;
-                if (expRaw2) {
-                  const exp2 = new Date(expRaw2 + 'T00:00:00');
-                  const today2 = new Date(); today2.setHours(0,0,0,0);
-                  if (exp2 < today2) return;
-                }
-              } catch(_) { }
-              const eligible = recipients.slice();
-              const allocs = window.Allocation.allocateItems(totalQty, eligible);
-              if (!Array.isArray(allocs) || !allocs.length) return;
-              let itemUnits = 0;
-              const statusLc = String(it.derived_status || '').toLowerCase();
-              const isSoon = (statusLc === 'expiring soon' || statusLc === 'soon to expire');
-              const statusLabel = isSoon ? 'Soon To Expire' : '';
-              allocs.forEach(a => {
-                const n = Math.max(0, parseInt(a.allocation||0,10)||0);
-                const minPerRecipient = (totalQty < 30) ? 3 : 1;
-                if (n < minPerRecipient) return;
-                addAllocItemToRecipient(a.id, category, name, n, (it.unit||''), statusLabel);
-                itemUnits += n;
-              });
-              if (itemUnits>0){ totalUnits += itemUnits; itemsProcessed++; }
-            });
-            resolve({ applied: itemsProcessed>0 && totalUnits>0, totalUnits, itemsProcessed });
-            // Show diagnostics to admin
-            try {
-              const meta = document.getElementById('diAllocMeta');
-              if (meta) {
-                meta.textContent = `Processed ${itemsProcessed} item${itemsProcessed===1?'':'s'} • Expired excluded • Scanned: ${scanned}`;
-              }
-            } catch(_) { }
-          });
-        })
-        .catch(()=> resolve({ applied:false }));
-    });
+      items.sort((a,b)=>{
+        const sa = String(a.derived_status||'').toLowerCase();
+        const sb = String(b.derived_status||'').toLowerCase();
+        const aSoon = (sa === 'expiring soon' || sa === 'soon to expire');
+        const bSoon = (sb === 'expiring soon' || sb === 'soon to expire');
+        if (aSoon !== bSoon) return aSoon ? -1 : 1;
+        const da = toDateVal(a).getTime();
+        const db = toDateVal(b).getTime();
+        return da - db;
+      });
+    } catch(_) { }
+
+    const popMap = await ensurePopAll();
+    const recipients = (window.Allocation && typeof window.Allocation.recipientsWithPopulation==='function')
+      ? window.Allocation.recipientsWithPopulation(ids, popMap)
+      : ids.map(id => ({ id, population: popMap.get(Number(id)) }));
+    try { console.log('[DI][alloc] recipients (all items)', recipients); } catch(_){ }
+
+    let totalUnits = 0;
+    let itemsProcessed = 0;
+    const scanned = items.length;
+    const fraction = getDistributableFraction();
+
+    for (const it of items){
+      const name = (it.item_name ?? it.product_name ?? '').trim();
+      const category = (it.category ?? it.product_category ?? '').trim();
+      const totalQty = parseInt(it.total_quantity ?? it.quantity ?? 0, 10) || 0;
+      if (!name || totalQty <= 0) continue;
+      try {
+        const st = String(it.derived_status || '').toLowerCase();
+        const expRaw2 = (it.earliest_expiry || it.expiry_date || '').trim();
+        if (st === 'expired') continue;
+        if (expRaw2) {
+          const exp2 = new Date(expRaw2 + 'T00:00:00');
+          const today2 = new Date(); today2.setHours(0,0,0,0);
+          if (exp2 < today2) continue;
+        }
+        const isSoonCheck = (st === 'expiring soon' || st === 'soon to expire');
+        if (!isSoonCheck && totalQty < 30) {
+          try { console.info('[DI][alloc] auto-all skip: below 30 units', { name, category, totalQty }); } catch(_){ }
+          continue;
+        }
+      } catch(_){ }
+
+      const eligible = recipients.slice();
+      const allocs = window.Allocation.allocateItems(totalQty, eligible);
+      if (!Array.isArray(allocs) || !allocs.length) continue;
+      let itemUnits = 0;
+      const statusLc = String(it.derived_status || '').toLowerCase();
+      const isSoon = (statusLc === 'expiring soon' || statusLc === 'soon to expire');
+      const statusLabel = isSoon ? 'Soon To Expire' : '';
+      allocs.forEach(a => {
+        const n = Math.max(0, parseInt(a.allocation||0,10)||0);
+        const minPerRecipient = (totalQty < 30)
+          ? Math.max(1, Math.floor(3 * fraction) || 1)
+          : 1;
+        if (n < minPerRecipient) return;
+        addAllocItemToRecipient(a.id, category, name, n, (it.unit||''), statusLabel);
+        itemUnits += n;
+      });
+      if (itemUnits>0){
+        totalUnits += itemUnits;
+        itemsProcessed++;
+      }
+    }
+
+    if (!(itemsProcessed>0 && totalUnits>0)){
+      try { console.warn('[DI][alloc] auto-all: no allocations produced', { itemsProcessed, totalUnits, scanned, fraction }); } catch(_){ }
+      return { applied:false, reason: 'no_allocations', totalUnits, itemsProcessed, scanned };
+    }
+    return { applied: true, totalUnits, itemsProcessed, scanned };
   }
   try { window.tryAutoAllAllItems = tryAutoAllAllItems; } catch(_){ }
 
@@ -846,14 +995,13 @@ function annotateCardsWithWeeksEx(weeksEx){ try { return window.annotateCardsWit
   'use strict';
   try { console.log('[DI] adminDistribute.js loaded'); } catch(_){ }
 
-  const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
-    ? window.API_BASE_URL
-    : '/Capstone%20Project/php/api';
+  const API_BASE_URL = DI_API_BASE = diResolveApiBase();
+  INVENTORY_API_BASE = `${API_BASE_URL}/inventory/index.php`;
+
   // Global toggle to enable/disable background polling
   const ENABLE_POLLING = false;
   // Minimal deterministic mode: use plan + cancelled to preload Selected
   const SIMPLE_MODE = true;
-
   const qs = (s, r=document)=> r.querySelector(s);
   const qsa = (s, r=document)=> Array.from(r.querySelectorAll(s));
 
@@ -872,6 +1020,7 @@ function annotateCardsWithWeeksEx(weeksEx){ try { return window.annotateCardsWit
   }
 
   async function simpleInit(){
+    await loadDistributableSettings().catch(()=>{});
     try { console.log('[DI][simple] init'); } catch(_){ }
     try { if (!window.__WEEK_START) { window.__WEEK_START = 'monday'; console.log('[DI][simple] defaulting __WEEK_START=monday'); } } catch(_){ }
     // One-time UI hooks

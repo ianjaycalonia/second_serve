@@ -4,10 +4,37 @@ require_once __DIR__ . '/../includes/config.php';
 class AllocationAlgorithm
 {
     private Database $db;
+    private float $distributableFraction = 0.90;
 
     public function __construct()
     {
         $this->db = Database::getInstance();
+        $this->distributableFraction = $this->loadDistributableFraction();
+    }
+
+    private function loadDistributableFraction(): float
+    {
+        $percent = null;
+        try {
+            $row = $this->db->query('SELECT `value` FROM settings WHERE `key` = ? LIMIT 1', ['distribution_distributable_percent'])->fetch();
+            if ($row && isset($row['value'])) {
+                $percent = (int)$row['value'];
+            }
+        } catch (Throwable $e) {
+            // ignore and fall back to default below
+        }
+        if (!is_int($percent)) {
+            $percent = 90;
+        }
+        $percent = max(0, min(100, $percent));
+        $fraction = $percent / 100;
+        if ($fraction <= 0) {
+            return 0.0;
+        }
+        if ($fraction > 1) {
+            return 1.0;
+        }
+        return $fraction;
     }
 
     private function normalizeTags($tags): array
@@ -169,7 +196,7 @@ class AllocationAlgorithm
                 $rows = $g['rows'];
                 $totalAvail = 0; foreach ($rows as $r){ $totalAvail += (int)($r['quantity'] ?? 0); }
                 if ($totalAvail <= 0) continue;
-                $A = (int)floor($totalAvail * 0.90);
+                $A = (int)floor($totalAvail * $this->distributableFraction);
                 if ($A <= 0) continue;
 
                 $isSpecial = !empty($g['tags']);

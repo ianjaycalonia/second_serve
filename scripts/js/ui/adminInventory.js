@@ -320,7 +320,7 @@
     if (!json || json.success !== true)
       throw new Error(json?.error || "Failed to load inventory");
     return (
-      json.data || { items: [], pagination: { page: 1, pages: 1, total: 0 } }
+      json.data || { items: [], pagination: { page: 1, pages: 1, total: 0 }, config: {} }
     );
   }
 
@@ -341,9 +341,29 @@
     return { category, q, fromDate, toDate, qtyOrder, submOrder, nameOrder, hideExpired };
   }
 
-  function renderTable(items) {
+  function applyConfig(meta = {}) {
+    try {
+      const leadDays = Number(meta?.config?.soon_expire_lead_days ?? meta?.soon_expire_lead_days ?? NaN);
+      const el = document.getElementById("inventorySoonLeadNotice");
+      if (el) {
+        if (Number.isFinite(leadDays)) {
+          const label = leadDays === 0
+            ? 'Items expiring today are flagged as "Expiring Soon".'
+            : `Items expiring within ${leadDays} day${leadDays === 1 ? '' : 's'} are flagged as "Expiring Soon".`;
+          el.textContent = label;
+          el.classList.remove('d-none');
+        } else {
+          el.textContent = '';
+          el.classList.add('d-none');
+        }
+      }
+    } catch (_) {}
+  }
+
+  function renderTable(items, meta) {
     const tbody = document.querySelector("main .table tbody");
     if (!tbody) return;
+    applyConfig(meta);
     // Apply Hide Expired filter if toggle is on
     let filtered = Array.isArray(items) ? [...items] : [];
     try {
@@ -479,22 +499,29 @@
       const hideExpired = !!filters.hideExpired;
       if (!hideExpired) {
         // Normal server-side pagination
-        const data = await fetchInventory({ category: filters.category, q: filters.q, page, limit });
+        const data = await fetchInventory({
+          category: filters.category,
+          q: filters.q,
+          page,
+          limit
+        });
         const items = applyClientFiltersAndSort(data.items || [], filters);
         window.__inventoryLast = { items, pagination: data.pagination };
-        renderTable(items);
+        renderTable(items, data);
         renderPagination(data.pagination || { page: 1, pages: 1 });
         return;
       }
 
       // Hide expired ON: build a client-side non-expired collection across all server pages
       const key = JSON.stringify({ k: "inv", category: filters.category, q: filters.q });
-      const cache =
-        window.__invNonExpiredCache || (window.__invNonExpiredCache = {});
-      let items = Array.isArray(cache[key]?.items) ? cache[key].items : null;
+      const cache = window.__invNonExpiredCache || (window.__invNonExpiredCache = {});
+      let cacheEntry = cache[key];
+      let items = Array.isArray(cacheEntry?.items) ? cacheEntry.items : null;
+      let configMeta = cacheEntry?.config || {};
       if (!items) {
         // Fetch page 1 with max chunk (100)
         const first = await fetchInventory({ category: filters.category, q: filters.q, page: 1, limit: 100 });
+        configMeta = first?.config || {};
         const totalPages = Math.max(1, first?.pagination?.pages || 1);
         const collected = [];
         const filterFn = (arr) =>
@@ -507,8 +534,10 @@
           collected.push(...filterFn(next.items));
         }
         items = collected;
-        cache[key] = { items, ts: Date.now() };
+        cacheEntry = { items, ts: Date.now(), config: configMeta };
+        cache[key] = cacheEntry;
       }
+      const meta = { config: configMeta || cacheEntry?.config || {} };
       // Client-side paginate non-expired
       const total = items.length;
       const pages = Math.max(1, Math.ceil(total / limit));
@@ -520,7 +549,7 @@
         items: slice,
         pagination: { page: cur, pages, total },
       };
-      renderTable(slice);
+      renderTable(slice, meta);
       renderPagination({ page: cur, pages });
     } catch (err) {
       console.error("Failed to load inventory:", err);

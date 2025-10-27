@@ -290,99 +290,234 @@
       </a>
     </aside>
 
-    <main>
-      <div aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item">
-            <a href="AdminDashboard.html">Dashboard</a>
-          </li>
-          <li class="breadcrumb-item active" aria-current="page">Settings</li>
-        </ol>
+    <main class="pb-5">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div>
+          <div aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+              <li class="breadcrumb-item">
+                <a href="AdminDashboard.html">Dashboard</a>
+              </li>
+              <li class="breadcrumb-item active" aria-current="page">Settings</li>
+            </ol>
+          </div>
+        </div>
+        <div class="text-muted small">
+          Review and update the platform defaults for administrators and recipients.
+        </div>
       </div>
 
-      <h4 class="mb-3">Admin Settings</h4>
+      <div class="card card-accent p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <div>
+            <h4 class="mb-1">Admin Settings</h4>
+            <p class="text-muted mb-0">
+              Configure system identity, acknowledgement policies, and allocation preferences from one place.
+            </p>
+          </div>
+          <span class="badge bg-light text-dark fw-semibold">Settings Center</span>
+        </div>
 
-      <ul class="nav nav-tabs" id="myTab" role="tablist">
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link active"
-            id="general-tab"
-            data-bs-toggle="tab"
-            data-bs-target="#general-tab-pane"
-            type="button"
-            role="tab"
-            aria-controls="general-tab-pane"
-            aria-selected="true"
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link active"
+              id="general-tab"
+              data-bs-toggle="tab"
+              data-bs-target="#general-tab-pane"
+              type="button"
+              role="tab"
+              aria-controls="general-tab-pane"
+              aria-selected="true"
+            >
+              General
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              id="configurations-tab"
+              data-bs-toggle="tab"
+              data-bs-target="#configurations-tab-pane"
+              type="button"
+              role="tab"
+              aria-controls="configurations-tab-pane"
+              aria-selected="false"
+            >
+              Configurations
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content mt-3" id="myTabContent">
+          <div
+            class="tab-pane fade show active"
+            id="general-tab-pane"
+            role="tabpanel"
+            aria-labelledby="general-tab"
+            tabindex="0"
           >
-            General
-          </button>
-        </li>
-      </ul>
-
-      <div class="tab-content" id="myTabContent">
-        <div
-          class="tab-pane fade show active"
-          id="general-tab-pane"
-          role="tabpanel"
-          aria-labelledby="general-tab"
-          tabindex="0"
-        >
-          <div class="mt-3">
-            <h5>General Settings</h5>
-
-            <div class="general-settings">
-              <div class="row g-3">
-                <div class="col-6 general-settings-content">
-                  <div>
-                    <label for="sysLabel">System Name</label>
-                    <input
-                      type="text"
-                      id="sysLabel"
-                      class="form-control form-control-sm"
-                      value="Second Serve"
-                    />
+            <form class="row g-4 mt-1">
+              <div class="col-12 col-xl-8">
+                <div class="card card-accent p-3 h-100">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">System Identity</h6>
+                    <span class="badge bg-primary-subtle text-primary">General</span>
                   </div>
-                  <div>
-                    <label for="sysDescription">System Description</label>
-                    <input
-                      type="text"
-                      id="sysDescription"
-                      class="form-control form-control-sm"
-                      value="Web-Based Food Donation Management System"
-                    />
-                  </div>
-                  <div>
-                    <label for="sysTimeZone">Default Timezone</label>
-                    <select id="sysTimeZone" class="form-select form-select-sm">
-                      <option value="asiaManila" selected>Asia/Manila</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="sysDateFormat">Date Format</label>
-                    <select
-                      id="sysDateFormat"
-                      class="form-select form-select-sm"
-                    >
-                      <option value="mm-dd-yyyy" selected>MM-DD-YYYY</option>
-                      <option value="dd-mm-yyyy" selected>DD-MM-YYYY</option>
-                      <option value="yyyy-mm-dd">YYYY-MM-DD</option>
-                    </select>
-                  </div>
-
-                  <div class="align-self-start mt-3">
-                    <button class="btn btn-sm btn-primary">Save Changes</button>
-                  </div>
-                </div>
-
-                <div class="col-6 system-photo">
-                  <img src="images/simply_share.png" alt="System Photo" />
-                  <div class="d-flex align-items-center gap-2">
-                    <button class="btn btn-sm btn-primary">Change</button>
-                    <button class="btn btn-sm btn-danger">Remove</button>
+                  <p class="text-muted small mb-3">
+                    Provide the name and description that appear across dashboards, emails, and printable reports.
+                  </p>
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="sysLabel" class="form-label">System Name</label>
+                      <input
+                        type="text"
+                        id="sysLabel"
+                        class="form-control form-control-sm"
+                        value="Second Serve"
+                      />
+                    </div>
+                    <div class="col-12">
+                      <label for="sysDescription" class="form-label">System Description</label>
+                      <input
+                        type="text"
+                        id="sysDescription"
+                        class="form-control form-control-sm"
+                        value="Web-Based Food Donation Management System"
+                      />
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label for="sysTimeZone" class="form-label">Default Timezone</label>
+                      <select id="sysTimeZone" class="form-select form-select-sm">
+                        <option value="asiaManila" selected>Asia/Manila</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label for="sysDateFormat" class="form-label">Date Format</label>
+                      <select id="sysDateFormat" class="form-select form-select-sm">
+                        <option value="mm-dd-yyyy" selected>MM-DD-YYYY</option>
+                        <option value="dd-mm-yyyy">DD-MM-YYYY</option>
+                        <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+              <div class="col-12 col-xl-4">
+                <div class="card card-accent p-3 h-100">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">Branding</h6>
+                    <span class="badge bg-warning-subtle text-warning">Appearance</span>
+                  </div>
+                  <p class="text-muted small mb-3">
+                    Update the logo used across admin pages, recipient acknowledgements, and exports.
+                  </p>
+                  <div class="text-center">
+                    <img
+                      src="images/simply_share.png"
+                      alt="System Logo"
+                      class="img-fluid rounded-3 border mb-3"
+                      style="max-width: 220px;"
+                    />
+                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                      <button class="btn btn-sm btn-primary" type="button">Change</button>
+                      <button class="btn btn-sm btn-outline-danger" type="button">Remove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 d-flex justify-content-end gap-2">
+                <button class="btn btn-sm btn-outline-secondary" type="button">Discard</button>
+                <button class="btn btn-sm btn-primary" type="button">Save General Settings</button>
+              </div>
+            </form>
+          </div>
+          <div
+            class="tab-pane fade"
+            id="configurations-tab-pane"
+            role="tabpanel"
+            aria-labelledby="configurations-tab"
+            tabindex="0"
+          >
+            <form class="row g-4 mt-1">
+              <div class="col-12 col-xl-5">
+                <div class="card card-accent p-3 h-100">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">Messaging & Acknowledgement</h6>
+                    <span class="badge bg-info-subtle text-info">Communication</span>
+                  </div>
+                  <p class="text-muted small mb-3">
+                    Control how recipients interact with important announcements and reminders.
+                  </p>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" value="1" id="cfgMsgAckCheckbox" />
+                    <label class="form-check-label" for="cfgMsgAckCheckbox">
+                      Require acknowledgement checkbox in message modals
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-xl-7">
+                <div class="card card-accent p-3 h-100">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">Inventory & Allocation Rules</h6>
+                    <span class="badge bg-success-subtle text-success">Operations</span>
+                  </div>
+                  <p class="text-muted small mb-3">
+                    Adjust thresholds that influence warning banners, distance weighting, and distribution caps.
+                  </p>
+                  <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                      <label class="form-label" for="cfgSoonExpireLead">"Soon to expire" warning lead time (days)</label>
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        id="cfgSoonExpireLead"
+                        min="0"
+                        placeholder="e.g., 7"
+                      />
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label" for="cfgFarRecipientWeight">Allocation weight multiplier for faraway recipients</label>
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        id="cfgFarRecipientWeight"
+                        min="0"
+                        step="0.1"
+                        placeholder="e.g., 0.85"
+                      />
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label" for="cfgDistributablePercent">Distributable inventory percentage (%)</label>
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        id="cfgDistributablePercent"
+                        min="0"
+                        max="100"
+                        step="1"
+                        placeholder="e.g., 90"
+                      />
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label" for="cfgCancellationHours">Recipient cancellation window (hours)</label>
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        id="cfgCancellationHours"
+                        min="0"
+                        placeholder="e.g., 24"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 d-flex justify-content-end gap-2">
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="configDiscardBtn">Discard</button>
+                <button class="btn btn-sm btn-success" type="button" id="configSaveBtn">Save Configurations</button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
@@ -456,5 +591,6 @@
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
+    <script src="scripts/js/ui/adminSettings.js"></script>
   </body>
 </html>

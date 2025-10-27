@@ -525,8 +525,14 @@ CREATE TABLE `settings` (
   PRIMARY KEY (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- Seed default week start to sunday (can be 'sunday' or 'monday')
-INSERT INTO `settings` (`key`, `value`) VALUES ('week_start', 'sunday')
+INSERT INTO `settings` (`key`, `value`) VALUES
+  ('week_start', 'sunday'),
+  ('di_auto_open_alloc', '0'),
+  ('require_ack_checkbox', '0'),
+  ('inventory_soon_expire_lead_days', '7'),
+  ('allocation_far_recipient_weight', '1.5'),
+  ('distribution_distributable_percent', '90'),
+  ('recipient_cancellation_hours', '24')
 ON DUPLICATE KEY UPDATE `value`=VALUES(`value`);
 
 -- user_preferences (per-user UI/UX preferences)

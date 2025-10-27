@@ -1,8 +1,28 @@
 <?php
-require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../../includes/config.php';
 
 setCorsHeaders();
 header('Content-Type: application/json');
+
+const SUPPORTED_SETTINGS = [
+    'week_start',
+    'di_auto_open_alloc',
+    'require_ack_checkbox',
+    'inventory_soon_expire_lead_days',
+    'allocation_far_recipient_weight',
+    'distribution_distributable_percent',
+    'recipient_cancellation_hours',
+];
+
+const DEFAULT_SETTING_VALUES = [
+    'week_start' => 'sunday',
+    'di_auto_open_alloc' => '0',
+    'require_ack_checkbox' => '0',
+    'inventory_soon_expire_lead_days' => '7',
+    'allocation_far_recipient_weight' => '1.5',
+    'distribution_distributable_percent' => '90',
+    'recipient_cancellation_hours' => '24',
+];
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if ($method === 'OPTIONS') { exit(0); }
@@ -22,35 +42,89 @@ function getSetting(string $key, $default = null){
     }
 }
 
+function normalizeSettingValue(string $key, $value){
+    switch ($key) {
+        case 'week_start':
+            $val = strtolower(trim((string)$value));
+            if (!in_array($val, ['sunday','monday'], true)) {
+                throw new InvalidArgumentException('invalid week_start');
+            }
+            return $val;
+
+        case 'di_auto_open_alloc':
+        case 'require_ack_checkbox':
+            $val = strtolower(trim((string)$value));
+            return in_array($val, ['1','true','yes','on'], true) ? '1' : '0';
+
+        case 'inventory_soon_expire_lead_days':
+            $days = (int)$value;
+            if ($days < 0) { $days = 0; }
+            return (string)$days;
+
+        case 'allocation_far_recipient_weight':
+            if (!is_numeric($value)) { $value = 0; }
+            $weight = max(0, (float)$value);
+            $formatted = rtrim(rtrim(sprintf('%.4F', $weight), '0'), '.');
+            return $formatted === '' ? '0' : $formatted;
+
+        case 'distribution_distributable_percent':
+            $percent = (int)$value;
+            if ($percent < 0) { $percent = 0; }
+            if ($percent > 100) { $percent = 100; }
+            return (string)$percent;
+
+        case 'recipient_cancellation_hours':
+            $hours = (int)$value;
+            if ($hours < 0) { $hours = 0; }
+            return (string)$hours;
+
+        default:
+            throw new InvalidArgumentException('unsupported key');
+    }
+}
+
 try {
     switch ($action) {
         case 'get':
             requireRole(['admin']);
             $key = isset($_GET['key']) ? trim((string)$_GET['key']) : '';
-            if ($key === '') { echo json_encode(['success'=>false,'error'=>'key required']); exit; }
-            $default = ($key === 'week_start') ? 'sunday' : (($key === 'di_auto_open_alloc') ? '0' : null);
+            if ($key === '') { sendJson(['success'=>false,'error'=>'key required'], 400); }
+            if (!in_array($key, SUPPORTED_SETTINGS, true)){
+                sendJson(['success'=>false,'error'=>'unsupported key'], 400);
+            }
+            $default = DEFAULT_SETTING_VALUES[$key] ?? null;
             $val = getSetting($key, $default);
-            echo json_encode(['success'=>true, 'data'=>['key'=>$key,'value'=>$val]]);
-            break;
+            sendJson(['success'=>true, 'data'=>['key'=>$key,'value'=>$val]]);
+
+        case 'all':
+            requireRole(['admin']);
+            $keys = SUPPORTED_SETTINGS;
+            if (isset($_GET['keys']) && $_GET['keys'] !== ''){
+                $requested = array_map('trim', explode(',', (string)$_GET['keys']));
+                $keys = array_values(array_intersect($requested, SUPPORTED_SETTINGS));
+                if (empty($keys)){
+                    sendJson(['success'=>false,'error'=>'no supported keys requested'], 400);
+                }
+            }
+            $data = [];
+            foreach ($keys as $k){
+                $data[$k] = getSetting($k, DEFAULT_SETTING_VALUES[$k] ?? null);
+            }
+            sendJson(['success'=>true,'data'=>$data]);
 
         case 'update':
             requireRole(['admin']);
             if ($_SERVER['REQUEST_METHOD'] !== 'POST'){
-                http_response_code(405);
-                echo json_encode(['success'=>false,'error'=>'Method Not Allowed']);
-                exit;
+                sendJson(['success'=>false,'error'=>'Method Not Allowed'], 405);
             }
             $key = isset($payload['key']) ? trim((string)$payload['key']) : '';
             $value = isset($payload['value']) ? trim((string)$payload['value']) : '';
-            if ($key === '') { echo json_encode(['success'=>false,'error'=>'key required']); exit; }
-            // Restrict known keys for now (security)
-            $allowed = ['week_start', 'di_auto_open_alloc'];
-            if (!in_array($key, $allowed, true)) { echo json_encode(['success'=>false,'error'=>'unsupported key']); exit; }
-            if ($key === 'week_start' && !in_array(strtolower($value), ['sunday','monday'], true)){
-                echo json_encode(['success'=>false,'error'=>'invalid week_start']); exit;
-            }
-            if ($key === 'di_auto_open_alloc'){
-                $value = ($value === '1') ? '1' : '0';
+            if ($key === '') { sendJson(['success'=>false,'error'=>'key required'], 400); }
+            if (!in_array($key, SUPPORTED_SETTINGS, true)) { sendJson(['success'=>false,'error'=>'unsupported key'], 400); }
+            try {
+                $value = normalizeSettingValue($key, $value);
+            } catch (InvalidArgumentException $e) {
+                sendJson(['success'=>false,'error'=>$e->getMessage()], 400);
             }
             $db = Database::getInstance();
             try {
@@ -67,18 +141,73 @@ try {
                     // Retry insert after ensuring table exists
                     $db->query('INSERT INTO settings(`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)', [$key, $value]);
                 } catch (Throwable $e2){
-                    http_response_code(500);
-                    echo json_encode(['success'=>false,'error'=>'DB error: ' . $e2->getMessage()]);
-                    exit;
+                    sendJson(['success'=>false,'error'=>'DB error: ' . $e2->getMessage()], 500);
                 }
             }
-            echo json_encode(['success'=>true, 'message'=>'updated']);
-            break;
+            sendJson(['success'=>true, 'message'=>'updated']);
+
+        case 'bulk_update':
+            requireRole(['admin']);
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST'){
+                sendJson(['success'=>false,'error'=>'Method Not Allowed'], 405);
+            }
+            $incoming = $payload['settings'] ?? null;
+            if (!is_array($incoming) || empty($incoming)){
+                sendJson(['success'=>false,'error'=>'settings payload required'], 400);
+            }
+            $db = Database::getInstance();
+            try {
+                $db->beginTransaction();
+                foreach ($incoming as $k => $v){
+                    $key = is_string($k) ? trim($k) : '';
+                    $valueRaw = $v;
+                    if (is_array($v)){
+                        $key = isset($v['key']) ? trim((string)$v['key']) : $key;
+                        $valueRaw = $v['value'] ?? '';
+                    }
+                    if ($key === '' || !in_array($key, SUPPORTED_SETTINGS, true)){
+                        throw new InvalidArgumentException('unsupported key');
+                    }
+                    $normalized = normalizeSettingValue($key, $valueRaw);
+                    $db->query('INSERT INTO settings(`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)', [$key, $normalized]);
+                }
+                $db->commit();
+            } catch (Throwable $e){
+                try { if ($db->inTransaction()) { $db->rollBack(); } } catch (Throwable $_){}
+                $code = ($e instanceof InvalidArgumentException) ? 400 : 500;
+                sendJson(['success'=>false,'error'=>$e->getMessage() ?: 'bulk update failed'], $code);
+            }
+            sendJson(['success'=>true,'message'=>'updated']);
+
+        case 'bulk_get':
+            requireRole(['admin']);
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST'){
+                sendJson(['success'=>false,'error'=>'Method Not Allowed'], 405);
+            }
+            $incoming = $payload['keys'] ?? null;
+            if (!is_array($incoming) || empty($incoming)){
+                sendJson(['success'=>false,'error'=>'keys payload required'], 400);
+            }
+            $db = Database::getInstance();
+            $data = [];
+            try {
+                foreach ($incoming as $k){
+                    $key = trim($k);
+                    if (!in_array($key, SUPPORTED_SETTINGS, true)){
+                        throw new InvalidArgumentException('unsupported key');
+                    }
+                    $data[$key] = getSetting($key, DEFAULT_SETTING_VALUES[$key] ?? null);
+                }
+            } catch (Throwable $e){
+                $code = ($e instanceof InvalidArgumentException) ? 400 : 500;
+                sendJson(['success'=>false,'error'=>$e->getMessage() ?: 'bulk get failed'], $code);
+            }
+            sendJson(['success'=>true,'data'=>$data]);
 
         default:
-            echo json_encode(['success'=>false, 'error'=>'unsupported action']);
+            sendJson(['success'=>false, 'error'=>'unsupported action'], 400);
     }
 } catch (Throwable $e){
-    http_response_code(500);
-    echo json_encode(['success'=>false, 'error'=>$e->getMessage()]);
+    sendJson(['success'=>false, 'error'=>$e->getMessage()], 500);
 }
+

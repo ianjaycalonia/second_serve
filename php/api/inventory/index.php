@@ -2,6 +2,24 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/Inventory.php';
 
+const INVENTORY_SETTING_DEFAULTS = [
+    'inventory_soon_expire_lead_days' => '7',
+];
+
+function inv_get_setting(string $key, $default = null){
+    try {
+        $db = Database::getInstance();
+        $row = $db->query('SELECT `value` FROM settings WHERE `key` = ? LIMIT 1', [$key])->fetch();
+        if ($row && array_key_exists('value', $row)) {
+            return $row['value'];
+        }
+    } catch (Throwable $e){ /* ignore */ }
+    if (array_key_exists($key, INVENTORY_SETTING_DEFAULTS)) {
+        return INVENTORY_SETTING_DEFAULTS[$key];
+    }
+    return $default;
+}
+
 // CORS / preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     setCorsHeaders();
@@ -389,6 +407,13 @@ try {
         }
         $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
+        $soonLeadDaysRaw = inv_get_setting('inventory_soon_expire_lead_days', null);
+        $soonLeadDays = is_numeric($soonLeadDaysRaw) ? (int)$soonLeadDaysRaw : 7;
+        if ($soonLeadDays < 0) { $soonLeadDays = 0; }
+        $soonLeadDays = min($soonLeadDays, 365);
+
+        $soonIntervalSql = "DATE_ADD(CURDATE(), INTERVAL {$soonLeadDays} DAY)";
+
         if ($groupMode === 'merge') {
             // Group by item_name + category + expiry bucket so expired lots stay separate
             $countSql = "SELECT COUNT(*) AS n FROM (
@@ -400,7 +425,7 @@ try {
                     CASE
                         WHEN di.expiry_date IS NULL THEN 'no-expiry'
                         WHEN di.expiry_date < CURDATE() THEN 'expired'
-                        WHEN di.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN 'soon'
+                        WHEN di.expiry_date <= {$soonIntervalSql} THEN 'soon'
                         ELSE 'fresh'
                     END
             ) x";
@@ -412,7 +437,7 @@ try {
                         CASE
                             WHEN di.expiry_date IS NULL THEN 'no-expiry'
                             WHEN di.expiry_date < CURDATE() THEN 'expired'
-                            WHEN di.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN 'soon'
+                            WHEN di.expiry_date <= {$soonIntervalSql} THEN 'soon'
                             ELSE 'fresh'
                         END AS expiry_bucket,
                         SUM(inv.quantity) AS total_quantity,
@@ -432,7 +457,7 @@ try {
                         CASE
                             WHEN di.expiry_date IS NULL THEN 'no-expiry'
                             WHEN di.expiry_date < CURDATE() THEN 'expired'
-                            WHEN di.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN 'soon'
+                            WHEN di.expiry_date <= {$soonIntervalSql} THEN 'soon'
                             ELSE 'fresh'
                         END
                     ORDER BY FIELD(expiry_bucket, 'expired','soon','fresh','no-expiry'), COALESCE(MIN(di.expiry_date), '9999-12-31'), item_name ASC
@@ -497,7 +522,7 @@ try {
                             $status = 'Expired';
                         } else {
                             $diff = (int)$today->diff($exp)->format('%r%a');
-                            if ($diff >= 0 && $diff <= 3) { $status = 'Expiring Soon'; }
+                            if ($diff >= 0 && $diff <= $soonLeadDays) { $status = 'Expiring Soon'; }
                         }
                     } catch (Exception $e) { /* ignore */ }
                 }
@@ -514,6 +539,9 @@ try {
                     'limit' => $limit,
                     'total' => $total,
                     'pages' => ($limit ? (int)ceil($total / $limit) : 1)
+                ],
+                'config' => [
+                    'soon_expire_lead_days' => $soonLeadDays
                 ]
             ]
         ];

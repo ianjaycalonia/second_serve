@@ -62,10 +62,11 @@
     if (ct.includes('application/json')){
       try { return await res.json(); } catch(_) { /* fallthrough */ }
     }
-    const _ = await res.text();
+    const rawBody = await res.text();
     // Hide raw body; return generic error structure
     const err = new Error(`HTTP ${res.status}`);
     err.status = res.status;
+    err.body = rawBody;
     throw err;
   }
 
