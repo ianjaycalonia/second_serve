@@ -13,7 +13,6 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
-    <link rel="stylesheet" href="scripts/css/responsive.css" />
     <link rel="stylesheet" href="scripts/css/monthlyRecipients.css" />
     <style>
       /* Constrain brand logo */
@@ -39,44 +38,58 @@
             Second Serve by <span>Simply</span><span>Share</span>
           </div>
 
-      <!-- Pending Recipient Approvals -->
-      <div class="card card-accent mb-3" id="pendingApprovalsCard" style="display:none;">
-        <div class="card-body">
-          <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-            <div class="fw-semibold">Pending Recipient Approvals</div>
-            <div class="d-flex align-items-center gap-2">
-              <button id="reloadPendingBtn" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-arrow-clockwise"></i>
-              </button>
+          <!-- Pending Recipient Approvals -->
+          <div
+            class="card card-accent mb-3"
+            id="pendingApprovalsCard"
+            style="display: none"
+          >
+            <div class="card-body">
+              <div
+                class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2"
+              >
+                <div class="fw-semibold">Pending Recipient Approvals</div>
+                <div class="d-flex align-items-center gap-2">
+                  <button
+                    id="reloadPendingBtn"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Organization</th>
+                      <th>Contact</th>
+                      <th>Email</th>
+                      <th>Address</th>
+                      <th style="width: 140px">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pendingRecipientsBody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
-          <div class="table-responsive">
-            <table class="table table-sm align-middle">
-              <thead>
-                <tr>
-                  <th>Organization</th>
-                  <th>Contact</th>
-                  <th>Email</th>
-                  <th>Address</th>
-                  <th style="width: 140px;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="pendingRecipientsBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
         </div>
         <div class="nav-icons">
           <a
-            class="nav-link me-3 position-relative"
+            class="nav-link position-relative"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#notificationsModal"
             aria-label="Open notifications"
           >
-          <img class="bell-icon" src="images/bell.gif"  alt="Bell" width="40" height="40">
-
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
 
             <span
               id="notificationsBadge"
@@ -84,14 +97,25 @@
             ></span>
           </a>
           <a
-            class="nav-link me-3"
+            class="nav-link"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#messagesModal"
             aria-label="Open messages"
           >
-            <img src="images/letter.gif" class="letter-icon" alt="Mail" width="35" height="35">
-            <span id="messagesBadge" class="badge bg-danger" style="display:none;">0</span>
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span
+              id="messagesBadge"
+              class="badge bg-danger"
+              style="display: none"
+              >0</span
+            >
           </a>
 
           <div class="dropdown">
@@ -102,9 +126,12 @@
               data-bs-toggle="dropdown"
               aria-expanded="false"
             >
-              <img src="images/profile.png" 
-                  alt="Dashboard Icon" 
-                  width="25" height="25"/>
+              <img
+                src="images/profile.png"
+                alt="Dashboard Icon"
+                width="25"
+                height="25"
+              />
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
@@ -689,70 +716,118 @@
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
     <script>
-      (function(){
-        const API = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
-          ? window.API_BASE_URL
-          : '/php/api';
-        const card = document.getElementById('pendingApprovalsCard');
-        const tbody = document.getElementById('pendingRecipientsBody');
-        const reloadBtn = document.getElementById('reloadPendingBtn');
+      (function () {
+        const API =
+          typeof window.API_BASE_URL === "string" && window.API_BASE_URL
+            ? window.API_BASE_URL
+            : "/php/api";
+        const card = document.getElementById("pendingApprovalsCard");
+        const tbody = document.getElementById("pendingRecipientsBody");
+        const reloadBtn = document.getElementById("reloadPendingBtn");
 
-        async function fetchPending(){
-          try{
-            const res = await fetch(`${API}/users/index.php?action=listPending&role=recipient`, { credentials: 'include' });
+        async function fetchPending() {
+          try {
+            const res = await fetch(
+              `${API}/users/index.php?action=listPending&role=recipient`,
+              { credentials: "include" }
+            );
             const j = await res.json();
-            if (!res.ok || !j?.success){ throw new Error(j?.error || `HTTP ${res.status}`); }
+            if (!res.ok || !j?.success) {
+              throw new Error(j?.error || `HTTP ${res.status}`);
+            }
             const items = Array.isArray(j?.data?.items) ? j.data.items : [];
             render(items);
-          }catch(e){ render([]); }
+          } catch (e) {
+            render([]);
+          }
         }
-        function render(items){
+        function render(items) {
           if (!tbody || !card) return;
-          tbody.innerHTML = '';
-          if (!items.length){ card.style.display = 'none'; return; }
-          card.style.display = '';
-          for (const u of items){
-            const tr = document.createElement('tr');
+          tbody.innerHTML = "";
+          if (!items.length) {
+            card.style.display = "none";
+            return;
+          }
+          card.style.display = "";
+          for (const u of items) {
+            const tr = document.createElement("tr");
             tr.innerHTML = `
-              <td>${escapeHtml(u.organization_name || u.name || '')}</td>
-              <td>${escapeHtml(u.position_designation || '')} ${escapeHtml(u.contact_number || '')}</td>
-              <td>${escapeHtml(u.email || '')}</td>
-              <td>${escapeHtml(u.address || '')}</td>
+              <td>${escapeHtml(u.organization_name || u.name || "")}</td>
+              <td>${escapeHtml(u.position_designation || "")} ${escapeHtml(
+              u.contact_number || ""
+            )}</td>
+              <td>${escapeHtml(u.email || "")}</td>
+              <td>${escapeHtml(u.address || "")}</td>
               <td>
                 <div class="btn-group btn-group-sm">
-                  <button class="btn btn-success" data-act="approve" data-id="${u.user_id}"><i class="bi bi-check2"></i></button>
-                  <button class="btn btn-outline-danger" data-act="reject" data-id="${u.user_id}"><i class="bi bi-x"></i></button>
+                  <button class="btn btn-success" data-act="approve" data-id="${
+                    u.user_id
+                  }"><i class="bi bi-check2"></i></button>
+                  <button class="btn btn-outline-danger" data-act="reject" data-id="${
+                    u.user_id
+                  }"><i class="bi bi-x"></i></button>
                 </div>
               </td>`;
             tbody.appendChild(tr);
           }
         }
-        function escapeHtml(s){
-          try{ return String(s).replace(/[&<>"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }catch(_){ return ''; }
+        function escapeHtml(s) {
+          try {
+            return String(s).replace(
+              /[&<>"]+/g,
+              (c) =>
+                ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+            );
+          } catch (_) {
+            return "";
+          }
         }
-        async function postJSON(url, body){
-          const res = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, credentials:'include', body: JSON.stringify(body||{}) });
-          const j = await res.json().catch(()=>({ success:false, error:`HTTP ${res.status}` }));
-          if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+        async function postJSON(url, body) {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(body || {}),
+          });
+          const j = await res
+            .json()
+            .catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+          if (!res.ok || !j?.success)
+            throw new Error(j?.error || `HTTP ${res.status}`);
           return j;
         }
-        async function onClick(e){
-          const btn = e.target.closest('button[data-act]');
+        async function onClick(e) {
+          const btn = e.target.closest("button[data-act]");
           if (!btn) return;
-          const id = Number(btn.getAttribute('data-id')||'0')||0; if (!id) return;
-          const act = btn.getAttribute('data-act');
-          try{
+          const id = Number(btn.getAttribute("data-id") || "0") || 0;
+          if (!id) return;
+          const act = btn.getAttribute("data-act");
+          try {
             btn.disabled = true;
-            if (act === 'approve'){
-              await postJSON(`${API}/users/index.php?action=approve`, { user_id: id });
-            } else if (act === 'reject'){
-              await postJSON(`${API}/users/index.php?action=reject`, { user_id: id });
+            if (act === "approve") {
+              await postJSON(`${API}/users/index.php?action=approve`, {
+                user_id: id,
+              });
+            } else if (act === "reject") {
+              await postJSON(`${API}/users/index.php?action=reject`, {
+                user_id: id,
+              });
             }
-          }catch(err){ /* could add toast here */ }
-          finally { btn.disabled = false; fetchPending(); }
+          } catch (err) {
+            /* could add toast here */
+          } finally {
+            btn.disabled = false;
+            fetchPending();
+          }
         }
-        if (tbody){ tbody.addEventListener('click', onClick); }
-        if (reloadBtn){ reloadBtn.addEventListener('click', function(){ fetchPending(); }); }
+        if (tbody) {
+          tbody.addEventListener("click", onClick);
+        }
+        if (reloadBtn) {
+          reloadBtn.addEventListener("click", function () {
+            fetchPending();
+          });
+        }
         // initial load
         fetchPending();
       })();
@@ -827,14 +902,18 @@
               b.setAttribute("title", title);
               b.setAttribute("data-bs-original-title", title);
             });
-            try { if (window.__rl_updateCounts) window.__rl_updateCounts(); } catch (_) {}
+            try {
+              if (window.__rl_updateCounts) window.__rl_updateCounts();
+            } catch (_) {}
             const w5Col = document.getElementById("w5Col");
             if (w5Col && w5Col.style.display !== "none") {
               const w5Label = document.getElementById("w5Label");
               if (w5Label) {
                 const w5Start = new Date(y, m, 29);
                 w5Label.textContent = `Week 5 (${formatLongDate(w5Start)})`;
-                try { if (window.__rl_updateCounts) window.__rl_updateCounts(); } catch (_) {}
+                try {
+                  if (window.__rl_updateCounts) window.__rl_updateCounts();
+                } catch (_) {}
               }
             }
           } catch (_) {}
@@ -860,7 +939,12 @@
             });
             // Initial relabel and a delayed one after async loads
             relabelWeeks();
-            setTimeout(() => { try { relabelWeeks(); if (window.__rl_updateCounts) window.__rl_updateCounts(); } catch(_){} }, 150);
+            setTimeout(() => {
+              try {
+                relabelWeeks();
+                if (window.__rl_updateCounts) window.__rl_updateCounts();
+              } catch (_) {}
+            }, 150);
           } catch (_) {
             relabelWeeks();
           }

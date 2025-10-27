@@ -14,7 +14,6 @@
     />
     <link rel="stylesheet" href="scripts/css/reportsAndAnalytics.css" />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
-    <link rel="stylesheet" href="scripts/css/responsive.css" />
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -34,14 +33,19 @@
         </div>
         <div class="nav-icons">
           <a
-            class="nav-link me-3 position-relative"
+            class="nav-link position-relative"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#notificationsModal"
             aria-label="Open notifications"
           >
-          <img class="bell-icon" src="images/bell.gif"  alt="Bell" width="40" height="40">
-
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
 
             <span
               id="notificationsBadge"
@@ -49,14 +53,25 @@
             ></span>
           </a>
           <a
-            class="nav-link me-3"
+            class="nav-link"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#messagesModal"
             aria-label="Open messages"
           >
-            <img src="images/letter.gif" class="letter-icon" alt="Mail" width="35" height="35">
-            <span id="messagesBadge" class="badge bg-danger" style="display:none;">0</span>
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span
+              id="messagesBadge"
+              class="badge bg-danger"
+              style="display: none"
+              >0</span
+            >
           </a>
 
           <div class="dropdown">
@@ -67,9 +82,12 @@
               data-bs-toggle="dropdown"
               aria-expanded="false"
             >
-              <img src="images/profile.png" 
-                  alt="Dashboard Icon" 
-                  width="25" height="25"/>
+              <img
+                src="images/profile.png"
+                alt="Dashboard Icon"
+                width="25"
+                height="25"
+              />
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
@@ -357,7 +375,6 @@
           </div>
         </div>
 
-
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
@@ -434,7 +451,6 @@
             </div>
           </div>
         </div>
-
       </div>
     </main>
 
@@ -450,11 +466,18 @@
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="exportModalLabel">Export Reports</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body d-grid gap-3">
             <div>
-              <label class="form-label" for="exportMonthInput">Select month to export</label>
+              <label class="form-label" for="exportMonthInput"
+                >Select month to export</label
+              >
               <input
                 type="month"
                 class="form-control"
@@ -462,15 +485,29 @@
                 name="exportMonthInput"
               />
             </div>
-            <button type="button" class="btn btn-outline-primary" id="exportInBtn">
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              id="exportInBtn"
+            >
               Export Product In
             </button>
-            <button type="button" class="btn btn-outline-success" id="exportOutBtn">
+            <button
+              type="button"
+              class="btn btn-outline-success"
+              id="exportOutBtn"
+            >
               Export Product Out
             </button>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>

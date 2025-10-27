@@ -19,19 +19,6 @@
     <link rel="stylesheet" href="scripts/css/donorMyDonations.css" />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-      /* Standardize status badge width for alignment */
-      td.status-col .badge {
-        display: inline-block;
-        min-width: 110px;
-      }
-      /* Keep a smooth transition on edit buttons; rely on Bootstrap's outline->solid hover */
-      .btn.edit-donation,
-      .btn.edit-batch {
-        transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out,
-          box-shadow 0.15s ease-in-out;
-      }
-    </style>
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -51,7 +38,7 @@
         </div>
         <div class="nav-icons">
           <a
-            class="nav-link me-3 position-relative"
+            class="nav-link position-relative"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#notificationsModal"
@@ -65,7 +52,7 @@
             ></span>
           </a>
           <a
-            class="nav-link me-3"
+            class="nav-link"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#messagesModal"
@@ -220,7 +207,7 @@
                         <option>All</option>
                       </select>
                     </div>
-                    
+
                     <div class="col-6">
                       <label class="form-label mb-1" for="statusSelectMobile"
                         >Status</label

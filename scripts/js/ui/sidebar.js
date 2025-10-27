@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const toggleBtn = document.getElementById("sidebarToggle");
   const backdrop = document.querySelector(".sidebar-backdrop");
-  const isMobile = () => window.matchMedia("(max-width: 992px)").matches;
+  const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
 
   // Harden initial state: ensure backdrop is hidden and body not marked open
   try {
@@ -164,7 +164,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (isMobile() && sidebar) {
         sidebar.style.transform = "translateX(-100%)";
         // Delay hiding to allow transform to apply; but ensure it's not blocking
-        setTimeout(() => { try { sidebar.style.display = "none"; } catch(_) {} }, 150);
+        setTimeout(() => {
+          try {
+            sidebar.style.display = "none";
+          } catch (_) {}
+        }, 150);
       }
     } catch (_) {}
     hideTooltips();
@@ -200,6 +204,14 @@ document.addEventListener("DOMContentLoaded", () => {
       hideTooltips();
     } else {
       closeSidebar();
+
+      try {
+        if (sidebar) {
+          sidebar.style.display = ""; // This clears the 'display: none'
+          sidebar.style.transform = ""; // This clears the 'transform: translateX'
+        }
+      } catch (_) {}
+
       sidebar.classList.add("collapsed");
       body.classList.add("sidebar-collapsed");
       showTooltips();

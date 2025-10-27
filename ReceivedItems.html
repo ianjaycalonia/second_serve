@@ -19,19 +19,6 @@
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link rel="stylesheet" href="scripts/css/receivedItems.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-      /* Standardize status badge width for alignment */
-      /* td.status-col .badge {
-        display: inline-block;
-        min-width: 110px;
-      } */
-      /* Keep a smooth transition on edit buttons; rely on Bootstrap's outline->solid hover */
-      .btn.edit-donation,
-      .btn.edit-batch {
-        transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out,
-          box-shadow 0.15s ease-in-out;
-      }
-    </style>
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -51,7 +38,7 @@
         </div>
         <div class="nav-icons">
           <a
-            class="nav-link me-3 position-relative"
+            class="nav-link position-relative"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#notificationsModal"
@@ -65,7 +52,7 @@
             ></span>
           </a>
           <a
-            class="nav-link me-3"
+            class="nav-link"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#messagesModal"
@@ -821,9 +808,24 @@
     <script src="scripts/js/ui/dropdownFilters.js"></script>
 
     <!-- Toast for feedback messages -->
-    <div aria-live="polite" aria-atomic="true" class="position-relative" style="z-index: 1080">
-      <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;">
-        <div id="feedbackToast" class="toast text-bg-success" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="6000">
+    <div
+      aria-live="polite"
+      aria-atomic="true"
+      class="position-relative"
+      style="z-index: 1080"
+    >
+      <div
+        class="toast-container position-fixed top-0 end-0 p-3"
+        style="z-index: 1090"
+      >
+        <div
+          id="feedbackToast"
+          class="toast text-bg-success"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          data-bs-delay="6000"
+        >
           <div class="toast-body">Action completed.</div>
         </div>
       </div>

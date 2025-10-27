@@ -14,7 +14,6 @@
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link rel="stylesheet" href="scripts/css/adminProfileAndSettings.css" />
-    <link rel="stylesheet" href="scripts/css/responsive.css" />
     <!-- Select2 CSS -->
     <link
       href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
@@ -42,14 +41,19 @@
         </div>
         <div class="nav-icons">
           <a
-            class="nav-link me-3 position-relative"
+            class="nav-link position-relative"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#notificationsModal"
             aria-label="Open notifications"
           >
-          <img class="bell-icon" src="images/bell.gif"  alt="Bell" width="40" height="40">
-
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
 
             <span
               id="notificationsBadge"
@@ -57,14 +61,25 @@
             ></span>
           </a>
           <a
-            class="nav-link me-3"
+            class="nav-link"
             href="#"
             data-bs-toggle="modal"
             data-bs-target="#messagesModal"
             aria-label="Open messages"
           >
-            <img src="images/letter.gif" class="letter-icon" alt="Mail" width="35" height="35">
-            <span id="messagesBadge" class="badge bg-danger" style="display:none;">0</span>
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span
+              id="messagesBadge"
+              class="badge bg-danger"
+              style="display: none"
+              >0</span
+            >
           </a>
 
           <div class="dropdown">
@@ -75,9 +90,12 @@
               data-bs-toggle="dropdown"
               aria-expanded="false"
             >
-              <img src="images/profile.png" 
-                  alt="Dashboard Icon" 
-                  width="25" height="25"/>
+              <img
+                src="images/profile.png"
+                alt="Dashboard Icon"
+                width="25"
+                height="25"
+              />
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
@@ -292,19 +310,29 @@
 
     <main>
       <div class="container-fluid py-4 profile-page">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-2">
+        <div
+          class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-2"
+        >
           <div>
             <nav aria-label="breadcrumb">
               <ol class="breadcrumb mb-1">
-                <li class="breadcrumb-item"><a href="AdminDashboard.html">Dashboard</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Profile</li>
+                <li class="breadcrumb-item">
+                  <a href="AdminDashboard.html">Dashboard</a>
+                </li>
+                <li class="breadcrumb-item active" aria-current="page">
+                  Profile
+                </li>
               </ol>
             </nav>
             <h4 class="mb-0">Admin Profile</h4>
-            <p class="text-muted small mb-0">Manage your contact information, credentials, and recent activity.</p>
+            <p class="text-muted small mb-0">
+              Manage your contact information, credentials, and recent activity.
+            </p>
           </div>
           <div class="text-md-end">
-            <button id="saveProfileBtn" class="btn btn-primary btn-sm">Save Changes</button>
+            <button id="saveProfileBtn" class="btn btn-primary btn-sm">
+              Save Changes
+            </button>
           </div>
         </div>
 
@@ -313,17 +341,40 @@
             <div class="card card-accent h-100">
               <div class="card-body">
                 <div class="text-center">
-                  <div class="mx-auto mb-3" style="width: 128px; height: 128px;">
-                    <img id="profileAvatar" src="images/profile.png" alt="Profile Photo" class="rounded-circle object-fit-cover w-100 h-100 border" />
+                  <div class="mx-auto mb-3" style="width: 128px; height: 128px">
+                    <img
+                      id="profileAvatar"
+                      src="images/profile.png"
+                      alt="Profile Photo"
+                      class="rounded-circle object-fit-cover w-100 h-100 border"
+                    />
                   </div>
                   <h5 id="profileSummaryName" class="mb-1">John Doe</h5>
-                  <p id="profileSummaryEmail" class="text-muted mb-1 small">john.doe@example.com</p>
-                  <span id="profileSummaryPhone" class="badge bg-light text-dark">—</span>
+                  <p id="profileSummaryEmail" class="text-muted mb-1 small">
+                    john.doe@example.com
+                  </p>
+                  <span
+                    id="profileSummaryPhone"
+                    class="badge bg-light text-dark"
+                    >—</span
+                  >
                 </div>
                 <hr class="my-4" />
                 <div class="d-grid gap-2">
-                  <button type="button" class="btn btn-outline-primary btn-sm" id="profileChangePhotoBtn">Change Photo</button>
-                  <button type="button" class="btn btn-outline-danger btn-sm" id="profileRemovePhotoBtn">Remove Photo</button>
+                  <button
+                    type="button"
+                    class="btn btn-outline-primary btn-sm"
+                    id="profileChangePhotoBtn"
+                  >
+                    Change Photo
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-outline-danger btn-sm"
+                    id="profileRemovePhotoBtn"
+                  >
+                    Remove Photo
+                  </button>
                 </div>
               </div>
             </div>
@@ -332,26 +383,59 @@
             <div class="card card-accent h-100">
               <div class="card-header border-0 pb-0">
                 <h6 class="mb-1">Personal Information</h6>
-                <p class="text-muted small mb-0">Updates appear across all admin pages after saving.</p>
+                <p class="text-muted small mb-0">
+                  Updates appear across all admin pages after saving.
+                </p>
               </div>
               <div class="card-body">
                 <form class="row g-3" id="profileInfoForm">
                   <div class="col-12 col-md-6">
                     <label for="adminName" class="form-label">Full Name</label>
-                    <input type="text" id="adminName" class="form-control form-control-sm" placeholder="Your name" />
+                    <input
+                      type="text"
+                      id="adminName"
+                      class="form-control form-control-sm"
+                      placeholder="Your name"
+                    />
                   </div>
                   <div class="col-12 col-md-6">
-                    <label for="adminEmail" class="form-label">Email Address</label>
-                    <input type="email" id="adminEmail" class="form-control form-control-sm" placeholder="name@domain.com" />
+                    <label for="adminEmail" class="form-label"
+                      >Email Address</label
+                    >
+                    <input
+                      type="email"
+                      id="adminEmail"
+                      class="form-control form-control-sm"
+                      placeholder="name@domain.com"
+                    />
                   </div>
                   <div class="col-12 col-md-6">
-                    <label for="adminPhone" class="form-label">Phone Number</label>
-                    <input type="tel" id="adminPhone" class="form-control form-control-sm" placeholder="(000) 000-0000" />
+                    <label for="adminPhone" class="form-label"
+                      >Phone Number</label
+                    >
+                    <input
+                      type="tel"
+                      id="adminPhone"
+                      class="form-control form-control-sm"
+                      placeholder="(000) 000-0000"
+                    />
                   </div>
                   <div class="col-12">
                     <div class="d-flex justify-content-end gap-2 pt-2">
-                      <button type="button" class="btn btn-outline-secondary btn-sm" id="resetProfileBtn">Cancel</button>
-                      <button type="button" class="btn btn-primary btn-sm" id="saveProfileBtnSecondary">Save Changes</button>
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm"
+                        id="resetProfileBtn"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-primary btn-sm"
+                        id="saveProfileBtnSecondary"
+                      >
+                        Save Changes
+                      </button>
                     </div>
                   </div>
                 </form>
@@ -362,30 +446,70 @@
             <div class="card card-accent h-100">
               <div class="card-header border-0 pb-0">
                 <h6 class="mb-1">Change Password</h6>
-                <p class="text-muted small mb-0">Set a strong password to keep your account secure.</p>
+                <p class="text-muted small mb-0">
+                  Set a strong password to keep your account secure.
+                </p>
               </div>
               <div class="card-body">
                 <div class="row g-3">
                   <div class="col-12">
-                    <label for="currentPassword" class="form-label">Current Password</label>
-                    <input type="password" id="currentPassword" name="profile-current-password" autocomplete="current-password" class="form-control form-control-sm" placeholder="Enter current password" />
+                    <label for="currentPassword" class="form-label"
+                      >Current Password</label
+                    >
+                    <input
+                      type="password"
+                      id="currentPassword"
+                      name="profile-current-password"
+                      autocomplete="current-password"
+                      class="form-control form-control-sm"
+                      placeholder="Enter current password"
+                    />
                   </div>
                   <div class="col-12 col-md-6">
-                    <label for="newPassword" class="form-label">New Password</label>
-                    <input type="password" id="newPassword" name="profile-new-password" autocomplete="new-password" class="form-control form-control-sm" placeholder="Enter new password" />
+                    <label for="newPassword" class="form-label"
+                      >New Password</label
+                    >
+                    <input
+                      type="password"
+                      id="newPassword"
+                      name="profile-new-password"
+                      autocomplete="new-password"
+                      class="form-control form-control-sm"
+                      placeholder="Enter new password"
+                    />
                   </div>
                   <div class="col-12 col-md-6">
-                    <label for="confirmPassword" class="form-label">Confirm New Password</label>
-                    <input type="password" id="confirmPassword" name="profile-confirm-password" autocomplete="new-password" class="form-control form-control-sm" placeholder="Confirm new password" />
+                    <label for="confirmPassword" class="form-label"
+                      >Confirm New Password</label
+                    >
+                    <input
+                      type="password"
+                      id="confirmPassword"
+                      name="profile-confirm-password"
+                      autocomplete="new-password"
+                      class="form-control form-control-sm"
+                      placeholder="Confirm new password"
+                    />
                   </div>
                   <div class="col-12">
                     <div class="form-check">
-                      <input class="form-check-input" type="checkbox" id="showPassword" />
-                      <label for="showPassword" class="form-check-label">Show Password</label>
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="showPassword"
+                      />
+                      <label for="showPassword" class="form-check-label"
+                        >Show Password</label
+                      >
                     </div>
                   </div>
                   <div class="col-12 d-flex justify-content-end">
-                    <button id="updatePasswordBtn" class="btn btn-success btn-sm">Update Password</button>
+                    <button
+                      id="updatePasswordBtn"
+                      class="btn btn-success btn-sm"
+                    >
+                      Update Password
+                    </button>
                   </div>
                 </div>
               </div>
@@ -395,11 +519,17 @@
             <div class="card card-accent h-100">
               <div class="card-header border-0 pb-0">
                 <h6 class="mb-1">Activity Overview</h6>
-                <p class="text-muted small mb-0">Recent events from your admin account.</p>
+                <p class="text-muted small mb-0">
+                  Recent events from your admin account.
+                </p>
               </div>
               <div class="card-body">
-                <p class="mb-1"><strong>Last Login:</strong> <span id="lastLogin">—</span></p>
-                <p class="mb-2 text-muted small"><strong>IP Address:</strong> <span id="ipAddress">—</span></p>
+                <p class="mb-1">
+                  <strong>Last Login:</strong> <span id="lastLogin">—</span>
+                </p>
+                <p class="mb-2 text-muted small">
+                  <strong>IP Address:</strong> <span id="ipAddress">—</span>
+                </p>
                 <p class="mb-1"><strong>Recent Activities:</strong></p>
                 <ul id="activityList" class="small mb-2 ps-3"></ul>
                 <div class="small text-muted" id="activityMeta"></div>
@@ -408,14 +538,20 @@
           </div>
           <div class="col-12">
             <div class="card card-accent">
-              <div class="card-header border-0 pb-0 d-flex justify-content-between align-items-center">
+              <div
+                class="card-header border-0 pb-0 d-flex justify-content-between align-items-center"
+              >
                 <div>
                   <h6 class="mb-1 text-danger">Danger Zone</h6>
-                  <p class="text-muted small mb-0">These actions cannot be undone. Proceed with caution.</p>
+                  <p class="text-muted small mb-0">
+                    These actions cannot be undone. Proceed with caution.
+                  </p>
                 </div>
               </div>
               <div class="card-body d-flex flex-wrap gap-2">
-                <button class="btn btn-warning btn-sm">Deactivate Account</button>
+                <button class="btn btn-warning btn-sm">
+                  Deactivate Account
+                </button>
                 <button class="btn btn-danger btn-sm">Delete Account</button>
               </div>
             </div>
@@ -493,211 +629,353 @@
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
     <!-- Toast Container -->
-    <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1080"></div>
+    <div
+      id="toastContainer"
+      class="toast-container position-fixed top-0 end-0 p-3"
+      style="z-index: 1080"
+    ></div>
     <script>
-      (function(){
+      (function () {
         const $ = window.jQuery;
         const byId = (id) => document.getElementById(id);
-        const setVal = (id, v) => { const el = byId(id); if (el && v !== undefined && v !== null) el.value = String(v); };
-        const getVal = (id) => { const el = byId(id); return el ? el.value.trim() : ''; };
+        const setVal = (id, v) => {
+          const el = byId(id);
+          if (el && v !== undefined && v !== null) el.value = String(v);
+        };
+        const getVal = (id) => {
+          const el = byId(id);
+          return el ? el.value.trim() : "";
+        };
 
-        function syncSummaryFromForm(){
-          const name = getVal('adminName') || '—';
-          const email = getVal('adminEmail') || '—';
-          const phone = getVal('adminPhone') || '—';
-          const summaryName = byId('profileSummaryName'); if (summaryName) summaryName.textContent = name;
-          const summaryEmail = byId('profileSummaryEmail'); if (summaryEmail) summaryEmail.textContent = email;
-          const summaryPhone = byId('profileSummaryPhone'); if (summaryPhone) summaryPhone.textContent = phone;
+        function syncSummaryFromForm() {
+          const name = getVal("adminName") || "—";
+          const email = getVal("adminEmail") || "—";
+          const phone = getVal("adminPhone") || "—";
+          const summaryName = byId("profileSummaryName");
+          if (summaryName) summaryName.textContent = name;
+          const summaryEmail = byId("profileSummaryEmail");
+          if (summaryEmail) summaryEmail.textContent = email;
+          const summaryPhone = byId("profileSummaryPhone");
+          if (summaryPhone) summaryPhone.textContent = phone;
         }
 
-        function showToast(message, variant){
+        function showToast(message, variant) {
           try {
-            const container = byId('toastContainer');
+            const container = byId("toastContainer");
             if (!container) return;
-            const type = (variant||'info').toLowerCase();
-            const bgClass = type === 'success' ? 'text-bg-success' : (type === 'error' || type === 'danger') ? 'text-bg-danger' : type === 'warning' ? 'text-bg-warning' : 'text-bg-info';
-            const toastEl = document.createElement('div');
+            const type = (variant || "info").toLowerCase();
+            const bgClass =
+              type === "success"
+                ? "text-bg-success"
+                : type === "error" || type === "danger"
+                ? "text-bg-danger"
+                : type === "warning"
+                ? "text-bg-warning"
+                : "text-bg-info";
+            const toastEl = document.createElement("div");
             toastEl.className = `toast align-items-center ${bgClass}`;
-            toastEl.setAttribute('role', 'alert');
-            toastEl.setAttribute('aria-live', 'assertive');
-            toastEl.setAttribute('aria-atomic', 'true');
+            toastEl.setAttribute("role", "alert");
+            toastEl.setAttribute("aria-live", "assertive");
+            toastEl.setAttribute("aria-atomic", "true");
             toastEl.innerHTML = `
               <div class="d-flex">
-                <div class="toast-body">${String(message || '')}</div>
+                <div class="toast-body">${String(message || "")}</div>
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
               </div>`;
             container.appendChild(toastEl);
-            const t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 });
+            const t = bootstrap.Toast.getOrCreateInstance(toastEl, {
+              delay: 3000,
+            });
             t.show();
-          } catch(_) { /* ignore */ }
+          } catch (_) {
+            /* ignore */
+          }
         }
 
-        async function loadActivity(){
-          try{
-            const res = await fetchJson(`${API_BASE_URL}/users/activity.php`, { method: 'GET' });
+        async function loadActivity() {
+          try {
+            const res = await fetchJson(`${API_BASE_URL}/users/activity.php`, {
+              method: "GET",
+            });
             const data = res && res.data ? res.data : null;
             if (!data) return;
             // Last login
             const last = data.last_login ? new Date(data.last_login) : null;
-            const lastStr = last && !isNaN(last) ? last.toLocaleString() : (data.last_login || '—');
-            const lastEl = byId('lastLogin'); if (lastEl) lastEl.textContent = lastStr;
+            const lastStr =
+              last && !isNaN(last)
+                ? last.toLocaleString()
+                : data.last_login || "—";
+            const lastEl = byId("lastLogin");
+            if (lastEl) lastEl.textContent = lastStr;
             // IP
-            const ipEl = byId('ipAddress'); if (ipEl) ipEl.textContent = data.ip || '—';
+            const ipEl = byId("ipAddress");
+            if (ipEl) ipEl.textContent = data.ip || "—";
             // Build activities: prefer my actions, then notifications, then inbound messages
-            const listEl = byId('activityList');
+            const listEl = byId("activityList");
             const items = [];
-            const actions = Array.isArray(data.recent_actions) ? data.recent_actions : [];
-            actions.slice(0,5).forEach(a => {
+            const actions = Array.isArray(data.recent_actions)
+              ? data.recent_actions
+              : [];
+            actions.slice(0, 5).forEach((a) => {
               const when = a.created_at ? new Date(a.created_at) : null;
-              const whenStr = when && !isNaN(when) ? when.toLocaleString() : (a.created_at || '');
-              const body = (a.body || '').toString().trim().slice(0,120);
-              const isDonation = (a && a.type === 'donation') || body.toLowerCase().includes('created donation:');
-              const label = isDonation ? '' : 'Sent message: ';
-              items.push(`<li>${label}${body} <span class="text-muted">(${whenStr})</span></li>`);
+              const whenStr =
+                when && !isNaN(when)
+                  ? when.toLocaleString()
+                  : a.created_at || "";
+              const body = (a.body || "").toString().trim().slice(0, 120);
+              const isDonation =
+                (a && a.type === "donation") ||
+                body.toLowerCase().includes("created donation:");
+              const label = isDonation ? "" : "Sent message: ";
+              items.push(
+                `<li>${label}${body} <span class="text-muted">(${whenStr})</span></li>`
+              );
             });
             if (items.length < 5) {
-              const notifs = Array.isArray(data.recent_notifications) ? data.recent_notifications : [];
-              notifs.slice(0,5-items.length).forEach(n => {
+              const notifs = Array.isArray(data.recent_notifications)
+                ? data.recent_notifications
+                : [];
+              notifs.slice(0, 5 - items.length).forEach((n) => {
                 const when = n.created_at ? new Date(n.created_at) : null;
-                const whenStr = when && !isNaN(when) ? when.toLocaleString() : (n.created_at || '');
-                items.push(`<li>${(n.message||'Notification')} <span class="text-muted">(${whenStr})</span></li>`);
+                const whenStr =
+                  when && !isNaN(when)
+                    ? when.toLocaleString()
+                    : n.created_at || "";
+                items.push(
+                  `<li>${
+                    n.message || "Notification"
+                  } <span class="text-muted">(${whenStr})</span></li>`
+                );
               });
             }
             if (items.length < 5) {
-              const msgs = Array.isArray(data.recent_messages) ? data.recent_messages : [];
-              msgs.slice(0,5-items.length).forEach(m => {
+              const msgs = Array.isArray(data.recent_messages)
+                ? data.recent_messages
+                : [];
+              msgs.slice(0, 5 - items.length).forEach((m) => {
                 const when = m.created_at ? new Date(m.created_at) : null;
-                const whenStr = when && !isNaN(when) ? when.toLocaleString() : (m.created_at || '');
-                const body = (m.body || '').toString().slice(0,80);
-                items.push(`<li>Message: ${body} <span class=\"text-muted\">(${whenStr})</span></li>`);
+                const whenStr =
+                  when && !isNaN(when)
+                    ? when.toLocaleString()
+                    : m.created_at || "";
+                const body = (m.body || "").toString().slice(0, 80);
+                items.push(
+                  `<li>Message: ${body} <span class=\"text-muted\">(${whenStr})</span></li>`
+                );
               });
             }
-            listEl.innerHTML = items.length ? items.slice(0,5).join('') : '<li class="text-muted">No recent activity</li>';
-            const meta = byId('activityMeta');
-            if (meta) meta.textContent = `Unread messages: ${Number(data.unread_messages||0)}`;
-          } catch(_){ /* ignore, leave placeholders */ }
+            listEl.innerHTML = items.length
+              ? items.slice(0, 5).join("")
+              : '<li class="text-muted">No recent activity</li>';
+            const meta = byId("activityMeta");
+            if (meta)
+              meta.textContent = `Unread messages: ${Number(
+                data.unread_messages || 0
+              )}`;
+          } catch (_) {
+            /* ignore, leave placeholders */
+          }
         }
 
-        async function loadProfile(){
-          try{
-            const res = await fetchJson(`${API_BASE_URL}/users/index.php?action=getProfile`, { method: 'GET' });
+        async function loadProfile() {
+          try {
+            const res = await fetchJson(
+              `${API_BASE_URL}/users/index.php?action=getProfile`,
+              { method: "GET" }
+            );
             const u = res && res.data && res.data.user ? res.data.user : null;
             if (!u) return;
-            setVal('adminName', u.name);
-            setVal('adminEmail', u.email);
-            setVal('adminPhone', u.contact_number);
+            setVal("adminName", u.name);
+            setVal("adminEmail", u.email);
+            setVal("adminPhone", u.contact_number);
             syncSummaryFromForm();
-          }catch(_){ /* global error handler already bound */ }
+          } catch (_) {
+            /* global error handler already bound */
+          }
         }
 
-        async function saveProfile(){
-          const primaryBtn = byId('saveProfileBtn');
-          const secondaryBtn = byId('saveProfileBtnSecondary');
-          [primaryBtn, secondaryBtn].forEach(btn => { if (btn){ btn.disabled = true; btn.textContent = 'Saving...'; } });
-          try{
+        async function saveProfile() {
+          const primaryBtn = byId("saveProfileBtn");
+          const secondaryBtn = byId("saveProfileBtnSecondary");
+          [primaryBtn, secondaryBtn].forEach((btn) => {
+            if (btn) {
+              btn.disabled = true;
+              btn.textContent = "Saving...";
+            }
+          });
+          try {
             const payload = {
-              name: getVal('adminName') || null,
-              email: getVal('adminEmail') || null,
-              contact_number: getVal('adminPhone') || null
+              name: getVal("adminName") || null,
+              email: getVal("adminEmail") || null,
+              contact_number: getVal("adminPhone") || null,
             };
-            await fetchJson(`${API_BASE_URL}/users/index.php?action=updateProfile`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
+            await fetchJson(
+              `${API_BASE_URL}/users/index.php?action=updateProfile`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              }
+            );
             // Sync updated name into sessionStorage so dashboards show the new name
             try {
-              const s = sessionStorage.getItem('user');
+              const s = sessionStorage.getItem("user");
               const u = s ? JSON.parse(s) : null;
-              if (u){
+              if (u) {
                 if (payload.name) u.name = payload.name;
                 if (payload.email) u.email = payload.email;
-                if (payload.contact_number) u.contact_number = payload.contact_number;
-                sessionStorage.setItem('user', JSON.stringify(u));
+                if (payload.contact_number)
+                  u.contact_number = payload.contact_number;
+                sessionStorage.setItem("user", JSON.stringify(u));
               }
-            } catch(_) { /* ignore session errors */ }
+            } catch (_) {
+              /* ignore session errors */
+            }
             // If populateGreeting is available (from auth.js), refresh header placeholders
             try {
-              if (typeof populateGreeting === 'function') populateGreeting();
+              if (typeof populateGreeting === "function") populateGreeting();
               else {
-                const els = document.querySelectorAll('.user-name');
-                els.forEach(el => { if (payload.name) el.textContent = payload.name; });
+                const els = document.querySelectorAll(".user-name");
+                els.forEach((el) => {
+                  if (payload.name) el.textContent = payload.name;
+                });
               }
-            } catch(_) { /* ignore */ }
+            } catch (_) {
+              /* ignore */
+            }
             syncSummaryFromForm();
-            showToast('Profile updated','success');
-          }catch(err){
-            showToast((err && err.message) || 'Failed to update profile','danger');
+            showToast("Profile updated", "success");
+          } catch (err) {
+            showToast(
+              (err && err.message) || "Failed to update profile",
+              "danger"
+            );
           } finally {
-            [primaryBtn, secondaryBtn].forEach(btn => { if (btn){ btn.disabled = false; btn.textContent = 'Save Changes'; } });
-          }
-        }
-
-        function bindPasswordToggles(){
-          const cb = byId('showPassword');
-          const fields = ['currentPassword','newPassword','confirmPassword'].map(byId).filter(Boolean);
-          if (cb && !cb.dataset.bound){
-            cb.dataset.bound = '1';
-            cb.addEventListener('change', function(){
-              fields.forEach(f => { if (f) f.type = cb.checked ? 'text' : 'password'; });
+            [primaryBtn, secondaryBtn].forEach((btn) => {
+              if (btn) {
+                btn.disabled = false;
+                btn.textContent = "Save Changes";
+              }
             });
           }
         }
 
-        async function updatePassword(){
-          const btn = byId('updatePasswordBtn');
-          const current = getVal('currentPassword');
-          const next = getVal('newPassword');
-          const confirm = getVal('confirmPassword');
-          if (!current || !next || !confirm){ showToast('All password fields are required','warning'); return; }
-          if (next.length < 8){ showToast('Password must be at least 8 characters long','warning'); return; }
-          if (next !== confirm){ showToast('Passwords do not match','warning'); return; }
-          if (current === next){ showToast('New password must be different from current','warning'); return; }
-          if (btn){ btn.disabled = true; btn.textContent = 'Updating...'; }
-          try{
-            await fetchJson(`${API_BASE_URL}/users/auth.php?action=changePassword`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ currentPassword: current, newPassword: next, confirmPassword: confirm })
+        function bindPasswordToggles() {
+          const cb = byId("showPassword");
+          const fields = ["currentPassword", "newPassword", "confirmPassword"]
+            .map(byId)
+            .filter(Boolean);
+          if (cb && !cb.dataset.bound) {
+            cb.dataset.bound = "1";
+            cb.addEventListener("change", function () {
+              fields.forEach((f) => {
+                if (f) f.type = cb.checked ? "text" : "password";
+              });
             });
-            ['currentPassword','newPassword','confirmPassword'].forEach(id => { const el = byId(id); if (el) el.value=''; });
-            const show = byId('showPassword'); if (show){ show.checked = false; }
+          }
+        }
+
+        async function updatePassword() {
+          const btn = byId("updatePasswordBtn");
+          const current = getVal("currentPassword");
+          const next = getVal("newPassword");
+          const confirm = getVal("confirmPassword");
+          if (!current || !next || !confirm) {
+            showToast("All password fields are required", "warning");
+            return;
+          }
+          if (next.length < 8) {
+            showToast("Password must be at least 8 characters long", "warning");
+            return;
+          }
+          if (next !== confirm) {
+            showToast("Passwords do not match", "warning");
+            return;
+          }
+          if (current === next) {
+            showToast("New password must be different from current", "warning");
+            return;
+          }
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Updating...";
+          }
+          try {
+            await fetchJson(
+              `${API_BASE_URL}/users/auth.php?action=changePassword`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  currentPassword: current,
+                  newPassword: next,
+                  confirmPassword: confirm,
+                }),
+              }
+            );
+            ["currentPassword", "newPassword", "confirmPassword"].forEach(
+              (id) => {
+                const el = byId(id);
+                if (el) el.value = "";
+              }
+            );
+            const show = byId("showPassword");
+            if (show) {
+              show.checked = false;
+            }
             bindPasswordToggles();
-            showToast('Password updated','success');
-          }catch(err){
-            showToast((err && err.message) || 'Failed to update password','danger');
+            showToast("Password updated", "success");
+          } catch (err) {
+            showToast(
+              (err && err.message) || "Failed to update password",
+              "danger"
+            );
           } finally {
-            if (btn){ btn.disabled = false; btn.textContent = 'Update Password'; }
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = "Update Password";
+            }
           }
         }
 
-        document.addEventListener('DOMContentLoaded', function(){
+        document.addEventListener("DOMContentLoaded", function () {
           loadProfile();
           loadActivity();
-          const attachSave = (btn)=>{
-            if (btn && !btn.dataset.bound){
-              btn.dataset.bound = '1';
-              btn.addEventListener('click', function(e){ e.preventDefault(); saveProfile(); });
+          const attachSave = (btn) => {
+            if (btn && !btn.dataset.bound) {
+              btn.dataset.bound = "1";
+              btn.addEventListener("click", function (e) {
+                e.preventDefault();
+                saveProfile();
+              });
             }
           };
-          attachSave(byId('saveProfileBtn'));
-          attachSave(byId('saveProfileBtnSecondary'));
-          const resetBtn = byId('resetProfileBtn');
-          if (resetBtn && !resetBtn.dataset.bound){
-            resetBtn.dataset.bound = '1';
-            resetBtn.addEventListener('click', function(e){ e.preventDefault(); loadProfile(); });
+          attachSave(byId("saveProfileBtn"));
+          attachSave(byId("saveProfileBtnSecondary"));
+          const resetBtn = byId("resetProfileBtn");
+          if (resetBtn && !resetBtn.dataset.bound) {
+            resetBtn.dataset.bound = "1";
+            resetBtn.addEventListener("click", function (e) {
+              e.preventDefault();
+              loadProfile();
+            });
           }
-          const form = document.getElementById('profileInfoForm');
-          if (form){
-            form.addEventListener('input', ()=>{ syncSummaryFromForm(); });
+          const form = document.getElementById("profileInfoForm");
+          if (form) {
+            form.addEventListener("input", () => {
+              syncSummaryFromForm();
+            });
           }
           syncSummaryFromForm();
           // Password form bindings
           bindPasswordToggles();
-          const upBtn = byId('updatePasswordBtn');
-          if (upBtn && !upBtn.dataset.bound){
-            upBtn.dataset.bound = '1';
-            upBtn.addEventListener('click', function(e){ e.preventDefault(); updatePassword(); });
+          const upBtn = byId("updatePasswordBtn");
+          if (upBtn && !upBtn.dataset.bound) {
+            upBtn.dataset.bound = "1";
+            upBtn.addEventListener("click", function (e) {
+              e.preventDefault();
+              updatePassword();
+            });
           }
         });
       })();

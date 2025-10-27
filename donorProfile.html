@@ -4,11 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Donor Profile</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
+    />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link rel="stylesheet" href="scripts/css/adminProfileAndSettings.css" />
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="scripts/css/adminDashboard.modal.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
@@ -19,27 +28,88 @@
           <button id="sidebarToggle" class="btn">
             <i class="bi bi-list fs-4"></i>
           </button>
-          <img src="images/simply_share.png" alt="Simply Share Logo" class="logo" />
-          <div class="brand d-none d-md-block">Second Serve by <span>Simply</span><span>Share</span></div>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
+          <div class="brand d-none d-md-block">
+            Second Serve by <span>Simply</span><span>Share</span>
+          </div>
         </div>
         <div class="nav-icons">
-          <a class="nav-link me-3 position-relative" href="#" data-bs-toggle="modal" data-bs-target="#notificationsModal" aria-label="Open notifications">
-            <img class="bell-icon" src="images/bell.gif" alt="Bell" width="40" height="40" />
-            <span id="notificationsBadge" class="position-absolute badge-message rounded-pill bg-danger"></span>
+          <a
+            class="nav-link position-relative"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
+            <span
+              id="notificationsBadge"
+              class="position-absolute badge-message rounded-pill bg-danger"
+            ></span>
           </a>
-          <a class="nav-link me-3" href="#" data-bs-toggle="modal" data-bs-target="#messagesModal" aria-label="Open messages">
-            <img src="images/letter.gif" class="letter-icon" alt="Mail" width="35" height="35" />
-            <span id="messagesBadge" class="badge bg-danger" style="display:none;">0</span>
+          <a
+            class="nav-link"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span
+              id="messagesBadge"
+              class="badge bg-danger"
+              style="display: none"
+              >0</span
+            >
           </a>
           <div class="dropdown">
-            <a class="nav-link d-flex align-items-center dashboard-icon" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              <img src="images/profile.png" alt="Profile" width="25" height="25"/>
+            <a
+              class="nav-link d-flex align-items-center dashboard-icon"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <img
+                src="images/profile.png"
+                alt="Profile"
+                width="25"
+                height="25"
+              />
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="donorProfile.html"><i class="bi bi-person me-2"></i>Profile</a></li>
-              <li><a class="dropdown-item" href="donorSettings.html"><i class="bi bi-gear me-2"></i>Settings</a></li>
+              <li>
+                <a class="dropdown-item" href="donorProfile.html"
+                  ><i class="bi bi-person me-2"></i>Profile</a
+                >
+              </li>
+              <li>
+                <a class="dropdown-item" href="donorSettings.html"
+                  ><i class="bi bi-gear me-2"></i>Settings</a
+                >
+              </li>
               <li><hr class="dropdown-divider" /></li>
-              <li><a class="dropdown-item text-danger logout-btn" href="#"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#"
+                  ><i class="bi bi-box-arrow-right me-2"></i>Logout</a
+                >
+              </li>
             </ul>
           </div>
         </div>
@@ -47,16 +117,55 @@
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
     <aside class="sidebar collapsed">
-      <a href="DonorDashboard.html" class="nav-link d-flex align-items-center dashboard-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Dashboard">
-        <img src="images/home.gif" alt="Dashboard Icon" class="dashboard-icon" width="35" height="35" />
+      <a
+        href="DonorDashboard.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Dashboard"
+      >
+        <img
+          src="images/home.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Dashboard</span>
       </a>
-      <a href="MyDonations.html" class="nav-link d-flex align-items-center dashboard-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="My Donations">
-        <img src="images/values.gif" alt="Donations" class="dashboard-icon" width="35" height="35" />
+      <a
+        href="MyDonations.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="My Donations"
+      >
+        <img
+          src="images/values.gif"
+          alt="Donations"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">My Donations</span>
       </a>
-      <a href="Inventory.html" class="nav-link d-flex align-items-center dashboard-link" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="Inventory">
-        <img src="images/available.gif" alt="Inventory" class="dashboard-icon" width="35" height="35" />
+      <a
+        href="Inventory.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Inventory"
+      >
+        <img
+          src="images/available.gif"
+          alt="Inventory"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Inventory</span>
       </a>
     </aside>
@@ -65,7 +174,9 @@
       <div class="profile-tab">
         <div aria-label="breadcrumb">
           <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="DonorDashboard.html">Dashboard</a></li>
+            <li class="breadcrumb-item">
+              <a href="DonorDashboard.html">Dashboard</a>
+            </li>
             <li class="breadcrumb-item active" aria-current="page">Profile</li>
           </ol>
         </div>
@@ -80,27 +191,52 @@
                 <div class="col-6 profile-info">
                   <div>
                     <label for="donorName" class="form-label">Name</label>
-                    <input type="text" id="donorName" class="form-control form-control-sm" />
+                    <input
+                      type="text"
+                      id="donorName"
+                      class="form-control form-control-sm"
+                    />
                   </div>
                   <div>
                     <label for="donorEmail" class="form-label">Email</label>
-                    <input type="email" id="donorEmail" class="form-control form-control-sm" />
+                    <input
+                      type="email"
+                      id="donorEmail"
+                      class="form-control form-control-sm"
+                    />
                   </div>
                   <div>
                     <label for="donorPhone" class="form-label">Phone</label>
-                    <input type="tel" id="donorPhone" class="form-control form-control-sm" />
+                    <input
+                      type="tel"
+                      id="donorPhone"
+                      class="form-control form-control-sm"
+                    />
                   </div>
                   <div>
-                    <label for="donorOrg" class="form-label">Organization</label>
-                    <input type="text" id="donorOrg" class="form-control form-control-sm" />
+                    <label for="donorOrg" class="form-label"
+                      >Organization</label
+                    >
+                    <input
+                      type="text"
+                      id="donorOrg"
+                      class="form-control form-control-sm"
+                    />
                   </div>
                   <div>
                     <label for="donorAddress" class="form-label">Address</label>
-                    <input type="text" id="donorAddress" class="form-control form-control-sm" />
+                    <input
+                      type="text"
+                      id="donorAddress"
+                      class="form-control form-control-sm"
+                    />
                   </div>
                 </div>
                 <div class="col-6 profile-photo">
-                  <img src="images/uploads/food_safety/food_safety_20251007_194916_30d43576.jpg" alt="Profile Photo" />
+                  <img
+                    src="images/uploads/food_safety/food_safety_20251007_194916_30d43576.jpg"
+                    alt="Profile Photo"
+                  />
                   <div class="d-flex align-items-center gap-2">
                     <button class="btn btn-sm btn-primary">Change</button>
                     <button class="btn btn-sm btn-danger">Remove</button>
@@ -113,24 +249,56 @@
                 <h5>Change Password</h5>
                 <div class="d-flex flex-column gap-2">
                   <div>
-                    <label for="currentPassword" class="form-label">Current Password</label>
-                    <input type="password" id="currentPassword" class="form-control form-control-sm" placeholder="Enter current password" />
+                    <label for="currentPassword" class="form-label"
+                      >Current Password</label
+                    >
+                    <input
+                      type="password"
+                      id="currentPassword"
+                      class="form-control form-control-sm"
+                      placeholder="Enter current password"
+                    />
                   </div>
                   <div>
-                    <label for="newPassword" class="form-label">New Password</label>
-                    <input type="password" id="newPassword" class="form-control form-control-sm" placeholder="Enter new password" />
+                    <label for="newPassword" class="form-label"
+                      >New Password</label
+                    >
+                    <input
+                      type="password"
+                      id="newPassword"
+                      class="form-control form-control-sm"
+                      placeholder="Enter new password"
+                    />
                   </div>
                   <div>
-                    <label for="confirmPassword" class="form-label">Confirm New Password</label>
-                    <input type="password" id="confirmPassword" class="form-control form-control-sm" placeholder="Confirm new password" />
+                    <label for="confirmPassword" class="form-label"
+                      >Confirm New Password</label
+                    >
+                    <input
+                      type="password"
+                      id="confirmPassword"
+                      class="form-control form-control-sm"
+                      placeholder="Confirm new password"
+                    />
                   </div>
                   <div>
                     <div class="form-check">
-                      <input class="form-check-input" type="checkbox" id="showPassword" />
-                      <label for="showPassword" class="form-check-label">Show Password</label>
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="showPassword"
+                      />
+                      <label for="showPassword" class="form-check-label"
+                        >Show Password</label
+                      >
                     </div>
                   </div>
-                  <button id="updatePasswordBtn" class="btn btn-sm btn-success mt-2 align-self-end">Update Password</button>
+                  <button
+                    id="updatePasswordBtn"
+                    class="btn btn-sm btn-success mt-2 align-self-end"
+                  >
+                    Update Password
+                  </button>
                 </div>
               </div>
             </div>
@@ -144,7 +312,9 @@
               <p class="mb-1"><strong>Recent Activities:</strong></p>
               <ul id="activityList" class="mb-2"></ul>
               <div class="small text-muted" id="activityMeta"></div>
-              <p class="mt-2"><strong>IP Address:</strong> <span id="ipAddress">—</span></p>
+              <p class="mt-2">
+                <strong>IP Address:</strong> <span id="ipAddress">—</span>
+              </p>
             </div>
           </div>
 
@@ -152,7 +322,9 @@
             <h5>Profile Management Controls</h5>
             <hr />
             <div class="d-flex gap-2">
-              <button id="saveProfileBtn" class="btn btn-sm btn-primary">Save Changes</button>
+              <button id="saveProfileBtn" class="btn btn-sm btn-primary">
+                Save Changes
+              </button>
               <button class="btn btn-sm btn-secondary">Cancel</button>
             </div>
           </div>
@@ -161,12 +333,25 @@
     </main>
 
     <!-- Notifications Modal -->
-    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-dialog-scrollable modal-lg">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="notificationsModalLabel">Notifications</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body p-0">
             <ul id="notificationsList" class="list-group list-group-flush">
@@ -179,8 +364,20 @@
             </ul>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="markAllReadBtn">Mark all as read</button>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              id="markAllReadBtn"
+            >
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
@@ -191,7 +388,11 @@
     <script src="scripts/js/config/constants.js?v=20250925"></script>
     <script src="scripts/js/api/http.js?v=20250925"></script>
     <script src="scripts/js/api/communications.js?v=20250925"></script>
-    <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1080"></div>
+    <div
+      id="toastContainer"
+      class="toast-container position-fixed top-0 end-0 p-3"
+      style="z-index: 1080"
+    ></div>
     <script src="scripts/js/utils/auth.js"></script>
     <script src="scripts/js/ui/messages.js"></script>
     <script src="scripts/js/ui/notifications.js"></script>
@@ -201,168 +402,276 @@
     <script src="scripts/js/ui/animatedMessage.js"></script>
 
     <script>
-      (function(){
+      (function () {
         const byId = (id) => document.getElementById(id);
-        const setVal = (id, v) => { const el = byId(id); if (el && v !== undefined && v !== null) el.value = String(v); };
-        const getVal = (id) => { const el = byId(id); return el ? el.value.trim() : ''; };
+        const setVal = (id, v) => {
+          const el = byId(id);
+          if (el && v !== undefined && v !== null) el.value = String(v);
+        };
+        const getVal = (id) => {
+          const el = byId(id);
+          return el ? el.value.trim() : "";
+        };
 
-        function showToast(message, variant){
+        function showToast(message, variant) {
           try {
-            const container = byId('toastContainer');
+            const container = byId("toastContainer");
             if (!container) return;
-            const type = (variant||'info').toLowerCase();
-            const bgClass = type === 'success' ? 'text-bg-success' : (type === 'error' || type === 'danger') ? 'text-bg-danger' : type === 'warning' ? 'text-bg-warning' : 'text-bg-info';
-            const toastEl = document.createElement('div');
+            const type = (variant || "info").toLowerCase();
+            const bgClass =
+              type === "success"
+                ? "text-bg-success"
+                : type === "error" || type === "danger"
+                ? "text-bg-danger"
+                : type === "warning"
+                ? "text-bg-warning"
+                : "text-bg-info";
+            const toastEl = document.createElement("div");
             toastEl.className = `toast align-items-center ${bgClass}`;
-            toastEl.setAttribute('role', 'alert');
-            toastEl.setAttribute('aria-live', 'assertive');
-            toastEl.setAttribute('aria-atomic', 'true');
+            toastEl.setAttribute("role", "alert");
+            toastEl.setAttribute("aria-live", "assertive");
+            toastEl.setAttribute("aria-atomic", "true");
             toastEl.innerHTML = `
               <div class="d-flex">
-                <div class="toast-body">${String(message || '')}</div>
+                <div class="toast-body">${String(message || "")}</div>
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
               </div>`;
             container.appendChild(toastEl);
-            const t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 });
+            const t = bootstrap.Toast.getOrCreateInstance(toastEl, {
+              delay: 3000,
+            });
             t.show();
-          } catch(_) { /* ignore */ }
+          } catch (_) {
+            /* ignore */
+          }
         }
 
-        async function loadProfile(){
-          try{
-            const res = await fetchJson(`${API_BASE_URL}/users/index.php?action=getProfile`, { method: 'GET' });
+        async function loadProfile() {
+          try {
+            const res = await fetchJson(
+              `${API_BASE_URL}/users/index.php?action=getProfile`,
+              { method: "GET" }
+            );
             const u = res && res.data && res.data.user ? res.data.user : null;
             if (!u) return;
-            setVal('donorName', u.name);
-            setVal('donorEmail', u.email);
-            setVal('donorPhone', u.contact_number);
-            setVal('donorOrg', u.organization_name);
-            setVal('donorAddress', u.address);
-          }catch(_){ }
+            setVal("donorName", u.name);
+            setVal("donorEmail", u.email);
+            setVal("donorPhone", u.contact_number);
+            setVal("donorOrg", u.organization_name);
+            setVal("donorAddress", u.address);
+          } catch (_) {}
         }
 
-        async function saveProfile(){
-          const btn = byId('saveProfileBtn');
-          if (btn){ btn.disabled = true; btn.textContent = 'Saving...'; }
-          try{
+        async function saveProfile() {
+          const btn = byId("saveProfileBtn");
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Saving...";
+          }
+          try {
             const payload = {
-              name: getVal('donorName') || null,
-              email: getVal('donorEmail') || null,
-              contact_number: getVal('donorPhone') || null,
-              organization_name: getVal('donorOrg') || null,
-              address: getVal('donorAddress') || null
+              name: getVal("donorName") || null,
+              email: getVal("donorEmail") || null,
+              contact_number: getVal("donorPhone") || null,
+              organization_name: getVal("donorOrg") || null,
+              address: getVal("donorAddress") || null,
             };
-            await fetchJson(`${API_BASE_URL}/users/index.php?action=updateProfile`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
+            await fetchJson(
+              `${API_BASE_URL}/users/index.php?action=updateProfile`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              }
+            );
             try {
-              const s = sessionStorage.getItem('user');
+              const s = sessionStorage.getItem("user");
               const u = s ? JSON.parse(s) : null;
-              if (u){
+              if (u) {
                 if (payload.name) u.name = payload.name;
                 if (payload.email) u.email = payload.email;
-                if (payload.contact_number) u.contact_number = payload.contact_number;
-                if (payload.organization_name) u.organization_name = payload.organization_name;
+                if (payload.contact_number)
+                  u.contact_number = payload.contact_number;
+                if (payload.organization_name)
+                  u.organization_name = payload.organization_name;
                 if (payload.address) u.address = payload.address;
-                sessionStorage.setItem('user', JSON.stringify(u));
+                sessionStorage.setItem("user", JSON.stringify(u));
               }
-            } catch(_) { }
-            showToast('Profile updated','success');
-          }catch(err){
-            showToast((err && err.message) || 'Failed to update profile','danger');
+            } catch (_) {}
+            showToast("Profile updated", "success");
+          } catch (err) {
+            showToast(
+              (err && err.message) || "Failed to update profile",
+              "danger"
+            );
           } finally {
-            if (btn){ btn.disabled = false; btn.textContent = 'Save Changes'; }
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = "Save Changes";
+            }
           }
         }
 
-        function bindPasswordToggles(){
-          const cb = byId('showPassword');
-          const fields = ['currentPassword','newPassword','confirmPassword'].map(byId).filter(Boolean);
-          if (cb && !cb.dataset.bound){
-            cb.dataset.bound = '1';
-            cb.addEventListener('change', function(){
-              fields.forEach(f => { if (f) f.type = cb.checked ? 'text' : 'password'; });
+        function bindPasswordToggles() {
+          const cb = byId("showPassword");
+          const fields = ["currentPassword", "newPassword", "confirmPassword"]
+            .map(byId)
+            .filter(Boolean);
+          if (cb && !cb.dataset.bound) {
+            cb.dataset.bound = "1";
+            cb.addEventListener("change", function () {
+              fields.forEach((f) => {
+                if (f) f.type = cb.checked ? "text" : "password";
+              });
             });
           }
         }
 
-        async function updatePassword(){
-          const btn = byId('updatePasswordBtn');
-          const current = getVal('currentPassword');
-          const next = getVal('newPassword');
-          const confirm = getVal('confirmPassword');
-          if (!current || !next || !confirm){ showToast('All password fields are required','warning'); return; }
-          if (next.length < 8){ showToast('Password must be at least 8 characters long','warning'); return; }
-          if (next !== confirm){ showToast('Passwords do not match','warning'); return; }
-          if (current === next){ showToast('New password must be different from current','warning'); return; }
-          if (btn){ btn.disabled = true; btn.textContent = 'Updating...'; }
-          try{
-            await fetchJson(`${API_BASE_URL}/users/auth.php?action=changePassword`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ currentPassword: current, newPassword: next, confirmPassword: confirm })
-            });
-            ['currentPassword','newPassword','confirmPassword'].forEach(id => { const el = byId(id); if (el) el.value=''; });
-            const show = byId('showPassword'); if (show){ show.checked = false; }
+        async function updatePassword() {
+          const btn = byId("updatePasswordBtn");
+          const current = getVal("currentPassword");
+          const next = getVal("newPassword");
+          const confirm = getVal("confirmPassword");
+          if (!current || !next || !confirm) {
+            showToast("All password fields are required", "warning");
+            return;
+          }
+          if (next.length < 8) {
+            showToast("Password must be at least 8 characters long", "warning");
+            return;
+          }
+          if (next !== confirm) {
+            showToast("Passwords do not match", "warning");
+            return;
+          }
+          if (current === next) {
+            showToast("New password must be different from current", "warning");
+            return;
+          }
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Updating...";
+          }
+          try {
+            await fetchJson(
+              `${API_BASE_URL}/users/auth.php?action=changePassword`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  currentPassword: current,
+                  newPassword: next,
+                  confirmPassword: confirm,
+                }),
+              }
+            );
+            ["currentPassword", "newPassword", "confirmPassword"].forEach(
+              (id) => {
+                const el = byId(id);
+                if (el) el.value = "";
+              }
+            );
+            const show = byId("showPassword");
+            if (show) {
+              show.checked = false;
+            }
             bindPasswordToggles();
-            showToast('Password updated','success');
-          }catch(err){
-            showToast((err && err.message) || 'Failed to update password','danger');
+            showToast("Password updated", "success");
+          } catch (err) {
+            showToast(
+              (err && err.message) || "Failed to update password",
+              "danger"
+            );
           } finally {
-            if (btn){ btn.disabled = false; btn.textContent = 'Update Password'; }
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = "Update Password";
+            }
           }
         }
 
-        async function loadActivity(){
-          try{
-            const res = await fetchJson(`${API_BASE_URL}/users/activity.php`, { method: 'GET' });
+        async function loadActivity() {
+          try {
+            const res = await fetchJson(`${API_BASE_URL}/users/activity.php`, {
+              method: "GET",
+            });
             const data = res && res.data ? res.data : null;
             if (!data) return;
             const last = data.last_login ? new Date(data.last_login) : null;
-            const lastStr = last && !isNaN(last) ? last.toLocaleString() : (data.last_login || '—');
-            const lastEl = byId('lastLogin'); if (lastEl) lastEl.textContent = lastStr;
-            const ipEl = byId('ipAddress'); if (ipEl) ipEl.textContent = data.ip || '—';
-            const listEl = byId('activityList');
+            const lastStr =
+              last && !isNaN(last)
+                ? last.toLocaleString()
+                : data.last_login || "—";
+            const lastEl = byId("lastLogin");
+            if (lastEl) lastEl.textContent = lastStr;
+            const ipEl = byId("ipAddress");
+            if (ipEl) ipEl.textContent = data.ip || "—";
+            const listEl = byId("activityList");
             const items = [];
-            const actions = Array.isArray(data.recent_actions) ? data.recent_actions : [];
-            actions.slice(0,5).forEach(a => {
+            const actions = Array.isArray(data.recent_actions)
+              ? data.recent_actions
+              : [];
+            actions.slice(0, 5).forEach((a) => {
               const when = a.created_at ? new Date(a.created_at) : null;
-              const whenStr = when && !isNaN(when) ? when.toLocaleString() : (a.created_at || '');
-              const body = (a.body || '').toString().trim().slice(0,120);
-              const isDonation = (a && a.type === 'donation') || body.toLowerCase().startsWith('created donation:');
-              const prefix = isDonation ? '' : 'Sent message: ';
-              items.push(`<li>${prefix}${body} <span class="text-muted">(${whenStr})</span></li>`);
+              const whenStr =
+                when && !isNaN(when)
+                  ? when.toLocaleString()
+                  : a.created_at || "";
+              const body = (a.body || "").toString().trim().slice(0, 120);
+              const isDonation =
+                (a && a.type === "donation") ||
+                body.toLowerCase().startsWith("created donation:");
+              const prefix = isDonation ? "" : "Sent message: ";
+              items.push(
+                `<li>${prefix}${body} <span class="text-muted">(${whenStr})</span></li>`
+              );
             });
             if (items.length < 5) {
-              const msgs = Array.isArray(data.recent_messages) ? data.recent_messages : [];
-              msgs.slice(0,5-items.length).forEach(m => {
+              const msgs = Array.isArray(data.recent_messages)
+                ? data.recent_messages
+                : [];
+              msgs.slice(0, 5 - items.length).forEach((m) => {
                 const when = m.created_at ? new Date(m.created_at) : null;
-                const whenStr = when && !isNaN(when) ? when.toLocaleString() : (m.created_at || '');
-                const body = (m.body || '').toString().slice(0,80);
-                items.push(`<li>Message: ${body} <span class=\"text-muted\">(${whenStr})</span></li>`);
+                const whenStr =
+                  when && !isNaN(when)
+                    ? when.toLocaleString()
+                    : m.created_at || "";
+                const body = (m.body || "").toString().slice(0, 80);
+                items.push(
+                  `<li>Message: ${body} <span class=\"text-muted\">(${whenStr})</span></li>`
+                );
               });
             }
-            listEl.innerHTML = items.length ? items.slice(0,5).join('') : '<li class="text-muted">No recent activity</li>';
-            const meta = byId('activityMeta');
-            if (meta) meta.textContent = `Unread messages: ${Number(data.unread_messages||0)}`;
-          } catch(_){ }
+            listEl.innerHTML = items.length
+              ? items.slice(0, 5).join("")
+              : '<li class="text-muted">No recent activity</li>';
+            const meta = byId("activityMeta");
+            if (meta)
+              meta.textContent = `Unread messages: ${Number(
+                data.unread_messages || 0
+              )}`;
+          } catch (_) {}
         }
 
-        document.addEventListener('DOMContentLoaded', function(){
+        document.addEventListener("DOMContentLoaded", function () {
           loadProfile();
           loadActivity();
-          const saveBtn = byId('saveProfileBtn');
-          if (saveBtn && !saveBtn.dataset.bound){
-            saveBtn.dataset.bound = '1';
-            saveBtn.addEventListener('click', function(e){ e.preventDefault(); saveProfile(); });
+          const saveBtn = byId("saveProfileBtn");
+          if (saveBtn && !saveBtn.dataset.bound) {
+            saveBtn.dataset.bound = "1";
+            saveBtn.addEventListener("click", function (e) {
+              e.preventDefault();
+              saveProfile();
+            });
           }
           bindPasswordToggles();
-          const upBtn = byId('updatePasswordBtn');
-          if (upBtn && !upBtn.dataset.bound){
-            upBtn.dataset.bound = '1';
-            upBtn.addEventListener('click', function(e){ e.preventDefault(); updatePassword(); });
+          const upBtn = byId("updatePasswordBtn");
+          if (upBtn && !upBtn.dataset.bound) {
+            upBtn.dataset.bound = "1";
+            upBtn.addEventListener("click", function (e) {
+              e.preventDefault();
+              updatePassword();
+            });
           }
         });
       })();
