@@ -75,6 +75,134 @@ function showImportModal(title, html) {
       ? window.API_BASE_URL
       : "/Capstone%20Project/php/api";
 
+  let beneficiaryCategoriesCache = null;
+  let beneficiaryCategoriesPromise = null;
+
+  async function loadBeneficiaryCategories() {
+    if (Array.isArray(beneficiaryCategoriesCache)) {
+      return beneficiaryCategoriesCache;
+    }
+    if (!beneficiaryCategoriesPromise) {
+      beneficiaryCategoriesPromise = fetch(
+        `${API_BASE_URL}/lookups/index.php/beneficiary-categories?active=1&limit=200`,
+        {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          credentials: "include",
+          cache: "no-store",
+        }
+      )
+        .then(async (res) => {
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          const j = await res.json();
+          const items = Array.isArray(j?.items)
+            ? j.items.map((it) => ({
+                id: Number(it.id),
+                name: String(it.name || ""),
+              }))
+            : [];
+          beneficiaryCategoriesCache = items;
+          return items;
+        })
+        .catch((err) => {
+          beneficiaryCategoriesPromise = null;
+          throw err;
+        });
+    }
+    return beneficiaryCategoriesPromise;
+  }
+
+  function ensureSelect2(selectEl, modalEl) {
+    if (!selectEl || !(window.$ && $.fn?.select2)) {
+      return null;
+    }
+    const $select = window.$(selectEl);
+    if (!$select.data("select2")) {
+      const config = {
+        width: "100%",
+        placeholder: selectEl.dataset.placeholder || "Select",
+        allowClear: true,
+      };
+      if (modalEl) {
+        config.dropdownParent = window.$(modalEl);
+      }
+      $select.select2(config);
+    }
+    return $select;
+  }
+
+  function populateBeneficiaryCategoryOptions(selectEl, categories) {
+    if (!selectEl) return;
+    const list = Array.isArray(categories) ? categories : [];
+    const $select = window.$ && $.fn?.select2 ? window.$(selectEl) : null;
+    const hasSelect2 = !!($select && $select.data("select2"));
+    if (hasSelect2) {
+      $select.empty();
+      $select.append(new Option("", "", false, false));
+    } else {
+      selectEl.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "";
+      selectEl.appendChild(placeholder);
+    }
+    const seen = new Set([""]);
+    list.forEach((cat) => {
+      if (!cat || cat.id == null) return;
+      const id = String(cat.id);
+      if (seen.has(id)) return;
+      seen.add(id);
+      const label = cat.name || `Category ${id}`;
+      if (hasSelect2) {
+        $select.append(new Option(label, id, false, false));
+      } else {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = label;
+        selectEl.appendChild(opt);
+      }
+    });
+    selectEl.dataset.optionsLoaded = "1";
+  }
+
+  function syncBeneficiaryCategorySelection(selectEl, selectedId, selectedLabel) {
+    if (!selectEl) return;
+    const raw = selectedId != null && selectedId !== "" ? String(selectedId) : "";
+    if (raw) {
+      const hasOption = Array.from(selectEl.options).some(
+        (opt) => opt.value === raw
+      );
+      if (!hasOption) {
+        const label = selectedLabel || `Category ${raw}`;
+        if (window.$ && $.fn?.select2 && window.$(selectEl).data("select2")) {
+          window.$(selectEl).append(new Option(label, raw, false, false));
+        } else {
+          const opt = document.createElement("option");
+          opt.value = raw;
+          opt.textContent = label;
+          selectEl.appendChild(opt);
+        }
+      }
+    }
+    if (window.$ && $.fn?.select2 && window.$(selectEl).data("select2")) {
+      window.$(selectEl)
+        .val(raw || null)
+        .trigger("change.select2");
+    } else {
+      selectEl.value = raw;
+    }
+  }
+
+  function initializeBeneficiaryCategorySelect(selectEl, modalEl) {
+    if (!selectEl) return;
+    ensureSelect2(selectEl, modalEl);
+    loadBeneficiaryCategories()
+      .then((cats) => populateBeneficiaryCategoryOptions(selectEl, cats))
+      .catch((err) => console.error("Failed to load beneficiary categories:", err));
+  }
+
   function escapeHtml(str) {
     return String(str || "").replace(
       /[&<>"']/g,
@@ -728,7 +856,7 @@ function showImportModal(title, html) {
     return Array.isArray(j?.data?.items) ? j.data.items : [];
   }
 
-  // Render recipients to match Recipient.html table: Beneficiary, Type, Address, Contact Person, Position, Contact#, Email, Status, Actions
+  // Render recipients to match Recipient.html table: Beneficiary, Beneficiary Category, Address, Contact Person, Position, Contact#, Email, Status, Actions
   function renderRecipients(items) {
     const tbody = document.querySelector("main .table tbody");
     if (!tbody) return;
@@ -738,7 +866,9 @@ function showImportModal(title, html) {
       const addr = decodeHtml(u.address || "");
       const recipientName =
         orgName && orgName.trim() ? orgName.trim() : (userName || "").trim();
-      const orgType = decodeHtml(u.organization_type || "");
+      const beneficiaryCategory = decodeHtml(
+        u.beneficiary_category || u.organization_type || ""
+      );
       const contact = (userName || "").trim() || "—";
       const position = decodeHtml(u.position_designation || "");
       const contactNo = decodeHtml(u.contact_number || "");
@@ -771,8 +901,8 @@ function showImportModal(title, html) {
       return `
         <tr>
           <td data-label="Name of Beneficiary">${escapeHtml(recipientName)}</td>
-          <td class="d-none d-sm-table-cell" data-label="Type">${escapeHtml(
-            orgType || "—"
+          <td class="d-none d-sm-table-cell" data-label="Beneficiary Category">${escapeHtml(
+            beneficiaryCategory || "—"
           )}</td>
           <td class="d-none d-sm-table-cell text-break" data-label="Address">${escapeHtml(
             location
@@ -1114,6 +1244,10 @@ function showImportModal(title, html) {
                   <input type="text" class="form-control" id="edit_org" />
                 </div>
                 <div>
+                  <label class="form-label">Beneficiary Category</label>
+                  <select id="edit_beneficiary_category" class="form-select" data-placeholder="Select a category"></select>
+                </div>
+                <div>
                   <label class="form-label">Contact Person</label>
                   <input type="text" class="form-control" id="edit_name" />
                 </div>
@@ -1148,6 +1282,21 @@ function showImportModal(title, html) {
     return document.getElementById('recipientEditModal');
   }
 
+  function setupEditModalSelects(modalEl){
+    if (!modalEl) return;
+    const select = modalEl.querySelector('#edit_beneficiary_category');
+    const $select = ensureSelect2(select, modalEl);
+    if ($select && !$select.data('_changeBound')){
+      $select.on('change', () => {
+        // no-op; placeholder to ensure event listener exists if needed later
+      });
+      $select.data('_changeBound', '1');
+    }
+    loadBeneficiaryCategories()
+      .then((cats) => populateBeneficiaryCategoryOptions(select, cats))
+      .catch((err) => console.error('Failed to load beneficiary categories:', err));
+  }
+
   function openEditModal(u){
     const el = ensureEditModal();
     el.querySelector('#edit_user_id').value = u.user_id;
@@ -1157,11 +1306,32 @@ function showImportModal(title, html) {
     el.querySelector('#edit_position').value = u.position_designation || '';
     el.querySelector('#edit_contact_no').value = u.contact_number || '';
     el.querySelector('#edit_email').value = u.email || '';
+    setupEditModalSelects(el);
+    const select = el.querySelector('#edit_beneficiary_category');
+    Promise.resolve()
+      .then(() =>
+        loadBeneficiaryCategories()
+          .then((cats) => {
+            populateBeneficiaryCategoryOptions(select, cats);
+          })
+          .catch(() => {})
+      )
+      .finally(() => {
+        syncBeneficiaryCategorySelection(
+          select,
+          u.beneficiary_category_id ?? u.organization_type,
+          u.beneficiary_category || u.organization_type
+        );
+      });
     const modal = bootstrap.Modal.getOrCreateInstance(el);
     const saveBtn = el.querySelector('#recipientEditSaveBtn');
     saveBtn.onclick = async ()=>{
       try{
         saveBtn.disabled = true;
+        const categorySelect = el.querySelector('#edit_beneficiary_category');
+        const categoryVal = categorySelect
+          ? categorySelect.value || null
+          : null;
         await updateRecipient({
           user_id: Number(el.querySelector('#edit_user_id').value),
           organization_name: el.querySelector('#edit_org').value.trim(),
@@ -1170,6 +1340,7 @@ function showImportModal(title, html) {
           position_designation: el.querySelector('#edit_position').value.trim(),
           contact_number: el.querySelector('#edit_contact_no').value.trim(),
           email: el.querySelector('#edit_email').value.trim(),
+          beneficiary_category_id: categoryVal ? Number(categoryVal) : null,
         });
         modal.hide();
         try{ showToast('Recipient updated successfully', 'success'); }catch(_){ }
@@ -1473,6 +1644,18 @@ function showImportModal(title, html) {
     const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
     const addBtn = document.getElementById('addRecSubmitBtn');
     if (!addBtn) return;
+    const addModalEl = document.getElementById('addRecipientModal');
+    const addCategorySelect = document.getElementById('addRecCategory');
+    initializeBeneficiaryCategorySelect(addCategorySelect, addModalEl);
+    syncBeneficiaryCategorySelection(addCategorySelect, '', '');
+
+    if (addModalEl) {
+      addModalEl.addEventListener('shown.bs.modal', () => {
+        initializeBeneficiaryCategorySelect(addCategorySelect, addModalEl);
+        syncBeneficiaryCategorySelection(addCategorySelect, '', '');
+      });
+    }
+
     addBtn.addEventListener('click', async () => {
       const org = document.getElementById('addRecOrg')?.value.trim() || '';
       const name = document.getElementById('addRecName')?.value.trim() || '';
@@ -1483,6 +1666,7 @@ function showImportModal(title, html) {
       const age_group = document.getElementById('addRecAgeGroup')?.value.trim() || '';
       const male_count = document.getElementById('addRecMale')?.value || '';
       const female_count = document.getElementById('addRecFemale')?.value || '';
+      const beneficiary_category_id = addCategorySelect?.value || '';
       const fb = document.getElementById('addRecFeedback');
       if (fb) fb.textContent = '';
       if (!org && !name) {
@@ -1505,6 +1689,7 @@ function showImportModal(title, html) {
             age_group: age_group || null,
             male_count: male_count ? Number(male_count) : null,
             female_count: female_count ? Number(female_count) : null,
+            beneficiary_category_id: beneficiary_category_id ? Number(beneficiary_category_id) : null,
           })
         });
         const j = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));

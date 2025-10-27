@@ -29,13 +29,49 @@
     }
   };
 
+  function pad2(num) {
+    return String(num).padStart(2, "0");
+  }
+
+  function sanitizeFilename(name) {
+    return name.replace(/[<>:"/\\|?*]+/g, "").replace(/\s{2,}/g, " ").trim();
+  }
+
+  function buildExportFilename(prefix, isoStart, fallback) {
+    try {
+      if (isoStart) {
+        const dt = new Date(`${isoStart}T00:00:00`);
+        if (!Number.isNaN(dt.getTime())) {
+          const monthName = dt.toLocaleString(undefined, { month: "long" });
+          const year = dt.getFullYear();
+          const raw = `${prefix} ${monthName}, ${year}.xlsx`;
+          return sanitizeFilename(raw);
+        }
+      }
+    } catch (_) {}
+    const raw = `${prefix} ${fallback || "export"}.xlsx`;
+    return sanitizeFilename(raw);
+  }
+
   function getMonthRange() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    const start = `${year}-${String(month).padStart(2, "0")}-01`;
-    const endDate = new Date(year, month, 0).getDate();
-    const end = `${year}-${String(month).padStart(2, "0")}-${String(endDate).padStart(2, "0")}`;
+    const input = document.getElementById("exportMonthInput");
+    let baseDate = null;
+    if (input && input.value) {
+      const parsed = new Date(`${input.value}-01T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        baseDate = parsed;
+      }
+    }
+    if (!baseDate) {
+      baseDate = new Date();
+    }
+    const year = baseDate.getFullYear();
+    const monthIdx = baseDate.getMonth(); // 0-based
+    const nextMonth = new Date(year, monthIdx + 1, 1);
+    const endDate = new Date(nextMonth - 1).getDate();
+    const monthStr = pad2(monthIdx + 1);
+    const start = `${year}-${monthStr}-01`;
+    const end = `${year}-${monthStr}-${pad2(endDate)}`;
     return { start, end };
   }
 
@@ -227,9 +263,11 @@
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Product In");
-      const fname = `product_in_${resp?.data?.start || ""}_${
-        resp?.data?.end || ""
-      }.xlsx`.replace(/[^a-zA-Z0-9_.-]/g, "_");
+      const fname = buildExportFilename(
+        "Product In",
+        resp?.data?.start || start,
+        `${resp?.data?.start || start}_${resp?.data?.end || end}`
+      );
       XLSX.writeFile(wb, fname, { cellStyles: true });
       const modalEl = document.getElementById("exportModal");
       if (modalEl) {
@@ -330,9 +368,11 @@
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Product Out");
-      const fname = `product_out_${resp?.data?.start || ""}_${
-        resp?.data?.end || ""
-      }.xlsx`.replace(/[^a-zA-Z0-9_.-]/g, "_");
+      const fname = buildExportFilename(
+        "Product Out",
+        resp?.data?.start || start,
+        `${resp?.data?.start || start}_${resp?.data?.end || end}`
+      );
       XLSX.writeFile(wb, fname, { cellStyles: true });
       const modalEl = document.getElementById("exportModal");
       if (modalEl) {
@@ -545,6 +585,21 @@
   function init() {
     document.getElementById("exportInBtn")?.addEventListener("click", exportIn);
     document.getElementById("exportOutBtn")?.addEventListener("click", exportOut);
+    const exportModalEl = document.getElementById("exportModal");
+    const exportInput = document.getElementById("exportMonthInput");
+    if (exportInput && !exportInput.value) {
+      const now = new Date();
+      exportInput.value = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    }
+    if (exportModalEl) {
+      exportModalEl.addEventListener("shown.bs.modal", () => {
+        const input = document.getElementById("exportMonthInput");
+        if (input && !input.value) {
+          const now = new Date();
+          input.value = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+        }
+      });
+    }
     loadTotalWeight();
     loadAnalytics().finally(() => {
       loadPickupTotals();
