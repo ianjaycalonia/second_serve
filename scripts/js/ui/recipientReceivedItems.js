@@ -12,12 +12,9 @@
       ? window.API_BASE_URL
       : (function () {
           try {
-            console.debug(
-              "[receivedItems] Deriving API_BASE_URL from location:",
-              window.location.href
-            );
+            const url = new URL("./", window.location.href);
           } catch (_) {}
-          return "/Capstone%20Project/php/api";
+          return "/php/api";
         })();
 
   function getStoredUser() {

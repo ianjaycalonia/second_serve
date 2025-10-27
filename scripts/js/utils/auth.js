@@ -1,6 +1,6 @@
 // API Base URL
 // Use a relative path so it works regardless of domain or spaces in folder name
-const API_BASE_URL = '/Capstone%20Project/php/api';
+const API_BASE_URL = '/php/api';
 
 // Auth router endpoint under php/api/users/
 const AUTH_API_URL = `${API_BASE_URL}/users/auth.php`;
@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 const donorSel = document.getElementById('registerDonorCategory');
                 if (donorSel && donorSel.options.length <= 1) {
-                    fetch(`${API_BASE_URL}/lookups/donor-categories?active=1&limit=200`, { credentials: 'include' })
+                    fetch(`${API_BASE_URL}/lookups/index.php/donor-categories?active=1&limit=200`, { credentials: 'include' })
                         .then(r => r.json()).then(j => {
                             const items = Array.isArray(j?.items) ? j.items : [];
                             items.forEach(it => {
@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const beneSel = document.getElementById('registerBeneficiaryCategory');
                 if (beneSel && beneSel.options.length <= 1) {
-                    fetch(`${API_BASE_URL}/lookups/beneficiary-categories?active=1&limit=200`, { credentials: 'include' })
+                    fetch(`${API_BASE_URL}/lookups/index.php/beneficiary-categories?active=1&limit=200`, { credentials: 'include' })
                         .then(r => r.json()).then(j => {
                             const items = Array.isArray(j?.items) ? j.items : [];
                             items.forEach(it => {

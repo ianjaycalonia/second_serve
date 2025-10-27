@@ -4,7 +4,7 @@
   const API_BASE_URL =
     typeof window.API_BASE_URL === "string" && window.API_BASE_URL
       ? window.API_BASE_URL
-      : "/Capstone%20Project/php/api";
+      : "/php/api";
 
   function escapeHtml(str) {
     return (str || "").replace(

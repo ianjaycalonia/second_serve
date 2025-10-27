@@ -629,7 +629,7 @@
         function getAPI() {
           return typeof window.API_BASE_URL === "string" && window.API_BASE_URL
             ? window.API_BASE_URL
-            : "/Capstone%20Project/php/api";
+            : "/php/api";
         }
         function lockRecipientUI(rid) {
           try {
@@ -873,7 +873,7 @@
                 var API_BASE_URL =
                   typeof window.API_BASE_URL === "string" && window.API_BASE_URL
                     ? window.API_BASE_URL
-                    : "/Capstone%20Project/php/api";
+                    : "/php/api";
                 // NOTE: synchronous fetch is not available; return a placeholder and let async resolver update later
               }
             }
@@ -938,7 +938,7 @@
             var API_BASE_URL =
               typeof window.API_BASE_URL === "string" && window.API_BASE_URL
                 ? window.API_BASE_URL
-                : "/Capstone%20Project/php/api";
+                : "/php/api";
             fetch(
               API_BASE_URL +
                 "/allocations/index.php?action=list_runs&limit=100&t=" +
@@ -1046,7 +1046,7 @@
         function getAPI() {
           return typeof window.API_BASE_URL === "string" && window.API_BASE_URL
             ? window.API_BASE_URL
-            : "/Capstone%20Project/php/api";
+            : "/php/api";
         }
         function resolvedRunId() {
           try {
@@ -1172,7 +1172,7 @@
                     typeof window.API_BASE_URL === "string" &&
                     window.API_BASE_URL
                       ? window.API_BASE_URL
-                      : "/Capstone%20Project/php/api";
+                      : "/php/api";
                   var url = new URL(window.location.href);
                   var runIdRaw = (url.searchParams.get("run_id") || "").trim();
                   var runId = parseInt(runIdRaw || "0", 10) || 0;

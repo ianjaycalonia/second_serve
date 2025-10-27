@@ -73,7 +73,7 @@ function showImportModal(title, html) {
   const API_BASE_URL =
     typeof window.API_BASE_URL === "string" && window.API_BASE_URL
       ? window.API_BASE_URL
-      : "/Capstone%20Project/php/api";
+      : "/php/api";
 
   let beneficiaryCategoriesCache = null;
   let beneficiaryCategoriesPromise = null;
@@ -623,6 +623,7 @@ function showImportModal(title, html) {
         String(
           r["type"] ??
             r["organization_type"] ??
+            r["organization type"] ??
             r["org_type"] ??
             r["orgtype"] ??
             r["agency_type"] ??
@@ -1641,7 +1642,7 @@ function showImportModal(title, html) {
 
   // Add Recipient modal submit handler (manual create)
   document.addEventListener('DOMContentLoaded', () => {
-    const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/Capstone%20Project/php/api';
+    const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) ? window.API_BASE_URL : '/php/api';
     const addBtn = document.getElementById('addRecSubmitBtn');
     if (!addBtn) return;
     const addModalEl = document.getElementById('addRecipientModal');

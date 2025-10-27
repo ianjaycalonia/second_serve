@@ -7,7 +7,7 @@
     ? window.API_BASE_URL
     : (function(){
         // Same default used in auth.js
-        return '/Capstone%20Project/php/api';
+        return '/php/api';
       })();
 
   // Attempt to read the current logged-in user from sessionStorage only

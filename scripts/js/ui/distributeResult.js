@@ -13,7 +13,7 @@
   const API_BASE_URL =
     typeof window.API_BASE_URL === "string" && window.API_BASE_URL
       ? window.API_BASE_URL
-      : "/Capstone%20Project/php/api";
+      : "/php/api";
   const url = new URL(window.location.href);
   const DEBUG = url.searchParams.get("debug") === "1";
   const runIdRaw = (url.searchParams.get("run_id") || "").trim();

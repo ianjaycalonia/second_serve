@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
  */
 async function loadDashboardData() {
     try {
-        const apiUrl = '/Capstone%20Project/php/api/dashboard/summary.php';
+        const apiUrl = '/php/api/dashboard/summary.php';
         const token = sessionStorage.getItem('token');
         
         const headers = {

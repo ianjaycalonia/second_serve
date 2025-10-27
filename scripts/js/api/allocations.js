@@ -1,7 +1,7 @@
 (function(){
   'use strict';
   const root = (typeof window !== 'undefined') ? window : globalThis;
-  const BASE = (root.API_BASE_URL || '/Capstone%20Project/php/api');
+  const BASE = (root.API_BASE_URL || '/php/api');
   const URL  = `${BASE}/allocations/index.php`;
 
   function obj(o){ return (o && typeof o === 'object') ? o : {}; }

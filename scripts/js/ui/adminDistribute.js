@@ -7,7 +7,7 @@ function diLogError(context, error){
 function diResolveApiBase(){
   return (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
     ? window.API_BASE_URL
-    : '/Capstone%20Project/php/api';
+    : '/php/api';
 }
 
 let DI_API_BASE = diResolveApiBase();
@@ -199,7 +199,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       const params = new URLSearchParams({ group: 'merge', page: '1', limit: '1' });
       if (cat) params.set('category', cat);
       if (name) params.set('q', name);
-      const res = await fetch(`/Capstone%20Project/php/api/inventory/index.php/list?${params.toString()}`, {
+      const res = await fetch(`${INVENTORY_API_BASE}/list?${params.toString()}`, {
         credentials: 'include',
         headers: { Accept: 'application/json' }
       });
@@ -658,7 +658,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         const ids = Array.isArray(window.__diAllocIds)?window.__diAllocIds:[];
         if (!ids.length){ return; }
         // 1) Create a run
-        const apiBase = (typeof API_BASE_URL === 'string' && API_BASE_URL) ? API_BASE_URL : '/Capstone%20Project/php/api';
+        const apiBase = (typeof API_BASE_URL === 'string' && API_BASE_URL) ? API_BASE_URL : '/php/api';
         const runRes = await fetch(`${apiBase}/allocations/index.php?action=create_run`, {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ note: 'Allocate Now from DistributeItems', period_key: null })

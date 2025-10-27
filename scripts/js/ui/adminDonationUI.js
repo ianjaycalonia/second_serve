@@ -738,7 +738,7 @@
                       window.AdminDonationApi &&
                       window.AdminDonationApi.API_BASE_URL
                         ? window.AdminDonationApi.API_BASE_URL
-                        : window.API_BASE_URL || "/Capstone%20Project/php/api";
+                        : window.API_BASE_URL || "/php/api";
                     const url = `${API_BASE}/communications/messages.php?action=get_or_create_direct`;
                     const res = await fetch(url, {
                       method: "POST",

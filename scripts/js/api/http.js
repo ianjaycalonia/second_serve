@@ -54,7 +54,7 @@
   }
 
   function ensureBase(){
-    if (!root.API_BASE_URL) root.API_BASE_URL = '/Capstone%20Project/php/api';
+    if (!root.API_BASE_URL) root.API_BASE_URL = '/php/api';
   }
 
   async function parseJsonLenient(res){

@@ -6,7 +6,7 @@
 
   const API_BASE_URL = (typeof window !== 'undefined' && typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
     ? window.API_BASE_URL
-    : '/Capstone%20Project/php/api';
+    : '/php/api';
 
   async function fetchAdminList() {
     const res = await fetch(`${API_BASE_URL}/donations/index.php/list?t=${Date.now()}`, {

@@ -1,7 +1,7 @@
 <?php
 // Application configuration
 define('APP_NAME', 'Second Serve');
-define('APP_URL', 'http://' . $_SERVER['HTTP_HOST'] . '/Capstone%20Project');
+define('APP_URL', 'http://' . $_SERVER['HTTP_HOST']);
 
 // Database configuration
 define('DB_HOST', 'localhost');

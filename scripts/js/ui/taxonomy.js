@@ -1,6 +1,6 @@
 (function(){
-  // Use a project-relative path so it works under /Capstone%20Project/
-  const API_BASE = 'php/api/taxonomy/index.php';
+  // Use the flattened project root
+  const API_BASE = '/php/api/taxonomy/index.php';
 
   function authHeaders(){
     return { 'Content-Type': 'application/json' };

@@ -690,7 +690,9 @@
     <script src="scripts/js/ui/animatedMessage.js"></script>
     <script>
       (function(){
-        const API = '/Capstone%20Project/php/api';
+        const API = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
+          ? window.API_BASE_URL
+          : '/php/api';
         const card = document.getElementById('pendingApprovalsCard');
         const tbody = document.getElementById('pendingRecipientsBody');
         const reloadBtn = document.getElementById('reloadPendingBtn');
