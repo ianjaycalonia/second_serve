@@ -554,6 +554,14 @@ CREATE TABLE `allocations` (
   `scheduled_pickup_at` datetime DEFAULT NULL,
   `acknowledged_at` datetime DEFAULT NULL,
   `cancelled_at` datetime DEFAULT NULL,
+  `picked_up_at` datetime DEFAULT NULL,
+  `picked_up_by` int(11) DEFAULT NULL,
+  `pickup_photo_path` varchar(255) DEFAULT NULL,
+  `pickup_signature_path` varchar(255) DEFAULT NULL,
+  `pickup_photo_uploaded_path` varchar(255) DEFAULT NULL,
+  `pickup_signature_uploaded_path` varchar(255) DEFAULT NULL,
+  `pickup_photo_uploaded_at` datetime DEFAULT NULL,
+  `pickup_signature_uploaded_at` datetime DEFAULT NULL,
   `delivered_at` datetime DEFAULT NULL,
   `cancel_reason` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -562,8 +570,11 @@ CREATE TABLE `allocations` (
   KEY `alloc_recipient_idx` (`recipient_id`),
   KEY `alloc_status_idx` (`status`),
   KEY `alloc_run_idx` (`run_id`),
+  KEY `alloc_picked_up_idx` (`picked_up_at`),
+  KEY `alloc_picked_by_idx` (`picked_up_by`),
   CONSTRAINT `alloc_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `alloc_run_fk` FOREIGN KEY (`run_id`) REFERENCES `allocation_runs`(`run_id`) ON DELETE SET NULL ON UPDATE CASCADE
+  CONSTRAINT `alloc_run_fk` FOREIGN KEY (`run_id`) REFERENCES `allocation_runs`(`run_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `alloc_picked_by_fk` FOREIGN KEY (`picked_up_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 -- allocation_items (distribution results details - now linked to inventory)

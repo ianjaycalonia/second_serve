@@ -110,7 +110,11 @@
     // Destination for anchor: adjust per notification type
     let anchorHref = null;
     if (shouldLinkToAllocation) {
-      anchorHref = 'DistributeResult.html';
+      if (role === 'recipient') {
+        anchorHref = 'ReceivedItems.html';
+      } else {
+        anchorHref = 'DistributeResult.html';
+      }
     }
     // Use a stretched-link anchor so the whole row is clickable even without JS
     const linkHtml = anchorHref ? `<a href="${anchorHref}" class="stretched-link" aria-label="Open related page"></a>` : '';
@@ -211,13 +215,13 @@
           } else if (nType === 'donation_missing_metadata') {
             if (role === 'admin') dest = 'taxonomy.html#assignment';
           } else if (nType.startsWith('allocation_')) {
-            dest = 'DistributeResult.html';
+            dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributeResult.html';
           } else if (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated') {
             // Normalize generic updated notifications to ReceivedItems for recipients
             if (role === 'recipient' || refType === 'allocation') dest = 'ReceivedItems.html';
           }
           // Fallbacks by reference_type if not set above
-          if (!dest && refType === 'allocation') dest = 'DistributeResult.html';
+          if (!dest && refType === 'allocation') dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributeResult.html';
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
           if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
 
@@ -246,9 +250,9 @@
           const nType = (li.getAttribute('data-type') || '').toLowerCase();
           const refType = (li.getAttribute('data-ref-type') || '').toLowerCase();
           let dest = null;
-          if (nType.startsWith('allocation_')) dest = 'DistributeResult.html';
+          if (nType.startsWith('allocation_')) dest = 'ReceivedItems.html';
           if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) dest = 'ReceivedItems.html';
-          if (!dest && refType === 'allocation') dest = 'DistributeResult.html';
+          if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
           if (dest) {
             try {
               const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);

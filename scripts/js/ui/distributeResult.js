@@ -1278,15 +1278,19 @@
         }
         // Prefer current year, then fallback to any match
         const nowY = new Date().getFullYear();
-        let match = rows.find((r) => {
-          const d = r.created_at ? new Date(r.created_at) : null;
-          return d && d.getFullYear() === nowY && isoWeekNumber(d) === wTarget;
-        });
-        if (!match) {
-          match = rows.find((r) => {
+        let match = rows.find(
+          (r) => {
             const d = r.created_at ? new Date(r.created_at) : null;
-            return d && isoWeekNumber(d) === wTarget;
-          });
+            return d && d.getFullYear() === nowY && isoWeekNumber(d) === wTarget;
+          }
+        );
+        if (!match) {
+          match = rows.find(
+            (r) => {
+              const d = r.created_at ? new Date(r.created_at) : null;
+              return d && isoWeekNumber(d) === wTarget;
+            }
+          );
         }
         if (match && match.period_key) {
           window.location.href = `DistributeResult.html?run_id=${encodeURIComponent(
@@ -1707,7 +1711,7 @@
 
   // Per-recipient Notify button (manual notify) - delegated (single registration)
   container.addEventListener("click", async (e) => {
-    const btn = e.target?.closest?.(".dr-notify");
+    const btn = e.target?.closest?.(".dr-notify-one");
     if (!btn) return;
     // Allow notifying even if UI is locked; it's a notification action only
     const rid = parseInt(btn.getAttribute("data-rec") || "0", 10) || 0;
@@ -1927,6 +1931,7 @@
 
   // Helper: update UI to mark a recipient as notified and persist server-side
   async function markRecipientNotified(rid, tb) {
+    if (!rid) return false;
     let persistOk = true;
     try {
       // Update rows and status badge
@@ -1941,7 +1946,7 @@
       });
 
       // Disable action buttons for this recipient (keep column visible)
-      tb.querySelectorAll(".dr-add-item, .dr-notify, .dr-del").forEach((el) => {
+      tb.querySelectorAll(".dr-add-item, .dr-notify-one, .dr-del").forEach((el) => {
         try {
           if (typeof el.disabled !== "undefined") el.disabled = true;
           el.setAttribute("aria-disabled", "true");
@@ -1989,7 +1994,10 @@
     let persistFailures = 0;
     for (const tb of bodies) {
       const rid = parseInt(tb.getAttribute("data-rec") || "0", 10) || 0;
-      if (!rid) continue;
+      if (!rid) {
+        persistFailures++;
+        continue;
+      }
       const parts = [];
       tb.querySelectorAll("tr").forEach((tr) => {
         const name = tr.querySelector(".dr-name")?.value?.trim() || "";

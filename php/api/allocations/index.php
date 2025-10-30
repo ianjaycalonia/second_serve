@@ -506,7 +506,15 @@ try {
                 $db = Database::getInstance();
                 // Load allocations for the run
                 $rows = $db->query(
-                    'SELECT allocation_id, recipient_id, status, created_at, updated_at
+                    'SELECT allocation_id,
+                            recipient_id,
+                            status,
+                            created_at,
+                            updated_at,
+                            pickup_photo_path,
+                            pickup_signature_path,
+                            pickup_photo_uploaded_path,
+                            pickup_signature_uploaded_path
                      FROM allocations
                      WHERE run_id = ?
                      ORDER BY created_at DESC, allocation_id DESC',
@@ -535,6 +543,10 @@ try {
                         'status'        => $r['status'] ?? 'Allocated',
                         'created_at'    => $r['created_at'] ?? null,
                         'updated_at'    => $r['updated_at'] ?? null,
+                        'pickup_photo_path' => $r['pickup_photo_path'] ?? null,
+                        'pickup_signature_path' => $r['pickup_signature_path'] ?? null,
+                        'pickup_photo_uploaded_path' => $r['pickup_photo_uploaded_path'] ?? null,
+                        'pickup_signature_uploaded_path' => $r['pickup_signature_uploaded_path'] ?? null,
                         'item_count'    => $itemCount,
                         'items'         => array_map(function($it){
                             return [
@@ -668,6 +680,27 @@ try {
                 }
             }
             sendJson(['success'=>true]);
+            break;
+
+        case 'confirm_pickup':
+            requireRole(['admin']);
+            $allocationId = isset($payload['allocation_id']) ? (int)$payload['allocation_id'] : 0;
+            if ($allocationId <= 0) { sendJson(['success'=>false,'error'=>'allocation_id is required'], 400); }
+
+            $photoBase64 = isset($payload['photo_base64']) ? trim((string)$payload['photo_base64']) : null;
+            $signatureBase64 = isset($payload['signature_base64']) ? trim((string)$payload['signature_base64']) : null;
+            $note = isset($payload['confirm_text']) ? trim((string)$payload['confirm_text']) : null;
+
+            if ($photoBase64 === '' || $photoBase64 === null) { sendJson(['success'=>false,'error'=>'pickup photo is required'], 400); }
+            if ($signatureBase64 === '' || $signatureBase64 === null) { sendJson(['success'=>false,'error'=>'pickup signature is required'], 400); }
+
+            $svc = new Allocation();
+            try {
+                $paths = $svc->confirmPickup($allocationId, (int)(currentUserId() ?? 0), $photoBase64, $signatureBase64, $note);
+                sendJson(['success'=>true, 'data'=>$paths]);
+            } catch (Exception $e) {
+                sendJson(['success'=>false,'error'=>'Failed to confirm pickup: ' . $e->getMessage()], 400);
+            }
             break;
 
         case 'acknowledge_admin':
