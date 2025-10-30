@@ -221,6 +221,27 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
 
   const maxCache = new Map();
 
+  function primeMaxAvailable(cat, name, qty, unit){
+    try {
+      const key = cacheKey(cat, name);
+      if (!key) return;
+      const normalizedQty = Math.max(0, parseInt(qty ?? 0, 10) || 0);
+      const normalizedUnit = (unit || '').trim();
+      const existing = maxCache.get(key);
+      if (existing) {
+        const existingQty = Math.max(0, parseInt(existing.qty ?? 0, 10) || 0);
+        if (existingQty >= normalizedQty) {
+          if (!existing.unit && normalizedUnit) {
+            existing.unit = normalizedUnit;
+            maxCache.set(key, existing);
+          }
+          return;
+        }
+      }
+      maxCache.set(key, { qty: normalizedQty, unit: normalizedUnit });
+    } catch (_) {}
+  }
+
   function addAllocItemToRecipient(recipientId, cat, name, qty, unit, statusLabel){
     try{
       if (!recipientId) return;
@@ -246,6 +267,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           <i class="bi bi-x-lg text-danger"></i>
         </button>`;
       list.appendChild(li);
+      const originalQty = Math.max(1, parseInt(qty || 1, 10) || 1);
       // Bind edit/delete handlers and prevent carousel from sliding on interaction
       const qtyInput = li.querySelector('.alloc-qty-input');
       if (qtyInput){
@@ -257,6 +279,10 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         const enforceMax = async ()=>{
           try {
             const current = Math.max(0, parseInt(qtyInput.value || '0', 10) || 0);
+            if (current === 0) {
+              qtyInput.value = String(originalQty);
+              return;
+            }
             let cached = maxCache.get(key);
             if (!cached) {
               cached = await resolveMaxAvailable(cat, name);
@@ -480,6 +506,8 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           }
           const fraction = getDistributableFraction();
           const allocatableTotal = Math.floor(totalQty * fraction);
+          primeMaxAvailable(cat, name, totalQty, it.unit);
+
           ensurePop().then((popMap)=>{
             const recipients = (window.Allocation && typeof window.Allocation.recipientsWithPopulation==='function')
               ? window.Allocation.recipientsWithPopulation(eligibleIds, popMap)
@@ -618,6 +646,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       } catch(_){ }
 
       const eligible = recipients.slice();
+      primeMaxAvailable(category, name, totalQty, it.unit);
       const allocs = window.Allocation.allocateItems(totalQty, eligible);
       if (!Array.isArray(allocs) || !allocs.length) continue;
       let itemUnits = 0;

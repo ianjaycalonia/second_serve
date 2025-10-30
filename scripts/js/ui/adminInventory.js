@@ -360,10 +360,40 @@
     } catch (_) {}
   }
 
+  // Helper function to format date
+  function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  // Helper function to create status badge with tooltip
+  function statusBadge(status, breakdown) {
+    if (!breakdown) return badge(status);
+    
+    const total = (breakdown.expired || 0) + (breakdown.soon || 0) + (breakdown.in_stock || 0);
+    if (total <= 0) return badge(status);
+    
+    const tooltip = [];
+    if (breakdown.expired) tooltip.push(`Expired: ${breakdown.expired}`);
+    if (breakdown.soon) tooltip.push(`Expiring Soon: ${breakdown.soon}`);
+    if (breakdown.in_stock) tooltip.push(`In Stock: ${breakdown.in_stock}`);
+    
+    return `
+      <span data-bs-toggle="tooltip" data-bs-html="true" title="${tooltip.join('<br>')}">
+        ${badge(status)}
+      </span>`;
+  }
+
   function renderTable(items, meta) {
     const tbody = document.querySelector("main .table tbody");
     if (!tbody) return;
     applyConfig(meta);
+    
     // Apply Hide Expired filter if toggle is on
     let filtered = Array.isArray(items) ? [...items] : [];
     try {
@@ -374,21 +404,27 @@
         );
       }
     } catch (_) {}
+    
     if (!Array.isArray(filtered) || filtered.length === 0) {
       tbody.innerHTML =
         '<tr><td colspan="8" class="text-center py-4">No inventory items match the current filters.</td></tr>';
       return;
     }
+    
     const rows = filtered.map((r) => {
       const item = escapeHtml(r.item_name || "");
       const cat = escapeHtml(r.category || "");
-      const qty = (r.total_quantity ?? r.quantity ?? 0) + "";
+      const totalQty = (r.total_quantity ?? r.quantity ?? 0);
+      const qty = totalQty + "";
       const unit = escapeHtml(r.unit || "");
-      const soonest = escapeHtml(r.earliest_expiry || "—");
+      const soonest = formatDate(r.earliest_expiry);
       const tagsRaw = r.tags_concat || r.tags || "" || "";
       const tags = escapeHtml(tagsRaw);
-      const status = badge(r.derived_status || "In Stock");
+      const status = statusBadge(r.derived_status || "In Stock", r.status_breakdown);
       const data = `data-item-name="${item}" data-category="${cat}" data-tags="${tags}"`;
+      
+      // Status breakdown is still available in the tooltip on the status badge
+      
       const actions = `
         <div class="dropdown text-center">
           <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
@@ -402,20 +438,33 @@
             </div>
           </div>
         </div>`;
+        
       return `
         <tr>
-          <td>${item}</td>
+          <td>
+            <div class="fw-medium">${item}</div>
+            ${r.total_lots > 1 ? `<small class="text-muted">${r.total_lots} lots</small>` : ''}
+          </td>
           <td>${cat}</td>
-          <td>${qty}</td>
-          <td>${unit || '—'}</td>
-          <td>${soonest}</td>
+          <td class="text-nowrap">${qty}</td>
+          <td class="text-nowrap">${unit || '—'}</td>
+          <td class="text-nowrap">${soonest}</td>
           <td>${tags || "—"}</td>
           <td>${status}</td>
           <td>${actions}</td>
         </tr>
       `;
     });
+    
     tbody.innerHTML = rows.join("");
+    
+    // Initialize tooltips
+    if (typeof bootstrap !== 'undefined') {
+      const tooltipTriggerList = [].slice.call(tbody.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+    }
   }
 
   function getPageSize() {
@@ -590,7 +639,108 @@
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn.apply(null, args), delay); };
   }
 
+  async function processExpiredItems() {
+    const btn = document.getElementById('processExpiredBtn');
+    if (!btn) {
+      console.error('Process expired button not found');
+      return;
+    }
+
+    console.log('Process expired button clicked');
+    const originalText = btn.innerHTML;
+    try {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+      
+      const url = `${API_BASE_URL}/inventory/index.php/check-expired`;
+      console.log('Making request to:', url);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin'
+      });
+
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Server returned ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json().catch(e => {
+        console.error('Failed to parse JSON response:', e);
+        throw new Error('Invalid response from server');
+      });
+      
+      console.log('Response data:', result);
+      
+      // Ensure we have a toast container
+      let toastContainer = document.querySelector('.toast-container');
+      if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        document.body.appendChild(toastContainer);
+      }
+      
+      // Create success toast
+      const toast = document.createElement('div');
+      toast.className = 'toast align-items-center text-white bg-success border-0 show';
+      toast.role = 'alert';
+      toast.setAttribute('aria-live', 'assertive');
+      toast.setAttribute('aria-atomic', 'true');
+      const moved = Number(result.moved_count || 0);
+      const already = Number(result.already_in_expired || 0);
+      const detail = already > 0
+        ? `${moved} moved now, ${already} already in expired inventory`
+        : `${moved} items moved to expired inventory`;
+
+      toast.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">
+            <i class="bi bi-check-circle-fill me-2"></i>
+            ${detail}
+          </div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      `;
+      
+      toastContainer.appendChild(toast);
+      
+      // Auto-remove after 5 seconds
+      setTimeout(() => {
+        toast.remove();
+      }, 5000);
+      
+      // Reload the inventory
+      console.log('Reloading inventory...');
+      loadAndRender(1);
+      
+    } catch (error) {
+      console.error('Error processing expired items:', error);
+      // Show error message in alert and console
+      const errorMsg = `Error: ${error.message || 'Failed to process expired items'}`;
+      console.error(errorMsg);
+      alert(errorMsg);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+
   function bindFilters() {
+    // Bind process expired button if it exists
+    const processExpiredBtn = document.getElementById('processExpiredBtn');
+    if (processExpiredBtn) {
+      console.log('Found process expired button, binding click handler');
+      processExpiredBtn.addEventListener('click', processExpiredItems);
+    } else {
+      console.error('Process expired button not found in DOM');
+    }
+
     // Pagination buttons
     const pag = document.getElementById("inventoryPagination");
     if (pag) {

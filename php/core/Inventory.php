@@ -254,10 +254,19 @@ class Inventory
             $newQty = $current - $quantity;
             $this->db->query("UPDATE inventory SET quantity = ? WHERE inventory_id = ?", [$newQty, $inventoryId]);
             $this->db->query(
-                "INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
-                 VALUES (?, 'out', ?, ?, ?, ?, ?, NOW())",
+                    "INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
+                     VALUES (?, 'out', ?, ?, ?, ?, ?, NOW())",
                 [$inventoryId, $quantity, $mode, $recipientId, $note, $performedBy]
             );
+            
+            // Apply trigger logic for inventory movement
+            $movementId = (int)$this->db->lastInsertId();
+            if ($movementId > 0) {
+                require_once __DIR__ . '/TriggerLogic.php';
+                $triggerLogic = new TriggerLogic();
+                $triggerLogic->syncInventoryMovementDonationItem($movementId, $inventoryId);
+            }
+            
             $this->db->commit();
             return ['new_quantity' => $newQty];
         } catch (Exception $e) {
@@ -307,6 +316,15 @@ class Inventory
                      VALUES (?, 'out', ?, ?, ?, ?, ?, NOW())",
                     [$invId, $take, $mode, $recipientId, $note, $performedBy]
                 );
+                
+                // Apply trigger logic for inventory movement
+                $movementId = (int)$this->db->lastInsertId();
+                if ($movementId > 0) {
+                    require_once __DIR__ . '/TriggerLogic.php';
+                    $triggerLogic = new TriggerLogic();
+                    $triggerLogic->syncInventoryMovementDonationItem($movementId, $invId);
+                }
+                
                 $toGo -= $take;
                 $affected[] = ['inventory_id' => $invId, 'taken' => $take, 'new_quantity' => $newQty];
             }
@@ -536,6 +554,23 @@ class Inventory
                     [ $donationId, $item, $categoryId, $qty, $unitId, $tw, $tc, $expNorm, ($tags === '' ? NULL : $tags) ]
                 );
                 $donationItemId = (int)$this->db->lastInsertId();
+                
+                // Trigger logic: Sync product category
+                if (!empty($item) && $categoryId) {
+                    require_once __DIR__ . '/TriggerLogic.php';
+                    $triggerLogic = new TriggerLogic();
+                    
+                    // Find or create product entry
+                    $product = $this->db->query('SELECT product_id FROM products WHERE product_name = ?', [$item])->fetch();
+                    if ($product) {
+                        // Update existing product if category differs
+                        $this->db->query('UPDATE products SET category_id = ? WHERE product_id = ? AND (category_id IS NULL OR category_id <> ?)', 
+                            [$categoryId, $product['product_id'], $categoryId]);
+                    } else {
+                        // Create new product
+                        $this->db->query('INSERT INTO products (product_name, category_id) VALUES (?, ?)', [$item, $categoryId]);
+                    }
+                }
 
                 // Create inventory lot referencing the donation_item
                 $addedAt = (function() use ($entryDateRaw) {
@@ -558,6 +593,14 @@ class Inventory
                              VALUES (?, ?, 'in', ?, ?, NULL, NULL, ?, NOW())",
                             [ $invId, $donationItemId, (int)$qty, $procType, $pb ]
                         );
+                        
+                        // Apply trigger logic for inventory movement
+                        $movementId = (int)$this->db->lastInsertId();
+                        if ($movementId > 0) {
+                            require_once __DIR__ . '/TriggerLogic.php';
+                            $triggerLogic = new TriggerLogic();
+                            $triggerLogic->syncInventoryMovementDonationItem($movementId, $invId);
+                        }
                     }
                 } catch (Exception $e2) { /* ignore movement log errors */ }
                 $inserted++;

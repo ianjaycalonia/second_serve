@@ -828,6 +828,8 @@
     });
     return sums;
   }
+  const previousQuantities = new WeakMap();
+
   async function validateAndClamp(inputEl) {
     try {
       const tr = inputEl.closest('tr');
@@ -838,8 +840,21 @@
       const k = keyFor(name, cat);
       const otherSums = groupSums(inputEl);
       const others = otherSums.get(k) || 0;
+      if (!previousQuantities.has(inputEl)) {
+        const initial = parseInt(inputEl.value || '0', 10) || 0;
+        previousQuantities.set(inputEl, initial > 0 ? initial : 0);
+      }
       let val = parseInt(inputEl.value || '0', 10) || 0;
       if (val < 0) val = 0;
+      if (val === 0) {
+        const prior = previousQuantities.get(inputEl) || 0;
+        if (prior > 0) {
+          inputEl.value = String(prior);
+          return;
+        }
+      } else {
+        previousQuantities.set(inputEl, val);
+      }
       const available = await fetchAvailable(name, cat);
       const maxForThisRow = Math.max(0, available - others);
       if (val > maxForThisRow) {
@@ -851,6 +866,16 @@
     } catch (_) {}
   }
   // Bind listeners
+  container.addEventListener('focusin', function(e){
+    const qty = e.target && e.target.classList && e.target.classList.contains('dr-qty');
+    if (!qty) return;
+    const current = Math.max(0, parseInt(e.target.value || '0', 10) || 0);
+    if (current > 0) {
+      previousQuantities.set(e.target, current);
+    } else if (!previousQuantities.has(e.target)) {
+      previousQuantities.set(e.target, 0);
+    }
+  });
   container.addEventListener('input', function(e){
     const qty = e.target && e.target.classList && e.target.classList.contains('dr-qty');
     if (!qty) return;

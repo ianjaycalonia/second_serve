@@ -10,6 +10,9 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 SET FOREIGN_KEY_CHECKS=0;
 
+-- Enable event scheduler if not already enabled
+SET GLOBAL event_scheduler = ON;
+
 -- =========================
 -- Weeks and Week Recipients
 -- =========================
@@ -335,40 +338,8 @@ CREATE TABLE `products` (
   CONSTRAINT `products_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- Triggers to keep products.product_category synchronized with categories
-DELIMITER $$
-DROP TRIGGER IF EXISTS products_bi_sync_category $$
-CREATE TRIGGER products_bi_sync_category
-BEFORE INSERT ON products
-FOR EACH ROW
-BEGIN
-  IF NEW.category_id IS NOT NULL THEN
-    SET NEW.product_category = (SELECT primary_name FROM categories WHERE category_id = NEW.category_id LIMIT 1);
-  END IF;
-END $$
-
-DROP TRIGGER IF EXISTS products_bu_sync_category $$
-CREATE TRIGGER products_bu_sync_category
-BEFORE UPDATE ON products
-FOR EACH ROW
-BEGIN
-  IF NEW.category_id IS NOT NULL AND (OLD.category_id IS NULL OR NEW.category_id <> OLD.category_id) THEN
-    SET NEW.product_category = (SELECT primary_name FROM categories WHERE category_id = NEW.category_id LIMIT 1);
-  END IF;
-END $$
-
-DROP TRIGGER IF EXISTS categories_au_sync_products $$
-CREATE TRIGGER categories_au_sync_products
-AFTER UPDATE ON categories
-FOR EACH ROW
-BEGIN
-  IF NEW.primary_name <> OLD.primary_name THEN
-    UPDATE products
-    SET product_category = NEW.primary_name
-    WHERE category_id = NEW.category_id;
-  END IF;
-END $$
-DELIMITER ;
+-- Triggers removed: products_bi_sync_category, products_bu_sync_category, categories_au_sync_products
+-- These will be implemented in backend logic
 
 -- donation_items (line items per donation) - normalized: use FKs for category and unit
 CREATE TABLE `donation_items` (
@@ -403,6 +374,56 @@ CREATE TABLE `inventory` (
   CONSTRAINT `inventory_donation_item_fk` FOREIGN KEY (`donation_item_id`) REFERENCES `donation_items`(`donation_item_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 -- inventory_movements (aligned with Inventory::ensureTables)
+-- =======================================
+-- Expired Inventory
+-- =======================================
+
+-- Table to track expired inventory items
+CREATE TABLE `expired_inventory` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `inventory_id` INT NOT NULL,
+    `product_name` VARCHAR(255) NOT NULL,
+    `category_id` INT,
+    `quantity` DECIMAL(10,2) NOT NULL,
+    `unit_id` INT,
+    `expiry_date` DATE,
+    `original_donation_id` INT,
+    `donor_id` INT,
+    `batch_id` VARCHAR(100),
+    `notes` TEXT,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `expired_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `moved_by` INT,
+    FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE CASCADE,
+    FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`),
+    FOREIGN KEY (`unit_id`) REFERENCES `units`(`unit_id`),
+    FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`),
+    FOREIGN KEY (`moved_by`) REFERENCES `users`(`user_id`),
+    KEY `ix_expired_inventory_expiry` (`expiry_date`),
+    KEY `ix_expired_inventory_batch` (`batch_id`),
+    KEY `ix_expired_inventory_donor` (`donor_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Logs for inventory expiry actions
+CREATE TABLE `inventory_expiry_logs` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `inventory_id` INT,
+    `product_name` VARCHAR(255) NOT NULL,
+    `quantity` DECIMAL(10,2) NOT NULL,
+    `unit_id` INT,
+    `expiry_date` DATE,
+    `action` ENUM('expired', 'restored', 'deleted') NOT NULL,
+    `performed_by` INT,
+    `performed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `notes` TEXT,
+    FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE SET NULL,
+    FOREIGN KEY (`unit_id`) REFERENCES `units`(`unit_id`),
+    FOREIGN KEY (`performed_by`) REFERENCES `users`(`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =======================================
+-- Inventory Movements
+-- =======================================
 CREATE TABLE `inventory_movements` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `inventory_id` int(11) NOT NULL,
@@ -425,28 +446,8 @@ CREATE TABLE `inventory_movements` (
   CONSTRAINT `im_recipient_fk` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- Triggers: enforce inventory_movements.donation_item_id consistency with inventory
-DELIMITER $$
-DROP TRIGGER IF EXISTS im_bi_set_donation_item $$
-CREATE TRIGGER im_bi_set_donation_item
-BEFORE INSERT ON inventory_movements
-FOR EACH ROW
-BEGIN
-  IF NEW.inventory_id IS NOT NULL THEN
-    SET NEW.donation_item_id = (SELECT donation_item_id FROM inventory WHERE inventory_id = NEW.inventory_id LIMIT 1);
-  END IF;
-END $$
-
-DROP TRIGGER IF EXISTS im_bu_set_donation_item $$
-CREATE TRIGGER im_bu_set_donation_item
-BEFORE UPDATE ON inventory_movements
-FOR EACH ROW
-BEGIN
-  IF NEW.inventory_id IS NOT NULL THEN
-    SET NEW.donation_item_id = (SELECT donation_item_id FROM inventory WHERE inventory_id = NEW.inventory_id LIMIT 1);
-  END IF;
-END $$
-DELIMITER ;
+-- Triggers removed: im_bi_set_donation_item, im_bu_set_donation_item
+-- These will be implemented in backend logic
 
 -- Minimal messages table (direct messages only) with role-based trigger
 CREATE TABLE `messages` (
@@ -632,5 +633,47 @@ ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
 INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category_id`, `contact_number`, `address`, `notes`) VALUES
   (5, 'TestDonor', NULL, '09910071273', 'Tabok, Mandaue City', NULL)
 ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
+
+-- =======================================
+-- Expired Inventory Management
+-- =======================================
+
+-- Table to track expired inventory items
+CREATE TABLE `expired_inventory` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `inventory_id` INT NOT NULL,
+    `product_name` VARCHAR(255) NOT NULL,
+    `category_id` INT,
+    `quantity` INT NOT NULL,
+    `unit_id` INT,
+    `expiry_date` DATE,
+    `original_donation_id` INT,
+    `donor_id` INT,
+    `batch_id` VARCHAR(36),
+    `moved_by` INT NOT NULL COMMENT 'User ID who moved this to expired',
+    `moved_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `notes` TEXT,
+    FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE CASCADE,
+    FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL,
+    FOREIGN KEY (`unit_id`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL,
+    FOREIGN KEY (`original_donation_id`) REFERENCES `donations`(`donation_id`) ON DELETE SET NULL,
+    FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL,
+    FOREIGN KEY (`moved_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Settings table for application configuration
+CREATE TABLE IF NOT EXISTS `settings` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `key` VARCHAR(100) NOT NULL,
+    `value` TEXT,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_settings_key` (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Insert default settings if they don't exist
+INSERT IGNORE INTO `settings` (`key`, `value`) VALUES
+('last_expiry_check', '1970-01-01'),
+('inventory_soon_expire_lead_days', '7');
 
 SET FOREIGN_KEY_CHECKS=1;

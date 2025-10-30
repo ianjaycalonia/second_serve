@@ -278,6 +278,25 @@ try {
             }
             $params[] = $productName;
             $db->query('UPDATE donation_items SET ' . implode(',', $fields) . ' WHERE product_name = ? AND (category_id IS NULL OR unit_id IS NULL OR total_weight IS NULL)', $params);
+            
+            // Trigger logic: Sync product category for all products with this name
+            if ($categoryId !== null) {
+                require_once __DIR__ . '/../../core/TriggerLogic.php';
+                $triggerLogic = new TriggerLogic();
+                
+                // Find or create product entry
+                $product = $db->query('SELECT product_id FROM products WHERE product_name = ?', [$productName])->fetch();
+                if ($product) {
+                    // Update existing product
+                    $db->query('UPDATE products SET category_id = ? WHERE product_id = ?', [$categoryId, $product['product_id']]);
+                    $triggerLogic->syncProductCategory((int)$product['product_id'], $categoryId);
+                } else {
+                    // Create new product
+                    $db->query('INSERT INTO products (product_name, category_id) VALUES (?, ?)', [$productName, $categoryId]);
+                    $productId = (int)$db->lastInsertId();
+                    $triggerLogic->syncProductCategory($productId, $categoryId);
+                }
+            }
 
             $db->commit();
             sendJson(['success'=>true, 'category_id'=>$categoryId, 'unit_id'=>$unitId, 'weight'=>$weight]);
