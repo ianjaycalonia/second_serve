@@ -378,7 +378,7 @@ CREATE TABLE `inventory` (
 -- Expired Inventory
 -- =======================================
 
--- Table to track expired inventory items
+DROP TABLE IF EXISTS `expired_inventory`;
 CREATE TABLE `expired_inventory` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `inventory_id` INT NOT NULL,
@@ -558,10 +558,6 @@ CREATE TABLE `allocations` (
   `picked_up_by` int(11) DEFAULT NULL,
   `pickup_photo_path` varchar(255) DEFAULT NULL,
   `pickup_signature_path` varchar(255) DEFAULT NULL,
-  `pickup_photo_uploaded_path` varchar(255) DEFAULT NULL,
-  `pickup_signature_uploaded_path` varchar(255) DEFAULT NULL,
-  `pickup_photo_uploaded_at` datetime DEFAULT NULL,
-  `pickup_signature_uploaded_at` datetime DEFAULT NULL,
   `delivered_at` datetime DEFAULT NULL,
   `cancel_reason` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -644,33 +640,6 @@ ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
 INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category_id`, `contact_number`, `address`, `notes`) VALUES
   (5, 'TestDonor', NULL, '09910071273', 'Tabok, Mandaue City', NULL)
 ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
-
--- =======================================
--- Expired Inventory Management
--- =======================================
-
--- Table to track expired inventory items
-CREATE TABLE `expired_inventory` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `inventory_id` INT NOT NULL,
-    `product_name` VARCHAR(255) NOT NULL,
-    `category_id` INT,
-    `quantity` INT NOT NULL,
-    `unit_id` INT,
-    `expiry_date` DATE,
-    `original_donation_id` INT,
-    `donor_id` INT,
-    `batch_id` VARCHAR(36),
-    `moved_by` INT NOT NULL COMMENT 'User ID who moved this to expired',
-    `moved_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    `notes` TEXT,
-    FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE CASCADE,
-    FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL,
-    FOREIGN KEY (`unit_id`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL,
-    FOREIGN KEY (`original_donation_id`) REFERENCES `donations`(`donation_id`) ON DELETE SET NULL,
-    FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL,
-    FOREIGN KEY (`moved_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Settings table for application configuration
 CREATE TABLE IF NOT EXISTS `settings` (

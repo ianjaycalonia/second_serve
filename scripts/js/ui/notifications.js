@@ -113,7 +113,7 @@
       if (role === 'recipient') {
         anchorHref = 'ReceivedItems.html';
       } else {
-        anchorHref = 'DistributeResult.html';
+        anchorHref = 'DistributionPickup.html';
       }
     }
     // Use a stretched-link anchor so the whole row is clickable even without JS
@@ -215,13 +215,13 @@
           } else if (nType === 'donation_missing_metadata') {
             if (role === 'admin') dest = 'taxonomy.html#assignment';
           } else if (nType.startsWith('allocation_')) {
-            dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributeResult.html';
+            dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributionPickup.html';
           } else if (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated') {
             // Normalize generic updated notifications to ReceivedItems for recipients
             if (role === 'recipient' || refType === 'allocation') dest = 'ReceivedItems.html';
           }
           // Fallbacks by reference_type if not set above
-          if (!dest && refType === 'allocation') dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributeResult.html';
+          if (!dest && refType === 'allocation') dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributionPickup.html';
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
           if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
 

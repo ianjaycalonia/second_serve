@@ -20,6 +20,91 @@ function inv_get_setting(string $key, $default = null){
     return $default;
 }
 
+function inventory_move_expired_items(bool $background = false): array {
+    $db = Database::getInstance();
+    $startedTxn = !$db->inTransaction();
+    if ($startedTxn) {
+        $db->beginTransaction();
+    }
+
+    try {
+        $expiredItems = $db->query(
+            "SELECT inv.inventory_id, inv.quantity, di.*, d.donor_id, d.batch_id
+             FROM inventory inv
+             JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+             JOIN donations d ON d.donation_id = di.donation_id
+             LEFT JOIN expired_inventory ei ON ei.inventory_id = inv.inventory_id
+             WHERE di.expiry_date < CURDATE()
+               AND inv.quantity > 0
+               AND ei.inventory_id IS NULL"
+        )->fetchAll();
+
+        $movedCount = 0;
+        $actingUserId = (int)(currentUserId() ?? 0);
+        if ($actingUserId <= 0) {
+            $actingUserId = 1; // fallback system user
+        }
+
+        foreach ($expiredItems as $item) {
+            $inventoryId = (int)($item['inventory_id'] ?? 0);
+            if ($inventoryId <= 0) {
+                continue;
+            }
+
+            $db->query(
+                "INSERT INTO expired_inventory (
+                    inventory_id, product_name, category_id, quantity,
+                    unit_id, expiry_date, original_donation_id,
+                    donor_id, batch_id, moved_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    $inventoryId,
+                    $item['product_name'],
+                    $item['category_id'],
+                    $item['quantity'],
+                    $item['unit_id'],
+                    $item['expiry_date'],
+                    $item['donation_id'],
+                    $item['donor_id'],
+                    $item['batch_id'],
+                    $actingUserId,
+                ]
+            );
+
+            $db->query(
+                "UPDATE inventory SET quantity = 0 WHERE inventory_id = ?",
+                [$inventoryId]
+            );
+
+            $movedCount++;
+        }
+
+        if ($startedTxn && $db->inTransaction()) {
+            $db->commit();
+        }
+    } catch (Exception $e) {
+        if ($startedTxn && $db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
+    }
+
+    $alreadyInExpired = (int)($db->query(
+        "SELECT COUNT(*) AS cnt
+         FROM expired_inventory ei
+         INNER JOIN inventory inv_exp ON inv_exp.inventory_id = ei.inventory_id
+         INNER JOIN donation_items di_exp ON di_exp.donation_item_id = inv_exp.donation_item_id
+         WHERE di_exp.expiry_date < CURDATE()"
+    )->fetch()['cnt'] ?? 0);
+
+    return [
+        'moved_count' => $movedCount,
+        'already_in_expired' => $alreadyInExpired,
+        'timestamp' => date('Y-m-d H:i:s'),
+        'background' => $background,
+    ];
+}
+
 // CORS / preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     setCorsHeaders();
@@ -291,7 +376,8 @@ try {
                     MAX({$categoryExpr}) AS product_category,
                     MAX({$unitBase}) AS unit_label,
                     {$weightSelect},
-                    MAX(up.name) AS entry_by
+                    MAX(up.name) AS entry_by,
+                    MAX(COALESCE(alloc.recipient_id, im.recipient_id)) AS recipient_user_id
                 FROM inventory_movements im
                 LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
                 LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
@@ -319,6 +405,7 @@ try {
                 'UNIT' => $r['unit_label'] ?? '',
                 'TOTAL WEIGHT (KG)' => isset($r['total_weight']) ? (float)$r['total_weight'] : null,
                 'ENTRY BY' => $r['entry_by'] ?? '',
+                'RECIPIENT_ID' => isset($r['recipient_user_id']) ? (int)$r['recipient_user_id'] : null,
             ];
         }
         sendJson(['success'=>true,'data'=>['rows'=>$data,'start'=>$start,'end'=>$end]]);
@@ -374,82 +461,10 @@ try {
 
     // POST /api/inventory/check-expired - Check for and move expired items
     if ($method === 'POST' && preg_match('#^/(check-expired|check-expired/)\z#', $sub)) {
-        $db = Database::getInstance();
-        
         try {
-            // Start transaction
-            $db->beginTransaction();
-            
-            // Get all expired items that haven't been moved yet
-            $expiredItems = $db->query(
-                "SELECT inv.inventory_id, inv.quantity, di.*, d.donor_id, d.batch_id
-                 FROM inventory inv
-                 JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
-                 JOIN donations d ON d.donation_id = di.donation_id
-                 LEFT JOIN expired_inventory ei ON ei.inventory_id = inv.inventory_id
-                 WHERE di.expiry_date < CURDATE() 
-                 AND inv.quantity > 0
-                 AND ei.inventory_id IS NULL"
-            )->fetchAll();
-            
-            $movedCount = 0;
-            
-            foreach ($expiredItems as $item) {
-                // Insert into expired_inventory
-                $db->query(
-                    "INSERT INTO expired_inventory (
-                        inventory_id, product_name, category_id, quantity, 
-                        unit_id, expiry_date, original_donation_id, 
-                        donor_id, batch_id, moved_by
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [
-                        $item['inventory_id'],
-                        $item['product_name'],
-                        $item['category_id'],
-                        $item['quantity'],
-                        $item['unit_id'],
-                        $item['expiry_date'],
-                        $item['donation_id'],
-                        $item['donor_id'],
-                        $item['batch_id'],
-                        currentUserId() ?: 1 // Fallback to system user if no one is logged in
-                    ]
-                );
-                
-                // Update original inventory - set quantity to 0
-                $db->query(
-                    "UPDATE inventory 
-                     SET quantity = 0 
-                     WHERE inventory_id = ?",
-                    [
-                        $item['inventory_id']
-                    ]
-                );
-                
-                $movedCount++;
-            }
-            
-            $db->commit();
-
-            $alreadyInExpired = (int)($db->query(
-                "SELECT COUNT(*) AS cnt
-                 FROM expired_inventory ei
-                 INNER JOIN inventory inv_exp ON inv_exp.inventory_id = ei.inventory_id
-                 INNER JOIN donation_items di_exp ON di_exp.donation_item_id = inv_exp.donation_item_id
-                 WHERE di_exp.expiry_date < CURDATE()"
-            )->fetch()['cnt'] ?? 0);
-            
-            sendJson([
-                'success' => true,
-                'moved_count' => $movedCount,
-                'already_in_expired' => $alreadyInExpired,
-                'timestamp' => date('Y-m-d H:i:s'),
-            ]);
+            $result = inventory_move_expired_items(false);
+            sendJson(['success' => true] + $result);
         } catch (Exception $e) {
-            if ($db->inTransaction()) {
-                $db->rollBack();
-            }
-            
             sendJson([
                 'success' => false,
                 'error' => 'Failed to process expired items: ' . $e->getMessage()
@@ -469,41 +484,13 @@ try {
                 $today = date('Y-m-d');
                 
                 if (!$lastCheck || $lastCheck['value'] !== $today) {
-                    // Call our new endpoint to check for expired items
-                    $ch = curl_init();
-                    curl_setopt($ch, CURLOPT_URL, 'http://' . $_SERVER['HTTP_HOST'] . '/php/api/inventory/check-expired');
-                    curl_setopt($ch, CURLOPT_POST, 1);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'X-Requested-With: XMLHttpRequest',
-                        'X-Is-Ajax: true'
-                    ]);
-                    
-                    // Execute in background if possible
-                    if (function_exists('fastcgi_finish_request')) {
-                        // For FPM
-                        session_write_close();
-                        fastcgi_finish_request();
-                        
-                        $response = curl_exec($ch);
-                        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                        
-                        if ($httpCode === 200) {
-                            $db->query("INSERT INTO settings (`key`, value) VALUES ('last_expiry_check', ?) 
-                                       ON DUPLICATE KEY UPDATE value = ?", [$today, $today]);
-                        }
-                    } else {
-                        // Fallback to synchronous check
-                        $response = curl_exec($ch);
-                        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                        
-                        if ($httpCode === 200) {
-                            $db->query("INSERT INTO settings (`key`, value) VALUES ('last_expiry_check', ?) 
-                                       ON DUPLICATE KEY KEY UPDATE value = ?", [$today, $today]);
-                        }
+                    try {
+                        inventory_move_expired_items(true);
+                        $db->query("INSERT INTO settings (`key`, value) VALUES ('last_expiry_check', ?) 
+                                   ON DUPLICATE KEY UPDATE value = ?", [$today, $today]);
+                    } catch (Exception $e2) {
+                        error_log('Auto expired inventory sweep failed: ' . $e2->getMessage());
                     }
-                    
-                    curl_close($ch);
                 }
             } catch (Exception $e) {
                 // Log error but don't break the request

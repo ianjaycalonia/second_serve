@@ -213,6 +213,8 @@
     allocations.forEach(row => {
       const status = String(row.status || '').toLowerCase();
       const canPickup = status === 'acknowledged';
+      const pickupActionVisible = !(status === 'picked up' || status === 'completed');
+      const showProofButtons = status === 'picked up' || status === 'completed';
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>
@@ -225,25 +227,26 @@
         <td class="text-center">${statusBadge(row.status)}</td>
         <td>${fmtDateTime(row.updated_at || row.created_at)}</td>
         <td class="text-center">
+          ${showProofButtons ? `
           <div class="d-flex justify-content-center gap-1">
             <button type="button" class="btn btn-sm btn-outline-secondary js-view-proof" 
               data-type="photo" 
-              data-path="${getFullImagePath(row.pickup_photo_path || row.pickup_photo_uploaded_path || 'images/placeholder-photo.jpg')}" 
+              data-path="${getFullImagePath(row.pickup_photo_path || 'images/placeholder-photo.jpg')}" 
               title="View photo">
               <i class="bi bi-camera"></i>
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary js-view-proof" 
               data-type="signature" 
-              data-path="${getFullImagePath(row.pickup_signature_path || row.pickup_signature_uploaded_path || 'images/placeholder-signature.png')}" 
+              data-path="${getFullImagePath(row.pickup_signature_path || 'images/placeholder-signature.png')}" 
               title="View signature">
               <i class="bi bi-pen"></i>
             </button>
-          </div>
+          </div>` : '<span class="text-muted">—</span>'}
         </td>
         <td class="text-center">
-          <button type="button" class="btn btn-outline-primary btn-sm js-open-pickup" data-id="${row.allocation_id}" ${canPickup ? '' : 'disabled title="Pickup is available once recipient acknowledges."'}>
+          ${pickupActionVisible ? `<button type="button" class="btn btn-outline-primary btn-sm js-open-pickup" data-id="${row.allocation_id}" ${canPickup ? '' : 'disabled title="Pickup is available once recipient acknowledges."'}>
             <i class="bi bi-clipboard-check"></i> Pickup
-          </button>
+          </button>` : '<span class="text-muted">—</span>'}
         </td>`;
       frag.appendChild(tr);
     });

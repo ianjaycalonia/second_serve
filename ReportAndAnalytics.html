@@ -313,7 +313,16 @@
         </ol>
       </div>
 
-      <div class="d-flex justify-content-end align-items-center mb-3">
+      <div class="d-flex justify-content-end align-items-center gap-2 mb-3 flex-wrap">
+        <div class="d-flex align-items-center gap-2">
+          <label for="analyticsTimeframeSelect" class="form-label mb-0 fw-semibold">Timeframe</label>
+          <select class="form-select w-auto" id="analyticsTimeframeSelect">
+            <option value="daily" selected>Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
         <button
           type="button"
           class="btn btn-primary"
@@ -335,7 +344,7 @@
                 </div>
                 <div class="card-text">
                   <h3 class="mb-0" id="totalWeightKg">0</h3>
-                  <small class="text-muted">This month</small>
+                  <small class="text-muted">All time</small>
                 </div>
               </div>
             </div>
@@ -344,14 +353,14 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Total Donations</h6>
+              <h6 class="card-title">Total Product In</h6>
               <div class="card-elements">
                 <div class="card-icon">
                   <i class="bi bi-basket-fill"></i>
                 </div>
                 <div class="card-text">
                   <h3 class="mb-0" id="totalDonations">0</h3>
-                  <small class="text-muted">Donated</small>
+                  <small class="text-muted">Product In</small>
                 </div>
               </div>
             </div>
@@ -361,14 +370,14 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Total Pickups</h6>
+              <h6 class="card-title">Total Product Out</h6>
               <div class="card-elements">
                 <div class="card-icon">
                   <i class="bi bi-truck"></i>
                 </div>
                 <div class="card-text">
                   <h3 class="mb-0" id="totalPickups">0</h3>
-                  <small class="text-muted">Picked Up</small>
+                  <small class="text-muted">Product Out</small>
                 </div>
               </div>
             </div>
@@ -394,20 +403,15 @@
 
         <div class="col-12 col-lg-6">
           <div class="card card-accent p-4 w-100 h-100">
-            <div class="d-flex justify-content-between mb-3">
-              <h6 class="mb-0">Donation Volume</h6>
-              <select class="form-select w-auto" id="donationVolumeRange">
-                <option value="daily" selected>Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0">Product In Volume</h6>
+              <span class="badge bg-light text-dark border" id="donationVolumeBadge">Daily</span>
             </div>
             <div style="height: 100%">
               <canvas id="lineChart"></canvas>
             </div>
             <div class="fs-6 mb-2 text-center">
-              <span id="donationTimeframe">Daily</span> Donations
+              <span id="donationTimeframe">Daily</span> Product In
             </div>
 
             <div
@@ -424,20 +428,15 @@
 
         <div class="col-12 col-lg-6">
           <div class="card card-accent p-4 w-100 h-100">
-            <div class="d-flex justify-content-between mb-3">
-              <h6 class="mb-0">Pickup Volume</h6>
-              <select class="form-select w-auto" id="pickupVolumeRange">
-                <option value="daily" selected>Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0">Product Out Volume</h6>
+              <span class="badge bg-light text-dark border" id="pickupVolumeBadge">Daily</span>
             </div>
             <div style="height: 100%">
               <canvas id="barChart"></canvas>
             </div>
             <div class="fs-6 mb-2 text-center">
-              <span id="pickupTimeframe">Daily</span> Pickups
+              <span id="pickupTimeframe">Daily</span> Product Out
             </div>
 
             <div

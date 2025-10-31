@@ -512,9 +512,7 @@ try {
                             created_at,
                             updated_at,
                             pickup_photo_path,
-                            pickup_signature_path,
-                            pickup_photo_uploaded_path,
-                            pickup_signature_uploaded_path
+                            pickup_signature_path
                      FROM allocations
                      WHERE run_id = ?
                      ORDER BY created_at DESC, allocation_id DESC',
@@ -545,8 +543,6 @@ try {
                         'updated_at'    => $r['updated_at'] ?? null,
                         'pickup_photo_path' => $r['pickup_photo_path'] ?? null,
                         'pickup_signature_path' => $r['pickup_signature_path'] ?? null,
-                        'pickup_photo_uploaded_path' => $r['pickup_photo_uploaded_path'] ?? null,
-                        'pickup_signature_uploaded_path' => $r['pickup_signature_uploaded_path'] ?? null,
                         'item_count'    => $itemCount,
                         'items'         => array_map(function($it){
                             return [

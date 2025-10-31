@@ -4,6 +4,158 @@ function diLogError(context, error){
   } catch(_){ }
 }
 
+function diCloseToast(button){
+  try {
+    const toast = button?.closest?.('.di-toast');
+    if (toast) toast.remove();
+  } catch (err) {
+    diLogError('diCloseToast failed', err);
+  }
+}
+
+try {
+  if (typeof window.diCloseToast !== 'function') {
+    window.diCloseToast = diCloseToast;
+  }
+} catch(_){ }
+
+const DI_TOAST_POS_KEY = 'diToastPosition';
+
+function diLoadToastPosition(){
+  try {
+    const raw = localStorage.getItem(DI_TOAST_POS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch(_){ }
+  return null;
+}
+
+function diSaveToastPosition(pos){
+  try {
+    localStorage.setItem(DI_TOAST_POS_KEY, JSON.stringify(pos));
+  } catch(_){ }
+}
+
+function diAttachToastDrag(container){
+  try {
+    if (!container || container.__diDragBound) return;
+    container.__diDragBound = true;
+    container.style.cursor = 'grab';
+    const down = (ev)=>{
+      try {
+        const startX = ev.clientX ?? (ev.touches && ev.touches[0]?.clientX);
+        const startY = ev.clientY ?? (ev.touches && ev.touches[0]?.clientY);
+        if (startX == null || startY == null) return;
+        const rect = container.getBoundingClientRect();
+        const offsetX = startX - rect.left;
+        const offsetY = startY - rect.top;
+        const move = (moveEv)=>{
+          const curX = moveEv.clientX ?? (moveEv.touches && moveEv.touches[0]?.clientX);
+          const curY = moveEv.clientY ?? (moveEv.touches && moveEv.touches[0]?.clientY);
+          if (curX == null || curY == null) return;
+          const left = Math.max(8, curX - offsetX);
+          const top = Math.max(8, curY - offsetY);
+          container.style.left = `${left}px`;
+          container.style.top = `${top}px`;
+          container.style.right = '';
+          container.style.bottom = '';
+        };
+        const up = ()=>{
+          try {
+            document.removeEventListener('mousemove', move);
+            document.removeEventListener('mouseup', up);
+            document.removeEventListener('touchmove', move);
+            document.removeEventListener('touchend', up);
+            container.style.cursor = 'grab';
+            const rect2 = container.getBoundingClientRect();
+            diSaveToastPosition({ left: rect2.left, top: rect2.top });
+          } catch(_){ }
+        };
+        document.addEventListener('mousemove', move, { passive: true });
+        document.addEventListener('mouseup', up, { passive: true });
+        document.addEventListener('touchmove', move, { passive: true });
+        document.addEventListener('touchend', up, { passive: true });
+        container.style.cursor = 'grabbing';
+        ev.preventDefault?.();
+      } catch(err){
+        diLogError('diAttachToastDrag-down failed', err);
+      }
+    };
+    container.addEventListener('mousedown', down);
+    container.addEventListener('touchstart', down, { passive: true });
+  } catch(err){
+    diLogError('diAttachToastDrag failed', err);
+  }
+}
+
+function diFormatNumber(val){
+  const num = Number(val);
+  return Number.isFinite(num) ? num.toLocaleString() : '0';
+}
+
+async function diFetchSoonExpireItems(limit = 5){
+  try {
+    const params = new URLSearchParams({ group: 'merge', page: '1', limit: String(limit * 3) });
+    params.set('t', String(Date.now()));
+    const res = await fetch(`${INVENTORY_API_BASE}/list?${params.toString()}`, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json().catch(() => null);
+    const items = Array.isArray(data?.data?.items) ? data.data.items : [];
+    const soon = items.filter((it) => {
+      const status = String(it?.derived_status || '').toLowerCase();
+      return status === 'expiring soon' || status === 'soon to expire';
+    });
+    soon.sort((a, b) => {
+      const qa = Number(a?.status_breakdown?.soon ?? a?.total_quantity ?? a?.quantity ?? 0);
+      const qb = Number(b?.status_breakdown?.soon ?? b?.total_quantity ?? b?.quantity ?? 0);
+      return qb - qa;
+    });
+    return soon.slice(0, limit);
+  } catch (err) {
+    diLogError('diFetchSoonExpireItems failed', err);
+    return null;
+  }
+}
+
+async function diBuildSoonExpireContent(){
+  const wrapper = document.createElement('div');
+  wrapper.className = 'small w-100';
+  const heading = document.createElement('div');
+  heading.className = 'fw-semibold mb-1';
+  heading.textContent = 'Soon-to-expire inventory';
+  wrapper.appendChild(heading);
+
+  const rows = await diFetchSoonExpireItems(5);
+  if (!rows || rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.textContent = 'No items currently marked as soon to expire.';
+    wrapper.appendChild(empty);
+    return wrapper;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'table table-borderless table-sm mb-0 text-body';
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr class="text-muted"><th>Category</th><th>Item name</th><th class="text-end">Qty</th></tr>';
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  rows.forEach((it) => {
+    const category = it?.category ?? it?.product_category ?? '—';
+    const name = it?.item_name ?? it?.product_name ?? 'Unnamed item';
+    const quantity = it?.status_breakdown?.soon ?? it?.total_quantity ?? it?.quantity ?? 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="pe-3">${category || '—'}</td><td class="pe-3">${name}</td><td class="text-end">${diFormatNumber(quantity)}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
 function diResolveApiBase(){
   return (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
     ? window.API_BASE_URL
@@ -63,6 +215,145 @@ async function loadDistributableSettings(){
     return await diDistributablePromise;
   } finally {
     diDistributablePromise = null;
+  }
+}
+
+async function diMaybeShowAllocationToast(){
+  try {
+    if (window.__diAllocToastShown) return;
+    const allocPane = document.getElementById('di-alloc');
+    const allocTabBtn = document.getElementById('di-alloc-tab');
+    const isActive =
+      (allocPane && allocPane.classList.contains('show') && allocPane.classList.contains('active')) ||
+      (allocTabBtn && allocTabBtn.classList.contains('active'));
+    if (!isActive) return;
+    window.__diAllocToastShown = true;
+    const content = await diBuildSoonExpireContent().catch(() => null);
+    if (content) diShowPersistentToast(content, 'warning');
+    else diShowPersistentToast('Unable to load soon-to-expire items right now.', 'warning');
+  } catch (err) {
+    diLogError('diMaybeShowAllocationToast failed', err);
+  }
+}
+
+function diShowPersistentToast(message, variant = 'success'){
+  try {
+    const container = diEnsureToastContainer();
+    if (!container) return;
+
+    const colorClass = variant === 'danger' ? 'alert-danger' : variant === 'warning' ? 'alert-warning' : 'alert-success';
+    const toastEl = document.createElement('div');
+    toastEl.className = `di-toast alert ${colorClass} d-flex align-items-start gap-3 shadow border-0 mb-2`;
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    toastEl.style.minWidth = '240px';
+    toastEl.style.maxWidth = '420px';
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'flex-grow-1 pe-2';
+    if (message instanceof Node) {
+      bodyEl.appendChild(message);
+    } else {
+      bodyEl.textContent = message ?? '';
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'di-toast-close btn btn-light btn-sm d-inline-flex align-items-center justify-content-center border-0 px-2';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.fontSize = '20px';
+    closeBtn.style.lineHeight = '1';
+    closeBtn.style.minWidth = '28px';
+    closeBtn.style.height = '28px';
+    closeBtn.style.borderRadius = '999px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.pointerEvents = 'auto';
+    const stopAll = (ev) => {
+      try { ev.preventDefault(); } catch(_) {}
+      try { ev.stopPropagation(); } catch(_) {}
+      try { ev.stopImmediatePropagation(); } catch(_) {}
+    };
+    ['mousedown','mouseup','pointerdown','pointerup','touchstart','touchend'].forEach((evt) => {
+      closeBtn.addEventListener(evt, stopAll, true);
+    });
+    closeBtn.addEventListener('click', (ev) => {
+      stopAll(ev);
+      diCloseToast(closeBtn);
+    });
+
+    toastEl.appendChild(bodyEl);
+    toastEl.appendChild(closeBtn);
+    container.appendChild(toastEl);
+  } catch (err) {
+    diLogError('diShowPersistentToast failed', err);
+  }
+}
+
+function diHandleToastContainerClick(ev){
+  try {
+    const btn = ev.target.closest?.('.di-toast-close');
+    if (!btn) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    diCloseToast(btn);
+  } catch (err) {
+    diLogError('diHandleToastContainerClick failed', err);
+  }
+}
+
+function diHandleToastContainerKeydown(ev){
+  try {
+    const btn = ev.target.closest?.('.di-toast-close');
+    if (!btn) return;
+    if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    diCloseToast(btn);
+  } catch (err) {
+    diLogError('diHandleToastContainerKeydown failed', err);
+  }
+}
+
+function diEnsureToastContainer(){
+  try {
+    const existing = document.getElementById('diToastContainer');
+    if (existing) {
+      if (!existing.__diCloseBound) {
+        existing.addEventListener('click', diHandleToastContainerClick, true);
+        existing.addEventListener('keydown', diHandleToastContainerKeydown, true);
+        existing.__diCloseBound = true;
+      }
+      diAttachToastDrag(existing);
+      return existing;
+    }
+    const body = document.body;
+    if (!body) return null;
+    const toastContainer = document.createElement('div');
+    toastContainer.id = 'diToastContainer';
+    toastContainer.className = 'position-fixed p-3';
+    toastContainer.style.zIndex = '1100';
+    toastContainer.style.left = '24px';
+    toastContainer.style.bottom = '24px';
+    toastContainer.__diCloseBound = true;
+    toastContainer.addEventListener('click', diHandleToastContainerClick, true);
+    toastContainer.addEventListener('keydown', diHandleToastContainerKeydown, true);
+    diAttachToastDrag(toastContainer);
+    const saved = diLoadToastPosition();
+    if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
+      toastContainer.style.left = `${saved.left}px`;
+      toastContainer.style.top = `${saved.top}px`;
+      toastContainer.style.bottom = '';
+      toastContainer.style.right = '';
+    }
+    body.appendChild(toastContainer);
+    return toastContainer;
+  } catch (err) {
+    diLogError('diEnsureToastContainer failed', err);
+    return null;
   }
 }
 
@@ -819,7 +1110,10 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         try { attachAllocGlobalControls(); } catch(_){ }
         try { initAllocSelects(); } catch(_){ }
         try { attachAllocateNow(); } catch(_){ }
+        diMaybeShowAllocationToast();
       });
+      // If allocation tab is already active (e.g., forced by fallback script), show the toast once shortly after init
+      setTimeout(diMaybeShowAllocationToast, 150);
       // Optional: when returning to Recipients tab, update Selected count
       if (recipientsTab){
         recipientsTab.addEventListener('shown.bs.tab', ()=>{ try { updateSelectedCount(); } catch(_){ } });

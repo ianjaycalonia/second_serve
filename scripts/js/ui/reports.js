@@ -13,6 +13,7 @@
   let filteredRecords = [];
   let donationLineChart = null;
   let pickupBarChart = null;
+  let currentTimeframe = 'daily';
 
   const volumeState = {
     donations: {
@@ -72,6 +73,29 @@
     const monthStr = pad2(monthIdx + 1);
     const start = `${year}-${monthStr}-01`;
     const end = `${year}-${monthStr}-${pad2(endDate)}`;
+    return { start, end };
+  }
+
+  function getTimeframeRange(timeframe) {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    switch ((timeframe || '').toLowerCase()) {
+      case 'weekly':
+        start.setDate(end.getDate() - 6);
+        break;
+      case 'monthly':
+        start.setDate(end.getDate() - 29);
+        break;
+      case 'yearly':
+        start.setDate(end.getDate() - 364);
+        break;
+      case 'daily':
+      default:
+        // same day
+        break;
+    }
+    start.setHours(0, 0, 0, 0);
     return { start, end };
   }
 
@@ -175,24 +199,6 @@
       } else {
         renderPickupChart();
       }
-    }
-  }
-
-  async function loadTotalWeight() {
-    try {
-      const resp = await fetchJson(
-        `${API_BASE_URL}/dashboard/summary.php`
-      );
-      const total = resp?.data?.totals?.total_weight_kg ?? 0;
-      const el = document.getElementById("totalWeightKg");
-      if (el) {
-        el.textContent = (Math.round(Number(total) * 100) / 100).toLocaleString(
-          undefined,
-          { minimumFractionDigits: 0, maximumFractionDigits: 2 }
-        );
-      }
-    } catch (err) {
-      console.error("Failed to load total weight", err);
     }
   }
 
@@ -387,9 +393,11 @@
     }
   }
 
-  async function loadPickupTotals() {
+  async function loadPickupTotals(timeframe) {
     try {
-      const { start, end } = getMonthRange();
+      const range = getTimeframeRange(timeframe || currentTimeframe);
+      const start = formatIsoDate(range.start);
+      const end = formatIsoDate(range.end);
       const url = new URL(
         `${API_BASE_URL}/inventory/index.php/report-out`,
         window.location.origin
@@ -399,14 +407,68 @@
       url.searchParams.set("t", String(Date.now()));
       const resp = await fetchJson(url.toString());
       const rows = Array.isArray(resp?.data?.rows) ? resp.data.rows : [];
-      const total = rows.reduce((sum, row) => {
-        const raw = row?.QUANTITY ?? row?.quantity ?? 0;
-        const num = typeof raw === "number" ? raw : raw ? parseFloat(raw) : 0;
-        return sum + (Number.isFinite(num) ? num : 0);
-      }, 0);
-      const el = document.getElementById("totalPickups");
-      if (el) {
-        el.textContent = formatNumber(total);
+      const seenGroups = new Set();
+      const totals = rows.reduce(
+        (acc, row) => {
+          const qtyRaw = row?.QUANTITY ?? row?.quantity ?? 0;
+          const qtyNum =
+            typeof qtyRaw === "number"
+              ? qtyRaw
+              : qtyRaw
+              ? parseFloat(qtyRaw)
+              : 0;
+          if (Number.isFinite(qtyNum)) {
+            acc.quantity += qtyNum;
+          }
+
+          const weightRaw =
+            row?.["TOTAL WEIGHT (KG)"] ??
+            row?.TOTAL_WEIGHT_KG ??
+            row?.total_weight ??
+            row?.total_weight_kg ??
+            0;
+          const weightNum =
+            typeof weightRaw === "number"
+              ? weightRaw
+              : weightRaw
+              ? parseFloat(weightRaw)
+              : 0;
+          if (Number.isFinite(weightNum)) {
+            acc.weight += weightNum;
+          }
+
+          const recipientId = row?.RECIPIENT_ID ?? row?.recipient_id ?? row?.recipient_user_id ?? null;
+          const dateOut = row?.DATE ?? row?.date_out ?? row?.created_at ?? null;
+          const normalizedDate = dateOut ? String(dateOut).slice(0, 10) : '';
+          const groupKey = `${recipientId ?? 'unknown'}|${normalizedDate}`;
+          if (!seenGroups.has(groupKey)) {
+            seenGroups.add(groupKey);
+            acc.groupCount += 1;
+          }
+          acc.count += 1;
+          return acc;
+        },
+        { quantity: 0, weight: 0, count: 0, groupCount: 0 }
+      );
+
+      const totalPickupsEl = document.getElementById("totalPickups");
+      if (totalPickupsEl) {
+        totalPickupsEl.textContent = formatNumber(totals.groupCount || totals.count);
+      }
+
+      const totalWeightEl = document.getElementById("totalWeightKg");
+      if (totalWeightEl) {
+        totalWeightEl.textContent = formatNumber(totals.weight, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        });
+      }
+
+      const avgValueEl = document.getElementById("avgDonationValue");
+      if (avgValueEl) {
+        const divisor = totals.groupCount > 0 ? totals.groupCount : totals.count;
+        const avg = divisor > 0 ? totals.quantity / divisor : 0;
+        avgValueEl.textContent = formatNumber(avg, { maximumFractionDigits: 2 });
       }
     } catch (err) {
       console.error("Failed to load pickup totals", err);
@@ -433,7 +495,18 @@
     };
   }
 
-  async function loadAnalytics() {
+  function filterRecordsByTimeframe(records, timeframe) {
+    if (!Array.isArray(records) || !records.length) return [];
+    const { start, end } = getTimeframeRange(timeframe || currentTimeframe);
+    return records.filter((rec) => {
+      if (!rec?.created_at) return false;
+      const dt = new Date(rec.created_at);
+      if (Number.isNaN(dt.getTime())) return false;
+      return dt >= start && dt <= end;
+    });
+  }
+
+  async function loadAnalytics(timeframe) {
     try {
       const summaryPromise = fetchJson(
         `${API_BASE_URL}/dashboard/summary.php`
@@ -447,17 +520,6 @@
       ]);
 
       const totals = summaryResp?.data?.totals || {};
-      if (typeof totals.total_weight_kg !== "undefined") {
-        const el = document.getElementById("totalWeightKg");
-        if (el) {
-          el.textContent = (
-            Math.round(Number(totals.total_weight_kg || 0) * 100) / 100
-          ).toLocaleString(undefined, {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2,
-          });
-        }
-      }
       const items = Array.isArray(donationsResp?.data?.items)
         ? donationsResp.data.items
         : Array.isArray(donationsResp?.items)
@@ -465,8 +527,8 @@
         : [];
 
       donationRecords = items.map(normalizeDonation);
-      updateTiles(totals, donationRecords);
-      filteredRecords = donationRecords.slice();
+      filteredRecords = filterRecordsByTimeframe(donationRecords, timeframe);
+      updateTiles(totals, filteredRecords);
     } catch (err) {
       console.error("Failed to load analytics", err);
       filteredRecords = [];
@@ -475,21 +537,11 @@
 
   function updateTiles(totals, records) {
     const totalDonationsEl = document.getElementById("totalDonations");
-    const avgValueEl = document.getElementById("avgDonationValue");
 
     const totalDonations = records.length;
-    const quantitySum = records.reduce((sum, r) => sum + (r.quantity || 0), 0);
-    const avgDonationValue = totalDonations
-      ? quantitySum / totalDonations
-      : 0;
 
     if (totalDonationsEl) {
       totalDonationsEl.textContent = formatNumber(totalDonations);
-    }
-    if (avgValueEl) {
-      avgValueEl.textContent = formatNumber(avgDonationValue, {
-        maximumFractionDigits: 2,
-      });
     }
 
   }
@@ -541,7 +593,7 @@
     chart.data.labels = labels;
     chart.data.datasets = [
       {
-        label: "Donations",
+        label: "Product In",
         data: values,
         borderColor: "#0d6efd",
         backgroundColor: "rgba(13, 110, 253, 0.15)",
@@ -555,6 +607,10 @@
     if (tfLabel) {
       tfLabel.textContent = timeframeLabel(state.timeframe);
     }
+    const tfBadge = document.getElementById("donationVolumeBadge");
+    if (tfBadge) {
+      tfBadge.textContent = timeframeLabel(state.timeframe);
+    }
   }
 
   function renderPickupChart() {
@@ -566,7 +622,7 @@
     chart.data.labels = labels;
     chart.data.datasets = [
       {
-        label: "Pickups",
+        label: "Product Out",
         data: values,
         borderColor: "#28a745",
         backgroundColor: "rgba(40, 167, 69, 0.15)",
@@ -580,6 +636,30 @@
     if (tfLabel) {
       tfLabel.textContent = timeframeLabel(state.timeframe);
     }
+    const tfBadge = document.getElementById("pickupVolumeBadge");
+    if (tfBadge) {
+      tfBadge.textContent = timeframeLabel(state.timeframe);
+    }
+  }
+
+  async function refreshDashboard(timeframe) {
+    try {
+      await Promise.all([
+        loadAnalytics(timeframe),
+        loadPickupTotals(timeframe),
+      ]);
+    } catch (err) {
+      console.error("Dashboard refresh failed", err);
+    }
+  }
+
+  function applyGlobalTimeframe(timeframe) {
+    currentTimeframe = timeframe;
+    volumeState.donations.timeframe = timeframe;
+    volumeState.pickups.timeframe = timeframe;
+    refreshDashboard(timeframe);
+    loadVolumeSection("donations");
+    loadVolumeSection("pickups");
   }
 
   function init() {
@@ -600,30 +680,21 @@
         }
       });
     }
-    loadTotalWeight();
-    loadAnalytics().finally(() => {
-      loadPickupTotals();
+    const timeframeSelect = document.getElementById("analyticsTimeframeSelect");
+    if (timeframeSelect) {
+      const initial = String(timeframeSelect.value || currentTimeframe).toLowerCase();
+      currentTimeframe = initial;
+      volumeState.donations.timeframe = initial;
+      volumeState.pickups.timeframe = initial;
+      timeframeSelect.addEventListener("change", (e) => {
+        const val = String(e.target.value || initial).toLowerCase();
+        applyGlobalTimeframe(val);
+      });
+    }
+    refreshDashboard(currentTimeframe).then(() => {
+      loadVolumeSection("donations");
+      loadVolumeSection("pickups");
     });
-    const donationRange = document.getElementById("donationVolumeRange");
-    if (donationRange) {
-      donationRange.value = volumeState.donations.timeframe;
-      donationRange.addEventListener("change", (e) => {
-        const val = String(e.target.value || "daily").toLowerCase();
-        volumeState.donations.timeframe = val;
-        loadVolumeSection("donations");
-      });
-    }
-    const pickupRange = document.getElementById("pickupVolumeRange");
-    if (pickupRange) {
-      pickupRange.value = volumeState.pickups.timeframe;
-      pickupRange.addEventListener("change", (e) => {
-        const val = String(e.target.value || "daily").toLowerCase();
-        volumeState.pickups.timeframe = val;
-        loadVolumeSection("pickups");
-      });
-    }
-    loadVolumeSection("donations");
-    loadVolumeSection("pickups");
   }
 
   if (document.readyState === "loading") {
