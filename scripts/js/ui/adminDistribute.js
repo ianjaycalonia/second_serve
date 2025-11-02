@@ -19,76 +19,6 @@ try {
   }
 } catch(_){ }
 
-const DI_TOAST_POS_KEY = 'diToastPosition';
-
-function diLoadToastPosition(){
-  try {
-    const raw = localStorage.getItem(DI_TOAST_POS_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed;
-  } catch(_){ }
-  return null;
-}
-
-function diSaveToastPosition(pos){
-  try {
-    localStorage.setItem(DI_TOAST_POS_KEY, JSON.stringify(pos));
-  } catch(_){ }
-}
-
-function diAttachToastDrag(container){
-  try {
-    if (!container || container.__diDragBound) return;
-    container.__diDragBound = true;
-    container.style.cursor = 'grab';
-    const down = (ev)=>{
-      try {
-        const startX = ev.clientX ?? (ev.touches && ev.touches[0]?.clientX);
-        const startY = ev.clientY ?? (ev.touches && ev.touches[0]?.clientY);
-        if (startX == null || startY == null) return;
-        const rect = container.getBoundingClientRect();
-        const offsetX = startX - rect.left;
-        const offsetY = startY - rect.top;
-        const move = (moveEv)=>{
-          const curX = moveEv.clientX ?? (moveEv.touches && moveEv.touches[0]?.clientX);
-          const curY = moveEv.clientY ?? (moveEv.touches && moveEv.touches[0]?.clientY);
-          if (curX == null || curY == null) return;
-          const left = Math.max(8, curX - offsetX);
-          const top = Math.max(8, curY - offsetY);
-          container.style.left = `${left}px`;
-          container.style.top = `${top}px`;
-          container.style.right = '';
-          container.style.bottom = '';
-        };
-        const up = ()=>{
-          try {
-            document.removeEventListener('mousemove', move);
-            document.removeEventListener('mouseup', up);
-            document.removeEventListener('touchmove', move);
-            document.removeEventListener('touchend', up);
-            container.style.cursor = 'grab';
-            const rect2 = container.getBoundingClientRect();
-            diSaveToastPosition({ left: rect2.left, top: rect2.top });
-          } catch(_){ }
-        };
-        document.addEventListener('mousemove', move, { passive: true });
-        document.addEventListener('mouseup', up, { passive: true });
-        document.addEventListener('touchmove', move, { passive: true });
-        document.addEventListener('touchend', up, { passive: true });
-        container.style.cursor = 'grabbing';
-        ev.preventDefault?.();
-      } catch(err){
-        diLogError('diAttachToastDrag-down failed', err);
-      }
-    };
-    container.addEventListener('mousedown', down);
-    container.addEventListener('touchstart', down, { passive: true });
-  } catch(err){
-    diLogError('diAttachToastDrag failed', err);
-  }
-}
-
 function diFormatNumber(val){
   const num = Number(val);
   return Number.isFinite(num) ? num.toLocaleString() : '0';
@@ -327,7 +257,7 @@ function diEnsureToastContainer(){
         existing.addEventListener('keydown', diHandleToastContainerKeydown, true);
         existing.__diCloseBound = true;
       }
-      diAttachToastDrag(existing);
+      existing.style.cursor = '';
       return existing;
     }
     const body = document.body;
@@ -341,14 +271,6 @@ function diEnsureToastContainer(){
     toastContainer.__diCloseBound = true;
     toastContainer.addEventListener('click', diHandleToastContainerClick, true);
     toastContainer.addEventListener('keydown', diHandleToastContainerKeydown, true);
-    diAttachToastDrag(toastContainer);
-    const saved = diLoadToastPosition();
-    if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
-      toastContainer.style.left = `${saved.left}px`;
-      toastContainer.style.top = `${saved.top}px`;
-      toastContainer.style.bottom = '';
-      toastContainer.style.right = '';
-    }
     body.appendChild(toastContainer);
     return toastContainer;
   } catch (err) {

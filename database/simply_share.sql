@@ -47,6 +47,50 @@ CREATE TABLE IF NOT EXISTS `week_recipients` (
   CONSTRAINT `fk_wr_week` FOREIGN KEY (`week_id`) REFERENCES `weeks`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- =========================
+-- Scheduling (Calendar / Events)
+-- =========================
+CREATE TABLE `schedule_events` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `title` VARCHAR(255) NOT NULL,
+  `event_type` ENUM('admin','donor','recipient') NOT NULL DEFAULT 'admin',
+  `status` ENUM('scheduled','confirmed','completed','cancelled') NOT NULL DEFAULT 'scheduled',
+  `start_datetime` DATETIME NOT NULL,
+  `end_datetime` DATETIME DEFAULT NULL,
+  `location` VARCHAR(255) DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `primary_recipient_id` INT DEFAULT NULL,
+  `donor_id` INT DEFAULT NULL,
+  `created_by` INT NOT NULL,
+  `created_for_user_id` INT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  `updated_by` INT DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_schedule_events_start` (`start_datetime`),
+  KEY `idx_schedule_events_type` (`event_type`),
+  KEY `idx_schedule_events_status` (`status`),
+  KEY `idx_schedule_events_primary_recipient` (`primary_recipient_id`),
+  KEY `idx_schedule_events_donor` (`donor_id`),
+  KEY `idx_schedule_events_created_by` (`created_by`),
+  CONSTRAINT `fk_schedule_events_primary_recipient` FOREIGN KEY (`primary_recipient_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_schedule_events_donor` FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_schedule_events_created_by` FOREIGN KEY (`created_by`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_schedule_events_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_schedule_events_created_for` FOREIGN KEY (`created_for_user_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+CREATE TABLE `schedule_event_recipients` (
+  `event_id` INT NOT NULL,
+  `recipient_id` INT NOT NULL,
+  `is_primary` TINYINT(1) NOT NULL DEFAULT 0,
+  `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`event_id`, `recipient_id`),
+  KEY `idx_ser_recipient` (`recipient_id`),
+  CONSTRAINT `fk_ser_event` FOREIGN KEY (`event_id`) REFERENCES `schedule_events`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_ser_recipient` FOREIGN KEY (`recipient_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
 -- users (must be created first for FK references)
 CREATE TABLE `users` (
   `user_id` int(11) NOT NULL AUTO_INCREMENT,

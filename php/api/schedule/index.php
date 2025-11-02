@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
+require_once __DIR__ . '/../../core/Notification.php';
 
 // CORS + JSON header
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { setCorsHeaders(); exit(0); }
@@ -12,33 +13,185 @@ $payload = getJsonInput();
 
 function ensureScheduleTable(){
     $db = Database::getInstance();
-    // Create table if not exists
-    $sql = "CREATE TABLE IF NOT EXISTS schedule_events (
+    // Create tables if not exist using latest schema definition.
+    $sqlEvents = "CREATE TABLE IF NOT EXISTS schedule_events (
         id INT AUTO_INCREMENT PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
+        event_type ENUM('admin','donor','recipient') NOT NULL DEFAULT 'admin',
+        status ENUM('scheduled','confirmed','completed','cancelled') NOT NULL DEFAULT 'scheduled',
         start_datetime DATETIME NOT NULL,
         end_datetime DATETIME DEFAULT NULL,
-        recipient_id INT DEFAULT NULL,
-        donor_id INT DEFAULT NULL,
         location VARCHAR(255) DEFAULT NULL,
         notes TEXT NULL,
-        status ENUM('scheduled','confirmed','completed','cancelled') NOT NULL DEFAULT 'scheduled',
+        primary_recipient_id INT DEFAULT NULL,
+        donor_id INT DEFAULT NULL,
         created_by INT NOT NULL,
+        created_for_user_id INT DEFAULT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
         updated_by INT DEFAULT NULL,
-        INDEX idx_start (start_datetime),
-        INDEX idx_recipient (recipient_id),
-        INDEX idx_donor (donor_id),
-        CONSTRAINT fk_schedule_created_by FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT fk_schedule_recipient FOREIGN KEY (recipient_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE,
-        CONSTRAINT fk_schedule_donor FOREIGN KEY (donor_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE,
-        CONSTRAINT fk_schedule_updated_by FOREIGN KEY (updated_by) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE
+        INDEX idx_schedule_events_start (start_datetime),
+        INDEX idx_schedule_events_type (event_type),
+        INDEX idx_schedule_events_status (status),
+        INDEX idx_schedule_events_primary_recipient (primary_recipient_id),
+        INDEX idx_schedule_events_donor (donor_id),
+        INDEX idx_schedule_events_created_by (created_by),
+        CONSTRAINT fk_schedule_events_primary_recipient FOREIGN KEY (primary_recipient_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE,
+        CONSTRAINT fk_schedule_events_donor FOREIGN KEY (donor_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE,
+        CONSTRAINT fk_schedule_events_created_by FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT fk_schedule_events_created_for FOREIGN KEY (created_for_user_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE,
+        CONSTRAINT fk_schedule_events_updated_by FOREIGN KEY (updated_by) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
-    try { $db->query($sql); } catch (Exception $e) { /* ignore create race */ }
-    // In case table already existed without updated_by, try to add it (ignore if already present)
-    try { $db->query("ALTER TABLE schedule_events ADD COLUMN updated_by INT DEFAULT NULL"); } catch (Exception $e) { /* ignore */ }
-    try { $db->query("ALTER TABLE schedule_events ADD CONSTRAINT fk_schedule_updated_by FOREIGN KEY (updated_by) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE"); } catch (Exception $e) { /* ignore */ }
+    try { $db->query($sqlEvents); } catch (Exception $e) { /* ignore create race */ }
+
+    $sqlRecipients = "CREATE TABLE IF NOT EXISTS schedule_event_recipients (
+        event_id INT NOT NULL,
+        recipient_id INT NOT NULL,
+        is_primary TINYINT(1) NOT NULL DEFAULT 0,
+        added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (event_id, recipient_id),
+        KEY idx_ser_recipient (recipient_id),
+        CONSTRAINT fk_ser_event FOREIGN KEY (event_id) REFERENCES schedule_events(id) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT fk_ser_recipient FOREIGN KEY (recipient_id) REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
+    try { $db->query($sqlRecipients); } catch (Exception $e) { /* ignore create race */ }
+
+    // Apply schema upgrades for older installations.
+    $alterStatements = [
+        "ALTER TABLE schedule_events ADD COLUMN event_type ENUM('admin','donor','recipient') NOT NULL DEFAULT 'admin'",
+        "ALTER TABLE schedule_events ADD COLUMN created_for_user_id INT DEFAULT NULL",
+        "ALTER TABLE schedule_events ADD COLUMN status ENUM('scheduled','confirmed','completed','cancelled') NOT NULL DEFAULT 'scheduled'",
+        "ALTER TABLE schedule_events ADD COLUMN primary_recipient_id INT DEFAULT NULL",
+        "ALTER TABLE schedule_events ADD COLUMN updated_by INT DEFAULT NULL",
+        "ALTER TABLE schedule_events ADD INDEX idx_schedule_events_type (event_type)",
+        "ALTER TABLE schedule_events ADD INDEX idx_schedule_events_status (status)",
+        "ALTER TABLE schedule_events ADD INDEX idx_schedule_events_primary_recipient (primary_recipient_id)",
+        "ALTER TABLE schedule_events ADD INDEX idx_schedule_events_created_by (created_by)",
+        "ALTER TABLE schedule_events ADD CONSTRAINT fk_schedule_events_primary_recipient FOREIGN KEY (primary_recipient_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE",
+        "ALTER TABLE schedule_events ADD CONSTRAINT fk_schedule_events_created_for FOREIGN KEY (created_for_user_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE",
+        "ALTER TABLE schedule_events ADD CONSTRAINT fk_schedule_events_updated_by FOREIGN KEY (updated_by) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE"
+    ];
+    foreach ($alterStatements as $stmt) {
+        try { $db->query($stmt); } catch (Exception $e) { /* ignore if already applied */ }
+    }
+
+    // Rename legacy recipient_id column if present.
+    try {
+        $db->query("ALTER TABLE schedule_events CHANGE COLUMN recipient_id primary_recipient_id INT DEFAULT NULL");
+    } catch (Exception $e) { /* ignore */ }
+
+    // Ensure recipient join table exists (legacy installs may not have it).
+    try {
+        $db->query($sqlRecipients);
+    } catch (Exception $e) { /* ignore */ }
+}
+
+function extractRecipientIds($raw){
+    if (empty($raw)) return [];
+    if (!is_array($raw)) {
+        $raw = [$raw];
+    }
+    $ids = [];
+    foreach ($raw as $value){
+        if (is_array($value)){
+            $value = $value['id'] ?? $value['recipient_id'] ?? null;
+        }
+        $num = (int)$value;
+        if ($num > 0 && !in_array($num, $ids, true)){
+            $ids[] = $num;
+        }
+    }
+    return $ids;
+}
+
+function attachEventRecipients(Database $db, array &$rows){
+    if (empty($rows)) return;
+    $eventIds = array_column($rows, 'id');
+    $placeholders = implode(',', array_fill(0, count($eventIds), '?'));
+    $sql = "SELECT ser.event_id, ser.recipient_id, ser.is_primary,
+                   COALESCE(rp.organization_name, u.name) AS recipient_display,
+                   rp.address AS recipient_address
+            FROM schedule_event_recipients ser
+            LEFT JOIN users u ON u.user_id = ser.recipient_id
+            LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
+            WHERE ser.event_id IN ($placeholders)";
+    $recipientRows = $db->query($sql, $eventIds)->fetchAll();
+    $grouped = [];
+    foreach ($recipientRows as $rec){
+        $eventId = (int)$rec['event_id'];
+        if (!isset($grouped[$eventId])) $grouped[$eventId] = [];
+        $grouped[$eventId][] = [
+            'id' => (int)$rec['recipient_id'],
+            'is_primary' => (int)$rec['is_primary'],
+            'display_name' => $rec['recipient_display'],
+            'address' => $rec['recipient_address']
+        ];
+    }
+    foreach ($rows as &$row){
+        $id = (int)$row['id'];
+        $row['recipients'] = $grouped[$id] ?? [];
+    }
+}
+
+function finalizeEventRows(array $rows, $role, $currentId){
+    foreach ($rows as &$row){
+        if (!isset($row['recipients'])) $row['recipients'] = [];
+        $primaryId = isset($row['primary_recipient_id']) ? (int)$row['primary_recipient_id'] : null;
+        // Ensure primary recipient appears in recipients list for convenience
+        if ($primaryId && !in_array($primaryId, array_column($row['recipients'], 'id'), true)) {
+            $row['recipients'][] = [
+                'id' => $primaryId,
+                'is_primary' => 1,
+                'display_name' => $row['recipient_display'] ?? null,
+                'address' => $row['recipient_address'] ?? null
+            ];
+        }
+        // Provide compatibility aliases
+        $row['recipient_id'] = $primaryId;
+        $roleType = $row['event_type'] ?? null;
+        if (!$roleType){
+            $roleType = $primaryId ? 'recipient' : (($row['donor_id'] ?? null) ? 'donor' : 'admin');
+        }
+        $row['role_type'] = $roleType;
+        $recipientIds = array_map(static function($r){ return (int)$r['id']; }, $row['recipients']);
+        $createdFor = isset($row['created_for_user_id']) ? (int)$row['created_for_user_id'] : null;
+        $isInvolved = ($role === 'admin')
+            || ((int)($row['created_by'] ?? 0) === $currentId)
+            || ((int)($row['donor_id'] ?? 0) === $currentId)
+            || ($createdFor && $createdFor === $currentId)
+            || ($primaryId && $primaryId === $currentId)
+            || in_array($currentId, $recipientIds, true);
+        $creatorName = trim((string)($row['created_by_name'] ?? ''));
+        $creatorOrg = trim((string)($row['created_by_org'] ?? ''));
+        $creatorEmail = trim((string)($row['created_by_email'] ?? ''));
+        $creatorParts = [];
+        if ($creatorName !== '') $creatorParts[] = $creatorName;
+        if ($creatorOrg !== '' && strcasecmp($creatorOrg, $creatorName) !== 0) $creatorParts[] = $creatorOrg;
+        if (!$creatorParts && $creatorEmail !== '') $creatorParts[] = $creatorEmail;
+        $row['created_by_display'] = $creatorParts ? implode(' — ', $creatorParts) : null;
+
+        if ($role !== 'admin' && !$isInvolved){
+            $row['title'] = 'Busy';
+            $row['location'] = null;
+            $row['notes'] = null;
+            $row['donor_id'] = null;
+            $row['primary_recipient_id'] = null;
+            $row['recipient_id'] = null;
+            $row['recipients'] = [];
+            $row['recipient_display'] = null;
+            $row['recipient_address'] = null;
+            $row['donor_display'] = null;
+            $row['donor_address'] = null;
+            $row['event_type'] = 'busy';
+            $row['role_type'] = 'busy';
+            $row['status'] = 'busy';
+            $row['is_busy'] = 1;
+            $row['created_by_display'] = null;
+        } else {
+            $row['is_busy'] = 0;
+        }
+    }
+    return $rows;
 }
 
 function canAccessEvent($row, $role, $currentId){
@@ -46,7 +199,7 @@ function canAccessEvent($row, $role, $currentId){
     if (!$row) return false;
     $createdBy = (int)($row['created_by'] ?? 0);
     $donorId = (int)($row['donor_id'] ?? 0);
-    $recipientId = (int)($row['recipient_id'] ?? 0);
+    $recipientId = (int)($row['primary_recipient_id'] ?? ($row['recipient_id'] ?? 0));
     if ($role === 'donor') return ($createdBy === $currentId) || ($donorId === $currentId);
     if ($role === 'recipient') return ($createdBy === $currentId) || ($recipientId === $currentId);
     return false;
@@ -69,49 +222,44 @@ try {
         // For privacy-friendly busy view, fetch all events in range for donors/recipients
         // Admin sees everything with full detail
         $sql = 'SELECT 
-                    e.id, e.title, e.start_datetime AS start, e.end_datetime AS end,
-                    e.recipient_id, e.donor_id, e.location, e.notes, e.status,
-                    e.created_by, e.created_at, e.updated_at, e.updated_by,
-                    -- donor display
+                    e.id,
+                    e.title,
+                    e.event_type,
+                    e.start_datetime AS start,
+                    e.end_datetime AS end,
+                    e.primary_recipient_id,
+                    e.donor_id,
+                    e.location,
+                    e.notes,
+                    e.status,
+                    e.created_by,
+                    e.created_for_user_id,
+                    e.created_at,
+                    e.updated_at,
+                    e.updated_by,
                     COALESCE(dp_d.organization_name, u_d.name) AS donor_display,
                     dp_d.address AS donor_address,
                     COALESCE(rp_r.organization_name, u_r.name) AS recipient_display,
                     rp_r.address AS recipient_address,
-                    u_up.role AS editor_role
+                    u_up.role AS editor_role,
+                    u_cb.name AS created_by_name,
+                    u_cb.email AS created_by_email,
+                    COALESCE(dp_cb.organization_name, rp_cb.organization_name, ap_cb.organization_name) AS created_by_org
                 FROM schedule_events e
                 LEFT JOIN users u_d ON u_d.user_id = e.donor_id
                 LEFT JOIN donor_profiles dp_d ON dp_d.user_id = u_d.user_id
-                LEFT JOIN users u_r ON u_r.user_id = e.recipient_id
+                LEFT JOIN users u_r ON u_r.user_id = e.primary_recipient_id
                 LEFT JOIN recipient_profiles rp_r ON rp_r.user_id = u_r.user_id
-                LEFT JOIN users u_up ON u_up.user_id = e.updated_by';
+                LEFT JOIN users u_up ON u_up.user_id = e.updated_by
+                LEFT JOIN users u_cb ON u_cb.user_id = e.created_by
+                LEFT JOIN donor_profiles dp_cb ON dp_cb.user_id = u_cb.user_id
+                LEFT JOIN recipient_profiles rp_cb ON rp_cb.user_id = u_cb.user_id
+                LEFT JOIN admin_profiles ap_cb ON ap_cb.user_id = u_cb.user_id';
         if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
         $sql .= ' ORDER BY start_datetime ASC LIMIT 1000';
         $rows = $db->query($sql, $params)->fetchAll();
-
-        $items = [];
-        foreach ($rows as $row) {
-            $createdBy = (int)($row['created_by'] ?? 0);
-            $donId = (int)($row['donor_id'] ?? 0);
-            $recId = (int)($row['recipient_id'] ?? 0);
-            // infer role_type for coloring
-            $roleType = $recId ? 'recipient' : ($donId ? 'donor' : 'admin');
-            $isInvolved = ($role === 'admin') || ($createdBy === $currentId) || ($donId === $currentId) || ($recId === $currentId);
-            $isBusy = false;
-            $out = $row;
-            $out['role_type'] = $roleType;
-            if ($role !== 'admin' && !$isInvolved) {
-                // scrub details
-                $isBusy = true;
-                $out['title'] = 'Busy';
-                $out['location'] = null;
-                $out['notes'] = null;
-                // do not expose counterpart IDs
-                $out['donor_id'] = null;
-                $out['recipient_id'] = null;
-            }
-            $out['is_busy'] = $isBusy ? 1 : 0;
-            $items[] = $out;
-        }
+        attachEventRecipients($db, $rows);
+        $items = finalizeEventRows($rows, $role, $currentId);
         sendJson(['success'=>true,'data'=>['items'=>$items]]);
     }
 
@@ -119,21 +267,49 @@ try {
         $title = trim((string)($payload['title'] ?? ''));
         $start = isset($payload['start']) ? date('Y-m-d H:i:s', strtotime($payload['start'])) : null;
         $end = isset($payload['end']) && $payload['end'] ? date('Y-m-d H:i:s', strtotime($payload['end'])) : null;
-        $recipientId = isset($payload['recipient_id']) ? (int)$payload['recipient_id'] : null;
-        $donorId = isset($payload['donor_id']) ? (int)$payload['donor_id'] : null;
         $location = isset($payload['location']) ? trim((string)$payload['location']) : null;
         $notes = isset($payload['notes']) ? (string)$payload['notes'] : null;
         $status = isset($payload['status']) ? strtolower(trim((string)$payload['status'])) : 'scheduled';
+        $donorId = isset($payload['donor_id']) ? (int)$payload['donor_id'] : null;
+        $primaryRecipientId = isset($payload['recipient_id']) ? (int)$payload['recipient_id'] : null;
+        $createdForUserId = isset($payload['created_for_user_id']) ? (int)$payload['created_for_user_id'] : null;
+        $recipientIds = extractRecipientIds($payload['recipient_ids'] ?? []);
+        $eventType = strtolower(trim((string)($payload['event_type'] ?? 'admin')));
+        if (!in_array($eventType, ['admin','donor','recipient'], true)) $eventType = 'admin';
+
         if ($title === '' || !$start){ sendJson(['success'=>false,'error'=>'title and start are required'], 400); }
-        // Auto-assign donor/recipient to self depending on role if not provided, and enforce constraints
+
+        if ($primaryRecipientId > 0 && !in_array($primaryRecipientId, $recipientIds, true)){
+            $recipientIds[] = $primaryRecipientId;
+        }
+
         if ($role === 'donor') {
             if ($donorId && $donorId !== $currentId) { sendJson(['success'=>false,'error'=>'Cannot create events for other donors'], 403); }
-            $donorId = $currentId; // ensure
+            $donorId = $currentId;
+            $eventType = 'donor';
+            $createdForUserId = $currentId;
+        } elseif ($role === 'recipient') {
+            if ($primaryRecipientId && $primaryRecipientId !== $currentId) { sendJson(['success'=>false,'error'=>'Cannot create events for other recipients'], 403); }
+            $primaryRecipientId = $currentId;
+            $eventType = 'recipient';
+            $recipientIds = [$currentId];
+            $createdForUserId = $currentId;
         }
-        if ($role === 'recipient') {
-            if ($recipientId && $recipientId !== $currentId) { sendJson(['success'=>false,'error'=>'Cannot create events for other recipients'], 403); }
-            $recipientId = $currentId; // ensure
+
+        if ($eventType === 'recipient'){
+            if (!$recipientIds && $primaryRecipientId){ $recipientIds = [$primaryRecipientId]; }
+            $recipientIds = array_values(array_unique(array_filter($recipientIds, static function($v){ return (int)$v > 0; })));
+            if (!$recipientIds){ sendJson(['success'=>false,'error'=>'Recipient events require at least one recipient'], 400); }
+            $primaryRecipientId = $recipientIds[0];
+        } else {
+            $recipientIds = [];
         }
+
+        if (!$createdForUserId){
+            if ($eventType === 'recipient' && $primaryRecipientId){ $createdForUserId = $primaryRecipientId; }
+            elseif ($eventType === 'donor' && $donorId){ $createdForUserId = $donorId; }
+        }
+
         // Scheduling constraints
         $startTs = strtotime($start);
         if ($startTs < time()){
@@ -142,12 +318,10 @@ try {
         $startDate = date('Y-m-d', $startTs);
         $startH = (int)date('H', $startTs); $startM = (int)date('i', $startTs);
         if ($role === 'recipient'){
-            // Window 10:00 - 16:00 inclusive
             $mins = $startH*60 + $startM;
             if ($mins < (10*60) || $mins > (16*60)){
                 sendJson(['success'=>false,'error'=>'Recipients can only book between 10:00 and 16:00'], 400);
             }
-            // Must be at least 3 hours after latest donor booking that day at or before this time
             $rowDon = $db->query('SELECT MAX(start_datetime) AS last_donor FROM schedule_events WHERE donor_id IS NOT NULL AND DATE(start_datetime)=? AND start_datetime<=?',[ $startDate, $start ])->fetch();
             if (!empty($rowDon['last_donor'])){
                 $lastDonTs = strtotime($rowDon['last_donor']);
@@ -157,19 +331,135 @@ try {
             }
         }
         if ($role === 'donor'){
-            // Only one donor booking per day for this donor
             $rowCnt = $db->query('SELECT COUNT(*) AS c FROM schedule_events WHERE donor_id=? AND DATE(start_datetime)=?', [ $currentId, $startDate ])->fetch();
             if ((int)($rowCnt['c'] ?? 0) > 0){
                 sendJson(['success'=>false,'error'=>'Only one donor booking per day is allowed'], 400);
             }
         }
-        // Admin may create admin events (no donor/recipient) or specify either/both
-        $db->query('INSERT INTO schedule_events (title,start_datetime,end_datetime,recipient_id,donor_id,location,notes,status,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?)', [
-            $title, $start, $end, $recipientId, $donorId, $location, $notes, in_array($status,['scheduled','confirmed','completed','cancelled'])?$status:'scheduled', $currentId, $currentId
+
+        $status = in_array($status, ['scheduled','confirmed','completed','cancelled'], true) ? $status : 'scheduled';
+        $db->query('INSERT INTO schedule_events (title,event_type,status,start_datetime,end_datetime,location,notes,primary_recipient_id,donor_id,created_by,created_for_user_id,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [
+            $title,
+            $eventType,
+            $status,
+            $start,
+            $end,
+            $location,
+            $notes,
+            $primaryRecipientId,
+            $donorId,
+            $currentId,
+            $createdForUserId,
+            $currentId
         ]);
         $id = (int)$db->lastInsertId();
-        $row = $db->query('SELECT id, title, start_datetime AS start, end_datetime AS end, recipient_id, donor_id, location, notes, status, created_by, created_at, updated_at FROM schedule_events WHERE id = ?', [$id])->fetch();
-        sendJson(['success'=>true,'data'=>$row], 201);
+
+        if ($eventType === 'recipient' && $recipientIds){
+            $insertSql = 'INSERT INTO schedule_event_recipients (event_id, recipient_id, is_primary) VALUES (?,?,?) ON DUPLICATE KEY UPDATE is_primary=VALUES(is_primary)';
+            foreach ($recipientIds as $rid){
+                $db->query($insertSql, [ $id, $rid, $rid === $primaryRecipientId ? 1 : 0 ]);
+            }
+        }
+
+        // Pre-format start for notification messages
+        $formattedStart = $start;
+        try {
+            $dt = new DateTime($start);
+            $formattedStart = $dt->format('M j, Y g:i A');
+        } catch (Exception $e) {
+            // keep fallback string
+        }
+
+        // Notify recipients about this new schedule event
+        if ($eventType === 'recipient'){
+            $notifyIds = $recipientIds;
+            if (!$notifyIds && $primaryRecipientId){
+                $notifyIds = [$primaryRecipientId];
+            }
+            $notifyIds = array_values(array_unique(array_filter(array_map('intval', $notifyIds), static function($v){ return $v > 0; })));
+            if ($notifyIds){
+                try {
+                    $notifSvc = new Notification();
+                    foreach ($notifyIds as $rid){
+                        try {
+                            $message = sprintf(
+                                '%s scheduled for %s%s.',
+                                $title ?: 'Recipient pickup',
+                                $formattedStart,
+                                $location ? ' at '.$location : ''
+                            );
+                            $notifSvc->create([
+                                'user_id' => $rid,
+                                'type' => 'schedule_event_created',
+                                'reference_type' => 'schedule_event',
+                                'reference_id' => $id,
+                                'message' => $message
+                            ]);
+                        } catch (Exception $e) {
+                            error_log('Failed to create recipient schedule notification: '.$e->getMessage());
+                        }
+                    }
+                } catch (Exception $e) {
+                    error_log('Notification service unavailable: '.$e->getMessage());
+                }
+            }
+        }
+
+        // Notify donor if event targets a donor
+        if ($donorId){
+            try {
+                $notifSvc = isset($notifSvc) && $notifSvc instanceof Notification ? $notifSvc : new Notification();
+                $message = sprintf(
+                    '%s scheduled for %s%s.',
+                    $title ?: 'Donor pickup',
+                    $formattedStart,
+                    $location ? ' at '.$location : ''
+                );
+                $notifSvc->create([
+                    'user_id' => $donorId,
+                    'type' => 'schedule_event_created',
+                    'reference_type' => 'schedule_event',
+                    'reference_id' => $id,
+                    'message' => $message
+                ]);
+            } catch (Exception $e) {
+                error_log('Failed to create donor schedule notification: '.$e->getMessage());
+            }
+        }
+
+        $row = $db->query('SELECT 
+                e.id,
+                e.title,
+                e.event_type,
+                e.start_datetime AS start,
+                e.end_datetime AS end,
+                e.primary_recipient_id,
+                e.donor_id,
+                e.location,
+                e.notes,
+                e.status,
+                e.created_by,
+                e.created_for_user_id,
+                e.created_at,
+                e.updated_at,
+                e.updated_by,
+                COALESCE(dp_d.organization_name, u_d.name) AS donor_display,
+                dp_d.address AS donor_address,
+                COALESCE(rp_r.organization_name, u_r.name) AS recipient_display,
+                rp_r.address AS recipient_address,
+                u_up.role AS editor_role
+            FROM schedule_events e
+            LEFT JOIN users u_d ON u_d.user_id = e.donor_id
+            LEFT JOIN donor_profiles dp_d ON dp_d.user_id = u_d.user_id
+            LEFT JOIN users u_r ON u_r.user_id = e.primary_recipient_id
+            LEFT JOIN recipient_profiles rp_r ON rp_r.user_id = u_r.user_id
+            LEFT JOIN users u_up ON u_up.user_id = e.updated_by
+            WHERE e.id = ?', [$id])->fetch();
+        $rowSet = $row ? [$row] : [];
+        attachEventRecipients($db, $rowSet);
+        $rowSet = finalizeEventRows($rowSet, $role, $currentId);
+        $responseRow = $rowSet ? $rowSet[0] : null;
+        sendJson(['success'=>true,'data'=>$responseRow], 201);
     }
 
     if ($method === 'PATCH' && $action === 'update'){
@@ -177,79 +467,153 @@ try {
         $row = $db->query('SELECT * FROM schedule_events WHERE id=?', [$id])->fetch();
         if (!$row) sendJson(['success'=>false,'error'=>'Not found'],404);
         if (!canAccessEvent($row, $role, $currentId)) sendJson(['success'=>false,'error'=>'Forbidden'],403);
-        // Donors can only edit entries for themselves (donor_id must be null or their own id)
-        if ($role === 'donor') {
-            $rowDon = isset($row['donor_id']) ? (int)$row['donor_id'] : 0;
-            if ($rowDon !== 0 && $rowDon !== $currentId) {
-                sendJson(['success'=>false,'error'=>'Forbidden'],403);
-            }
+
+        $currentEventType = $row['event_type'] ?? 'admin';
+        $newEventType = isset($payload['event_type']) ? strtolower(trim((string)$payload['event_type'])) : $currentEventType;
+        if (!in_array($newEventType, ['admin','donor','recipient'], true)) {
+            $newEventType = $currentEventType;
         }
-        // Recipients can only edit entries for themselves (recipient_id must be null or their own id)
-        if ($role === 'recipient') {
-            $rowRec = isset($row['recipient_id']) ? (int)$row['recipient_id'] : 0;
-            if ($rowRec !== 0 && $rowRec !== $currentId) {
-                sendJson(['success'=>false,'error'=>'Forbidden'],403);
-            }
+
+        $newTitle = isset($payload['title']) ? trim((string)$payload['title']) : null;
+        $newStart = isset($payload['start']) ? date('Y-m-d H:i:s', strtotime($payload['start'])) : null;
+        $newEnd = array_key_exists('end',$payload) ? ($payload['end'] ? date('Y-m-d H:i:s', strtotime($payload['end'])) : null) : null;
+        $newLocation = isset($payload['location']) ? trim((string)$payload['location']) : null;
+        $newNotes = isset($payload['notes']) ? (string)$payload['notes'] : null;
+        $newStatus = isset($payload['status']) ? strtolower(trim((string)$payload['status'])) : null;
+        $newDonorId = array_key_exists('donor_id',$payload) ? ($payload['donor_id']!==null ? (int)$payload['donor_id'] : null) : null;
+        $newPrimaryRecipientId = array_key_exists('recipient_id',$payload) ? ($payload['recipient_id']!==null ? (int)$payload['recipient_id'] : null) : null;
+        $newCreatedFor = array_key_exists('created_for_user_id',$payload) ? ($payload['created_for_user_id']!==null ? (int)$payload['created_for_user_id'] : null) : null;
+        $recipientIds = extractRecipientIds($payload['recipient_ids'] ?? []);
+
+        if ($newPrimaryRecipientId && !in_array($newPrimaryRecipientId, $recipientIds, true)){
+            $recipientIds[] = $newPrimaryRecipientId;
         }
-        $fields = [];$params=[];
-        if (isset($payload['title'])){ $fields[]='title=?'; $params[] = trim((string)$payload['title']); }
-        if (isset($payload['start'])){ $fields[]='start_datetime=?'; $params[] = date('Y-m-d H:i:s', strtotime($payload['start'])); }
-        if (array_key_exists('end',$payload)){ $fields[]='end_datetime=?'; $params[] = ($payload['end']?date('Y-m-d H:i:s', strtotime($payload['end'])):null); }
-        if (array_key_exists('recipient_id',$payload)){
-            $newRec = $payload['recipient_id']!==null ? (int)$payload['recipient_id'] : null;
-            if ($role === 'recipient') {
-                // Force recipient_id to self; recipients cannot reassign to others or null
-                $fields[]='recipient_id=?'; $params[] = $currentId;
-            } else {
-                $fields[]='recipient_id=?'; $params[] = $newRec;
-            }
+
+        if ($role === 'donor'){
+            $newDonorId = $currentId;
+            $newEventType = 'donor';
+            $newCreatedFor = $currentId;
         }
-        if (array_key_exists('donor_id',$payload)){
-            $newDon = $payload['donor_id']!==null ? (int)$payload['donor_id'] : null;
-            if ($role === 'donor') {
-                // Force donor_id to self; donors cannot reassign to others or null
-                $fields[]='donor_id=?'; $params[] = $currentId;
-            } else {
-                $fields[]='donor_id=?'; $params[] = $newDon;
-            }
+        if ($role === 'recipient'){
+            $newPrimaryRecipientId = $currentId;
+            $newEventType = 'recipient';
+            $recipientIds = [$currentId];
+            $newCreatedFor = $currentId;
         }
-        if (isset($payload['location'])){ $fields[]='location=?'; $params[] = trim((string)$payload['location']); }
-        if (isset($payload['notes'])){ $fields[]='notes=?'; $params[] = (string)$payload['notes']; }
-        if (isset($payload['status'])){ $st = strtolower(trim((string)$payload['status'])); $fields[]='status=?'; $params[] = in_array($st,['scheduled','confirmed','completed','cancelled'])?$st:'scheduled'; }
-        // Always stamp who updated
+
+        if ($newEventType === 'recipient'){
+            if (!$recipientIds){
+                $recipientIds = [$newPrimaryRecipientId ?? (int)($row['primary_recipient_id'] ?? 0)];
+            }
+            $recipientIds = array_values(array_unique(array_filter($recipientIds, static function($v){ return (int)$v > 0; })));
+            if (!$recipientIds){ sendJson(['success'=>false,'error'=>'Recipient events require at least one recipient'], 400); }
+            $newPrimaryRecipientId = $recipientIds[0];
+        } else {
+            $recipientIds = [];
+            $newPrimaryRecipientId = null;
+        }
+
+        if ($newCreatedFor === null){
+            if ($newEventType === 'recipient' && $newPrimaryRecipientId){ $newCreatedFor = $newPrimaryRecipientId; }
+            elseif ($newEventType === 'donor' && ($newDonorId ?? $row['donor_id'])){ $newCreatedFor = $newDonorId ?? $row['donor_id']; }
+        }
+
+        $fields = [];
+        $params = [];
+        if ($newTitle !== null){ $fields[] = 'title=?'; $params[] = $newTitle; }
+        if ($newStart !== null){ $fields[] = 'start_datetime=?'; $params[] = $newStart; }
+        if ($newEnd !== null || array_key_exists('end',$payload)){ $fields[] = 'end_datetime=?'; $params[] = $newEnd; }
+        if ($newLocation !== null){ $fields[] = 'location=?'; $params[] = $newLocation; }
+        if ($newNotes !== null){ $fields[] = 'notes=?'; $params[] = $newNotes; }
+        if ($newStatus !== null){ $sanitized = in_array($newStatus,['scheduled','confirmed','completed','cancelled'], true) ? $newStatus : 'scheduled'; $fields[]='status=?'; $params[]=$sanitized; }
+        if ($newEventType !== $currentEventType){ $fields[]='event_type=?'; $params[] = $newEventType; }
+        if ($newDonorId !== null || array_key_exists('donor_id',$payload) || $role==='donor'){
+            $fields[] = 'donor_id=?';
+            $params[] = $newDonorId;
+        }
+        if ($newEventType === 'recipient' || array_key_exists('recipient_id',$payload) || $role==='recipient'){
+            $fields[] = 'primary_recipient_id=?';
+            $params[] = $newPrimaryRecipientId;
+        }
+        if ($newCreatedFor !== null || array_key_exists('created_for_user_id',$payload)){
+            $fields[] = 'created_for_user_id=?';
+            $params[] = $newCreatedFor;
+        }
         $fields[] = 'updated_by=?';
         $params[] = $currentId;
-        if (!$fields) sendJson(['success'=>false,'error'=>'No updates provided'],400);
-        $params[] = $id;
-        // Before update, enforce constraints using the would-be new values
-        $newStart = null;
-        foreach ($fields as $idx=>$f){ if (strpos($f,'start_datetime=')===0){ $newStart = $params[$idx]; break; } }
-        if (!$newStart) { $newStart = $row['start_datetime']; }
-        $newStartTs = strtotime($newStart);
-        if ($newStartTs < time()){
+
+        if (!$fields){ sendJson(['success'=>false,'error'=>'No updates provided'],400); }
+
+        $candidateStart = $newStart ?? $row['start_datetime'];
+        $candidateTs = strtotime($candidateStart);
+        if ($candidateTs < time()){
             sendJson(['success'=>false,'error'=>'Cannot update events to a past time'], 400);
         }
-        $newDate = date('Y-m-d', $newStartTs);
+        $candidateDate = date('Y-m-d', $candidateTs);
         if ($role === 'recipient'){
-            $h = (int)date('H',$newStartTs); $m=(int)date('i',$newStartTs); $mins=$h*60+$m;
+            $mins = (int)date('H',$candidateTs)*60 + (int)date('i',$candidateTs);
             if ($mins < (10*60) || $mins > (16*60)){
                 sendJson(['success'=>false,'error'=>'Recipients can only book between 10:00 and 16:00'], 400);
             }
-            $rowDon = $db->query('SELECT MAX(start_datetime) AS last_donor FROM schedule_events WHERE donor_id IS NOT NULL AND DATE(start_datetime)=? AND start_datetime<=? AND id<>?',[ $newDate, $newStart, $id ])->fetch();
+            $rowDon = $db->query('SELECT MAX(start_datetime) AS last_donor FROM schedule_events WHERE donor_id IS NOT NULL AND DATE(start_datetime)=? AND start_datetime<=? AND id<>?',[ $candidateDate, $candidateStart, $id ])->fetch();
             if (!empty($rowDon['last_donor'])){
                 $lastDonTs = strtotime($rowDon['last_donor']);
-                if ($newStartTs < ($lastDonTs + 3*3600)){
+                if ($candidateTs < ($lastDonTs + 3*3600)){
                     sendJson(['success'=>false,'error'=>'Must be at least 3 hours after the latest donor booking'], 400);
                 }
             }
         }
         if ($role === 'donor'){
-            $rowCnt = $db->query('SELECT COUNT(*) AS c FROM schedule_events WHERE donor_id=? AND DATE(start_datetime)=? AND id<>?', [ $currentId, $newDate, $id ])->fetch();
+            $rowCnt = $db->query('SELECT COUNT(*) AS c FROM schedule_events WHERE donor_id=? AND DATE(start_datetime)=? AND id<>?', [ $currentId, $candidateDate, $id ])->fetch();
             if ((int)($rowCnt['c'] ?? 0) > 0){ sendJson(['success'=>false,'error'=>'Only one donor booking per day is allowed'], 400); }
         }
+
+        $params[] = $id;
         $db->query('UPDATE schedule_events SET '.implode(',', $fields).' WHERE id=?', $params);
-        $new = $db->query('SELECT id, title, start_datetime AS start, end_datetime AS end, recipient_id, donor_id, location, notes, status, created_by, created_at, updated_at FROM schedule_events WHERE id = ?', [$id])->fetch();
-        sendJson(['success'=>true,'data'=>$new]);
+
+        if ($newEventType === 'recipient'){
+            $db->query('DELETE FROM schedule_event_recipients WHERE event_id=?', [$id]);
+            $insertSql = 'INSERT INTO schedule_event_recipients (event_id, recipient_id, is_primary) VALUES (?,?,?)';
+            foreach ($recipientIds as $rid){
+                $db->query($insertSql, [ $id, $rid, $rid === $newPrimaryRecipientId ? 1 : 0 ]);
+            }
+        } else {
+            $db->query('DELETE FROM schedule_event_recipients WHERE event_id=?', [$id]);
+        }
+
+        $row = $db->query('SELECT 
+                e.id,
+                e.title,
+                e.event_type,
+                e.start_datetime AS start,
+                e.end_datetime AS end,
+                e.primary_recipient_id,
+                e.donor_id,
+                e.location,
+                e.notes,
+                e.status,
+                e.created_by,
+                e.created_for_user_id,
+                e.created_at,
+                e.updated_at,
+                e.updated_by,
+                COALESCE(dp_d.organization_name, u_d.name) AS donor_display,
+                dp_d.address AS donor_address,
+                COALESCE(rp_r.organization_name, u_r.name) AS recipient_display,
+                rp_r.address AS recipient_address,
+                u_up.role AS editor_role
+            FROM schedule_events e
+            LEFT JOIN users u_d ON u_d.user_id = e.donor_id
+            LEFT JOIN donor_profiles dp_d ON dp_d.user_id = u_d.user_id
+            LEFT JOIN users u_r ON u_r.user_id = e.primary_recipient_id
+            LEFT JOIN recipient_profiles rp_r ON rp_r.user_id = u_r.user_id
+            LEFT JOIN users u_up ON u_up.user_id = e.updated_by
+            WHERE e.id = ?', [$id])->fetch();
+        $rowSet = $row ? [$row] : [];
+        attachEventRecipients($db, $rowSet);
+        $rowSet = finalizeEventRows($rowSet, $role, $currentId);
+        $responseRow = $rowSet ? $rowSet[0] : null;
+        sendJson(['success'=>true,'data'=>$responseRow]);
     }
 
     if ($method === 'DELETE' && $action === 'delete'){

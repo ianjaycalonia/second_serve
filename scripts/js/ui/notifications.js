@@ -115,11 +115,14 @@
       } else {
         anchorHref = 'DistributionPickup.html';
       }
+    } else if (t === 'schedule_event_created' || (n.reference_type && n.reference_type.toLowerCase() === 'schedule_event')) {
+      anchorHref = 'Schedule.html';
     }
     // Use a stretched-link anchor so the whole row is clickable even without JS
     const linkHtml = anchorHref ? `<a href="${anchorHref}" class="stretched-link" aria-label="Open related page"></a>` : '';
+    const destAttr = anchorHref ? ` data-dest="${anchorHref}"` : '';
     return `
-      <li class="list-group-item list-group-item-action d-flex align-items-start position-relative ${unreadClass} clickable" style="cursor:pointer; user-select:none;" data-id="${n.id}" data-type="${n.type || ''}" data-ref-type="${n.reference_type || ''}" data-ref-id="${n.reference_id || ''}">
+      <li class="list-group-item list-group-item-action d-flex align-items-start position-relative ${unreadClass} clickable" style="cursor:pointer; user-select:none;" data-id="${n.id}" data-type="${n.type || ''}" data-ref-type="${n.reference_type || ''}" data-ref-id="${n.reference_id || ''}"${destAttr}>
         <div class="me-2" aria-hidden="true" style="cursor:pointer; user-select:none;">${iconHtml}</div>
         <div class="flex-grow-1" style="cursor:pointer; user-select:none;">
           <div class="fw-semibold mb-1">${escapeHtml(msgText)}</div>
@@ -201,26 +204,29 @@
           // Determine destination
           const user = getStoredUser();
           const role = (user?.role || '').toLowerCase();
-          let dest = null;
+          let dest = (li.getAttribute('data-dest') || '').trim() || null;
           // Admin: new donation => Donation.html
-          if (nType === 'donation_created') {
+          if (!dest && nType === 'donation_created') {
             dest = 'Donation.html';
-          } else if (nType === 'status_updated') {
+          } else if (!dest && nType === 'status_updated') {
             // Donors: go to their donations page; Admins: Donation.html
             if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
-          } else if (nType === 'donation_cancelled') {
+          } else if (!dest && nType === 'donation_cancelled') {
             if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
-          } else if (nType === 'donation_missing_metadata') {
+          } else if (!dest && nType === 'donation_missing_metadata') {
             if (role === 'admin') dest = 'taxonomy.html#assignment';
-          } else if (nType.startsWith('allocation_')) {
+          } else if (!dest && nType.startsWith('allocation_')) {
             dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributionPickup.html';
-          } else if (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated') {
+          } else if (!dest && nType === 'schedule_event_created') {
+            dest = 'Schedule.html';
+          } else if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) {
             // Normalize generic updated notifications to ReceivedItems for recipients
             if (role === 'recipient' || refType === 'allocation') dest = 'ReceivedItems.html';
           }
           // Fallbacks by reference_type if not set above
+          if (!dest && refType === 'schedule_event') dest = 'Schedule.html';
           if (!dest && refType === 'allocation') dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributionPickup.html';
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
           if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
@@ -249,10 +255,11 @@
         try {
           const nType = (li.getAttribute('data-type') || '').toLowerCase();
           const refType = (li.getAttribute('data-ref-type') || '').toLowerCase();
-          let dest = null;
-          if (nType.startsWith('allocation_')) dest = 'ReceivedItems.html';
+          let dest = (li.getAttribute('data-dest') || '').trim() || null;
+          if (!dest && nType.startsWith('allocation_')) dest = 'ReceivedItems.html';
           if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) dest = 'ReceivedItems.html';
           if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
+          if (!dest && (nType === 'schedule_event_created' || refType === 'schedule_event')) dest = 'Schedule.html';
           if (dest) {
             try {
               const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);

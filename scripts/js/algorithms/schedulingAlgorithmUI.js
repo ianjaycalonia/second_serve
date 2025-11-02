@@ -5,11 +5,205 @@
   // ----- DOM helpers -----
   const qs = (s, r=document)=> r.querySelector(s);
   const qsa = (s, r=document)=> Array.from(r.querySelectorAll(s));
+  function cardHasBadge(el, tag){
+    const host = qs('.di-week-badges', el);
+    if (!host) return false;
+    return Array.from(host.querySelectorAll('.badge')).some(b => String(b.textContent || '').trim().toUpperCase() === tag);
+  }
 
   // ----- API base -----
   const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
     ? window.API_BASE_URL
     : '/php/api';
+
+  const WEEK_KEYS = ['W1', 'W2', 'W3', 'W4'];
+  const WEEK_INDEX = { W1: 0, W2: 1, W3: 2, W4: 3 };
+  const MAX_SELECTED = 10;
+  const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'declined', 'no show']);
+
+  function createEmptyWeekMap(){
+    return { W1: [], W2: [], W3: [], W4: [] };
+  }
+
+  function toRecipientIds(source){
+    return (Array.isArray(source) ? source : [])
+      .map(value => Number.parseInt(value, 10))
+      .filter(number => Number.isFinite(number) && number > 0);
+  }
+
+  function toRecipientIdSet(source){
+    return new Set(toRecipientIds(source));
+  }
+
+  function normalizeWeekMap(mapLike){
+    const map = createEmptyWeekMap();
+    if (!mapLike) return map;
+    WEEK_KEYS.forEach(key => { map[key] = toRecipientIds(mapLike[key]); });
+    return map;
+  }
+
+  function getNextBuckets(current){
+    const idx = WEEK_INDEX[current] ?? 0;
+    return [
+      WEEK_KEYS[(idx + 1) % WEEK_KEYS.length],
+      WEEK_KEYS[(idx + 2) % WEEK_KEYS.length],
+      WEEK_KEYS[(idx + 3) % WEEK_KEYS.length],
+    ];
+  }
+
+  function fillIdsFromBuckets(target, map, buckets, skipSet, limit = MAX_SELECTED){
+    const existing = new Set(target);
+    buckets.forEach(bucket => {
+      (map[bucket] || []).forEach(id => {
+        if (existing.has(id) || skipSet.has(id) || target.length >= limit) return;
+        target.push(id);
+        existing.add(id);
+      });
+    });
+  }
+
+  async function resolveExtraExcludedSet(){
+    try {
+      if (typeof window.__diExcludedIdsFromPeriodsAndSelected === 'function') {
+        const extra = await window.__diExcludedIdsFromPeriodsAndSelected();
+        return extra instanceof Set ? extra : new Set(extra);
+      }
+    } catch(_){ }
+    return new Set();
+  }
+
+  async function createSkipSet(cancelledSet){
+    const base = cancelledSet instanceof Set ? new Set(cancelledSet) : new Set();
+    const extra = await resolveExtraExcludedSet();
+    extra.forEach(id => base.add(id));
+    return base;
+  }
+
+  function prependCarryoverIds(ids, skip){
+    try {
+      const carry = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
+      if (!carry.size) return ids;
+      const desired = [];
+      carry.forEach(v => {
+        const n = Number.parseInt(v, 10) || 0;
+        if (n > 0 && !skip.has(n) && !ids.includes(n)) desired.push(n);
+      });
+      return desired.length ? desired.concat(ids) : ids;
+    } catch(_){ return ids; }
+  }
+
+  function augmentWithNextBuckets(ids, mapNormalized, skip, currentBucket, originalWeeksMap){
+    const nextOrder = getNextBuckets(currentBucket);
+    const result = ids.slice();
+    fillIdsFromBuckets(result, mapNormalized, nextOrder, skip, MAX_SELECTED);
+
+    if (result.length < MAX_SELECTED && window.Scheduling && typeof window.Scheduling.planOrder === 'function'){
+      const orderAll = window.Scheduling.planOrder(originalWeeksMap, skip, currentBucket) || [];
+      const firstBucket = nextOrder[0];
+      const bucketIds = mapNormalized[firstBucket] || [];
+      const pos = orderAll.findIndex(id => bucketIds.includes(id));
+      const rotated = pos > 0 ? orderAll.slice(pos).concat(orderAll.slice(0, pos)) : orderAll;
+      rotated.forEach(id => {
+        if (result.length >= MAX_SELECTED || skip.has(id) || result.includes(id)) return;
+        result.push(id);
+      });
+    }
+
+    if (result.length < MAX_SELECTED){
+      for (const bucket of nextOrder){
+        if (result.length >= MAX_SELECTED) break;
+        const tag = bucket.toUpperCase();
+        const candidates = qsa('#diPool .di-card')
+          .map(el => ({ el, id: Number.parseInt(el.dataset.id || '0', 10) || 0 }))
+          .filter(candidate => candidate.id && !skip.has(candidate.id) && !result.includes(candidate.id) && cardHasBadge(candidate.el, tag));
+        for (const candidate of candidates){
+          if (result.length >= MAX_SELECTED) break;
+          result.push(candidate.id);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  async function enforceLatestStatus(ids, skip){
+    try {
+      const API = API_BASE_URL;
+      const isExcluded = (s)=> /cancel|decline|no\s*show/i.test(String(s||''));
+      const curPkForGuard = (typeof getPeriodKeyFromInputs === 'function') ? getPeriodKeyFromInputs() : null;
+      const fetchByRecipient = async (rid)=>{
+        const url = `${API}/allocations/index.php?action=list_by_recipient&recipient_id=${encodeURIComponent(String(rid))}&t=${Date.now()}`;
+        try {
+          const res = await fetch(url, { credentials:'include', headers:{'Accept':'application/json'} });
+          const j = await res.json().catch(()=>null);
+          return (res.ok && j?.success && Array.isArray(j?.data?.items)) ? j.data.items : [];
+        } catch(_){ return []; }
+      };
+      const checks = await Promise.all(ids.map(async id => {
+        const hist = await fetchByRecipient(id);
+        const curOnly = (Array.isArray(hist) ? hist : []).filter(row => String(row?.period_key || '') === String(curPkForGuard || ''));
+        const sorted = [...curOnly].sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        const latest = sorted[0];
+        return { id, drop: !!(latest && isExcluded(latest.status)) };
+      }));
+      const forcedDrop = new Set(checks.filter(x => x.drop).map(x => x.id));
+      if (forcedDrop.size){
+        ids = ids.filter(id => !forcedDrop.has(id));
+        forcedDrop.forEach(id => skip.add(id));
+      }
+    } catch(_){ }
+    return { ids, skip };
+  }
+
+  function orderIdsForRendering(ids, mapNormalized, currentBucket){
+    try {
+      const nextOrder = getNextBuckets(currentBucket);
+      const carry = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
+      const isIn = (collection, id)=> (collection instanceof Set) ? collection.has(id) : Array.isArray(collection) ? collection.includes(id) : false;
+      const rollbacks = ids.filter(id => isIn(carry, id));
+      const currentOnly = ids.filter(id => (mapNormalized[currentBucket] || []).includes(id));
+      const nextAll = nextOrder.flatMap(b => mapNormalized[b] || []);
+      const replacements = ids.filter(id => nextAll.includes(id) && !isIn(carry, id));
+      const seen = new Set();
+      const ordered = [];
+      const pushGroup = (group)=>{
+        group.forEach(id => {
+          if (ordered.length >= MAX_SELECTED || seen.has(id)) return;
+          ordered.push(id);
+          seen.add(id);
+        });
+      };
+      pushGroup(rollbacks);
+      pushGroup(replacements);
+      pushGroup(currentOnly);
+      if (ordered.length < Math.min(MAX_SELECTED, ids.length)){
+        pushGroup(ids);
+      }
+      return ordered.slice(0, MAX_SELECTED);
+    } catch(_){
+      return ids.slice(0, MAX_SELECTED);
+    }
+  }
+
+  function removeExcludedCardsFromDom(skip, pool, selected){
+    try {
+      selected.querySelectorAll('.di-card').forEach(el => {
+        const rid = Number.parseInt(el.dataset.id || '0', 10) || 0;
+        if (rid && skip.has(rid)) pool.appendChild(el);
+      });
+    } catch(_){ }
+  }
+
+  function renderSelectedCards(ids, skip, selected, pool){
+    removeExcludedCardsFromDom(skip, pool, selected);
+    selected.innerHTML = '';
+    for (let i = ids.length - 1; i >= 0; i--){
+      const id = ids[i];
+      if (skip.has(id)) continue;
+      const card = qs(`.di-card[data-id="${id}"]`) || ensureCardForId(id);
+      if (card) selected.insertBefore(card, selected.firstChild);
+    }
+  }
 
   // ======================== Week/period helpers ========================
   function getWeekStart(){
@@ -56,18 +250,18 @@
       window.__diWeeks = weeksMap;
       annotateCardsWithWeeks(weeksMap);
       refreshBadges();
-    } catch(_){ weeksMap = { W1:[], W2:[], W3:[], W4:[] }; }
+    } catch(_){ weeksMap = createEmptyWeekMap(); }
     // If plan still empty, seed current bucket from available recipients so Selected shows something
     try {
-      const hasAny = ['W1','W2','W3','W4'].some(k => Array.isArray(weeksMap?.[k]) && weeksMap[k].length);
+      const hasAny = WEEK_KEYS.some(k => Array.isArray(weeksMap?.[k]) && weeksMap[k].length);
       if (!hasAny){
         const cur = getCurrentBucketNow();
         const poolCards = qsa('#diPool .di-card');
-        const ids = (poolCards.length ? poolCards : Array.from({length:10}, (_,i)=>({dataset:{id:String(i+1)}})))
-          .slice(0,10)
+        const ids = (poolCards.length ? poolCards : Array.from({length:MAX_SELECTED}, (_,i)=>({dataset:{id:String(i+1)}})))
+          .slice(0,MAX_SELECTED)
           .map(el => parseInt(el.dataset.id||'0',10))
           .filter(Number.isFinite);
-        weeksMap = { W1:[], W2:[], W3:[], W4:[] };
+        weeksMap = createEmptyWeekMap();
         weeksMap[cur] = ids;
         window.__diWeeks = weeksMap;
       }
@@ -80,13 +274,12 @@
       const skipRuns = (typeof window.DI_SKIP_RUN_LOOKUPS === 'boolean') ? window.DI_SKIP_RUN_LOOKUPS : false;
       if (!skipRuns){
         const norm = (s)=> String(s||'').trim().toLowerCase();
-        const CANCEL = new Set(['cancelled','canceled','declined','no show']);
         // Previous period
         try {
           const prevPk = getPreviousPeriodKey();
           const prev = await fetchRunAllocationsByPeriod(prevPk);
           const idsPrev = (prev.ok ? prev.items : [])
-            .filter(a=>CANCEL.has(norm(a.status)))
+            .filter(a=>CANCELLED_STATUSES.has(norm(a.status)))
             .map(a=>parseInt(a.recipient_id,10))
             .filter(Number.isFinite);
           // NOTE: Do NOT add previous-period cancelled into cancelledSet so they remain eligible as rollbacks
@@ -97,7 +290,7 @@
           const curPk = getPeriodKeyFromInputs();
           const cur = await fetchRunAllocationsByPeriod(curPk);
           const idsCur = (cur.ok ? cur.items : [])
-            .filter(a=>CANCEL.has(norm(a.status)))
+            .filter(a=>CANCELLED_STATUSES.has(norm(a.status)))
             .map(a=>parseInt(a.recipient_id,10))
             .filter(Number.isFinite);
           idsCur.forEach(id=> cancelledSet.add(id));
@@ -106,7 +299,7 @@
     } catch(_){ cancelledSet = new Set(); }
     // 4) Ensure plan cards exist in pool, then build Selected
     try {
-      const allIds = ['W1','W2','W3','W4']
+      const allIds = WEEK_KEYS
         .flatMap(k => (Array.isArray(weeksMap?.[k])?weeksMap[k]:[]))
         .map(v=>parseInt(v,10)).filter(Number.isFinite);
       allIds.forEach(id => { ensureCardForId(id); });
@@ -339,8 +532,7 @@
 
   // ======================== Badges / annotations ========================
   function annotateCardsWithWeeks(weeksMap){
-    const toSet = (arr)=> new Set((Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(n=>Number.isFinite(n)&&n>0));
-    const W1=toSet(weeksMap?.W1), W2=toSet(weeksMap?.W2), W3=toSet(weeksMap?.W3), W4=toSet(weeksMap?.W4);
+    const W1=toRecipientIdSet(weeksMap?.W1), W2=toRecipientIdSet(weeksMap?.W2), W3=toRecipientIdSet(weeksMap?.W3), W4=toRecipientIdSet(weeksMap?.W4);
     const currentW = resolveCurrentWeekBucket();
     const wkToIso = { W1:{label:'W1',color:'primary'}, W2:{label:'W2',color:'danger'}, W3:{label:'W3',color:'warning'}, W4:{label:'W4',color:'info'} };
     qsa('.di-card').forEach(card => {
@@ -349,7 +541,7 @@
       card.classList.remove('border-primary','border-danger','border-warning','border-info','border-secondary','border-1','border-2');
       if (!card.classList.contains('border')) card.classList.add('border');
       let added=false;
-      ['W1','W2','W3','W4'].forEach(wk=>{
+      WEEK_KEYS.forEach(wk=>{
         const has = wk==='W1'?W1.has(id):wk==='W2'?W2.has(id):wk==='W3'?W3.has(id):W4.has(id);
         if (!has) return;
         const meta = wkToIso[wk];
@@ -378,16 +570,15 @@
     try{
       let weeks = (window.__diWeeks && typeof window.__diWeeks==='object') ? window.__diWeeks : null;
       if (!weeks && Array.isArray(window.__diWeeksEx)) weeks = normalizeWeeksExToMap(window.__diWeeksEx);
-      annotateCardsWithWeeks(weeks||{W1:[],W2:[],W3:[],W4:[]});
+      annotateCardsWithWeeks(weeks||createEmptyWeekMap());
       ensureCurrentWeekDecor();
     } catch(_){ }
   }
   function sortPoolByWeeks(){
     try{
       const pool = qs('#diPool'); if (!pool) return;
-      const weeks = (window.__diWeeks && typeof window.__diWeeks==='object') ? window.__diWeeks : {W1:[],W2:[],W3:[],W4:[]};
-      const toSet = (arr)=> new Set((Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(Number.isFinite));
-      const W1=toSet(weeks.W1), W2=toSet(weeks.W2), W3=toSet(weeks.W3), W4=toSet(weeks.W4);
+      const weeks = (window.__diWeeks && typeof window.__diWeeks==='object') ? window.__diWeeks : createEmptyWeekMap();
+      const W1=toRecipientIdSet(weeks.W1), W2=toRecipientIdSet(weeks.W2), W3=toRecipientIdSet(weeks.W3), W4=toRecipientIdSet(weeks.W4);
       const orderIdx=(id)=> W1.has(id)?0:W2.has(id)?1:W3.has(id)?2:W4.has(id)?3:4;
       const rows = qsa('#diPool .di-card').map(el=>({ el, id:parseInt(el.dataset.id||'0',10)||0, label:(qs('.di-card-label',el)?.textContent||'').toLowerCase() }));
       rows.sort((a,b)=>{ const ai=orderIdx(a.id), bi=orderIdx(b.id); if (ai!==bi) return ai-bi; return a.label.localeCompare(b.label); });
@@ -440,135 +631,30 @@
 
   // ======================== Selected builder & allocations data ========================
   async function buildSelectedSimple(weeksMap, cancelledSet){
-    try{
-      const selected = qs('#diSelected'); const pool = qs('#diPool'); if (!selected || !pool) return;
-      const cur = getCurrentBucketNow();
-      let ids = [];
-      // Merge in dynamic exclusions (cancelled/completed) gathered from API and Selected fallback
-      let extraExcluded = new Set();
-      try { if (typeof window.__diExcludedIdsFromPeriodsAndSelected === 'function') { extraExcluded = await window.__diExcludedIdsFromPeriodsAndSelected(); } } catch(_){ }
-      const skip = new Set([...(cancelledSet instanceof Set ? cancelledSet : []), ...extraExcluded]);
-      try { ids = window.Scheduling.buildSelectedIds(weeksMap, skip, { currentBucket: cur }); } catch(_){ ids = []; }
-      // Ensure rollback candidates (previous-period cancelled) are included first
-      try {
-        const carry = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
-        if (carry && carry.size){
-          const desired = [];
-          carry.forEach(function(v){
-            try{
-              const n = parseInt(v,10)||0;
-              if (n>0 && !skip.has(n) && !ids.includes(n)) desired.push(n);
-            } catch(_){ }
-          });
-          if (desired.length){ ids = desired.concat(ids); }
-        }
-      } catch(_){ }
-      // Backfill: strictly from next week's buckets (then subsequent buckets), not arbitrary pool
-      try {
-        if (ids.length < 10){
-          const toNums = (arr)=> (Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(Number.isFinite);
-          const map = { W1: toNums(weeksMap?.W1), W2: toNums(weeksMap?.W2), W3: toNums(weeksMap?.W3), W4: toNums(weeksMap?.W4) };
-          const order = ['W1','W2','W3','W4'];
-          const curIdx = ({W1:0,W2:1,W3:2,W4:3})[cur] ?? 0;
-          const nextOrder = [ order[(curIdx+1)%4], order[(curIdx+2)%4], order[(curIdx+3)%4] ];
-          const existing = new Set(ids);
-          const pushIf = (id)=>{ if (ids.length<10 && !existing.has(id) && !skip.has(id)) { ids.push(id); existing.add(id); } };
-          nextOrder.forEach(bucket=>{ map[bucket].forEach(pushIf); });
-          // If still short, use Scheduling.planOrder and start from next bucket position
-          if (ids.length < 10 && window.Scheduling && typeof window.Scheduling.planOrder==='function'){
-            const orderAll = window.Scheduling.planOrder(weeksMap, skip, cur);
-            // Reorder orderAll to start at first element that belongs to nextOrder[0], then continue
-            const pos = orderAll.findIndex(id => map[nextOrder[0]].includes(id));
-            const rotated = pos>0 ? orderAll.slice(pos).concat(orderAll.slice(0,pos)) : orderAll;
-            rotated.forEach(id=>{ if (ids.length<10 && !skip.has(id) && !ids.includes(id)) ids.push(id); });
-          }
-        }
-      } catch(_){ }
-      // Final guard: verify latest status for computed ids and drop excluded
-      try {
-        const API = API_BASE_URL;
-        // Final guard should only drop clearly unavailable candidates (Cancel/Decline/No show).
-        // Limit to CURRENT period to preserve previous-week rollbacks.
-        const isExcluded = (s)=> /cancel|decline|no\s*show/i.test(String(s||''));
-        const fetchByRecipient = async (rid)=>{
-          const url = `${API}/allocations/index.php?action=list_by_recipient&recipient_id=${encodeURIComponent(String(rid))}&t=${Date.now()}`;
-          try { const res=await fetch(url,{credentials:'include',headers:{'Accept':'application/json'}}); const j=await res.json().catch(()=>null); return (res.ok&&j?.success&&Array.isArray(j?.data?.items))? j.data.items:[]; } catch(_){ return []; }
-        };
-        const curPkForGuard = (typeof getPeriodKeyFromInputs==='function') ? getPeriodKeyFromInputs() : null;
-        const checks = await Promise.all(ids.map(async id => {
-          const hist = await fetchByRecipient(id);
-          const curOnly = (Array.isArray(hist)?hist:[]).filter(row => String(row?.period_key||'') === String(curPkForGuard||''));
-          const sorted = [...curOnly].sort((a,b)=> new Date(b.created_at||0)-new Date(a.created_at||0));
-          const latest = sorted[0];
-          return { id, drop: !!(latest && isExcluded(latest.status)) };
-        }));
-        const forcedDrop = new Set(checks.filter(x=>x.drop).map(x=>x.id));
-        if (forcedDrop.size){ ids = ids.filter(id => !forcedDrop.has(id)); forcedDrop.forEach(id=> skip.add(id)); }
-      } catch(_){ }
-      // Backfill again if final guard dropped some, strictly from next buckets
-      try {
-        if (ids.length < 10){
-          const toNums = (arr)=> (Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(Number.isFinite);
-          const map = { W1: toNums(weeksMap?.W1), W2: toNums(weeksMap?.W2), W3: toNums(weeksMap?.W3), W4: toNums(weeksMap?.W4) };
-          const order = ['W1','W2','W3','W4'];
-          const curIdx = ({W1:0,W2:1,W3:2,W4:3})[cur] ?? 0;
-          const nextOrder = [ order[(curIdx+1)%4], order[(curIdx+2)%4], order[(curIdx+3)%4] ];
-          const existing = new Set(ids);
-          const pushIf = (id)=>{ if (ids.length<10 && !existing.has(id) && !skip.has(id)) { ids.push(id); existing.add(id); } };
-          nextOrder.forEach(bucket=>{ map[bucket].forEach(pushIf); });
-          // As a last resort, pull from DOM pool by badge (strict next buckets) to align UI even if weeksMap lacks entries
-          if (ids.length < 10){
-            const bucketHas = (el, tag)=>{
-              const host = qs('.di-week-badges', el); if (!host) return false;
-              return Array.from(host.querySelectorAll('.badge')).some(b=> String(b.textContent||'').trim().toUpperCase() === tag);
-            };
-            for (const b of nextOrder){
-              if (ids.length >= 10) break;
-              const tag = b.toUpperCase();
-              const candidates = qsa('#diPool .di-card').map(el=>({ el, id: parseInt(el.dataset.id||'0',10)||0 }))
-                .filter(r => r.id && !skip.has(r.id) && !ids.includes(r.id) && bucketHas(r.el, tag));
-              for (const r of candidates){ if (ids.length<10) ids.push(r.id); else break; }
-            }
-          }
-        }
-      } catch(_){ }
-      // Reorder priority for rendering: Rollbacks (carryovers) -> Replacements (next weeks) -> Current week
-      try {
-        const toNums = (arr)=> (Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(Number.isFinite);
-        const map = { W1: toNums(weeksMap?.W1), W2: toNums(weeksMap?.W2), W3: toNums(weeksMap?.W3), W4: toNums(weeksMap?.W4) };
-        const order = ['W1','W2','W3','W4'];
-        const curIdx = ({W1:0,W2:1,W3:2,W4:3})[cur] ?? 0;
-        const nextOrder = [ order[(curIdx+1)%4], order[(curIdx+2)%4], order[(curIdx+3)%4] ];
-        const carry = (window.__diCarryOverSet instanceof Set) ? window.__diCarryOverSet : new Set();
-        const isIn = (setOrArr, id)=> (setOrArr instanceof Set) ? setOrArr.has(id) : Array.isArray(setOrArr) ? setOrArr.includes(id) : false;
-        const rollbacks = ids.filter(id => isIn(carry,id));
-        const currentOnly = ids.filter(id => map[cur].includes(id));
-        const nextAll = nextOrder.flatMap(b => map[b]);
-        const replacements = ids.filter(id => nextAll.includes(id) && !isIn(carry,id));
-        const seen = new Set();
-        let ordered = [];
-        const pushU = (arr)=> arr.forEach(id=>{ if (ordered.length<10 && !seen.has(id)) { ordered.push(id); seen.add(id); } });
-        pushU(rollbacks);
-        pushU(replacements);
-        pushU(currentOnly);
-        // If still short (edge), append any remaining ids in their current order
-        if (ordered.length < Math.min(10, ids.length)){
-          pushU(ids);
-        }
-        ids = ordered.slice(0,10);
-      } catch(_){ }
+    try {
+      const selected = qs('#diSelected');
+      const pool = qs('#diPool');
+      if (!selected || !pool) return;
 
-      // Purge any excluded currently rendered
-      try { qsa('#diSelected .di-card').forEach(el=>{ const rid = parseInt(el.dataset.id||'0',10)||0; if (rid && skip.has(rid)) pool.appendChild(el); }); } catch(_){ }
-      selected.innerHTML='';
-      // Insert at top while preserving our priority order: iterate in reverse and insertBefore firstChild
-      for (let i = ids.length - 1; i >= 0; i--) {
-        const id = ids[i];
-        if (skip.has(id)) continue;
-        const card = qs(`.di-card[data-id="${id}"]`) || ensureCardForId(id);
-        if (card) selected.insertBefore(card, selected.firstChild);
-      }
-      updateSelectedCount(); updateHeaderMeta(); refreshBadges();
+      const currentBucket = getCurrentBucketNow();
+      const normalizedMap = normalizeWeekMap(weeksMap);
+      let skip = await createSkipSet(cancelledSet);
+
+      let ids = [];
+      try { ids = window.Scheduling.buildSelectedIds(weeksMap, skip, { currentBucket }); } catch(_){ ids = []; }
+
+      ids = prependCarryoverIds(ids, skip);
+      ids = augmentWithNextBuckets(ids, normalizedMap, skip, currentBucket, weeksMap);
+
+      ({ ids, skip } = await enforceLatestStatus(ids, skip));
+
+      ids = augmentWithNextBuckets(ids, normalizedMap, skip, currentBucket, weeksMap);
+      ids = orderIdsForRendering(ids, normalizedMap, currentBucket);
+
+      renderSelectedCards(ids, skip, selected, pool);
+      updateSelectedCount();
+      updateHeaderMeta();
+      refreshBadges();
     } catch(_){ }
   }
   async function fetchRunAllocationsByPeriod(periodKey){
