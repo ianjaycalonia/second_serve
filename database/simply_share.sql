@@ -346,6 +346,18 @@ INSERT IGNORE INTO `units` (`code`, `label`) VALUES
   ('kg', 'kilogram'),
   ('g', 'gram');
 
+-- Unit conversion metadata to support repacking math (e.g., sack -> kg -> g)
+CREATE TABLE `unit_conversions` (
+  `from_unit_id` INT NOT NULL,
+  `to_unit_id` INT NOT NULL,
+  `multiplier` DECIMAL(18,6) NOT NULL,
+  `description` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`from_unit_id`, `to_unit_id`),
+  CONSTRAINT `uc_from_unit_fk` FOREIGN KEY (`from_unit_id`) REFERENCES `units`(`unit_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `uc_to_unit_fk` FOREIGN KEY (`to_unit_id`) REFERENCES `units`(`unit_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
 -- Seed minimal admin so FKs (donations.admin_in_charge) can reference it
 INSERT INTO `users` (`user_id`, `name`, `email`, `password_hash`, `role`, `status`, `created_at`, `last_login`) VALUES
   (1, 'Admin One', 'admin1@simplyshare.org', '$2y$10$6tp9korSSS8o7wqtSfuxJOG1bgiRYkWNHkBndnoLsXXomlCVUiiru', 'admin', 'approved', NOW(), NOW())
@@ -492,6 +504,114 @@ CREATE TABLE `inventory_movements` (
 
 -- Triggers removed: im_bi_set_donation_item, im_bu_set_donation_item
 -- These will be implemented in backend logic
+
+-- =======================================
+-- Repacking Recipes and Operations
+-- =======================================
+CREATE TABLE `kit_templates` (
+  `kit_template_id` INT NOT NULL AUTO_INCREMENT,
+  `code` VARCHAR(64) DEFAULT NULL,
+  `name` VARCHAR(150) NOT NULL,
+  `description` TEXT DEFAULT NULL,
+  `output_product_id` INT DEFAULT NULL,
+  `output_product_name` VARCHAR(255) NOT NULL,
+  `output_category_id` INT DEFAULT NULL,
+  `output_unit_id` INT DEFAULT NULL,
+  `output_quantity_per_kit` DECIMAL(12,4) NOT NULL DEFAULT 1.0000,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_by` INT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`kit_template_id`),
+  UNIQUE KEY `uq_kit_templates_code` (`code`),
+  KEY `kit_templates_output_product_idx` (`output_product_id`),
+  KEY `kit_templates_output_category_idx` (`output_category_id`),
+  KEY `kit_templates_output_unit_idx` (`output_unit_id`),
+  KEY `kit_templates_created_by_idx` (`created_by`),
+  CONSTRAINT `kit_templates_output_product_fk` FOREIGN KEY (`output_product_id`) REFERENCES `products`(`product_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `kit_templates_output_category_fk` FOREIGN KEY (`output_category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `kit_templates_output_unit_fk` FOREIGN KEY (`output_unit_id`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `kit_templates_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+CREATE TABLE `kit_components` (
+  `kit_component_id` INT NOT NULL AUTO_INCREMENT,
+  `kit_template_id` INT NOT NULL,
+  `position` SMALLINT NOT NULL DEFAULT 0,
+  `product_id` INT DEFAULT NULL,
+  `product_name` VARCHAR(255) NOT NULL,
+  `category_id` INT DEFAULT NULL,
+  `unit_id` INT DEFAULT NULL,
+  `quantity_per_kit` DECIMAL(12,4) NOT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`kit_component_id`),
+  UNIQUE KEY `uq_kit_components_template_position` (`kit_template_id`, `position`),
+  KEY `kit_components_product_idx` (`product_id`),
+  KEY `kit_components_category_idx` (`category_id`),
+  KEY `kit_components_unit_idx` (`unit_id`),
+  CONSTRAINT `kit_components_template_fk` FOREIGN KEY (`kit_template_id`) REFERENCES `kit_templates`(`kit_template_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `kit_components_product_fk` FOREIGN KEY (`product_id`) REFERENCES `products`(`product_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `kit_components_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `kit_components_unit_fk` FOREIGN KEY (`unit_id`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+CREATE TABLE `repack_operations` (
+  `repack_id` INT NOT NULL AUTO_INCREMENT,
+  `kit_template_id` INT DEFAULT NULL,
+  `performed_by` INT NOT NULL,
+  `kits_produced` INT NOT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`repack_id`),
+  KEY `repack_operations_template_idx` (`kit_template_id`),
+  KEY `repack_operations_performed_by_idx` (`performed_by`),
+  CONSTRAINT `repack_operations_template_fk` FOREIGN KEY (`kit_template_id`) REFERENCES `kit_templates`(`kit_template_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `repack_operations_performed_by_fk` FOREIGN KEY (`performed_by`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+CREATE TABLE `repack_inputs` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `repack_id` INT NOT NULL,
+  `inventory_id` INT NOT NULL,
+  `donation_item_id` INT DEFAULT NULL,
+  `product_name_snapshot` VARCHAR(255) NOT NULL,
+  `category_id_snapshot` INT DEFAULT NULL,
+  `unit_id_snapshot` INT DEFAULT NULL,
+  `quantity_used` DECIMAL(12,4) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `repack_inputs_repack_idx` (`repack_id`),
+  KEY `repack_inputs_inventory_idx` (`inventory_id`),
+  KEY `repack_inputs_donation_item_idx` (`donation_item_id`),
+  CONSTRAINT `repack_inputs_repack_fk` FOREIGN KEY (`repack_id`) REFERENCES `repack_operations`(`repack_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `repack_inputs_inventory_fk` FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `repack_inputs_donation_item_fk` FOREIGN KEY (`donation_item_id`) REFERENCES `donation_items`(`donation_item_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `repack_inputs_unit_fk` FOREIGN KEY (`unit_id_snapshot`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `repack_inputs_category_fk` FOREIGN KEY (`category_id_snapshot`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+CREATE TABLE `repack_outputs` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `repack_id` INT NOT NULL,
+  `inventory_id` INT NOT NULL,
+  `donation_item_id` INT DEFAULT NULL,
+  `product_name_snapshot` VARCHAR(255) NOT NULL,
+  `category_id_snapshot` INT DEFAULT NULL,
+  `unit_id_snapshot` INT DEFAULT NULL,
+  `quantity_produced` DECIMAL(12,4) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `repack_outputs_repack_idx` (`repack_id`),
+  KEY `repack_outputs_inventory_idx` (`inventory_id`),
+  KEY `repack_outputs_donation_item_idx` (`donation_item_id`),
+  CONSTRAINT `repack_outputs_repack_fk` FOREIGN KEY (`repack_id`) REFERENCES `repack_operations`(`repack_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `repack_outputs_inventory_fk` FOREIGN KEY (`inventory_id`) REFERENCES `inventory`(`inventory_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `repack_outputs_donation_item_fk` FOREIGN KEY (`donation_item_id`) REFERENCES `donation_items`(`donation_item_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `repack_outputs_unit_fk` FOREIGN KEY (`unit_id_snapshot`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `repack_outputs_category_fk` FOREIGN KEY (`category_id_snapshot`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 -- Minimal messages table (direct messages only) with role-based trigger
 CREATE TABLE `messages` (

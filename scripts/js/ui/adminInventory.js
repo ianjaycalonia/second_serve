@@ -6,6 +6,25 @@
       ? window.API_BASE_URL
       : "/php/api";
 
+  const repackState = {
+    categories: [],
+    categoryLookup: {},
+    units: [],
+    unitLookup: {},
+    templates: [],
+    templateLookup: {},
+    currentTemplateId: null,
+    run: {
+      template: null,
+      kits: 1,
+      allocations: {},
+    },
+    lotModal: null,
+    toast: null,
+  };
+
+  const REPACK_TOAST_VARIANTS = ["primary", "success", "warning", "danger", "info", "secondary"];
+
   function escapeHtml(str) {
     return (str || "").replace(
       /[&<>"']/g,
@@ -18,6 +37,1292 @@
           "'": "&#39;",
         }[c])
     );
+  }
+
+  function showRepackToast(message, variant = "primary") {
+    try {
+      const toastEl = document.getElementById("repackToast");
+      if (!toastEl || typeof bootstrap === "undefined") return;
+      const classes = toastEl.classList;
+      if (classes && typeof classes.remove === "function") {
+        REPACK_TOAST_VARIANTS.forEach((v) => classes.remove(`text-bg-${v}`));
+        if (variant && REPACK_TOAST_VARIANTS.includes(variant)) {
+          classes.add(`text-bg-${variant}`);
+        } else {
+          classes.add("text-bg-primary");
+        }
+      }
+      const body = document.getElementById("repackToastBody");
+      if (body) body.textContent = message;
+      repackState.toast = bootstrap.Toast.getOrCreateInstance(toastEl);
+      repackState.toast.show();
+    } catch (_) {}
+  }
+
+  function buildCategoryLabel(primary, secondary) {
+    const p = (primary || "").trim();
+    const s = (secondary || "").trim();
+    if (!p && !s) return "";
+    return s ? `${p} - ${s}` : p;
+  }
+
+  async function ensureRepackReferenceData(force = false) {
+    if (!force && repackState.categories.length && repackState.units.length) return;
+    const categoryUrl = `${API_BASE_URL}/taxonomy/index.php/categories?active=1&t=${Date.now()}`;
+    const unitUrl = `${API_BASE_URL}/taxonomy/index.php/units?active=1&t=${Date.now()}`;
+    try {
+      const [catRes, unitRes] = await Promise.all([
+        fetch(categoryUrl, { credentials: "include", headers: { Accept: "application/json" } }),
+        fetch(unitUrl, { credentials: "include", headers: { Accept: "application/json" } }),
+      ]);
+      const catJson = await catRes.json().catch(() => ({}));
+      const unitJson = await unitRes.json().catch(() => ({}));
+      repackState.categories = Array.isArray(catJson?.items)
+        ? catJson.items.map((row) => ({
+            id: Number(row.category_id),
+            primary: row.primary_name || row.name || "",
+            secondary: row.secondary_name || "",
+            label: buildCategoryLabel(row.primary_name || row.name || "", row.secondary_name || ""),
+          }))
+        : [];
+      repackState.units = Array.isArray(unitJson?.items)
+        ? unitJson.items.map((row) => ({
+            id: Number(row.unit_id),
+            code: row.code || "",
+            label: (row.label || row.code || "").trim(),
+          }))
+        : [];
+      repackState.categoryLookup = Object.create(null);
+      repackState.unitLookup = Object.create(null);
+      repackState.categories.forEach((c) => {
+        if (c.label) repackState.categoryLookup[c.label.toLowerCase()] = c.id;
+      });
+      repackState.units.forEach((u) => {
+        if (u.label) repackState.unitLookup[u.label.toLowerCase()] = u.id;
+        if (u.code) repackState.unitLookup[u.code.toLowerCase()] = u.id;
+      });
+      syncRepackDatalists();
+    } catch (err) {
+      console.error("Failed to load taxonomy for repack module", err);
+      showRepackToast("Failed to load taxonomy (categories/units)", "danger");
+    }
+  }
+
+  function syncRepackDatalists() {
+    const catList = document.getElementById("repackCategoryOptions");
+    if (catList) {
+      catList.innerHTML = repackState.categories
+        .filter((c) => c.label)
+        .map((c) => `<option value="${escapeHtml(c.label)}"></option>`)
+        .join("");
+    }
+    const unitList = document.getElementById("repackUnitOptions");
+    if (unitList) {
+      unitList.innerHTML = repackState.units
+        .filter((u) => u.label)
+        .map((u) => `<option value="${escapeHtml(u.label)}"></option>`)
+        .join("");
+    }
+  }
+
+  function toCategoryId(label) {
+    if (!label) return null;
+    const match = repackState.categoryLookup[label.trim().toLowerCase()];
+    return Number.isInteger(match) ? match : null;
+  }
+
+  function toUnitId(label) {
+    if (!label) return null;
+    const key = label.trim().toLowerCase();
+    const match = repackState.unitLookup[key];
+    return Number.isInteger(match) ? match : null;
+  }
+
+  function clearTemplateForm() {
+    const form = document.getElementById("repackTemplateForm");
+    if (!form) return;
+    form.reset();
+    const idField = document.getElementById("repackTemplateId");
+    if (idField) idField.value = "";
+    const componentsContainer = document.getElementById("repackComponentsContainer");
+    if (componentsContainer) {
+      try {
+        if (window.jQuery && window.jQuery.fn?.select2) {
+          componentsContainer.querySelectorAll(".component-name-select").forEach((sel) => {
+            try {
+              window.jQuery(sel).select2("destroy");
+            } catch (_) {}
+          });
+        }
+      } catch (_) {}
+      componentsContainer.innerHTML = "";
+    }
+    repackState.currentTemplateId = null;
+  }
+
+  function initComponentNameSelect(selectEl, rowEl) {
+    if (!selectEl) return;
+    const placeholder = selectEl.dataset.placeholder || "Search inventory items";
+    if (window.jQuery && window.jQuery.fn?.select2) {
+      const $select = window.jQuery(selectEl);
+      if ($select.hasClass("select2-hidden-accessible")) {
+        return;
+      }
+      const $parent = window.jQuery("#repackTemplatesModal");
+      $select
+        .select2({
+          width: "100%",
+          placeholder,
+          allowClear: true,
+          minimumInputLength: 1,
+          dropdownParent: $parent.length ? $parent : undefined,
+          ajax: {
+            delay: 250,
+            url: `${API_BASE_URL}/inventory/index.php/list`,
+            dataType: "json",
+            xhrFields: { withCredentials: true },
+            data: (params) => ({
+              q: params.term || "",
+              group: "merge",
+              limit: 20,
+            }),
+            processResults: (resp) => {
+              const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
+              const results = items
+                .map((item) => {
+                  const name = String(item?.item_name || item?.product_name || "").trim();
+                  if (!name) return null;
+                  return {
+                    id: name,
+                    text: name,
+                    data: item,
+                  };
+                })
+                .filter(Boolean);
+              return { results };
+            },
+          },
+        })
+        .on("select2:open", () => {
+          const search = document.querySelector(".select2-container--open .select2-search__field");
+          if (search) {
+            search.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        })
+        .on("select2:select", (ev) => {
+          try {
+            const data = ev?.params?.data || {};
+            if (rowEl) {
+              const productId = data?.data?.product_id;
+              if (productId != null) {
+                rowEl.dataset.productId = String(productId);
+              } else {
+                delete rowEl.dataset.productId;
+              }
+            }
+          } catch (_) {}
+        })
+        .on("select2:clear", () => {
+          if (rowEl) {
+            delete rowEl.dataset.productId;
+          }
+        });
+    } else if (!selectEl.dataset.loaded) {
+      fetch(`${API_BASE_URL}/inventory/index.php/list?group=merge&limit=50`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      })
+        .then((res) => res.json().catch(() => null))
+        .then((json) => {
+          const items = Array.isArray(json?.data?.items) ? json.data.items : [];
+          const opts = ['<option value=""></option>'];
+          items.forEach((item) => {
+            const name = String(item?.item_name || item?.product_name || "").trim();
+            if (!name) return;
+            opts.push(`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`);
+          });
+          selectEl.innerHTML = opts.join("");
+          selectEl.dataset.loaded = "1";
+        })
+        .catch(() => {});
+    }
+  }
+
+  function addComponentRow(component, focus = false) {
+    const tpl = document.getElementById("repackComponentRowTemplate");
+    const container = document.getElementById("repackComponentsContainer");
+    if (!tpl || !container) return;
+    const clone = tpl.content.firstElementChild.cloneNode(true);
+    const index = container.children.length;
+    clone.setAttribute("data-index", String(index));
+    if (component?.product_id != null) {
+      clone.dataset.productId = String(component.product_id);
+    }
+    const nameSelect = clone.querySelector(".component-name-select");
+    const qtyInput = clone.querySelector(".component-qty");
+    if (nameSelect) {
+      nameSelect.innerHTML = '<option value=""></option>';
+    }
+    if (component) {
+      if (nameSelect) {
+        const value = component.product_name || "";
+        if (value) {
+          const opt = document.createElement("option");
+          opt.value = value;
+          opt.textContent = value;
+          opt.selected = true;
+          nameSelect.appendChild(opt);
+        }
+      }
+      if (qtyInput) qtyInput.value = Number(component.quantity_per_kit || 0) || 1;
+      clone.dataset.componentId = component.kit_component_id ? String(component.kit_component_id) : "";
+    }
+    const removeBtn = clone.querySelector(".component-remove-btn");
+    if (removeBtn) {
+      removeBtn.addEventListener("click", () => {
+        try {
+          if (nameSelect && window.jQuery && window.jQuery.fn?.select2) {
+            const $sel = window.jQuery(nameSelect);
+            if ($sel.hasClass("select2-hidden-accessible")) {
+              $sel.select2("destroy");
+            }
+          }
+        } catch (_) {}
+        clone.remove();
+      });
+    }
+    container.appendChild(clone);
+    initComponentNameSelect(nameSelect, clone);
+    if (focus && nameSelect) {
+      setTimeout(() => {
+        try {
+          if (window.jQuery && window.jQuery.fn?.select2) {
+            const $sel = window.jQuery(nameSelect);
+            if ($sel.hasClass("select2-hidden-accessible")) {
+              $sel.select2("open");
+              return;
+            }
+          }
+        } catch (_) {}
+        nameSelect.focus();
+      }, 0);
+    }
+  }
+
+  function populateTemplateForm(template) {
+    clearTemplateForm();
+    if (!template) return;
+    repackState.currentTemplateId = template.kit_template_id || template.id || null;
+    const idField = document.getElementById("repackTemplateId");
+    if (idField) idField.value = repackState.currentTemplateId || "";
+    const nameField = document.getElementById("repackTemplateName");
+    const codeField = document.getElementById("repackTemplateCode");
+    const descField = document.getElementById("repackTemplateDescription");
+    const outName = document.getElementById("repackOutputName");
+    const outQty = document.getElementById("repackOutputQuantity");
+    const outUnit = document.getElementById("repackOutputUnit");
+    const outCat = document.getElementById("repackOutputCategory");
+    const activeChk = document.getElementById("repackTemplateActive");
+    if (nameField) nameField.value = template.name || "";
+    if (codeField) codeField.value = template.code || "";
+    if (descField) descField.value = template.description || "";
+    if (outName) outName.value = template.output_product_name || "";
+    if (outQty) outQty.value = template.output_quantity_per_kit || 1;
+    if (outUnit) outUnit.value = template.output_unit_label || "";
+    if (outCat) outCat.value = template.output_category_label || "";
+    if (activeChk) activeChk.checked = Boolean(template.is_active ?? true);
+    if (Array.isArray(template.components)) {
+      template.components.forEach((component) => addComponentRow(component));
+    }
+  }
+
+  function getTemplateFormData() {
+    const data = {};
+    data.id = repackState.currentTemplateId;
+    const nameField = document.getElementById("repackTemplateName");
+    const codeField = document.getElementById("repackTemplateCode");
+    const descField = document.getElementById("repackTemplateDescription");
+    const outName = document.getElementById("repackOutputName");
+    const outQty = document.getElementById("repackOutputQuantity");
+    const outUnit = document.getElementById("repackOutputUnit");
+    const outCat = document.getElementById("repackOutputCategory");
+    const activeChk = document.getElementById("repackTemplateActive");
+    data.name = String(nameField?.value || "").trim();
+    data.code = String(codeField?.value || "").trim();
+    data.description = String(descField?.value || "").trim();
+    data.output_product_name = String(outName?.value || "").trim();
+    data.output_quantity_per_kit = parseInt(outQty?.value || "0", 10) || 0;
+    const unitLabel = String(outUnit?.value || "").trim();
+    const catLabel = String(outCat?.value || "").trim();
+    data.output_unit_id = toUnitId(unitLabel);
+    data.output_unit_label = unitLabel;
+    data.output_category_id = toCategoryId(catLabel);
+    data.output_category_label = catLabel;
+    data.is_active = Boolean(activeChk?.checked);
+    const componentsContainer = document.getElementById("repackComponentsContainer");
+    const components = [];
+    if (componentsContainer) {
+      componentsContainer.querySelectorAll(".component-row").forEach((row, idx) => {
+        const nameSelect = row.querySelector(".component-name-select");
+        const qtyInput = row.querySelector(".component-qty");
+        const productName = String(nameSelect?.value || "").trim();
+        const qty = parseInt(qtyInput?.value || "0", 10) || 0;
+        if (!productName || qty <= 0) return;
+        const comp = {
+          kit_component_id: row.dataset.componentId ? parseInt(row.dataset.componentId, 10) : undefined,
+          position: idx + 1,
+          product_name: productName,
+          quantity_per_kit: qty,
+        };
+        const productIdRaw = row.dataset.productId;
+        if (productIdRaw != null && productIdRaw !== "") {
+          const parsed = parseInt(productIdRaw, 10);
+          if (!Number.isNaN(parsed)) {
+            comp.product_id = parsed;
+          }
+        }
+        components.push(comp);
+      });
+    }
+    data.components = components;
+    return data;
+  }
+
+  async function fetchTemplates(force = false) {
+    if (!force && repackState.templates.length) return repackState.templates;
+    try {
+      const res = await fetch(`${API_BASE_URL}/repack/index.php/templates`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      const items = Array.isArray(json?.data?.items) ? json.data.items : [];
+      repackState.templates = items;
+      repackState.templateLookup = Object.create(null);
+      items.forEach((tpl) => {
+        const id = tpl.kit_template_id || tpl.id;
+        if (id != null) repackState.templateLookup[id] = tpl;
+      });
+      renderTemplateList();
+      return items;
+    } catch (err) {
+      console.error("Failed to load repack templates", err);
+      showRepackToast("Failed to fetch repack templates", "danger");
+      return [];
+    }
+  }
+
+  function renderTemplateList(filterText = "") {
+    const listEl = document.getElementById("repackTemplateList");
+    if (!listEl) return;
+    const search = filterText.trim().toLowerCase();
+    const items = repackState.templates.filter((tpl) => {
+      if (!search) return true;
+      const haystack = `${tpl.name || ""} ${tpl.code || ""}`.toLowerCase();
+      return haystack.includes(search);
+    });
+    if (!items.length) {
+      listEl.innerHTML = '<div class="text-muted small px-2 py-3">No templates found.</div>';
+      return;
+    }
+    listEl.innerHTML = items
+      .map((tpl) => {
+        const id = tpl.kit_template_id || tpl.id;
+        const activeBadge = tpl.is_active ? '' : '<span class="badge bg-secondary ms-2">Inactive</span>';
+        return `
+          <button type="button" class="list-group-item list-group-item-action" data-template-id="${id}">
+            <div class="fw-semibold">${escapeHtml(tpl.name || "(no name)")}${activeBadge}</div>
+            <div class="small text-muted">${escapeHtml(tpl.code || "")}</div>
+          </button>`;
+      })
+      .join("");
+  }
+
+  async function saveTemplate() {
+    const feedback = document.getElementById("repackTemplateFormFeedback");
+    if (feedback) feedback.textContent = "";
+    const data = getTemplateFormData();
+    if (!data.name) {
+      if (feedback) feedback.textContent = "Template name is required.";
+      return;
+    }
+    if (!data.output_product_name) {
+      if (feedback) feedback.textContent = "Output product name is required.";
+      return;
+    }
+    if (!data.output_quantity_per_kit || data.output_quantity_per_kit <= 0) {
+      if (feedback) feedback.textContent = "Units per kit must be greater than zero.";
+      return;
+    }
+    if (!Array.isArray(data.components) || !data.components.length) {
+      if (feedback) feedback.textContent = "Add at least one component.";
+      return;
+    }
+    const payload = {
+      name: data.name,
+      code: data.code || null,
+      description: data.description || null,
+      output_product_name: data.output_product_name,
+      output_quantity_per_kit: data.output_quantity_per_kit,
+      output_category_id: data.output_category_id,
+      output_unit_id: data.output_unit_id,
+      is_active: data.is_active,
+      components: data.components.map((comp) => {
+        const payloadComp = {
+          product_name: comp.product_name,
+          quantity_per_kit: comp.quantity_per_kit,
+        };
+        if (comp.product_id != null) {
+          payloadComp.product_id = comp.product_id;
+        }
+        return payloadComp;
+      }),
+    };
+    const isUpdate = Boolean(data.id);
+    const url = isUpdate
+      ? `${API_BASE_URL}/repack/index.php/templates/${data.id}`
+      : `${API_BASE_URL}/repack/index.php/templates`;
+    const method = isUpdate ? "PUT" : "POST";
+    try {
+      const res = await fetch(url, {
+        method,
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      showRepackToast(`Template ${isUpdate ? "updated" : "created"}.`, "success");
+      await fetchTemplates(true);
+      if (isUpdate) {
+        const id = data.id;
+        const tpl = repackState.templateLookup[id];
+        populateTemplateForm(tpl || null);
+      } else {
+        clearTemplateForm();
+      }
+    } catch (err) {
+      console.error("Failed to save template", err);
+      if (feedback) feedback.textContent = err?.message || "Failed to save template.";
+      showRepackToast("Failed to save template", "danger");
+    }
+  }
+
+  function bindTemplateModalEvents() {
+    const listEl = document.getElementById("repackTemplateList");
+    if (listEl && !listEl.dataset.bound) {
+      listEl.dataset.bound = "1";
+      listEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-template-id]");
+        if (!btn) return;
+        const id = btn.getAttribute("data-template-id");
+        const tpl = repackState.templateLookup[id];
+        populateTemplateForm(tpl || null);
+      });
+    }
+    const categoryAddBtn = document.getElementById("repackCategoryAddButton");
+    if (categoryAddBtn && !categoryAddBtn.dataset.bound) {
+      categoryAddBtn.dataset.bound = "1";
+      categoryAddBtn.addEventListener("click", async () => {
+        const catInput = document.getElementById("repackOutputCategory");
+        const feedbackEl = document.getElementById("repackCategoryAddFeedback");
+        if (feedbackEl) feedbackEl.textContent = "";
+        const raw = String(catInput?.value || "").trim();
+        if (!raw) {
+          if (feedbackEl) feedbackEl.textContent = "Type a category first.";
+          catInput?.focus();
+          return;
+        }
+        const parts = raw.split(/\s*-\s*/);
+        const primary = String(parts[0] || "").trim();
+        const secondary = parts.length > 1 ? String(parts.slice(1).join(" - ") || "").trim() : "";
+        if (!primary) {
+          if (feedbackEl) feedbackEl.textContent = "Primary name is required.";
+          catInput?.focus();
+          return;
+        }
+        const label = secondary ? `${primary} - ${secondary}` : primary;
+        categoryAddBtn.disabled = true;
+        try {
+          const res = await fetch(`${API_BASE_URL}/taxonomy/index.php/categories`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ primary_name: primary, secondary_name: secondary || null }),
+          });
+          const json = await res.json().catch(() => null);
+          if (!res.ok || json?.success === false) {
+            const errMsg = json?.error || `HTTP ${res.status}`;
+            if (feedbackEl) feedbackEl.textContent = errMsg;
+            return;
+          }
+          const newId = Number(json?.data?.category_id ?? json?.category_id ?? 0) || null;
+          await ensureRepackReferenceData(true);
+          syncRepackDatalists();
+          if (newId != null) {
+            repackState.categoryLookup[label.toLowerCase()] = newId;
+          }
+          if (catInput) {
+            catInput.value = label;
+            catInput.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+          showRepackToast("Category saved.", "success");
+        } catch (err) {
+          if (feedbackEl) feedbackEl.textContent = err?.message || "Failed to add category.";
+        } finally {
+          categoryAddBtn.disabled = false;
+        }
+      });
+    }
+    const addComponentBtn = document.getElementById("repackAddComponentBtn");
+    if (addComponentBtn && !addComponentBtn.dataset.bound) {
+      addComponentBtn.dataset.bound = "1";
+      addComponentBtn.addEventListener("click", () => addComponentRow(null, true));
+    }
+    const resetBtn = document.getElementById("repackTemplateResetBtn");
+    if (resetBtn && !resetBtn.dataset.bound) {
+      resetBtn.dataset.bound = "1";
+      resetBtn.addEventListener("click", () => {
+        clearTemplateForm();
+        const feedback = document.getElementById("repackTemplateFormFeedback");
+        if (feedback) feedback.textContent = "";
+      });
+    }
+    const saveBtn = document.getElementById("repackTemplateSaveBtn");
+    if (saveBtn && !saveBtn.dataset.bound) {
+      saveBtn.dataset.bound = "1";
+      saveBtn.addEventListener("click", saveTemplate);
+    }
+    const searchInput = document.getElementById("repackTemplateSearchInput");
+    if (searchInput && !searchInput.dataset.bound) {
+      searchInput.dataset.bound = "1";
+      searchInput.addEventListener("input", (e) => {
+        renderTemplateList(e.target.value || "");
+      });
+    }
+    const refreshBtn = document.getElementById("repackTemplatesRefreshBtn");
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+      refreshBtn.dataset.bound = "1";
+      refreshBtn.addEventListener("click", async () => {
+        await fetchTemplates(true);
+        renderTemplateList(document.getElementById("repackTemplateSearchInput")?.value || "");
+      });
+    }
+  }
+
+  async function openTemplateModal() {
+    await ensureRepackReferenceData();
+    await fetchTemplates();
+    bindTemplateModalEvents();
+    const modalEl = document.getElementById("repackTemplatesModal");
+    if (modalEl && typeof bootstrap !== "undefined") {
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Repack Run Workflow
+  // ---------------------------------------------------------------------------
+
+  function resetRunState() {
+    repackState.run.template = null;
+    repackState.run.kits = 1;
+    repackState.run.allocations = {};
+  }
+
+  function populateRunTemplateOptions(preferredId = null) {
+    const select = document.getElementById("repackRunTemplateSelect");
+    if (!select) return null;
+    const activeTemplates = repackState.templates.filter((tpl) => Boolean(tpl.is_active));
+    if (!activeTemplates.length) {
+      select.innerHTML = '<option value="">No active templates available</option>';
+      select.disabled = true;
+      return null;
+    }
+    select.disabled = false;
+    select.innerHTML = activeTemplates
+      .map((tpl) => {
+        const id = tpl.kit_template_id || tpl.id;
+        const label = tpl.code ? `${tpl.name} (${tpl.code})` : tpl.name;
+        return `<option value="${id}">${escapeHtml(label || "Template")}</option>`;
+      })
+      .join("");
+    const desired = preferredId && activeTemplates.find((tpl) => String(tpl.kit_template_id || tpl.id) === String(preferredId));
+    const selected = desired || activeTemplates[0];
+    if (selected) {
+      const selectedId = String(selected.kit_template_id || selected.id);
+      select.value = selectedId;
+    }
+    return selected || null;
+  }
+
+  function renderRunSummary() {
+    const summary = document.getElementById("repackOutputSummary");
+    if (!summary) return;
+    const template = repackState.run.template;
+    const kits = repackState.run.kits || 0;
+    const fields = summary.querySelectorAll("dd[data-field]");
+    fields.forEach((dd) => {
+      dd.textContent = "—";
+    });
+    if (!template || !kits) return;
+    const product = template.output_product_name || "";
+    const category = template.output_category_label || "";
+    const unit = template.output_unit_label || "";
+    const unitsProduced = (Number(template.output_quantity_per_kit || 0) || 0) * kits;
+    const map = {
+      product,
+      category,
+      unit,
+      units: unitsProduced ? `${unitsProduced}` : "0",
+    };
+    Object.entries(map).forEach(([key, value]) => {
+      const dd = summary.querySelector(`dd[data-field="${key}"]`);
+      if (dd) dd.textContent = value || "—";
+    });
+  }
+
+  function renderRunComponentsTable() {
+    const tableBody = document.querySelector("#repackComponentsTable tbody");
+    const statusEl = document.getElementById("repackAllocationStatus");
+    if (!tableBody) return;
+    const template = repackState.run.template;
+    tableBody.innerHTML = "";
+    if (!template) {
+      if (statusEl) statusEl.textContent = "Select a template to begin.";
+      return;
+    }
+    const kits = Math.max(1, Number(repackState.run.kits || 1));
+    const rows = [];
+    let allSatisfied = true;
+    template.components.forEach((component) => {
+      const componentId = component.kit_component_id;
+      const required = (Number(component.quantity_per_kit || 0) || 0) * kits;
+      const allocation = repackState.run.allocations[componentId] || { lots: [] };
+      const allocated = allocation.lots.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+      if (allocated !== required) allSatisfied = false;
+      const lotsSummary = allocation.lots.length
+        ? allocation.lots
+            .map((lot) => `Lot #${lot.inventory_id}: ${lot.quantity}`)
+            .join("<br>")
+        : "No lots selected";
+      rows.push(`
+        <tr data-component-id="${componentId}">
+          <td>
+            <div class="fw-semibold">${escapeHtml(component.product_name || "")}</div>
+            <div class="small text-muted">${escapeHtml(component.category_label || "")}</div>
+          </td>
+          <td class="text-nowrap">${required} ${escapeHtml(component.unit_label || "")}</td>
+          <td class="text-nowrap">
+            ${allocated} ${escapeHtml(component.unit_label || "")}
+            <div class="small text-muted">${lotsSummary}</div>
+          </td>
+          <td class="text-end">
+            <button type="button" class="btn btn-sm btn-outline-primary repack-allocate-btn" data-component-id="${componentId}">
+              Allocate Lots
+            </button>
+          </td>
+        </tr>
+      `);
+    });
+    tableBody.innerHTML = rows.join("");
+    if (statusEl) {
+      statusEl.textContent = allSatisfied
+        ? "All components allocated."
+        : "Allocate lots for each component.";
+    }
+    updateRunSubmitState();
+  }
+
+  function updateRunSubmitState(message = "") {
+    const submitBtn = document.getElementById("repackRunSubmitBtn");
+    const feedbackEl = document.getElementById("repackRunFeedback");
+    if (feedbackEl) feedbackEl.textContent = message || "";
+    if (!submitBtn) return;
+    const template = repackState.run.template;
+    if (!template) {
+      submitBtn.disabled = true;
+      return;
+    }
+    const kits = Math.max(1, Number(repackState.run.kits || 1));
+    if (!kits) {
+      submitBtn.disabled = true;
+      return;
+    }
+    const allSatisfied = template.components.every((component) => {
+      const required = (Number(component.quantity_per_kit || 0) || 0) * kits;
+      const allocation = repackState.run.allocations[component.kit_component_id] || { lots: [] };
+      const allocated = allocation.lots.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+      return allocated === required && required > 0;
+    });
+    submitBtn.disabled = !allSatisfied;
+  }
+
+  async function fetchTemplateDetail(templateId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/repack/index.php/templates/${templateId}`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      const tpl = json.data;
+      if (tpl) {
+        const id = tpl.kit_template_id || tpl.id;
+        // Update cached template collection
+        repackState.templateLookup[id] = tpl;
+        const idx = repackState.templates.findIndex((t) => (t.kit_template_id || t.id) === id);
+        if (idx >= 0) {
+          repackState.templates[idx] = tpl;
+        } else {
+          repackState.templates.push(tpl);
+        }
+      }
+      return tpl;
+    } catch (err) {
+      console.error("Failed to load template detail", err);
+      showRepackToast("Failed to load template detail", "danger");
+      return null;
+    }
+  }
+
+  function setRunTemplate(template) {
+    repackState.run.template = template;
+    repackState.run.allocations = {};
+    repackState.run.kits = Math.max(1, Number(document.getElementById("repackRunQuantity")?.value || 1));
+    renderRunSummary();
+    renderRunComponentsTable();
+  }
+
+  async function handleRunTemplateChange() {
+    const select = document.getElementById("repackRunTemplateSelect");
+    if (!select) return;
+    const templateId = select.value;
+    if (!templateId) {
+      resetRunState();
+      renderRunSummary();
+      renderRunComponentsTable();
+      return;
+    }
+    let template = repackState.templateLookup[templateId];
+    if (!template || !Array.isArray(template.components)) {
+      template = await fetchTemplateDetail(templateId);
+    }
+    setRunTemplate(template || null);
+  }
+
+  function handleRunQuantityChange() {
+    const input = document.getElementById("repackRunQuantity");
+    if (!input) return;
+    let value = parseInt(input.value || "0", 10) || 1;
+    if (value < 1) value = 1;
+    input.value = String(value);
+    repackState.run.kits = value;
+    renderRunSummary();
+    renderRunComponentsTable();
+  }
+
+  async function fetchComponentLots(component) {
+    if (!component) return [];
+    const url = new URL(`${API_BASE_URL}/inventory/index.php/list`, window.location.origin);
+    url.searchParams.set("q", component.product_name || "");
+    if (component.category_label) {
+      url.searchParams.set("category", component.category_label);
+    }
+    url.searchParams.set("limit", "200");
+    url.searchParams.set("group", "none");
+    try {
+      const res = await fetch(url.toString(), {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      const items = Array.isArray(json?.data?.items) ? json.data.items : [];
+      const productName = (component.product_name || "").toLowerCase();
+      const categoryLabel = (component.category_label || "").toLowerCase();
+      return items
+        .filter((item) => {
+          const nameMatch = String(item.item_name || item.product_name || "").toLowerCase() === productName;
+          const catMatch = categoryLabel
+            ? String(item.category || "").toLowerCase() === categoryLabel
+            : true;
+          return nameMatch && catMatch && Number(item.quantity || item.total_quantity || 0) > 0;
+        })
+        .map((item) => ({
+          inventory_id: Number(item.id || item.inventory_id),
+          quantity: Number(item.quantity || item.total_quantity || 0) || 0,
+          expiry_date: item.expiry_date || item.earliest_expiry || null,
+          added_at: item.added_at || item.created_at || null,
+        }))
+        .sort((a, b) => {
+          const expA = a.expiry_date ? new Date(a.expiry_date).getTime() : Infinity;
+          const expB = b.expiry_date ? new Date(b.expiry_date).getTime() : Infinity;
+          return expA - expB;
+        });
+    } catch (err) {
+      console.error("Failed to load lots for component", err);
+      showRepackToast("Failed to load lots", "danger");
+      return [];
+    }
+  }
+
+  function renderLotModalTable(filter = "") {
+    const context = repackState.lotModal;
+    const tbody = document.querySelector("#repackLotTable tbody");
+    const summary = document.getElementById("repackLotSummary");
+    if (!context || !tbody) return;
+    const search = filter.trim().toLowerCase();
+    let allocated = 0;
+    const rows = context.lots
+      .filter((lot) => {
+        if (!search) return true;
+        return String(lot.inventory_id).includes(search);
+      })
+      .map((lot) => {
+        const existing = context.selection?.find((sel) => sel.inventory_id === lot.inventory_id);
+        const value = existing ? existing.quantity : "";
+        return `
+          <tr data-lot-id="${lot.inventory_id}" data-available="${lot.quantity}">
+            <td>#${lot.inventory_id}</td>
+            <td>${lot.quantity}</td>
+            <td>${lot.expiry_date ? escapeHtml(lot.expiry_date) : "—"}</td>
+            <td>
+              <input type="number" class="form-control form-control-sm repack-lot-input" min="0" max="${lot.quantity}" value="${value}" />
+            </td>
+          </tr>
+        `;
+      });
+    tbody.innerHTML = rows.length
+      ? rows.join("")
+      : '<tr><td colspan="4" class="text-center text-muted py-3">No lots found.</td></tr>';
+    if (summary) {
+      const existingTotal = (context.selection || []).reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+      allocated = existingTotal;
+      summary.textContent = `Allocated ${allocated} / ${context.required}`;
+    }
+  }
+
+  function openLotModalForComponent(componentId) {
+    const template = repackState.run.template;
+    if (!template) return;
+    const component = template.components.find((c) => c.kit_component_id === componentId);
+    if (!component) return;
+    const kits = repackState.run.kits || 1;
+    const required = (Number(component.quantity_per_kit || 0) || 0) * kits;
+    const existing = repackState.run.allocations[componentId]?.lots || [];
+    repackState.lotModal = {
+      component,
+      componentId,
+      required,
+      lots: [],
+      selection: existing.map((lot) => ({ ...lot })),
+    };
+    const headerName = document.getElementById("repackLotComponentName");
+    const requirementEl = document.getElementById("repackLotRequirement");
+    if (headerName) headerName.textContent = component.product_name || "Component";
+    if (requirementEl) requirementEl.textContent = `Required: ${required}`;
+    const feedback = document.getElementById("repackLotFeedback");
+    if (feedback) feedback.textContent = "";
+    const searchInput = document.getElementById("repackLotSearchInput");
+    if (searchInput) searchInput.value = "";
+    fetchComponentLots(component).then((lots) => {
+      repackState.lotModal.lots = lots;
+      renderLotModalTable();
+    });
+    const modalEl = document.getElementById("repackLotModal");
+    if (modalEl && typeof bootstrap !== "undefined") {
+      repackState.lotModal.modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      repackState.lotModal.modal.show();
+    }
+  }
+
+  function applyLotSelection() {
+    const ctx = repackState.lotModal;
+    if (!ctx) return;
+    const feedback = document.getElementById("repackLotFeedback");
+    if (feedback) feedback.textContent = "";
+    const inputs = document.querySelectorAll("#repackLotTable tbody tr");
+    const selections = [];
+    let invalid = false;
+    inputs.forEach((row) => {
+      const input = row.querySelector(".repack-lot-input");
+      if (!input) return;
+      const quantity = parseInt(input.value || "0", 10) || 0;
+      const available = parseInt(row.getAttribute("data-available") || "0", 10) || 0;
+      const lotId = parseInt(row.getAttribute("data-lot-id") || "0", 10) || 0;
+      if (quantity < 0) {
+        input.value = "";
+        return;
+      }
+      if (quantity > available) {
+        if (feedback) feedback.textContent = `Lot #${lotId} exceeds available quantity.`;
+        invalid = true;
+        return;
+      }
+      if (quantity > 0) {
+        selections.push({ inventory_id: lotId, quantity });
+      }
+    });
+    if (invalid) return;
+    const total = selections.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+    if (total !== ctx.required) {
+      if (feedback) feedback.textContent = `Allocation must total exactly ${ctx.required}.`;
+      return;
+    }
+    repackState.run.allocations[ctx.componentId] = { lots: selections };
+    if (ctx.modal) ctx.modal.hide();
+    renderRunComponentsTable();
+    updateRunSubmitState();
+  }
+
+  async function executeRepackRun() {
+    const template = repackState.run.template;
+    if (!template) return;
+    const kits = Math.max(1, Number(repackState.run.kits || 1));
+    const submitBtn = document.getElementById("repackRunSubmitBtn");
+    const feedback = document.getElementById("repackRunFeedback");
+    if (feedback) feedback.textContent = "";
+    const note = String(document.getElementById("repackRunNote")?.value || "").trim() || null;
+    const componentsPayload = [];
+    const templateId = template.kit_template_id || template.id;
+    for (const component of template.components) {
+      const required = (Number(component.quantity_per_kit || 0) || 0) * kits;
+      const allocation = repackState.run.allocations[component.kit_component_id];
+      if (!allocation || !allocation.lots.length) {
+        if (feedback) feedback.textContent = "Allocate lots for every component.";
+        return;
+      }
+      const total = allocation.lots.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+      if (total !== required) {
+        if (feedback) feedback.textContent = `Component ${component.product_name} allocation mismatch.`;
+        return;
+      }
+      componentsPayload.push({
+        kit_component_id: component.kit_component_id,
+        lots: allocation.lots.map((lot) => ({
+          inventory_id: lot.inventory_id,
+          quantity: Number(lot.quantity || 0),
+        })),
+      });
+    }
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE_URL}/repack/index.php/templates/${templateId}/produce`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          kits_produced: kits,
+          note,
+          components: componentsPayload,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      showRepackToast(`Repack run completed: produced ${kits} kit${kits === 1 ? "" : "s"}.`, "success");
+      const modalEl = document.getElementById("repackRunModal");
+      if (modalEl && typeof bootstrap !== "undefined") {
+        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+      }
+      resetRunState();
+      renderRunSummary();
+      renderRunComponentsTable();
+      try { window.__invNonExpiredCache = {}; } catch (_) {}
+      loadAndRender(window.__inventoryLast?.pagination?.page || 1);
+    } catch (err) {
+      console.error("Failed to execute repack", err);
+      if (feedback) feedback.textContent = err?.message || "Failed to execute repack.";
+      showRepackToast("Failed to execute repack", "danger");
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  async function openRunModal() {
+    await ensureRepackReferenceData();
+    await fetchTemplates(true);
+    resetRunState();
+    const selected = populateRunTemplateOptions();
+    const qtyEl = document.getElementById("repackRunQuantity");
+    if (qtyEl) qtyEl.value = "1";
+    const noteEl = document.getElementById("repackRunNote");
+    if (noteEl) noteEl.value = "";
+    if (selected) {
+      let template = repackState.templateLookup[selected.kit_template_id || selected.id];
+      if (!template || !Array.isArray(template.components)) {
+        template = await fetchTemplateDetail(selected.kit_template_id || selected.id);
+      }
+      setRunTemplate(template || null);
+    } else {
+      setRunTemplate(null);
+    }
+    bindRunModalEvents();
+    const modalEl = document.getElementById("repackRunModal");
+    if (modalEl && typeof bootstrap !== "undefined") {
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+  }
+
+  function bindRunModalEvents() {
+    const templateSelect = document.getElementById("repackRunTemplateSelect");
+    if (templateSelect && !templateSelect.dataset.bound) {
+      templateSelect.dataset.bound = "1";
+      templateSelect.addEventListener("change", handleRunTemplateChange);
+    }
+    const quantityInput = document.getElementById("repackRunQuantity");
+    if (quantityInput && !quantityInput.dataset.bound) {
+      quantityInput.dataset.bound = "1";
+      quantityInput.addEventListener("change", handleRunQuantityChange);
+      quantityInput.addEventListener("input", handleRunQuantityChange);
+    }
+    const submitBtn = document.getElementById("repackRunSubmitBtn");
+    if (submitBtn && !submitBtn.dataset.bound) {
+      submitBtn.dataset.bound = "1";
+      submitBtn.addEventListener("click", executeRepackRun);
+    }
+    const refreshBtn = document.getElementById("repackRunRefreshTemplateBtn");
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+      refreshBtn.dataset.bound = "1";
+      refreshBtn.addEventListener("click", async () => {
+        const select = document.getElementById("repackRunTemplateSelect");
+        if (!select) return;
+        const id = select.value;
+        if (!id) return;
+        const tpl = await fetchTemplateDetail(id);
+        setRunTemplate(tpl || null);
+      });
+    }
+    const table = document.getElementById("repackComponentsTable");
+    if (table && !table.dataset.bound) {
+      table.dataset.bound = "1";
+      table.addEventListener("click", (e) => {
+        const btn = e.target.closest(".repack-allocate-btn");
+        if (!btn) return;
+        const componentId = parseInt(btn.getAttribute("data-component-id") || "0", 10) || 0;
+        if (!componentId) return;
+        openLotModalForComponent(componentId);
+      });
+    }
+    const lotSearch = document.getElementById("repackLotSearchInput");
+    if (lotSearch && !lotSearch.dataset.bound) {
+      lotSearch.dataset.bound = "1";
+      lotSearch.addEventListener("input", (e) => {
+        renderLotModalTable(e.target.value || "");
+      });
+    }
+    const lotReload = document.getElementById("repackLotReloadBtn");
+    if (lotReload && !lotReload.dataset.bound) {
+      lotReload.dataset.bound = "1";
+      lotReload.addEventListener("click", async () => {
+        const ctx = repackState.lotModal;
+        if (!ctx) return;
+        const lots = await fetchComponentLots(ctx.component);
+        repackState.lotModal.lots = lots;
+        renderLotModalTable(document.getElementById("repackLotSearchInput")?.value || "");
+      });
+    }
+    const lotApply = document.getElementById("repackLotApplyBtn");
+    if (lotApply && !lotApply.dataset.bound) {
+      lotApply.dataset.bound = "1";
+      lotApply.addEventListener("click", applyLotSelection);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Repack Operation History
+  // ---------------------------------------------------------------------------
+
+  repackState.operations = {
+    items: [],
+    lookup: {},
+    selectedId: null,
+  };
+
+  async function fetchRepackOperations(force = false) {
+    if (!force && repackState.operations.items.length) return repackState.operations.items;
+    try {
+      const res = await fetch(`${API_BASE_URL}/repack/index.php/operations?limit=50`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      const items = Array.isArray(json?.data?.items) ? json.data.items : [];
+      repackState.operations.items = items;
+      repackState.operations.lookup = Object.create(null);
+      items.forEach((op) => {
+        if (op && op.repack_id != null) {
+          repackState.operations.lookup[op.repack_id] = op;
+        }
+      });
+      return items;
+    } catch (err) {
+      console.error("Failed to load repack operations", err);
+      showRepackToast("Failed to load repack operations", "danger");
+      return [];
+    }
+  }
+
+  async function fetchOperationDetail(repackId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/repack/index.php/operations/${repackId}`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      const op = json.data;
+      if (op) {
+        repackState.operations.lookup[repackId] = op;
+      }
+      return op;
+    } catch (err) {
+      console.error("Failed to load operation detail", err);
+      showRepackToast("Failed to load run details", "danger");
+      return null;
+    }
+  }
+
+  function renderOperationsTable() {
+    const tbody = document.querySelector("#repackOpsTable tbody");
+    if (!tbody) return;
+    const rows = repackState.operations.items.map((op) => {
+      const id = op.repack_id;
+      const kits = op.kits_produced || op.kits || op.total_output_quantity || 0;
+      return `
+        <tr data-repack-id="${id}">
+          <td>${id}</td>
+          <td>${escapeHtml(op.kit_name || op.template_name || "")}</td>
+          <td>${kits}</td>
+          <td>${escapeHtml(op.performed_by_name || "")}</td>
+          <td>${escapeHtml(op.created_at || "")}</td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = rows.length
+      ? rows.join("")
+      : '<tr><td colspan="5" class="text-center text-muted py-3">No repack runs recorded.</td></tr>';
+  }
+
+  function renderOperationDetails(op) {
+    const inputsList = document.getElementById("repackOpsInputsList");
+    const outputsList = document.getElementById("repackOpsOutputsList");
+    if (inputsList) {
+      inputsList.innerHTML = Array.isArray(op?.inputs) && op.inputs.length
+        ? op.inputs
+            .map(
+              (input) =>
+                `<li class="list-group-item d-flex justify-content-between align-items-center">
+                  <span>${escapeHtml(input.product_name_snapshot || "")}</span>
+                  <span class="badge bg-light text-dark">${input.quantity_used}</span>
+                </li>`
+            )
+            .join("")
+        : '<li class="list-group-item text-muted">No inputs recorded.</li>';
+    }
+    if (outputsList) {
+      outputsList.innerHTML = Array.isArray(op?.outputs) && op.outputs.length
+        ? op.outputs
+            .map(
+              (output) =>
+                `<li class="list-group-item d-flex justify-content-between align-items-center">
+                  <span>${escapeHtml(output.product_name_snapshot || "")}</span>
+                  <span class="badge bg-light text-dark">${output.quantity_produced}</span>
+                </li>`
+            )
+            .join("")
+        : '<li class="list-group-item text-muted">No outputs recorded.</li>';
+    }
+  }
+
+  async function handleOperationRowClick(repackId) {
+    let op = repackState.operations.lookup[repackId];
+    if (!op || !op.inputs || !op.outputs) {
+      op = await fetchOperationDetail(repackId);
+    }
+    if (!op) return;
+    repackState.operations.selectedId = repackId;
+    renderOperationDetails(op);
+  }
+
+  async function openOperationsModal() {
+    await fetchRepackOperations(true);
+    renderOperationsTable();
+    renderOperationDetails(null);
+    bindOperationsModalEvents();
+    const modalEl = document.getElementById("repackOpsModal");
+    if (modalEl && typeof bootstrap !== "undefined") {
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+  }
+
+  function bindRepackEntryPoints() {
+    const tplBtn = document.getElementById("repackTemplatesOpenBtn");
+    if (tplBtn && !tplBtn.dataset.bound) {
+      tplBtn.dataset.bound = "1";
+      tplBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        openTemplateModal();
+      });
+    }
+    const runBtn = document.getElementById("repackRunOpenBtn");
+    if (runBtn && !runBtn.dataset.bound) {
+      runBtn.dataset.bound = "1";
+      runBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        openRunModal();
+      });
+    }
+    const opsBtn = document.getElementById("repackOpsOpenBtn");
+    if (opsBtn && !opsBtn.dataset.bound) {
+      opsBtn.dataset.bound = "1";
+      opsBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        openOperationsModal();
+      });
+    }
+    bindTemplateModalEvents();
+    bindRunModalEvents();
+    bindOperationsModalEvents();
+  }
+
+  function bindOperationsModalEvents() {
+    const tbody = document.querySelector("#repackOpsTable tbody");
+    if (tbody && !tbody.dataset.bound) {
+      tbody.dataset.bound = "1";
+      tbody.addEventListener("click", async (e) => {
+        const row = e.target.closest("tr[data-repack-id]");
+        if (!row) return;
+        const id = parseInt(row.getAttribute("data-repack-id") || "0", 10) || 0;
+        if (!id) return;
+        handleOperationRowClick(id);
+      });
+    }
+    const refreshBtn = document.getElementById("repackOpsRefreshBtn");
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+      refreshBtn.dataset.bound = "1";
+      refreshBtn.addEventListener("click", async () => {
+        await fetchRepackOperations(true);
+        renderOperationsTable();
+        renderOperationDetails(null);
+      });
+    }
   }
 
   function updateRowImmediate(itemName, category, updater) {
@@ -1308,170 +2613,151 @@
   try {
     const importModal = document.getElementById("importInventoryModal");
     if (importModal) {
-      importModal.addEventListener(
-        "shown.bs.modal",
-        () => {
-          try {
-            bindImportModal();
-          } catch (_) {}
-        },
-        { once: true }
-      );
+      importModal.addEventListener("shown.bs.modal", () => {
+        try {
+          bindImportModal();
+        } catch (_) {}
+      });
+    }
+  } catch (_) {}
+
+  // Wire tag edit save button
+  try {
+    const save = document.getElementById("tagEditSaveBtn");
+    if (save) {
+      save.addEventListener("click", async () => {
+        try {
+          const ctx = window.__tagCtx || {};
+          const itemName = ctx.itemName || "";
+          const category = ctx.category || "";
+          const input = document.getElementById("tagEditInput");
+          const fb = document.getElementById("tagEditFeedback");
+          const tags = String(input?.value || "").trim();
+          if (!itemName || !category) {
+            if (fb) fb.textContent = "Invalid item context.";
+            return;
+          }
+          updateRowImmediate(itemName, category, (tr, tds) => {
+            tds[4].textContent = tags || "—";
+            const btn = tr.querySelector(".inv-edit-tags");
+            if (btn) btn.setAttribute("data-tags", tags);
+          });
+          const res = await fetch(`${API_BASE_URL}/inventory/index.php/update-tags`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: "group", item_name: itemName, category, tags })
+          });
+          const j = await res.json().catch(() => ({ success:false, error:`HTTP ${res.status}` }));
+          if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+          const modal = document.getElementById("tagEditModal");
+          if (modal && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modal).hide();
+          }
+          try { window.__invNonExpiredCache = {}; } catch (_) {}
+          const page = window.__inventoryLast?.pagination?.page || 1;
+          await loadAndRender(page);
+        } catch (err) {
+          console.error("Tag save failed:", err);
+          const fb = document.getElementById("tagEditFeedback");
+          if (fb) fb.textContent = err?.message || "Failed to update tags.";
+        }
+      });
+    }
+  } catch (_) {}
+
+  // No export bindings here; exports will live in ReportAndAnalytics.html
+
+  (function bindOnsiteModalSubmit() {
+    const submit = document.getElementById("onsiteIssueSubmitBtn");
+    if (!submit) return;
+    submit.addEventListener("click", async () => {
+      const btn = submit;
+      const qtyEl = document.getElementById("onsiteQty");
+      const noteEl = document.getElementById("onsiteNote");
+      const fb = document.getElementById("onsiteIssueFeedback");
+      const modalEl = document.getElementById("onsiteIssueModal");
+      const ctx = window.__onsiteCtx || {};
+      const itemName = ctx.itemName || "";
+      const category = ctx.category || "";
+      const quantity = parseInt(qtyEl?.value || "0", 10) || 0;
+      const note = String(noteEl?.value || "").trim();
+      if (!itemName || !category) {
+        if (fb) fb.textContent = "Invalid item context.";
+        return;
+      }
+      if (!quantity || quantity <= 0) {
+        if (fb) fb.textContent = "Quantity must be at least 1.";
+        return;
+      }
+      const cleanup = () => {
+        try {
+          document.querySelectorAll(".modal-backdrop").forEach((el) => {
+            try { el.remove(); } catch (_) {}
+          });
+          if (document && document.body) {
+            document.body.classList.remove("modal-open");
+            try { document.body.style.removeProperty("padding-right"); } catch (_) {}
+          }
+        } catch (_) {}
+      };
+      try {
+        btn.disabled = true;
+        if (fb) fb.textContent = "";
+        updateRowImmediate(itemName, category, (tr, tds) => {
+          const cur = parseInt((tds[2].textContent || "0").replace(/[^0-9]/g, ""), 10) || 0;
+          const next = Math.max(0, cur - quantity);
+          tds[2].textContent = String(next);
+        });
+        if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+          bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        }
+        cleanup();
+        await createOnsiteAllocation(itemName, category, quantity, note);
+        try { window.__invNonExpiredCache = {}; } catch (_) {}
+        const page = window.__inventoryLast?.pagination?.page || 1;
+        await loadAndRender(page);
+      } catch (err) {
+        console.error("On-site allocation failed:", err);
+        if (fb) fb.textContent = err?.message || "Failed to save allocation.";
+      } finally {
+        btn.disabled = false;
+        cleanup();
+      }
+    });
+  })();
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      const page = window.__inventoryLast?.pagination?.page || 1;
+      loadAndRender(page);
+    }
+  });
+
+  try {
+    const filtersBar = document.querySelector("main .d-flex.flex-wrap");
+    if (filtersBar && !document.getElementById("invRefreshBtn")) {
+      const btnWrap = document.createElement("div");
+      btnWrap.className = "ms-0";
+      btnWrap.innerHTML =
+        '<button id="invRefreshBtn" type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Refresh</button>';
+      filtersBar.appendChild(btnWrap);
+      btnWrap
+        .querySelector("#invRefreshBtn")
+        .addEventListener("click", () => {
+          const page = window.__inventoryLast?.pagination?.page || 1;
+          loadAndRender(page);
+        });
     }
   } catch (_) {}
 
   async function init() {
-    // init
     bindFilters();
     bindActions();
+    bindRepackEntryPoints();
     await loadCategories();
     loadAndRender(1);
     bindImportModal();
-    // When the Import Result modal is closed, refresh the table immediately
-    try {
-      const irm = document.getElementById("importResultModal");
-      if (irm) {
-        irm.addEventListener("hidden.bs.modal", () => {
-          try { window.__invNonExpiredCache = {}; } catch (_) {}
-          const p = window.__inventoryLast?.pagination?.page || 1;
-          loadAndRender(p);
-        });
-      }
-    } catch (_) {}
-    // Wire tag edit save button
-    try {
-      const save = document.getElementById("tagEditSaveBtn");
-      if (save) {
-        save.addEventListener("click", async () => {
-          try {
-            const ctx = window.__tagCtx || {};
-            const itemName = ctx.itemName || "";
-            const category = ctx.category || "";
-            const input = document.getElementById("tagEditInput");
-            const fb = document.getElementById("tagEditFeedback");
-            const tags = String(input?.value || "").trim();
-            if (!itemName || !category) {
-              if (fb) fb.textContent = "Invalid item context.";
-              return;
-            }
-            updateRowImmediate(itemName, category, (tr, tds) => {
-              tds[4].textContent = tags || "—";
-              const btn = tr.querySelector(".inv-edit-tags");
-              if (btn) btn.setAttribute("data-tags", tags);
-            });
-            const res = await fetch(`${API_BASE_URL}/inventory/index.php/update-tags`, {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ scope: "group", item_name: itemName, category, tags })
-            });
-            const j = await res.json().catch(() => ({ success:false, error:`HTTP ${res.status}` }));
-            if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
-            // Close modal
-            const m = document.getElementById("tagEditModal");
-            if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-              bootstrap.Modal.getOrCreateInstance(m).hide();
-            }
-            try { window.__invNonExpiredCache = {}; } catch (_) {}
-            const p = window.__inventoryLast?.pagination?.page || 1;
-            await loadAndRender(p);
-          } catch (err) {
-            console.error("Tag save failed:", err);
-            const fb = document.getElementById("tagEditFeedback");
-            if (fb) fb.textContent = err?.message || "Failed to update tags.";
-          }
-        });
-      }
-    } catch (_) {}
-    // No export bindings here; exports will live in ReportAndAnalytics.html
-    // Bind modal submit
-    const submit = document.getElementById("onsiteIssueSubmitBtn");
-    if (submit) {
-      submit.addEventListener("click", async () => {
-        const btn = submit;
-        const qtyEl = document.getElementById("onsiteQty");
-        const noteEl = document.getElementById("onsiteNote");
-        const fb = document.getElementById("onsiteIssueFeedback");
-        const mEl = document.getElementById("onsiteIssueModal");
-        const ctx = window.__onsiteCtx || {};
-        const itemName = ctx.itemName || "";
-        const category = ctx.category || "";
-        const quantity = parseInt(qtyEl?.value || "0", 10) || 0;
-        const note = String(noteEl?.value || "").trim();
-        if (!itemName || !category) {
-          if (fb) fb.textContent = "Invalid item context.";
-          return;
-        }
-        if (!quantity || quantity <= 0) {
-          if (fb) fb.textContent = "Quantity must be at least 1.";
-          return;
-        }
-        const cleanup = () => {
-          try {
-            document.querySelectorAll(".modal-backdrop").forEach((el) => {
-              try {
-                el.remove();
-              } catch (_) {}
-            });
-            if (document && document.body) {
-              document.body.classList.remove("modal-open");
-              try {
-                document.body.style.removeProperty("padding-right");
-              } catch (_) {}
-            }
-          } catch (_) {}
-        };
-        try {
-          btn.disabled = true;
-          if (fb) fb.textContent = "";
-          updateRowImmediate(itemName, category, (tr, tds) => {
-            const cur = parseInt((tds[2].textContent || "0").replace(/[^0-9]/g, ''), 10) || 0;
-            const next = Math.max(0, cur - quantity);
-            tds[2].textContent = String(next);
-          });
-          // Hide the entry modal first to avoid stacked backdrops
-          if (mEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-            bootstrap.Modal.getOrCreateInstance(mEl).hide();
-          }
-          cleanup();
-          await createOnsiteAllocation(itemName, category, quantity, note);
-          // Reload table
-          try { window.__invNonExpiredCache = {}; } catch (_) {}
-          const p = window.__inventoryLast?.pagination?.page || 1;
-          await loadAndRender(p);
-        } catch (err) {
-          console.error("On-site allocation failed:", err);
-          if (fb) fb.textContent = err?.message || "Failed to save allocation.";
-        } finally {
-          btn.disabled = false;
-          cleanup();
-        }
-      });
-    }
-    // Auto-refresh when tab becomes visible again
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
-        const p = window.__inventoryLast?.pagination?.page || 1;
-        loadAndRender(p);
-      }
-    });
-    // Add a manual Refresh button next to Import if not present
-    try {
-      const filtersBar = document.querySelector("main .d-flex.flex-wrap");
-      if (filtersBar && !document.getElementById("invRefreshBtn")) {
-        const btnWrap = document.createElement("div");
-        btnWrap.className = "ms-0";
-        btnWrap.innerHTML =
-          '<button id="invRefreshBtn" type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Refresh</button>';
-        filtersBar.appendChild(btnWrap);
-        btnWrap
-          .querySelector("#invRefreshBtn")
-          .addEventListener("click", () => {
-            const p = window.__inventoryLast?.pagination?.page || 1;
-            loadAndRender(p);
-          });
-      }
-    } catch (_) {}
   }
 
   document.addEventListener("DOMContentLoaded", init);

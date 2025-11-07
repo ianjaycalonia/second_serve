@@ -241,11 +241,14 @@ class Inventory
     public function moveOut(int $inventoryId, int $quantity, int $performedBy, string $mode, ?int $recipientId = null, ?string $note = null): array
     {
         if ($quantity <= 0) { throw new Exception('Quantity must be positive'); }
-        if (!in_array($mode, ['recipient','onsite','discarded'], true)) { throw new Exception('Invalid mode'); }
+        if (!in_array($mode, ['recipient','onsite','discarded','repack'], true)) { throw new Exception('Invalid mode'); }
         if ($mode === 'recipient' && empty($recipientId)) { throw new Exception('recipient_id is required for recipient mode'); }
 
         $this->ensureTables();
-        $this->db->beginTransaction();
+        $manageTransaction = !$this->db->inTransaction();
+        if ($manageTransaction) {
+            $this->db->beginTransaction();
+        }
         try {
             $row = $this->db->query("SELECT inventory_id, quantity FROM inventory WHERE inventory_id = ? FOR UPDATE", [$inventoryId])->fetch();
             if (!$row) { throw new Exception('Inventory item not found'); }
@@ -267,10 +270,14 @@ class Inventory
                 $triggerLogic->syncInventoryMovementDonationItem($movementId, $inventoryId);
             }
             
-            $this->db->commit();
+            if ($manageTransaction) {
+                $this->db->commit();
+            }
             return ['new_quantity' => $newQty];
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($manageTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             throw $e;
         }
     }
@@ -282,11 +289,14 @@ class Inventory
     public function moveOutGroup(string $itemName, string $category, int $quantity, int $performedBy, string $mode, ?int $recipientId = null, ?string $note = null): array
     {
         if ($quantity <= 0) { throw new Exception('Quantity must be positive'); }
-        if (!in_array($mode, ['recipient','onsite','discarded'], true)) { throw new Exception('Invalid mode'); }
+        if (!in_array($mode, ['recipient','onsite','discarded','repack'], true)) { throw new Exception('Invalid mode'); }
         if ($mode === 'recipient' && empty($recipientId)) { throw new Exception('recipient_id is required for recipient mode'); }
 
         $this->ensureTables();
-        $this->db->beginTransaction();
+        $manageTransaction = !$this->db->inTransaction();
+        if ($manageTransaction) {
+            $this->db->beginTransaction();
+        }
         try {
             // Lock matching lots ordered by soonest expiry (from donation_items), then by added_at
             $lots = $this->db->query(
@@ -324,15 +334,19 @@ class Inventory
                     $triggerLogic = new TriggerLogic();
                     $triggerLogic->syncInventoryMovementDonationItem($movementId, $invId);
                 }
-                
+
                 $toGo -= $take;
                 $affected[] = ['inventory_id' => $invId, 'taken' => $take, 'new_quantity' => $newQty];
             }
             if ($toGo > 0) { throw new Exception('Insufficient stock'); }
-            $this->db->commit();
+            if ($manageTransaction) {
+                $this->db->commit();
+            }
             return ['requested' => $quantity, 'affected' => $affected];
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($manageTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             throw $e;
         }
     }
