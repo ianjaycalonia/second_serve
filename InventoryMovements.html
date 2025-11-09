@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Inventory Movements</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Inventory Movements</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -13,6 +14,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <link rel="stylesheet" href="scripts/css/inventoryMovements.css" />
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -164,7 +166,13 @@
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Pickup Management"
       >
-        <i class="bi bi-truck-front fs-5 me-2"></i>
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Pickup Management</span>
       </a>
 
@@ -191,7 +199,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column ms-3">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html"
                 ><img
@@ -272,7 +280,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -381,16 +389,18 @@
         </div>
 
         <div class="table-responsive">
-          <table class="table table-sm align-middle table-striped">
+          <table
+            class="table table-sm align-middle table-striped table-bordered"
+          >
             <thead class="table-light">
               <tr>
-                <th style="width: 16%">Date/Time</th>
-                <th style="width: 10%">Direction</th>
-                <th style="width: 26%">Item</th>
-                <th style="width: 18%">Category</th>
-                <th style="width: 8%">Qty</th>
-                <th style="width: 10%">Mode</th>
-                <th style="width: 12%">Performed By</th>
+                <th>Date/Time</th>
+                <th>Direction</th>
+                <th>Item</th>
+                <th>Category</th>
+                <th>Quantity</th>
+                <th>Mode</th>
+                <th>Performed By</th>
               </tr>
             </thead>
             <tbody id="mvTableBody">
@@ -467,5 +477,8 @@
     <script src="scripts/js/ui/notifications.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
     <script src="scripts/js/ui/inventoryMovements.js"></script>
+    <script src="scripts/js/ui/animatedMessage.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
   </body>
 </html>

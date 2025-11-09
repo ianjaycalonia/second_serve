@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Distribute Items</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Distribute Items</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -172,7 +173,13 @@
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Pickup Management"
       >
-        <i class="bi bi-truck-front fs-5 me-2"></i>
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Pickup Management</span>
       </a>
 
@@ -234,17 +241,6 @@
               </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="DistributionPickup.html">
-                <img
-                  src="images/pickup.gif"
-                  alt="Dashboard Icon"
-                  class="dashboard-icon"
-                  width="35"
-                  height="35"
-                />Pickup
-              </a>
-            </li>
-            <li class="nav-item">
               <a class="nav-link" href="Schedule.html">
                 <img
                   src="images/calendar.gif"
@@ -290,7 +286,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -328,7 +324,13 @@
       </a>
     </aside>
     <main>
-      <div id="diToastContainer" class="toast-container position-fixed p-3" aria-live="polite" aria-atomic="true" style="z-index: 1080; left: 24px; bottom: 24px;"></div>
+      <div
+        id="diToastContainer"
+        class="toast-container position-fixed p-3"
+        aria-live="polite"
+        aria-atomic="true"
+        style="z-index: 1080; left: 24px; bottom: 24px"
+      ></div>
       <div aria-label="breadcrumb">
         <ol class="breadcrumb">
           <li class="breadcrumb-item">
@@ -677,7 +679,8 @@
             if (typeof attachAllocateNow === "function") attachAllocateNow();
           } catch (_) {}
           try {
-            if (typeof diMaybeShowAllocationToast === "function") diMaybeShowAllocationToast();
+            if (typeof diMaybeShowAllocationToast === "function")
+              diMaybeShowAllocationToast();
           } catch (_) {}
         }
         function bind() {
@@ -691,7 +694,8 @@
         else bind();
         setTimeout(function () {
           try {
-            if (typeof diMaybeShowAllocationToast === "function") diMaybeShowAllocationToast();
+            if (typeof diMaybeShowAllocationToast === "function")
+              diMaybeShowAllocationToast();
           } catch (_) {}
         }, 200);
       })();

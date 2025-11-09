@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Settings</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -175,7 +176,13 @@
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Pickup Management"
       >
-        <i class="bi bi-truck-front fs-5 me-2"></i>
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Pickup Management</span>
       </a>
 
@@ -202,7 +209,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column ms-3">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html">
                 <img
@@ -282,7 +289,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -347,7 +354,7 @@
           class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"
         >
           <div>
-            <h4 class="mb-1">Admin Settings</h4>
+            <h5 class="mb-1">Admin Settings</h5>
             <p class="text-muted mb-0">
               Configure system identity, acknowledgement policies, and
               allocation preferences from one place.

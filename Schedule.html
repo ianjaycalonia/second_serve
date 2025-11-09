@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Schedule</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Schedule</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -88,7 +89,7 @@
           position: relative;
         }
         .schedule-resizer::before {
-          content: '';
+          content: "";
           position: absolute;
           top: 50%;
           left: 50%;
@@ -141,7 +142,8 @@
       .fc .fc-event-main-frame {
         pointer-events: none !important;
       }
-      .fc .fc-event, .fc .fc-event:hover {
+      .fc .fc-event,
+      .fc .fc-event:hover {
         cursor: pointer;
       }
       .fc .fc-event-selected,
@@ -333,7 +335,13 @@
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Pickup Management"
       >
-        <i class="bi bi-truck-front fs-5 me-2"></i>
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Pickup Management</span>
       </a>
 
@@ -440,7 +448,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -490,7 +498,7 @@
       <div
         class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3"
       >
-        <h5 class="mb-0">Schedule</h5>
+        <h5 class="mb-0">Schedule Log</h5>
         <div class="d-flex gap-2">
           <button class="btn btn-sm btn-outline-primary" id="newEventBtn">
             <i class="bi bi-plus-lg"></i> New Event
@@ -510,11 +518,7 @@
       </div>
 
       <div id="calFeedback" class="small mb-2"></div>
-      <div
-        class="schedule-layout"
-        id="scheduleLayout"
-        data-calendar-min="520"
-      >
+      <div class="schedule-layout" id="scheduleLayout" data-calendar-min="520">
         <div class="calendar-pane">
           <div class="card card-accent p-3 h-100">
             <div id="calendar"></div>
@@ -527,11 +531,7 @@
           aria-orientation="vertical"
           aria-label="Resize calendar and event list"
         ></div>
-        <div
-          class="selected-pane"
-          data-min-width="240"
-          data-max-width="520"
-        >
+        <div class="selected-pane" data-min-width="240" data-max-width="520">
           <div class="card w-100" id="selectedDayCard">
             <div class="card-header">
               <small class="text-muted d-block">Selected date</small>
@@ -583,7 +583,12 @@
     </div>
 
     <!-- Event View Modal -->
-    <div class="modal fade" id="eventViewModal" tabindex="-1" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="eventViewModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
@@ -599,7 +604,10 @@
             <div class="mb-3">
               <h5 id="viewEventTitle" class="mb-1">&nbsp;</h5>
               <span class="badge bg-secondary" id="viewEventType">&nbsp;</span>
-              <span class="badge bg-light text-dark" id="viewEventStatus"></span>
+              <span
+                class="badge bg-light text-dark"
+                id="viewEventStatus"
+              ></span>
             </div>
             <dl class="row small mb-0">
               <dt
@@ -610,7 +618,9 @@
               >
                 Start
               </dt>
-              <dd class="col-8" id="viewEventStart" data-view-row="start">&nbsp;</dd>
+              <dd class="col-8" id="viewEventStart" data-view-row="start">
+                &nbsp;
+              </dd>
               <dt
                 class="col-4 text-muted"
                 data-view-row="end"
@@ -619,7 +629,9 @@
               >
                 End
               </dt>
-              <dd class="col-8" id="viewEventEnd" data-view-row="end">&nbsp;</dd>
+              <dd class="col-8" id="viewEventEnd" data-view-row="end">
+                &nbsp;
+              </dd>
               <dt
                 class="col-4 text-muted"
                 data-view-row="recipients"
@@ -628,7 +640,13 @@
               >
                 Recipients
               </dt>
-              <dd class="col-8" id="viewEventRecipients" data-view-row="recipients">&nbsp;</dd>
+              <dd
+                class="col-8"
+                id="viewEventRecipients"
+                data-view-row="recipients"
+              >
+                &nbsp;
+              </dd>
               <dt
                 class="col-4 text-muted"
                 data-view-row="donor"
@@ -637,7 +655,9 @@
               >
                 Donor
               </dt>
-              <dd class="col-8" id="viewEventDonor" data-view-row="donor">&nbsp;</dd>
+              <dd class="col-8" id="viewEventDonor" data-view-row="donor">
+                &nbsp;
+              </dd>
               <dt
                 class="col-4 text-muted"
                 data-view-row="location"
@@ -646,7 +666,9 @@
               >
                 Location
               </dt>
-              <dd class="col-8" id="viewEventLocation" data-view-row="location">&nbsp;</dd>
+              <dd class="col-8" id="viewEventLocation" data-view-row="location">
+                &nbsp;
+              </dd>
               <dt
                 class="col-4 text-muted"
                 data-view-row="notes"
@@ -655,7 +677,9 @@
               >
                 Notes
               </dt>
-              <dd class="col-8" id="viewEventNotes" data-view-row="notes">&nbsp;</dd>
+              <dd class="col-8" id="viewEventNotes" data-view-row="notes">
+                &nbsp;
+              </dd>
               <dt
                 class="col-4 text-muted"
                 data-view-row="created"
@@ -664,7 +688,9 @@
               >
                 Created By
               </dt>
-              <dd class="col-8" id="viewEventCreatedBy" data-view-row="created">&nbsp;</dd>
+              <dd class="col-8" id="viewEventCreatedBy" data-view-row="created">
+                &nbsp;
+              </dd>
               <dt
                 class="col-4 text-muted"
                 data-view-row="updated"
@@ -673,7 +699,9 @@
               >
                 Updated
               </dt>
-              <dd class="col-8" id="viewEventUpdated" data-view-row="updated">&nbsp;</dd>
+              <dd class="col-8" id="viewEventUpdated" data-view-row="updated">
+                &nbsp;
+              </dd>
             </dl>
           </div>
           <div class="modal-footer">
@@ -786,7 +814,11 @@
                     class="form-select form-select-sm"
                     style="width: 100%"
                   ></select>
-                  <div class="mt-2 small" id="evDonorDisplay" style="display: none"></div>
+                  <div
+                    class="mt-2 small"
+                    id="evDonorDisplay"
+                    style="display: none"
+                  ></div>
                   <input
                     type="number"
                     id="evDonor"

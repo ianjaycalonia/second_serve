@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Profile</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -175,7 +176,13 @@
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Pickup Management"
       >
-        <i class="bi bi-truck-front fs-5 me-2"></i>
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Pickup Management</span>
       </a>
 
@@ -202,7 +209,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column ms-3">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html">
                 <img
@@ -282,7 +289,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -321,251 +328,241 @@
     </aside>
 
     <main>
-      <div class="container-fluid py-4 profile-page">
-        <div
-          class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-2"
-        >
-          <div>
-            <nav aria-label="breadcrumb">
-              <ol class="breadcrumb mb-1">
-                <li class="breadcrumb-item">
-                  <a href="AdminDashboard.html">Dashboard</a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">
-                  Profile
-                </li>
-              </ol>
-            </nav>
-            <h4 class="mb-0">Admin Profile</h4>
-            <p class="text-muted small mb-0">
-              Manage your contact information, credentials, and recent activity.
-            </p>
-          </div>
-          <div class="text-md-end">
-            <button id="saveProfileBtn" class="btn btn-primary btn-sm">
-              Save Changes
-            </button>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+          <li class="breadcrumb-item">
+            <a href="AdminDashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">Profile</li>
+        </ol>
+      </div>
+
+      <div
+        class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-2"
+      >
+        <div>
+          <h5 class="mb-0">Admin Profile</h5>
+          <p class="text-muted small mb-0">
+            Manage your contact information, credentials, and recent activity.
+          </p>
+        </div>
+        <div class="text-md-end">
+          <button id="saveProfileBtn" class="btn btn-primary btn-sm">
+            Save Changes
+          </button>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-12 col-xl-4">
+          <div class="card card-accent h-100">
+            <div class="card-body">
+              <div class="text-center">
+                <div class="mx-auto mb-3" style="width: 128px; height: 128px">
+                  <img
+                    id="profileAvatar"
+                    src="images/profile.png"
+                    alt="Profile Photo"
+                    class="rounded-circle object-fit-cover w-100 h-100 border"
+                  />
+                </div>
+                <h5 id="profileSummaryName" class="mb-1">John Doe</h5>
+                <p id="profileSummaryEmail" class="text-muted mb-1 small">
+                  john.doe@example.com
+                </p>
+                <span id="profileSummaryPhone" class="badge bg-light text-dark"
+                  >—</span
+                >
+              </div>
+              <hr class="my-4" />
+              <div class="d-grid gap-2">
+                <button
+                  type="button"
+                  class="btn btn-outline-primary btn-sm"
+                  id="profileChangePhotoBtn"
+                >
+                  Change Photo
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline-danger btn-sm"
+                  id="profileRemovePhotoBtn"
+                >
+                  Remove Photo
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div class="row g-4">
-          <div class="col-12 col-xl-4">
-            <div class="card card-accent h-100">
-              <div class="card-body">
-                <div class="text-center">
-                  <div class="mx-auto mb-3" style="width: 128px; height: 128px">
-                    <img
-                      id="profileAvatar"
-                      src="images/profile.png"
-                      alt="Profile Photo"
-                      class="rounded-circle object-fit-cover w-100 h-100 border"
-                    />
-                  </div>
-                  <h5 id="profileSummaryName" class="mb-1">John Doe</h5>
-                  <p id="profileSummaryEmail" class="text-muted mb-1 small">
-                    john.doe@example.com
-                  </p>
-                  <span
-                    id="profileSummaryPhone"
-                    class="badge bg-light text-dark"
-                    >—</span
-                  >
-                </div>
-                <hr class="my-4" />
-                <div class="d-grid gap-2">
-                  <button
-                    type="button"
-                    class="btn btn-outline-primary btn-sm"
-                    id="profileChangePhotoBtn"
-                  >
-                    Change Photo
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-outline-danger btn-sm"
-                    id="profileRemovePhotoBtn"
-                  >
-                    Remove Photo
-                  </button>
-                </div>
-              </div>
+        <div class="col-12 col-xl-8">
+          <div class="card card-accent h-100">
+            <div class="card-header border-0 pb-0">
+              <h6 class="mb-1">Personal Information</h6>
+              <p class="text-muted small mb-0">
+                Updates appear across all admin pages after saving.
+              </p>
             </div>
-          </div>
-          <div class="col-12 col-xl-8">
-            <div class="card card-accent h-100">
-              <div class="card-header border-0 pb-0">
-                <h6 class="mb-1">Personal Information</h6>
-                <p class="text-muted small mb-0">
-                  Updates appear across all admin pages after saving.
-                </p>
-              </div>
-              <div class="card-body">
-                <form class="row g-3" id="profileInfoForm">
-                  <div class="col-12 col-md-6">
-                    <label for="adminName" class="form-label">Full Name</label>
-                    <input
-                      type="text"
-                      id="adminName"
-                      class="form-control form-control-sm"
-                      placeholder="Your name"
-                    />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="adminEmail" class="form-label"
-                      >Email Address</label
-                    >
-                    <input
-                      type="email"
-                      id="adminEmail"
-                      class="form-control form-control-sm"
-                      placeholder="name@domain.com"
-                    />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="adminPhone" class="form-label"
-                      >Phone Number</label
-                    >
-                    <input
-                      type="tel"
-                      id="adminPhone"
-                      class="form-control form-control-sm"
-                      placeholder="(000) 000-0000"
-                    />
-                  </div>
-                  <div class="col-12">
-                    <div class="d-flex justify-content-end gap-2 pt-2">
-                      <button
-                        type="button"
-                        class="btn btn-outline-secondary btn-sm"
-                        id="resetProfileBtn"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        class="btn btn-primary btn-sm"
-                        id="saveProfileBtnSecondary"
-                      >
-                        Save Changes
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-          <div class="col-12 col-xl-6">
-            <div class="card card-accent h-100">
-              <div class="card-header border-0 pb-0">
-                <h6 class="mb-1">Change Password</h6>
-                <p class="text-muted small mb-0">
-                  Set a strong password to keep your account secure.
-                </p>
-              </div>
-              <div class="card-body">
-                <div class="row g-3">
-                  <div class="col-12">
-                    <label for="currentPassword" class="form-label"
-                      >Current Password</label
-                    >
-                    <input
-                      type="password"
-                      id="currentPassword"
-                      name="profile-current-password"
-                      autocomplete="current-password"
-                      class="form-control form-control-sm"
-                      placeholder="Enter current password"
-                    />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="newPassword" class="form-label"
-                      >New Password</label
-                    >
-                    <input
-                      type="password"
-                      id="newPassword"
-                      name="profile-new-password"
-                      autocomplete="new-password"
-                      class="form-control form-control-sm"
-                      placeholder="Enter new password"
-                    />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="confirmPassword" class="form-label"
-                      >Confirm New Password</label
-                    >
-                    <input
-                      type="password"
-                      id="confirmPassword"
-                      name="profile-confirm-password"
-                      autocomplete="new-password"
-                      class="form-control form-control-sm"
-                      placeholder="Confirm new password"
-                    />
-                  </div>
-                  <div class="col-12">
-                    <div class="form-check">
-                      <input
-                        class="form-check-input"
-                        type="checkbox"
-                        id="showPassword"
-                      />
-                      <label for="showPassword" class="form-check-label"
-                        >Show Password</label
-                      >
-                    </div>
-                  </div>
-                  <div class="col-12 d-flex justify-content-end">
+            <div class="card-body">
+              <form class="row g-3" id="profileInfoForm">
+                <div class="col-12 col-md-6">
+                  <label for="adminName" class="form-label">Full Name</label>
+                  <input
+                    type="text"
+                    id="adminName"
+                    class="form-control form-control-sm"
+                    placeholder="Your name"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="adminEmail" class="form-label"
+                    >Email Address</label
+                  >
+                  <input
+                    type="email"
+                    id="adminEmail"
+                    class="form-control form-control-sm"
+                    placeholder="name@domain.com"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="adminPhone" class="form-label"
+                    >Phone Number</label
+                  >
+                  <input
+                    type="tel"
+                    id="adminPhone"
+                    class="form-control form-control-sm"
+                    placeholder="(000) 000-0000"
+                  />
+                </div>
+                <div class="col-12">
+                  <div class="d-flex justify-content-end gap-2 pt-2">
                     <button
-                      id="updatePasswordBtn"
-                      class="btn btn-success btn-sm"
+                      type="button"
+                      class="btn btn-outline-secondary btn-sm"
+                      id="resetProfileBtn"
                     >
-                      Update Password
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                      id="saveProfileBtnSecondary"
+                    >
+                      Save Changes
                     </button>
                   </div>
                 </div>
-              </div>
+              </form>
             </div>
           </div>
-          <div class="col-12 col-xl-6">
-            <div class="card card-accent h-100">
-              <div class="card-header border-0 pb-0">
-                <h6 class="mb-1">Activity Overview</h6>
-                <p class="text-muted small mb-0">
-                  Recent events from your admin account.
-                </p>
-              </div>
-              <div class="card-body">
-                <p class="mb-1">
-                  <strong>Last Login:</strong> <span id="lastLogin">—</span>
-                </p>
-                <p class="mb-2 text-muted small">
-                  <strong>IP Address:</strong> <span id="ipAddress">—</span>
-                </p>
-                <p class="mb-1"><strong>Recent Activities:</strong></p>
-                <ul id="activityList" class="small mb-2 ps-3"></ul>
-                <div class="small text-muted" id="activityMeta"></div>
-              </div>
+        </div>
+        <div class="col-12 col-xl-6">
+          <div class="card card-accent h-100">
+            <div class="card-header border-0 pb-0">
+              <h6 class="mb-1">Change Password</h6>
+              <p class="text-muted small mb-0">
+                Set a strong password to keep your account secure.
+              </p>
             </div>
-          </div>
-          <div class="col-12">
-            <div class="card card-accent">
-              <div
-                class="card-header border-0 pb-0 d-flex justify-content-between align-items-center"
-              >
-                <div>
-                  <h6 class="mb-1 text-danger">Danger Zone</h6>
-                  <p class="text-muted small mb-0">
-                    These actions cannot be undone. Proceed with caution.
-                  </p>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12">
+                  <label for="currentPassword" class="form-label"
+                    >Current Password</label
+                  >
+                  <input
+                    type="password"
+                    id="currentPassword"
+                    name="profile-current-password"
+                    autocomplete="current-password"
+                    class="form-control form-control-sm"
+                    placeholder="Enter current password"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="newPassword" class="form-label"
+                    >New Password</label
+                  >
+                  <input
+                    type="password"
+                    id="newPassword"
+                    name="profile-new-password"
+                    autocomplete="new-password"
+                    class="form-control form-control-sm"
+                    placeholder="Enter new password"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="confirmPassword" class="form-label"
+                    >Confirm New Password</label
+                  >
+                  <input
+                    type="password"
+                    id="confirmPassword"
+                    name="profile-confirm-password"
+                    autocomplete="new-password"
+                    class="form-control form-control-sm"
+                    placeholder="Confirm new password"
+                  />
+                </div>
+                <div class="col-12">
+                  <div class="form-check">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="showPassword"
+                    />
+                    <label for="showPassword" class="form-check-label"
+                      >Show Password</label
+                    >
+                  </div>
+                </div>
+                <div class="col-12 d-flex justify-content-end">
+                  <button id="updatePasswordBtn" class="btn btn-success btn-sm">
+                    Update Password
+                  </button>
                 </div>
               </div>
-              <div class="card-body d-flex flex-wrap gap-2">
-                <button class="btn btn-warning btn-sm">
-                  Deactivate Account
-                </button>
-                <button class="btn btn-danger btn-sm">Delete Account</button>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-xl-6">
+          <div class="card card-accent h-100">
+            <div class="card-header border-0 pb-0">
+              <h6 class="mb-1">Activity Overview</h6>
+              <p class="text-muted small mb-0">
+                Recent events from your admin account.
+              </p>
+            </div>
+            <div class="card-body">
+              <p class="mb-1">
+                <strong>Last Login:</strong> <span id="lastLogin">—</span>
+              </p>
+              <p class="mb-2 text-muted small">
+                <strong>IP Address:</strong> <span id="ipAddress">—</span>
+              </p>
+              <p class="mb-1"><strong>Recent Activities:</strong></p>
+              <ul id="activityList" class="small mb-2 ps-3"></ul>
+              <div class="small text-muted" id="activityMeta"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="card card-accent">
+            <div
+              class="card-header border-0 pb-0 d-flex justify-content-between align-items-center"
+            >
+              <div>
+                <h6 class="mb-1 text-danger">Danger Zone</h6>
+                <p class="text-muted small mb-0">
+                  These actions cannot be undone. Proceed with caution.
+                </p>
               </div>
+            </div>
+            <div class="card-body d-flex flex-wrap gap-2">
+              <button class="btn btn-warning btn-sm">Deactivate Account</button>
+              <button class="btn btn-danger btn-sm">Delete Account</button>
             </div>
           </div>
         </div>

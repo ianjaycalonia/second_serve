@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Pickup Management</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -167,7 +168,13 @@
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Pickup Management"
       >
-        <i class="bi bi-truck-front fs-5 me-2"></i>
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Pickup Management</span>
       </a>
 
@@ -194,7 +201,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column ms-3">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html">
                 <img
@@ -274,7 +281,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -318,25 +325,36 @@
           <li class="breadcrumb-item">
             <a href="AdminDashboard.html">Dashboard</a>
           </li>
-          <li class="breadcrumb-item active" aria-current="page">Pickup Management</li>
+          <li class="breadcrumb-item active" aria-current="page">
+            Pickup Management
+          </li>
         </ol>
       </div>
 
-      <div class="card card-accent p-4 mb-4">
-        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+      <div class="card card-accent p-4">
+        <div
+          class="d-flex flex-column flex-lg-row justify-content-between gap-3"
+        >
           <div>
-            <h5 class="mb-1">Allocation Logs</h5>
-            <p class="mb-0 text-muted small">Monitor allocation pickups, capture proof, and close the loop.</p>
+            <h6 class="mb-1">Allocation Logs</h6>
+            <p class="mb-0 text-muted small">
+              Monitor allocation pickups, capture proof, and close the loop.
+            </p>
           </div>
           <div class="d-flex flex-wrap gap-2">
-            <button id="refreshBtn" class="btn btn-outline-primary btn-sm px-2 py-1">
+            <button
+              id="refreshBtn"
+              class="btn btn-outline-primary btn-sm px-2 py-1"
+            >
               <i class="bi bi-arrow-clockwise"></i>
             </button>
           </div>
         </div>
         <div class="row g-3 mt-1">
           <div class="col-12 col-md-4">
-            <label for="statusFilter" class="form-label small text-uppercase">Status</label>
+            <label for="statusFilter" class="form-label small text-uppercase"
+              >Status</label
+            >
             <select id="statusFilter" class="form-select form-select-sm">
               <option value="">All statuses</option>
               <option value="notified">Notified</option>
@@ -348,13 +366,17 @@
             </select>
           </div>
           <div class="col-12 col-md-4">
-            <label for="runFilter" class="form-label small text-uppercase">Allocation Run</label>
+            <label for="runFilter" class="form-label small text-uppercase"
+              >Allocation Run</label
+            >
             <select id="runFilter" class="form-select form-select-sm">
               <option value="">Current run</option>
             </select>
           </div>
           <div class="col-12 col-md-4">
-            <label for="searchInput" class="form-label small text-uppercase">Search</label>
+            <label for="searchInput" class="form-label small text-uppercase"
+              >Search</label
+            >
             <div class="input-group input-group-sm">
               <span class="input-group-text"><i class="bi bi-search"></i></span>
               <input
@@ -367,34 +389,34 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="card card-accent">
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-sm table-striped table-hover align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Recipient</th>
-                  <th class="text-nowrap">Allocation Items</th>
-                  <th class="text-center">Status</th>
-                  <th class="text-nowrap">Updated</th>
-                  <th class="text-center">Proof</th>
-                  <th class="text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="allocationsTableBody">
-                <tr id="allocationsLoading">
-                  <td colspan="6" class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status">
-                      <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <div class="text-muted small mt-2">Loading allocations…</div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <hr />
+
+        <div class="table-responsive">
+          <table
+            class="table table-sm table-striped table-bordered align-middle"
+          >
+            <thead class="table-light">
+              <tr>
+                <th>Recipient</th>
+                <th class="text-nowrap">Allocation Items</th>
+                <th class="text-center">Status</th>
+                <th class="text-nowrap">Updated</th>
+                <th class="text-center">Proof</th>
+                <th class="text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="allocationsTableBody">
+              <tr id="allocationsLoading">
+                <td colspan="6" class="text-center py-5">
+                  <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                  </div>
+                  <div class="text-muted small mt-2">Loading allocations…</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </main>
@@ -405,7 +427,12 @@
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">Confirm Pickup</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
           </div>
           <div class="modal-body">
             <div class="row g-4">
@@ -413,14 +440,20 @@
                 <h6 class="text-muted small text-uppercase mb-2">Recipient</h6>
                 <div id="pickupRecipientDetails" class="mb-4 small"></div>
                 <h6 class="text-muted small text-uppercase mb-2">Items</h6>
-                <ul id="pickupItemsList" class="list-group list-group-flush small mb-4"></ul>
+                <ul
+                  id="pickupItemsList"
+                  class="list-group list-group-flush small mb-4"
+                ></ul>
               </div>
               <div class="col-lg-6">
                 <div class="mb-4">
                   <label class="form-label fw-semibold">Pickup Photo</label>
                   <div id="photoMobileGroup">
                     <div id="cameraPreview">
-                      <button id="startCameraBtn" class="btn btn-outline-primary btn-sm">
+                      <button
+                        id="startCameraBtn"
+                        class="btn btn-outline-primary btn-sm"
+                      >
                         <i class="bi bi-camera"></i> Start Camera
                       </button>
                       <video
@@ -428,54 +461,113 @@
                         autoplay
                         playsinline
                         muted
-                        style="display: none; width: 220px; max-width: 100%; border-radius: 0.5rem"
+                        style="
+                          display: none;
+                          width: 220px;
+                          max-width: 100%;
+                          border-radius: 0.5rem;
+                        "
                       ></video>
                       <canvas
                         id="photoCanvas"
-                        style="display: none; width: 220px; max-width: 100%; height: auto; border-radius: 0.5rem"
+                        style="
+                          display: none;
+                          width: 220px;
+                          max-width: 100%;
+                          height: auto;
+                          border-radius: 0.5rem;
+                        "
                       ></canvas>
                     </div>
                     <div class="d-flex flex-wrap gap-2 mt-2">
-                      <button id="takePhotoBtn" class="btn btn-primary btn-sm" style="display: none">
+                      <button
+                        id="takePhotoBtn"
+                        class="btn btn-primary btn-sm"
+                        style="display: none"
+                      >
                         <i class="bi bi-camera-fill"></i> Take Photo
                       </button>
-                      <button id="retakePhotoBtn" class="btn btn-outline-secondary btn-sm" style="display: none">
+                      <button
+                        id="retakePhotoBtn"
+                        class="btn btn-outline-secondary btn-sm"
+                        style="display: none"
+                      >
                         <i class="bi bi-arrow-repeat"></i> Retake
                       </button>
                     </div>
                   </div>
                   <div id="photoUploadGroup" class="d-none">
-                    <input type="file" id="photoUploadInput" class="form-control" accept="image/*" />
-                    <div class="form-text">Upload a pickup photo (JPG or PNG, max 10MB).</div>
+                    <input
+                      type="file"
+                      id="photoUploadInput"
+                      class="form-control"
+                      accept="image/*"
+                    />
+                    <div class="form-text">
+                      Upload a pickup photo (JPG or PNG, max 10MB).
+                    </div>
                   </div>
                 </div>
                 <div class="mb-4">
-                  <label class="form-label fw-semibold">Recipient Signature</label>
+                  <label class="form-label fw-semibold"
+                    >Recipient Signature</label
+                  >
                   <div id="signatureMobileGroup">
                     <div id="signaturePad" class="mb-2 position-relative"></div>
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                      <span class="small text-muted">Capture the signature on screen.</span>
+                    <div
+                      class="d-flex justify-content-between align-items-center flex-wrap gap-2"
+                    >
+                      <span class="small text-muted"
+                        >Capture the signature on screen.</span
+                      >
                       <div class="d-flex gap-2">
-                        <button id="toggleSignaturePadBtn" class="btn btn-outline-primary btn-sm" type="button">
+                        <button
+                          id="toggleSignaturePadBtn"
+                          class="btn btn-outline-primary btn-sm"
+                          type="button"
+                        >
                           <i class="bi bi-unlock"></i> Disable Pad
                         </button>
-                        <button id="clearSignatureBtn" class="btn btn-outline-secondary btn-sm" type="button">
+                        <button
+                          id="clearSignatureBtn"
+                          class="btn btn-outline-secondary btn-sm"
+                          type="button"
+                        >
                           <i class="bi bi-eraser"></i> Clear
                         </button>
                       </div>
                     </div>
                   </div>
                   <div id="signatureUploadGroup" class="d-none">
-                    <input type="file" id="signatureUploadInput" class="form-control" accept="image/*" />
-                    <div class="form-text">Upload a signed acknowledgment image (JPG or PNG, max 10MB).</div>
+                    <input
+                      type="file"
+                      id="signatureUploadInput"
+                      class="form-control"
+                      accept="image/*"
+                    />
+                    <div class="form-text">
+                      Upload a signed acknowledgment image (JPG or PNG, max
+                      10MB).
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary" id="confirmPickupBtn" disabled>
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="confirmPickupBtn"
+              disabled
+            >
               <i class="bi bi-check-lg"></i> Confirm Pickup
             </button>
           </div>
@@ -693,5 +785,8 @@
     <script src="scripts/js/ui/messages.js"></script>
     <script src="scripts/js/api/allocations.js"></script>
     <script src="scripts/js/ui/adminDistributionPickup.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    <script src="scripts/js/ui/animatedMessage.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
   </body>
 </html>

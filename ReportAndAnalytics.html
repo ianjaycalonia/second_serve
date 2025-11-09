@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Admin Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Reports and Analytics</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -167,7 +168,13 @@
         data-bs-custom-class="custom-tooltip"
         data-bs-title="Pickup Management"
       >
-        <i class="bi bi-truck-front fs-5 me-2"></i>
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
         <span class="sidebar-text">Pickup Management</span>
       </a>
 
@@ -194,7 +201,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column ms-3">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html">
                 <img
@@ -274,7 +281,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -314,35 +321,41 @@
 
     <!-- Main Content -->
     <main>
-      <div aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item">
-            <a href="AdminDashboard.html">Dashboard</a>
-          </li>
-          <li class="breadcrumb-item active" aria-current="page">
-            Reports & Analytics
-          </li>
-        </ol>
-      </div>
-
-      <div class="d-flex justify-content-end align-items-center gap-2 mb-3 flex-wrap">
-        <div class="d-flex align-items-center gap-2">
-          <label for="analyticsTimeframeSelect" class="form-label mb-0 fw-semibold">Timeframe</label>
-          <select class="form-select w-auto" id="analyticsTimeframeSelect">
-            <option value="daily" selected>Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="yearly">Yearly</option>
-          </select>
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div aria-label="breadcrumb">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+              <a href="AdminDashboard.html">Dashboard</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">
+              Reports & Analytics
+            </li>
+          </ol>
         </div>
-        <button
-          type="button"
-          class="btn btn-primary"
-          data-bs-toggle="modal"
-          data-bs-target="#exportModal"
-        >
-          Export
-        </button>
+
+        <div class="d-flex align-items-center gap-3">
+          <div class="d-flex align-items-center gap-2">
+            <label
+              for="analyticsTimeframeSelect"
+              class="form-label mb-0 fw-semibold"
+              >Timeframe:</label
+            >
+            <select class="form-select w-auto" id="analyticsTimeframeSelect">
+              <option value="daily" selected>Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-bs-toggle="modal"
+            data-bs-target="#exportModal"
+          >
+            Export
+          </button>
+        </div>
       </div>
 
       <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
@@ -417,23 +430,17 @@
           <div class="card card-accent p-4 w-100 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h6 class="mb-0">Product In Volume</h6>
-              <span class="badge bg-light text-dark border" id="donationVolumeBadge">Daily</span>
+              <span
+                class="badge bg-light text-dark border"
+                id="donationVolumeBadge"
+                >Daily</span
+              >
             </div>
             <div style="height: 100%">
               <canvas id="lineChart"></canvas>
             </div>
             <div class="fs-6 mb-2 text-center">
               <span id="donationTimeframe">Daily</span> Product In
-            </div>
-
-            <div
-              class="d-flex align-items-center justify-content-center mt-auto"
-            >
-              <span class="ms-2">Change View:</span>
-              <select class="form-select form-select-sm w-auto ms-2">
-                <option selected>Region</option>
-                <option>City</option>
-              </select>
             </div>
           </div>
         </div>
@@ -442,23 +449,17 @@
           <div class="card card-accent p-4 w-100 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h6 class="mb-0">Product Out Volume</h6>
-              <span class="badge bg-light text-dark border" id="pickupVolumeBadge">Daily</span>
+              <span
+                class="badge bg-light text-dark border"
+                id="pickupVolumeBadge"
+                >Daily</span
+              >
             </div>
             <div style="height: 100%">
               <canvas id="barChart"></canvas>
             </div>
             <div class="fs-6 mb-2 text-center">
               <span id="pickupTimeframe">Daily</span> Product Out
-            </div>
-
-            <div
-              class="d-flex align-items-center justify-content-center mt-auto"
-            >
-              <span class="ms-2">Change View:</span>
-              <select class="form-select form-select-sm w-auto ms-2">
-                <option selected>Region</option>
-                <option>City</option>
-              </select>
             </div>
           </div>
         </div>
