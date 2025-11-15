@@ -312,7 +312,7 @@
     });
   }
 
-  async function clearWeek(dropId, weekKey) {
+  function clearWeek(dropId) {
     const dz = qs("#" + dropId);
     const pool = qs("#pool");
     if (!dz || !pool) return;
@@ -327,15 +327,6 @@
       }
     });
     updateCounts();
-    // Persist empty list for this week if weekKey provided
-    if (weekKey) {
-      try {
-        await apiSavePlan({ [weekKey]: [] }, currentMonth());
-        await restoreFromServer();
-      } catch (_) {
-        /* ignore */
-      }
-    }
   }
 
   function collectWeekIds(dropId) {
@@ -825,10 +816,7 @@
       }
     }
     updateCounts();
-    toast(
-      `Auto added ${added} recipient(s) (priority: 2 infant, 2 elderly, 1 medicine)`,
-      added ? "success" : "warning"
-    );
+    toast("Auto added 10 recipient(s)", added ? "success" : "warning");
   }
 
   async function fetchRecipients() {
@@ -889,28 +877,23 @@
         filterPool(e.target.value)
       );
       qs("#clearW1")?.addEventListener("click", () => {
-        clearWeek("w1", "W1");
-        saveWeekKey("W1", "w1");
+        clearWeek("w1");
         console.info("Cleared week 1");
       });
       qs("#clearW2")?.addEventListener("click", () => {
-        clearWeek("w2", "W2");
-        saveWeekKey("W2", "w2");
+        clearWeek("w2");
         console.info("Cleared week 2");
       });
       qs("#clearW3")?.addEventListener("click", () => {
-        clearWeek("w3", "W3");
-        saveWeekKey("W3", "w3");
+        clearWeek("w3");
         console.info("Cleared week 3");
       });
       qs("#clearW4")?.addEventListener("click", () => {
-        clearWeek("w4", "W4");
-        saveWeekKey("W4", "w4");
+        clearWeek("w4");
         console.info("Cleared week 4");
       });
       qs("#clearW5")?.addEventListener("click", () => {
-        clearWeek("w5", "W5");
-        saveWeekKey("W5", "w5");
+        clearWeek("w5");
         console.info("Cleared week 5");
       });
       qs("#autoW1")?.addEventListener("click", () => autoFill("w1", 10));

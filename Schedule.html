@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Schedule</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Schedule</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -25,6 +26,9 @@
       .fc-toolbar-title {
         font-size: 1.1rem;
       }
+      .sidebar[data-role-pending="1"] {
+        visibility: hidden;
+      }
       .fc .fc-button {
         padding: 0.25rem 0.5rem;
         font-size: 0.875rem;
@@ -38,6 +42,147 @@
       /* Show past dates but make them unclickable */
       .fc-day-past {
         pointer-events: none;
+      }
+      .schedule-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      @media (min-width: 992px) {
+        .schedule-layout {
+          flex-direction: row;
+          align-items: stretch;
+        }
+      }
+      .schedule-layout .calendar-pane,
+      .schedule-layout .selected-pane {
+        min-width: 0;
+      }
+      .schedule-layout .calendar-pane {
+        flex: 1 1 auto;
+      }
+      .schedule-layout .selected-pane {
+        flex: 0 0 var(--selected-pane-width, 260px);
+        min-width: 240px;
+        max-width: 520px;
+        display: flex;
+      }
+      @media (min-width: 992px) {
+        .schedule-layout {
+          --calendar-min-width: 520px;
+        }
+        .schedule-layout .calendar-pane {
+          min-width: var(--calendar-min-width);
+        }
+      }
+      .schedule-layout .selected-pane .card,
+      .schedule-layout .calendar-pane .card {
+        height: 100%;
+      }
+      .schedule-resizer {
+        display: none;
+      }
+      @media (min-width: 992px) {
+        .schedule-resizer {
+          display: block;
+          width: 8px;
+          border-radius: 4px;
+          background: #dee2e6;
+          cursor: col-resize;
+          position: relative;
+        }
+        .schedule-resizer::before {
+          content: "";
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 2px;
+          height: 28px;
+          background: #adb5bd;
+          transform: translate(-50%, -50%);
+          border-radius: 1px;
+        }
+        body.schedule-resizing {
+          user-select: none;
+          cursor: col-resize;
+        }
+      }
+      .selected-pane .card-body {
+        overflow-y: auto;
+        max-height: 100%;
+      }
+      .fc .fc-daygrid-day.selected-day {
+        background-color: #f1f3f5;
+        outline: 2px solid #dee2e6;
+        outline-offset: -2px;
+      }
+      .fc .fc-daygrid-event,
+      .fc .fc-timegrid-event,
+      .fc .fc-event {
+        background-color: #f8f9fa !important;
+        border: 1px solid #dee2e6 !important;
+        color: #212529 !important;
+        box-shadow: none;
+      }
+      .fc .fc-daygrid-event,
+      .fc .fc-timegrid-event {
+        box-shadow: none;
+      }
+      .fc .fc-daygrid-event:hover,
+      .fc .fc-timegrid-event:hover,
+      .fc .fc-event:hover {
+        border-color: #ced4da !important;
+        background-color: #f8f9fa !important;
+      }
+      .fc .fc-event-title,
+      .fc .fc-event-title a,
+      .fc .fc-event a {
+        color: inherit !important;
+        text-decoration: none !important;
+        pointer-events: none !important;
+      }
+      .fc .fc-event-main,
+      .fc .fc-event-main-frame {
+        pointer-events: none !important;
+      }
+      .fc .fc-event,
+      .fc .fc-event:hover {
+        cursor: pointer;
+      }
+      .fc .fc-event-selected,
+      .fc .fc-event-selected:focus,
+      .fc .fc-event-selected:active,
+      .fc .fc-event:focus {
+        background-color: #f1f3f5 !important;
+        border-color: #dee2e6 !important;
+        color: #212529 !important;
+        box-shadow: inset 0 0 0 1px #dee2e6;
+      }
+      .fc .fc-event-selected .fc-event-main,
+      .fc .fc-event-selected a,
+      .fc .fc-event:focus .fc-event-main {
+        color: inherit !important;
+      }
+      .selected-day-item {
+        cursor: pointer;
+      }
+      .selected-day-item:hover,
+      .selected-day-item:focus {
+        background-color: #43b9c5 !important;
+        border-color: #43b9c5 !important;
+        color: #ffffff !important;
+      }
+      .selected-day-item.active,
+      .selected-day-item.active:hover,
+      .selected-day-item.active:focus {
+        background-color: #43b9c5 !important;
+        border-color: #43b9c5 !important;
+        color: #ffffff !important;
+      }
+      .selected-day-item:hover .text-muted,
+      .selected-day-item:focus .text-muted,
+      .selected-day-item.active .text-muted {
+        color: rgba(255, 255, 255, 0.85) !important;
       }
     </style>
   </head>
@@ -115,7 +260,7 @@
                 height="25"
               />
             </a>
-            <ul class="dropdown-menu dropdown-menu-end">
+            <ul class="dropdown-menu dropdown-menu-end" id="accountMenu">
               <li>
                 <a class="dropdown-item" href="adminProfile.html">
                   <i class="bi bi-person me-2"></i>Profile
@@ -148,7 +293,7 @@
       </div>
     </nav>
     <div class="sidebar-backdrop" style="display: none"></div>
-    <aside class="sidebar collapsed">
+    <aside class="sidebar collapsed" data-role-pending="1">
       <a
         href="AdminDashboard.html"
         class="nav-link d-flex align-items-center dashboard-link"
@@ -183,6 +328,24 @@
           height="35"
         />
         <span class="sidebar-text">Donation</span>
+      </a>
+
+      <a
+        href="DistributionPickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
       </a>
 
       <div class="nav-item position-relative">
@@ -242,17 +405,6 @@
                 />Result
               </a>
             </li>
-            <li class="nav-item">
-              <a class="nav-link active" href="Schedule.html">
-                <img
-                  src="images/calendar.gif"
-                  alt="Dashboard Icon"
-                  class="dashboard-icon"
-                  width="35"
-                  height="35"
-                />Schedule
-              </a>
-            </li>
           </ul>
         </div>
       </div>
@@ -288,7 +440,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -324,6 +476,23 @@
         />
         <span class="sidebar-text">Inventory</span>
       </a>
+      <a
+        href="Schedule.html"
+        class="nav-link active d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
+      </a>
     </aside>
     <main>
       <div aria-label="breadcrumb">
@@ -335,62 +504,57 @@
         </ol>
       </div>
 
-      <!-- Day Events Modal -->
-      <div
-        class="modal fade"
-        id="dayEventsModal"
-        tabindex="-1"
-        aria-hidden="true"
-      >
-        <div class="modal-dialog modal-dialog-scrollable">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Scheduled Events</h5>
-              <button
-                type="button"
-                class="btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Close"
-              ></button>
-            </div>
-            <div class="modal-body">
-              <div class="small text-muted mb-2" id="dayEventsDate"></div>
-              <ul class="list-group" id="dayEventsList">
-                <li class="list-group-item text-center text-muted">
-                  No events
-                </li>
-              </ul>
-            </div>
-            <div class="modal-footer">
-              <button
-                type="button"
-                class="btn btn-secondary"
-                data-bs-dismiss="modal"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div
         class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3"
       >
-        <h5 class="mb-0">Schedule</h5>
+        <h5 class="mb-0">Schedule Log</h5>
         <div class="d-flex gap-2">
           <button class="btn btn-sm btn-outline-primary" id="newEventBtn">
             <i class="bi bi-plus-lg"></i> New Event
           </button>
+          <button
+            class="btn btn-sm btn-outline-secondary"
+            id="editEventBtn"
+            disabled
+          >
+            <i class="bi bi-pencil-square"></i> Edit Selected
+          </button>
           <button class="btn btn-sm btn-outline-secondary" id="refreshCalBtn">
-            <i class="bi bi-arrow-clockwise"></i> Refresh
+            <i class="bi bi-arrow-clockwise"></i>
+            Refresh
           </button>
         </div>
       </div>
 
       <div id="calFeedback" class="small mb-2"></div>
-      <div class="card card-accent p-3">
-        <div id="calendar"></div>
+      <div class="schedule-layout" id="scheduleLayout" data-calendar-min="520">
+        <div class="calendar-pane">
+          <div class="card card-accent p-3 h-100">
+            <div id="calendar"></div>
+          </div>
+        </div>
+        <div
+          class="schedule-resizer"
+          id="scheduleResizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize calendar and event list"
+        ></div>
+        <div class="selected-pane" data-min-width="240" data-max-width="520">
+          <div class="card w-100" id="selectedDayCard">
+            <div class="card-header">
+              <small class="text-muted d-block">Selected date</small>
+              <div id="selectedDayDate" class="fw-semibold">Select a date</div>
+            </div>
+            <div class="card-body flex-grow-1 p-0">
+              <ul class="list-group list-group-flush" id="selectedDayList">
+                <li class="list-group-item text-center text-muted py-3">
+                  Click any date on the calendar to view events.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
 
@@ -414,6 +578,141 @@
             ></button>
           </div>
           <div class="modal-body" id="calAlertBody">Done.</div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event View Modal -->
+    <div
+      class="modal fade"
+      id="eventViewModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Event Details</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body" id="eventViewBody">
+            <div class="mb-3">
+              <h5 id="viewEventTitle" class="mb-1">&nbsp;</h5>
+              <span class="badge bg-secondary" id="viewEventType">&nbsp;</span>
+              <span
+                class="badge bg-light text-dark"
+                id="viewEventStatus"
+              ></span>
+            </div>
+            <dl class="row small mb-0">
+              <dt
+                class="col-4 text-muted"
+                data-view-row="start"
+                data-view-label="start"
+                data-default-label="Start"
+              >
+                Start
+              </dt>
+              <dd class="col-8" id="viewEventStart" data-view-row="start">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="end"
+                data-view-label="end"
+                data-default-label="End"
+              >
+                End
+              </dt>
+              <dd class="col-8" id="viewEventEnd" data-view-row="end">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="recipients"
+                data-view-label="recipients"
+                data-default-label="Recipients"
+              >
+                Recipients
+              </dt>
+              <dd
+                class="col-8"
+                id="viewEventRecipients"
+                data-view-row="recipients"
+              >
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="donor"
+                data-view-label="donor"
+                data-default-label="Donor"
+              >
+                Donor
+              </dt>
+              <dd class="col-8" id="viewEventDonor" data-view-row="donor">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="location"
+                data-view-label="location"
+                data-default-label="Location"
+              >
+                Location
+              </dt>
+              <dd class="col-8" id="viewEventLocation" data-view-row="location">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="notes"
+                data-view-label="notes"
+                data-default-label="Notes"
+              >
+                Notes
+              </dt>
+              <dd class="col-8" id="viewEventNotes" data-view-row="notes">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="created"
+                data-view-label="created"
+                data-default-label="Created By"
+              >
+                Created By
+              </dt>
+              <dd class="col-8" id="viewEventCreatedBy" data-view-row="created">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="updated"
+                data-view-label="updated"
+                data-default-label="Updated"
+              >
+                Updated
+              </dt>
+              <dd class="col-8" id="viewEventUpdated" data-view-row="updated">
+                &nbsp;
+              </dd>
+            </dl>
+          </div>
           <div class="modal-footer">
             <button
               type="button"
@@ -463,52 +762,59 @@
                 />
               </div>
               <div class="row g-2" id="wrapDateTimeDefault">
-                <div class="col-6">
-                  <label class="form-label mb-1">Start</label>
-                  <input
-                    type="datetime-local"
-                    id="evStart"
-                    class="form-control form-control-sm"
-                    required
-                  />
-                </div>
-                <div class="col-6">
-                  <label class="form-label mb-1">End</label>
-                  <input
-                    type="datetime-local"
-                    id="evEnd"
-                    class="form-control form-control-sm"
-                  />
-                </div>
-              </div>
-              <!-- Admin Pickup date+time (no end) -->
-              <div class="row g-2" id="wrapDateTimeAdmin" style="display: none">
-                <div class="col-6">
+                <div class="col-6 col-lg-4">
                   <label class="form-label mb-1">Date</label>
                   <input
                     type="date"
                     id="evDate"
                     class="form-control form-control-sm"
+                    required
                   />
                 </div>
-                <div class="col-6">
-                  <label class="form-label mb-1">Time</label>
+                <div class="col-6 col-lg-4">
+                  <label class="form-label mb-1">Start Time</label>
                   <input
                     type="time"
-                    id="evTime"
+                    id="evStartTime"
+                    class="form-control form-control-sm"
+                    required
+                  />
+                </div>
+                <div class="col-6 col-lg-4">
+                  <label class="form-label mb-1">End Time</label>
+                  <input
+                    type="time"
+                    id="evEndTime"
                     class="form-control form-control-sm"
                   />
                 </div>
               </div>
-              <div class="row g-2 mt-2">
+              <div class="row g-2 mt-2 align-items-end">
                 <div class="col-6" id="wrapRecipient">
-                  <label class="form-label mb-1">Recipient ID</label>
+                  <label class="form-label mb-1">Recipient</label>
+                  <div class="d-flex gap-2">
+                    <select
+                      id="evRecipientSelect"
+                      class="form-select form-select-sm flex-grow-1"
+                      style="width: 100%"
+                    ></select>
+                    <button
+                      type="button"
+                      class="btn btn-outline-primary btn-sm"
+                      id="addRecipientBtn"
+                      title="Add recipient to list"
+                    >
+                      <i class="bi bi-plus-lg"></i>
+                    </button>
+                  </div>
                   <input
                     type="number"
                     id="evRecipient"
                     class="form-control form-control-sm"
                     placeholder="optional"
+                    style="display: none"
                   />
+                  <div class="mt-2 small" id="evRecipientTags"></div>
                 </div>
                 <div class="col-6" id="wrapDonor">
                   <label class="form-label mb-1">Donor</label>
@@ -517,6 +823,11 @@
                     class="form-select form-select-sm"
                     style="width: 100%"
                   ></select>
+                  <div
+                    class="mt-2 small"
+                    id="evDonorDisplay"
+                    style="display: none"
+                  ></div>
                   <input
                     type="number"
                     id="evDonor"
@@ -626,6 +937,7 @@
     <script src="scripts/js/ui/notifications.js"></script>
     <script src="scripts/js/charts/adminDashboard.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
+    <script src="scripts/js/ui/scheduleRoleUi.js"></script>
     <script src="scripts/js/api/schedule.js?v=20250925"></script>
     <script src="scripts/js/utils/calendar.js"></script>
     <script src="scripts/js/ui/animation.js"></script>

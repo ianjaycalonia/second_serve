@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Taxonomy Settings</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Taxonomy</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -17,7 +18,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
-    <link rel="stylesheet" href="scripts/css/inventory.css" />
+    <link rel="stylesheet" href="scripts/css/taxonomy.css" />
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -162,6 +163,24 @@
         <span class="sidebar-text">Donation</span>
       </a>
 
+      <a
+        href="DistributionPickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
+      </a>
+
       <div class="nav-item position-relative">
         <a
           href="#distributionMenu"
@@ -185,7 +204,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column ms-3">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html">
                 <img
@@ -217,17 +236,6 @@
                   width="35"
                   height="35"
                 />Result
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="Schedule.html">
-                <img
-                  src="images/calendar.gif"
-                  alt="Dashboard Icon"
-                  class="dashboard-icon"
-                  width="35"
-                  height="35"
-                />Schedule
               </a>
             </li>
           </ul>
@@ -267,7 +275,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
 
       <a
@@ -304,6 +312,23 @@
           height="35"
         />
         <span class="sidebar-text">Inventory</span>
+      </a>
+      <a
+        href="Schedule.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
       </a>
     </aside>
 
@@ -379,10 +404,8 @@
             role="tabpanel"
             aria-labelledby="categories-tab"
           >
-            <div class="card">
-              <div
-                class="card-header d-flex justify-content-between align-items-center"
-              >
+            <div class="d-flex flex-column gap-3">
+              <div class="d-flex justify-content-between align-items-center">
                 <div class="d-flex gap-2">
                   <input
                     type="text"
@@ -404,26 +427,26 @@
                   <i class="bi bi-plus-lg"></i> Add
                 </button>
               </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
-                    <thead class="table-light">
-                      <tr>
-                        <th style="width: 30%">Primary</th>
-                        <th style="width: 30%">Secondary</th>
-                        <th style="width: 10%">Active</th>
-                        <th style="width: 30%" class="text-end">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="catTableBody">
-                      <tr>
-                        <td colspan="4" class="text-center text-muted py-3">
-                          Loading...
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+              <div class="table-responsive">
+                <table
+                  class="table table-sm align-middle table-striped table-bordered"
+                >
+                  <thead class="table-light">
+                    <tr>
+                      <th>Primary</th>
+                      <th>Secondary</th>
+                      <th>Active</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="catTableBody">
+                    <tr>
+                      <td colspan="4" class="text-center text-muted py-3">
+                        Loading...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -434,10 +457,8 @@
             role="tabpanel"
             aria-labelledby="units-tab"
           >
-            <div class="card">
-              <div
-                class="card-header d-flex justify-content-between align-items-center"
-              >
+            <div class="d-flex flex-column gap-3">
+              <div class="d-flex justify-content-between align-items-center">
                 <div class="d-flex gap-2">
                   <input
                     type="text"
@@ -459,26 +480,26 @@
                   <i class="bi bi-plus-lg"></i> Add
                 </button>
               </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
-                    <thead class="table-light">
-                      <tr>
-                        <th style="width: 25%">Code</th>
-                        <th style="width: 35%">Label</th>
-                        <th style="width: 10%">Active</th>
-                        <th style="width: 30%" class="text-end">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="unitTableBody">
-                      <tr>
-                        <td colspan="4" class="text-center text-muted py-3">
-                          Loading...
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+              <div class="table-responsive">
+                <table
+                  class="table table-sm align-middle table-striped table-bordered"
+                >
+                  <thead class="table-light">
+                    <tr>
+                      <th>Code</th>
+                      <th>Label</th>
+                      <th>Active</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="unitTableBody">
+                    <tr>
+                      <td colspan="4" class="text-center text-muted py-3">
+                        Loading...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -489,9 +510,9 @@
             role="tabpanel"
             aria-labelledby="assignment-tab"
           >
-            <div class="card">
+            <div class="d-flex flex-column gap-3">
               <div
-                class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+                class="d-flex justify-content-between align-items-center flex-wrap gap-2"
               >
                 <div>
                   <h6 class="mb-0">Metadata Assignment</h6>
@@ -507,29 +528,29 @@
                   <span>Refresh</span>
                 </button>
               </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
-                    <thead class="table-light">
-                      <tr>
-                        <th style="width: 24%">Item</th>
-                        <th style="width: 16%">Missing Metadata</th>
-                        <th style="width: 18%">Donor</th>
-                        <th style="width: 10%" class="text-center">Qty</th>
-                        <th style="width: 12%">Expiry</th>
-                        <th style="width: 12%">Submitted</th>
-                        <th style="width: 8%" class="text-end">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="assignmentTableBody">
-                      <tr>
-                        <td colspan="7" class="text-center text-muted py-3">
-                          Loading...
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+              <div class="table-responsive">
+                <table
+                  class="table table-sm align-middle table-striped table-bordered"
+                >
+                  <thead class="table-light">
+                    <tr>
+                      <th>Item</th>
+                      <th>Missing Metadata</th>
+                      <th>Donor</th>
+                      <th>Qty</th>
+                      <th>Expiry</th>
+                      <th>Submitted</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="assignmentTableBody">
+                    <tr>
+                      <td colspan="7" class="text-center text-muted py-3">
+                        Loading...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -778,9 +799,9 @@
     <script src="scripts/js/ui/messages.js"></script>
     <script src="scripts/js/ui/notifications.js"></script>
     <script src="scripts/js/ui/sidebar.js"></script>
-    <script src="scripts/js/ui/animation.js"></script>
-    <script src="scripts/js/ui/animatedNotification.js"></script>
-    <script src="scripts/js/ui/animatedMessage.js"></script>
     <script src="scripts/js/ui/taxonomy.js"></script>
+    <script src="scripts/js/ui/animatedMessage.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
   </body>
 </html>

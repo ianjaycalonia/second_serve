@@ -879,25 +879,36 @@ class Allocation
 
     public function schedule(int $allocationId, int $recipientId): bool
     {
-        // Allow schedule if owned by recipient and in Pending/Allocated/Notified/Acknowledged/Updated status
-        $row = $this->db->query('SELECT status, recipient_id FROM allocations WHERE allocation_id = ?', [$allocationId])->fetch();
-        if (!$row || (int)$row['recipient_id'] !== $recipientId) return false;
-        $st = strtolower((string)$row['status']);
-        if (!in_array($st, ['pending','allocated','notified','acknowledged','updated'], true)) return false;
+        $allocationId = (int)$allocationId;
+        $recipientId = (int)$recipientId;
+        if ($allocationId <= 0 || $recipientId <= 0) {
+            return false;
+        }
 
-        // If not yet acknowledged, auto-acknowledge now
-        if ($st !== 'acknowledged'){
+        $row = $this->db->query('SELECT status, recipient_id FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocationId])->fetch();
+        if (!$row || (int)($row['recipient_id'] ?? 0) !== $recipientId) {
+            return false;
+        }
+        $status = strtolower((string)($row['status'] ?? ''));
+        if (!in_array($status, ['pending','allocated','notified','acknowledged','updated'], true)) {
+            return false;
+        }
+
+        if ($status !== 'acknowledged') {
             $this->db->query('UPDATE allocations SET status = "Acknowledged", acknowledged_at = NOW(), updated_at = NOW() WHERE allocation_id = ?', [$allocationId]);
         }
 
-        // Deduct inventory lots exactly as allocated and log Product Out movements.
-        // If any lot is missing or has insufficient quantity, rollback and return false.
         $items = $this->db->query('SELECT inventory_id, quantity FROM allocation_items WHERE allocation_id = ? ORDER BY id ASC', [$allocationId])->fetchAll();
-        if (!$items) { return false; }
+        if (!$items) {
+            return false;
+        }
 
-        $this->db->beginTransaction();
+        $startedTxn = !$this->db->inTransaction();
+        if ($startedTxn) {
+            $this->db->beginTransaction();
+        }
+
         try {
-            // Ensure movements table exists (Allocation cannot call Inventory::ensureTables which is private)
             try {
                 $this->db->query(
                     "CREATE TABLE IF NOT EXISTS `inventory_movements` (
@@ -917,40 +928,246 @@ class Allocation
                         KEY `im_performed_by_idx` (`performed_by`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
                 );
-            } catch (Exception $e) { /* ignore ensure errors */ }
+            } catch (Exception $e) {
+                // best-effort; continue
+            }
+
             foreach ($items as $it) {
                 $inventoryId = (int)($it['inventory_id'] ?? 0);
                 $need = (int)($it['quantity'] ?? 0);
-                if ($inventoryId <= 0 || $need <= 0) { continue; }
-                // Lock current lot
-                $invRow = $this->db->query('SELECT quantity FROM inventory WHERE inventory_id = ? FOR UPDATE', [$inventoryId])->fetch();
-                if (!$invRow) { if ($startedTxn && $this->db->inTransaction()) { $this->db->rollBack(); } return false; }
-                $have = (int)$invRow['quantity'];
-                if ($have < $need) { if ($startedTxn && $this->db->inTransaction()) { $this->db->rollBack(); } return false; }
-                // Deduct
+                if ($inventoryId <= 0 || $need <= 0) {
+                    continue;
+                }
+
+                $lot = $this->db->query('SELECT quantity FROM inventory WHERE inventory_id = ? FOR UPDATE', [$inventoryId])->fetch();
+                if (!$lot) {
+                    throw new RuntimeException('Inventory item not found');
+                }
+                if ((int)($lot['quantity'] ?? 0) < $need) {
+                    throw new RuntimeException('Insufficient stock for allocation item');
+                }
+
                 $this->db->query('UPDATE inventory SET quantity = quantity - ? WHERE inventory_id = ?', [$need, $inventoryId]);
-                // Log movement as Product Out to recipient (best effort)
+
                 try {
                     $this->db->query(
                         'INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at) VALUES (?, "out", ?, "recipient", ?, NULL, ?, NOW())',
                         [ $inventoryId, $need, $recipientId, $recipientId ]
                     );
-                } catch (Exception $e) { /* ignore movement log errors but keep deduction */ }
+                } catch (Exception $e) {
+                    // ignore log errors
+                }
             }
-            // Mark picked up
-            $this->db->query('UPDATE allocations SET status = "Picked Up", updated_at = NOW() WHERE allocation_id = ?', [$allocationId]);
-            if ($startedTxn && $this->db->inTransaction()) { $this->db->commit(); }
-            // Notify admins (best effort)
-            try {
-                $rec = $this->db->query('SELECT u.name, rp.organization_name FROM users u LEFT JOIN recipient_profiles rp ON u.user_id = rp.user_id WHERE u.user_id = ?', [$recipientId])->fetch();
-                $rname = $rec && $rec['organization_name'] ? $rec['organization_name'] : ($rec ? ($rec['name'] ?? ('Recipient '.$recipientId)) : ('Recipient '.$recipientId));
-                $this->notifyAdmins('allocation_picked_up', 'allocation', $allocationId, "Allocation picked up by {$rname} and inventory deducted.");
-            } catch (Exception $e) { /* ignore notification errors */ }
-            return true;
+
+            $this->db->query('UPDATE allocations SET status = "Picked Up", picked_up_at = NOW(), picked_up_by = ?, updated_at = NOW() WHERE allocation_id = ?', [$recipientId, $allocationId]);
+
+            if ($startedTxn && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (Exception $e) {
-            if ($startedTxn && $this->db->inTransaction()) { $this->db->rollBack(); }
+            if ($startedTxn && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             throw $e;
         }
+
+        try {
+            $rec = $this->db->query('SELECT u.name, rp.organization_name FROM users u LEFT JOIN recipient_profiles rp ON u.user_id = rp.user_id WHERE u.user_id = ? LIMIT 1', [$recipientId])->fetch();
+            $rname = $rec && $rec['organization_name'] ? $rec['organization_name'] : ($rec ? ($rec['name'] ?? ('Recipient '.$recipientId)) : ('Recipient '.$recipientId));
+            $this->notifyAdmins('allocation_picked_up', 'allocation', $allocationId, "Allocation picked up by {$rname} and inventory deducted.");
+        } catch (Exception $e) {
+            // ignore notification errors
+        }
+
+        return true;
+    }
+
+    public function confirmPickup(int $allocationId, int $adminId, ?string $photoBase64, ?string $signatureBase64, ?string $note = null): array
+    {
+        $allocationId = (int)$allocationId;
+        $adminId = (int)$adminId;
+        if ($allocationId <= 0 || $adminId <= 0) {
+            throw new InvalidArgumentException('allocation_id and admin_id are required');
+        }
+
+        $row = $this->db->query('SELECT status, pickup_photo_path, pickup_signature_path, recipient_id FROM allocations WHERE allocation_id = ? LIMIT 1', [$allocationId])->fetch();
+        if (!$row) {
+            throw new RuntimeException('Allocation not found');
+        }
+
+        $status = strtolower((string)($row['status'] ?? ''));
+        $recipientId = (int)($row['recipient_id'] ?? 0);
+        if ($recipientId <= 0) {
+            throw new RuntimeException('Allocation recipient not found');
+        }
+        $paths = [
+            'photo_path' => $row['pickup_photo_path'] ?? null,
+            'signature_path' => $row['pickup_signature_path'] ?? null
+        ];
+
+        if ($status === 'picked up') {
+            return $paths;
+        }
+        if (!in_array($status, ['acknowledged','updated'], true)) {
+            throw new RuntimeException('Allocation must be acknowledged before confirming pickup');
+        }
+
+        if ($photoBase64 !== null && trim($photoBase64) !== '') {
+            $paths['photo_path'] = $this->savePickupImageBase64($photoBase64, 'photos');
+        }
+        if ($signatureBase64 !== null && trim($signatureBase64) !== '') {
+            $paths['signature_path'] = $this->savePickupImageBase64($signatureBase64, 'signatures');
+        }
+
+        $cleanNote = $note !== null ? trim((string)$note) : null;
+        if ($cleanNote !== null && $cleanNote !== '') {
+            // limit note length to avoid excessively large payloads in movements table
+            $cleanNote = mb_substr($cleanNote, 0, 500);
+        } else {
+            $cleanNote = null;
+        }
+
+        $startedTxn = !$this->db->inTransaction();
+        if ($startedTxn) {
+            $this->db->beginTransaction();
+        }
+
+        try {
+            $items = $this->db->query(
+                'SELECT ai.inventory_id, ai.quantity, inv.donation_item_id
+                   FROM allocation_items ai
+                   LEFT JOIN inventory inv ON inv.inventory_id = ai.inventory_id
+                  WHERE ai.allocation_id = ?
+                  ORDER BY ai.id ASC',
+                [$allocationId]
+            )->fetchAll();
+
+            if (!$items) {
+                throw new RuntimeException('Allocation has no items to deduct');
+            }
+
+            try {
+                $this->db->query(
+                    "CREATE TABLE IF NOT EXISTS `inventory_movements` (
+                        `id` int(11) NOT NULL AUTO_INCREMENT,
+                        `inventory_id` int(11) NOT NULL,
+                        `donation_item_id` int(11) DEFAULT NULL,
+                        `direction` enum('in','out') NOT NULL,
+                        `quantity` int(11) NOT NULL,
+                        `mode` varchar(32) NOT NULL,
+                        `recipient_id` int(11) DEFAULT NULL,
+                        `note` text DEFAULT NULL,
+                        `performed_by` int(11) NOT NULL,
+                        `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+                        PRIMARY KEY (`id`),
+                        KEY `im_inventory_idx` (`inventory_id`),
+                        KEY `im_recipient_idx` (`recipient_id`),
+                        KEY `im_performed_by_idx` (`performed_by`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+                );
+            } catch (Exception $e) {
+                // best effort; continue even if the helper DDL fails (legacy deployments)
+            }
+
+            foreach ($items as $it) {
+                $inventoryId = (int)($it['inventory_id'] ?? 0);
+                $need = (int)($it['quantity'] ?? 0);
+                if ($inventoryId <= 0 || $need <= 0) {
+                    continue;
+                }
+
+                $lot = $this->db->query('SELECT quantity FROM inventory WHERE inventory_id = ? FOR UPDATE', [$inventoryId])->fetch();
+                if (!$lot) {
+                    throw new RuntimeException('Inventory item not found');
+                }
+                $available = (int)($lot['quantity'] ?? 0);
+                if ($available < $need) {
+                    throw new RuntimeException('Insufficient stock for allocation item');
+                }
+
+                $this->db->query('UPDATE inventory SET quantity = quantity - ? WHERE inventory_id = ?', [$need, $inventoryId]);
+
+                try {
+                    $this->db->query(
+                        'INSERT INTO inventory_movements (inventory_id, donation_item_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
+                         VALUES (?, ?, "out", ?, "admin_pickup", ?, ?, ?, NOW())',
+                        [
+                            $inventoryId,
+                            isset($it['donation_item_id']) ? (int)$it['donation_item_id'] : null,
+                            $need,
+                            $recipientId,
+                            $cleanNote,
+                            $adminId
+                        ]
+                    );
+                } catch (Exception $e) {
+                    // ignore logging errors so inventory deduction still succeeds
+                }
+            }
+
+            $sets = ['status = "Picked Up"', 'picked_up_at = NOW()', 'picked_up_by = ?', 'updated_at = NOW()'];
+            $params = [$recipientId];
+
+            if ($paths['photo_path'] !== null) {
+                $sets[] = 'pickup_photo_path = ?';
+                $params[] = $paths['photo_path'];
+            }
+
+            if ($paths['signature_path'] !== null) {
+                $sets[] = 'pickup_signature_path = ?';
+                $params[] = $paths['signature_path'];
+            }
+
+            $params[] = $allocationId;
+            $sql = 'UPDATE allocations SET ' . implode(', ', $sets) . ' WHERE allocation_id = ?';
+            $this->db->query($sql, $params);
+
+            if ($startedTxn && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
+        } catch (Exception $e) {
+            if ($startedTxn && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+
+        try {
+            $this->notifyAdmins('allocation_picked_up', 'allocation', $allocationId, 'Pickup validated by the admin');
+        } catch (Exception $e) {
+            // ignore notification errors
+        }
+
+        return $paths;
+    }
+
+    private function savePickupImageBase64(string $base64, string $type): string
+    {
+        $base64 = trim($base64);
+        $ext = 'png';
+        if (preg_match('/^data:image\/(png|jpg|jpeg);base64,/', $base64, $m)) {
+            $ext = $m[1] === 'jpeg' ? 'jpg' : $m[1];
+            $base64 = substr($base64, strpos($base64, ',') + 1);
+        }
+        $data = base64_decode($base64, true);
+        if ($data === false) {
+            throw new RuntimeException('Invalid image data');
+        }
+        $type = preg_replace('/[^a-z0-9_-]+/i', '', $type);
+        if ($type === '') {
+            $type = 'photos';
+        }
+        $dir = __DIR__ . '/../../images/uploads/pickups/' . $type;
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new RuntimeException('Unable to create pickup image directory');
+        }
+        $random = bin2hex(random_bytes(8));
+        $filename = sprintf('pickup_%s_%d_%s.%s', $type, time(), $random, $ext);
+        $path = $dir . '/' . $filename;
+        if (file_put_contents($path, $data) === false) {
+            throw new RuntimeException('Failed to write pickup image');
+        }
+        return '/images/uploads/pickups/' . $type . '/' . $filename;
     }
 
     public function acknowledgeByAdmin(int $allocationId, int $adminId): bool

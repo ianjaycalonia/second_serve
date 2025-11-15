@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Settings</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -167,6 +168,24 @@
         <span class="sidebar-text">Donation</span>
       </a>
 
+      <a
+        href="DistributionPickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
+      </a>
+
       <div class="nav-item position-relative">
         <a
           href="#distributionMenu"
@@ -190,7 +209,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column ms-3">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html">
                 <img
@@ -222,17 +241,6 @@
                   width="35"
                   height="35"
                 />Result
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="Schedule.html">
-                <img
-                  src="images/calendar.gif"
-                  alt="Dashboard Icon"
-                  class="dashboard-icon"
-                  width="35"
-                  height="35"
-                />Schedule
               </a>
             </li>
           </ul>
@@ -270,7 +278,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -306,6 +314,23 @@
         />
         <span class="sidebar-text">Inventory</span>
       </a>
+      <a
+        href="Schedule.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
+      </a>
     </aside>
 
     <main class="pb-5">
@@ -335,7 +360,7 @@
           class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"
         >
           <div>
-            <h4 class="mb-1">Admin Settings</h4>
+            <h5 class="mb-1">Admin Settings</h5>
             <p class="text-muted mb-0">
               Configure system identity, acknowledgement policies, and
               allocation preferences from one place.
@@ -350,27 +375,13 @@
           <li class="nav-item" role="presentation">
             <button
               class="nav-link active"
-              id="general-tab"
-              data-bs-toggle="tab"
-              data-bs-target="#general-tab-pane"
-              type="button"
-              role="tab"
-              aria-controls="general-tab-pane"
-              aria-selected="true"
-            >
-              General
-            </button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button
-              class="nav-link"
               id="configurations-tab"
               data-bs-toggle="tab"
               data-bs-target="#configurations-tab-pane"
               type="button"
               role="tab"
               aria-controls="configurations-tab-pane"
-              aria-selected="false"
+              aria-selected="true"
             >
               Configurations
             </button>
@@ -380,123 +391,6 @@
         <div class="tab-content mt-3" id="myTabContent">
           <div
             class="tab-pane fade show active"
-            id="general-tab-pane"
-            role="tabpanel"
-            aria-labelledby="general-tab"
-            tabindex="0"
-          >
-            <form class="row g-4 mt-1">
-              <div class="col-12 col-xl-8">
-                <div class="card card-accent p-3 h-100">
-                  <div
-                    class="d-flex justify-content-between align-items-center mb-3"
-                  >
-                    <h6 class="mb-0">System Identity</h6>
-                    <span class="badge bg-primary-subtle text-primary"
-                      >General</span
-                    >
-                  </div>
-                  <p class="text-muted small mb-3">
-                    Provide the name and description that appear across
-                    dashboards, emails, and printable reports.
-                  </p>
-                  <div class="row g-3">
-                    <div class="col-12">
-                      <label for="sysLabel" class="form-label"
-                        >System Name</label
-                      >
-                      <input
-                        type="text"
-                        id="sysLabel"
-                        class="form-control form-control-sm"
-                        value="Second Serve"
-                      />
-                    </div>
-                    <div class="col-12">
-                      <label for="sysDescription" class="form-label"
-                        >System Description</label
-                      >
-                      <input
-                        type="text"
-                        id="sysDescription"
-                        class="form-control form-control-sm"
-                        value="Web-Based Food Donation Management System"
-                      />
-                    </div>
-                    <div class="col-12 col-md-6">
-                      <label for="sysTimeZone" class="form-label"
-                        >Default Timezone</label
-                      >
-                      <select
-                        id="sysTimeZone"
-                        class="form-select form-select-sm"
-                      >
-                        <option value="asiaManila" selected>Asia/Manila</option>
-                      </select>
-                    </div>
-                    <div class="col-12 col-md-6">
-                      <label for="sysDateFormat" class="form-label"
-                        >Date Format</label
-                      >
-                      <select
-                        id="sysDateFormat"
-                        class="form-select form-select-sm"
-                      >
-                        <option value="mm-dd-yyyy" selected>MM-DD-YYYY</option>
-                        <option value="dd-mm-yyyy">DD-MM-YYYY</option>
-                        <option value="yyyy-mm-dd">YYYY-MM-DD</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-12 col-xl-4">
-                <div class="card card-accent p-3 h-100">
-                  <div
-                    class="d-flex justify-content-between align-items-center mb-3"
-                  >
-                    <h6 class="mb-0">Branding</h6>
-                    <span class="badge bg-warning-subtle text-warning"
-                      >Appearance</span
-                    >
-                  </div>
-                  <p class="text-muted small mb-3">
-                    Update the logo used across admin pages, recipient
-                    acknowledgements, and exports.
-                  </p>
-                  <div class="text-center">
-                    <img
-                      src="images/simply_share.png"
-                      alt="System Logo"
-                      class="img-fluid rounded-3 border mb-3"
-                      style="max-width: 220px"
-                    />
-                    <div class="d-flex justify-content-center gap-2 flex-wrap">
-                      <button class="btn btn-sm btn-primary" type="button">
-                        Change
-                      </button>
-                      <button
-                        class="btn btn-sm btn-outline-danger"
-                        type="button"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-12 d-flex justify-content-end gap-2">
-                <button class="btn btn-sm btn-outline-secondary" type="button">
-                  Discard
-                </button>
-                <button class="btn btn-sm btn-primary" type="button">
-                  Save General Settings
-                </button>
-              </div>
-            </form>
-          </div>
-          <div
-            class="tab-pane fade"
             id="configurations-tab-pane"
             role="tabpanel"
             aria-labelledby="configurations-tab"

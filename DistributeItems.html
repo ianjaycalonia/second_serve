@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Distribute Items</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Distribute Items</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -164,6 +165,24 @@
         <span class="sidebar-text">Donation</span>
       </a>
 
+      <a
+        href="DistributionPickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
+      </a>
+
       <div class="nav-item position-relative">
         <a
           href="#distributionMenu"
@@ -221,17 +240,6 @@
                 />Result
               </a>
             </li>
-            <li class="nav-item">
-              <a class="nav-link" href="Schedule.html">
-                <img
-                  src="images/calendar.gif"
-                  alt="Dashboard Icon"
-                  class="dashboard-icon"
-                  width="35"
-                  height="35"
-                />Schedule
-              </a>
-            </li>
           </ul>
         </div>
       </div>
@@ -267,7 +275,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -303,8 +311,32 @@
         />
         <span class="sidebar-text">Inventory</span>
       </a>
+      <a
+        href="Schedule.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
+      </a>
     </aside>
     <main>
+      <div
+        id="diToastContainer"
+        class="toast-container position-fixed p-3"
+        aria-live="polite"
+        aria-atomic="true"
+        style="z-index: 1080; left: 24px; bottom: 24px"
+      ></div>
       <div aria-label="breadcrumb">
         <ol class="breadcrumb">
           <li class="breadcrumb-item">
@@ -429,15 +461,7 @@
                   </button>
                 </div>
               </div>
-              <div class="col-12 col-md-5">
-                <label class="form-label mb-1">Category</label>
-                <select
-                  id="diGlobalCat"
-                  class="form-select form-select-sm"
-                  data-placeholder="Category"
-                ></select>
-              </div>
-              <div class="col-12 col-md-5">
+              <div class="col-12 col-md-8">
                 <label class="form-label mb-1">Item Name</label>
                 <select
                   id="diGlobalName"
@@ -445,7 +469,7 @@
                   data-placeholder="Item name"
                 ></select>
               </div>
-              <div class="col-6 col-md-2">
+              <div class="col-6 col-md-4 col-lg-3">
                 <label class="form-label mb-1">Qty</label>
                 <input
                   id="diGlobalQty"
@@ -592,7 +616,7 @@
     <script src="scripts/js/algorithms/allocationAlgorithm.js?v=20251003-2203"></script>
     <!-- New: scheduling UI module must load before adminDistribute.js -->
     <script src="scripts/js/algorithms/schedulingAlgorithmUI.js?v=20251005-1213"></script>
-    <script src="scripts/js/ui/adminDistribute.js?v=20251005-1219"></script>
+    <script src="scripts/js/ui/adminDistribute.js?v=20251031-1606"></script>
     <script src="scripts/js/ui/sidebar.js?v=20250925"></script>
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedNotification.js"></script>
@@ -652,6 +676,10 @@
           try {
             if (typeof attachAllocateNow === "function") attachAllocateNow();
           } catch (_) {}
+          try {
+            if (typeof diMaybeShowAllocationToast === "function")
+              diMaybeShowAllocationToast();
+          } catch (_) {}
         }
         function bind() {
           var btn = document.getElementById("diNextTabBtn");
@@ -662,6 +690,12 @@
         if (document.readyState === "loading")
           document.addEventListener("DOMContentLoaded", bind);
         else bind();
+        setTimeout(function () {
+          try {
+            if (typeof diMaybeShowAllocationToast === "function")
+              diMaybeShowAllocationToast();
+          } catch (_) {}
+        }, 200);
       })();
     </script>
     <!-- Scheduling scripts removed on this page to avoid injected Weekly Schedule UI -->

@@ -1,23 +1,43 @@
 (function(){
   'use strict';
   const Scheduling = {};
+  const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'declined', 'no show']);
+
+  function toRecipientIdArray(value){
+    return (Array.isArray(value) ? value : [])
+      .map(v => Number.parseInt(v, 10))
+      .filter(Number.isFinite);
+  }
+
+  function normalizeWeekEntries(entry){
+    return toRecipientIdArray(entry).map(Number);
+  }
+
+  function buildWeekMap(source){
+    return {
+      W1: normalizeWeekEntries(source?.W1),
+      W2: normalizeWeekEntries(source?.W2),
+      W3: normalizeWeekEntries(source?.W3),
+      W4: normalizeWeekEntries(source?.W4),
+    };
+  }
 
   // Normalize extended weeks plan (weeks_ex) into a simple W1..W4 map of recipient IDs
   Scheduling.normalizeWeeksExToMap = function(weeksEx){
     const map = { W1: [], W2: [], W3: [], W4: [] };
-    if (!Array.isArray(weeksEx)) return map;
+    if (!weeksEx) return map;
+    if (!Array.isArray(weeksEx)) {
+      return buildWeekMap(weeksEx);
+    }
     if (weeksEx.length && typeof weeksEx[0] === 'object' && !Array.isArray(weeksEx[0])){
       weeksEx.forEach(w => {
         const idx = Number(w.week_index || w.index || w.week || 0);
-        const ids = Array.isArray(w.recipient_ids || w.ids) ? (w.recipient_ids || w.ids) : [];
         const key = idx===1?'W1':idx===2?'W2':idx===3?'W3':idx===4?'W4':null;
-        if (key){ map[key] = ids.map(n=>parseInt(n,10)).filter(Number.isFinite); }
+        if (key){ map[key] = toRecipientIdArray(w.recipient_ids || w.ids); }
       });
     } else if (weeksEx.length && Array.isArray(weeksEx[0])){
       const keys = ['W1','W2','W3','W4'];
-      keys.forEach((k,i)=>{ const val = weeksEx[i]||[]; map[k] = val.map(n=>parseInt(n,10)).filter(Number.isFinite); });
-    } else if (weeksEx && typeof weeksEx === 'object'){
-      ['W1','W2','W3','W4'].forEach(k => { const v = weeksEx[k]; map[k] = Array.isArray(v)? v.map(n=>parseInt(n,10)).filter(Number.isFinite) : []; });
+      keys.forEach((k,i)=>{ map[k] = toRecipientIdArray(weeksEx[i] || []); });
     }
     return map;
   };
@@ -26,12 +46,11 @@
   // items: [{ recipient_id, status, ... }]
   Scheduling.computeCancelledSet = function(items){
     try{
-      const CANCEL = new Set(['cancelled','canceled','declined','no show']);
       const out = new Set();
       (Array.isArray(items)?items:[]).forEach(a => {
         const id = parseInt(a?.recipient_id,10)||0; if (!id) return;
         const s = String(a?.status||'').trim().toLowerCase();
-        if (CANCEL.has(s)) out.add(id);
+        if (CANCELLED_STATUSES.has(s)) out.add(id);
       });
       return out;
     } catch(_){ return new Set(); }
@@ -54,10 +73,7 @@
   // Build a full ordered candidate list (no cap) by priority rules
   // Priority: cancelledSet first, then current bucket, then next buckets wrap-around
   Scheduling.planOrder = function(weeksMap, cancelledSet, currentBucket){
-    const toNums = (arr)=> (Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(Number.isFinite);
-    const map = {
-      W1: toNums(weeksMap?.W1), W2: toNums(weeksMap?.W2), W3: toNums(weeksMap?.W3), W4: toNums(weeksMap?.W4)
-    };
+    const map = buildWeekMap(weeksMap || {});
     const cur = currentBucket || Scheduling.getCurrentBucketNow();
     const order = ['W1','W2','W3','W4'];
     const curIdx = ({W1:0,W2:1,W3:2,W4:3})[cur] ?? 0;
@@ -122,13 +138,7 @@
 
   // Build Selected deterministically: cancelled -> current week -> others (max 10)
   Scheduling.buildSelectedIds = function(weeksMap, cancelledSet, options){
-    const toNums = (arr)=> (Array.isArray(arr)?arr:[]).map(v=>parseInt(v,10)).filter(Number.isFinite);
-    const map = {
-      W1: toNums(weeksMap?.W1),
-      W2: toNums(weeksMap?.W2),
-      W3: toNums(weeksMap?.W3),
-      W4: toNums(weeksMap?.W4)
-    };
+    const map = buildWeekMap(weeksMap || {});
     const cur = (options?.currentBucket) || Scheduling.getCurrentBucketNow();
     const order = ['W1','W2','W3','W4'];
     const curIdx = ({W1:0,W2:1,W3:2,W4:3})[cur] ?? 0;

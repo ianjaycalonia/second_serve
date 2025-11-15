@@ -97,7 +97,7 @@ try {
                 $db->query(
                     'UPDATE allocations
                      SET status = "Notified", updated_at = NOW()
-                     WHERE run_id = ? AND LOWER(COALESCE(status, "")) IN ("pending","allocated","acknowledged")'
+                     WHERE run_id = ? AND LOWER(COALESCE(status, "")) IN ("pending","allocated","updated")'
                     , [$runId]
                 );
                 // Do not insert a generic notification here; upstream callers may add
@@ -125,7 +125,7 @@ try {
                 $db->query(
                     'UPDATE allocations
                      SET status = "Notified", updated_at = NOW()
-                     WHERE run_id = ? AND recipient_id = ? AND LOWER(COALESCE(status, "")) IN ("pending","allocated","acknowledged","updated")'
+                     WHERE run_id = ? AND recipient_id = ? AND LOWER(COALESCE(status, "")) IN ("pending","allocated","updated")'
                     , [$runId, $recipientId]
                 );
                 // Do not insert a generic notification here; upstream may handle messaging.
@@ -506,7 +506,13 @@ try {
                 $db = Database::getInstance();
                 // Load allocations for the run
                 $rows = $db->query(
-                    'SELECT allocation_id, recipient_id, status, created_at, updated_at
+                    'SELECT allocation_id,
+                            recipient_id,
+                            status,
+                            created_at,
+                            updated_at,
+                            pickup_photo_path,
+                            pickup_signature_path
                      FROM allocations
                      WHERE run_id = ?
                      ORDER BY created_at DESC, allocation_id DESC',
@@ -535,6 +541,8 @@ try {
                         'status'        => $r['status'] ?? 'Allocated',
                         'created_at'    => $r['created_at'] ?? null,
                         'updated_at'    => $r['updated_at'] ?? null,
+                        'pickup_photo_path' => $r['pickup_photo_path'] ?? null,
+                        'pickup_signature_path' => $r['pickup_signature_path'] ?? null,
                         'item_count'    => $itemCount,
                         'items'         => array_map(function($it){
                             return [
@@ -564,18 +572,22 @@ try {
             if ($recipientId <= 0) { sendJson(['success'=>false,'error'=>'Forbidden'], 403); }
             $runId = isset($_GET['run_id']) ? (int)$_GET['run_id'] : null;
             if ($runId !== null && $runId <= 0) { $runId = null; }
-            // If caller is a recipient and did not specify run_id, force alignment to latest run
+            $forcedLatestRunId = null;
+            // If caller is a recipient and did not specify run_id, prefer the latest run but fall back if empty
             if ($role !== 'admin' && ($runId === null)) {
                 try {
                     $svcTmp = new Allocation();
                     $latest = $svcTmp->latestRun();
                     if ($latest && isset($latest['run_id']) && (int)$latest['run_id'] > 0) {
-                        $runId = (int)$latest['run_id'];
+                        $runId = $forcedLatestRunId = (int)$latest['run_id'];
                     }
-                } catch (Exception $e) { /* ignore; fallback to all */ }
+                } catch (Exception $e) { /* ignore; fallback handled below */ }
             }
             $svc = new Allocation();
             $list = $svc->listByRecipient($recipientId, $runId);
+            if ($forcedLatestRunId !== null && empty($list)) {
+                $list = $svc->listByRecipient($recipientId, null);
+            }
             sendJson(['success'=>true, 'data'=>['items'=>$list]]);
             break;
 
@@ -668,6 +680,27 @@ try {
                 }
             }
             sendJson(['success'=>true]);
+            break;
+
+        case 'confirm_pickup':
+            requireRole(['admin']);
+            $allocationId = isset($payload['allocation_id']) ? (int)$payload['allocation_id'] : 0;
+            if ($allocationId <= 0) { sendJson(['success'=>false,'error'=>'allocation_id is required'], 400); }
+
+            $photoBase64 = isset($payload['photo_base64']) ? trim((string)$payload['photo_base64']) : null;
+            $signatureBase64 = isset($payload['signature_base64']) ? trim((string)$payload['signature_base64']) : null;
+            $note = isset($payload['confirm_text']) ? trim((string)$payload['confirm_text']) : null;
+
+            if ($photoBase64 === '' || $photoBase64 === null) { sendJson(['success'=>false,'error'=>'pickup photo is required'], 400); }
+            if ($signatureBase64 === '' || $signatureBase64 === null) { sendJson(['success'=>false,'error'=>'pickup signature is required'], 400); }
+
+            $svc = new Allocation();
+            try {
+                $paths = $svc->confirmPickup($allocationId, (int)(currentUserId() ?? 0), $photoBase64, $signatureBase64, $note);
+                sendJson(['success'=>true, 'data'=>$paths]);
+            } catch (Exception $e) {
+                sendJson(['success'=>false,'error'=>'Failed to confirm pickup: ' . $e->getMessage()], 400);
+            }
             break;
 
         case 'acknowledge_admin':

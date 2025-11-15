@@ -10,7 +10,8 @@
     />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>Distribution Result</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Distribution Result</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
@@ -171,6 +172,24 @@
         <span class="sidebar-text">Donation</span>
       </a>
 
+      <a
+        href="DistributionPickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
+      </a>
+
       <div class="nav-item position-relative">
         <a
           href="#distributionMenu"
@@ -228,17 +247,6 @@
                 />Result
               </a>
             </li>
-            <li class="nav-item">
-              <a class="nav-link" href="Schedule.html">
-                <img
-                  src="images/calendar.gif"
-                  alt="Dashboard Icon"
-                  class="dashboard-icon"
-                  width="35"
-                  height="35"
-                />Schedule
-              </a>
-            </li>
           </ul>
         </div>
       </div>
@@ -274,7 +282,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -309,6 +317,23 @@
           height="35"
         />
         <span class="sidebar-text">Inventory</span>
+      </a>
+      <a
+        href="Schedule.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
       </a>
     </aside>
     <main>
@@ -617,7 +642,7 @@
         }
       })();
     </script>
-    <!-- Per-recipient Notify button beside Add Item (post-render injection) -->
+    <!-- Per-recipient Notify button injection -->
     <script>
       (function () {
         function syncNotifyVisibility() {
@@ -657,14 +682,6 @@
                 const cell = btn.parentElement;
                 if (cell) cell.style.display = "none";
               });
-            }
-            // Hide Add Item button for this recipient
-            const addBtn = container.querySelector(
-              '.dr-add-item[data-rec="' + rid + '"]'
-            );
-            if (addBtn) {
-              addBtn.classList.add("d-none");
-              addBtn.parentElement && (addBtn.parentElement.style.display = "");
             }
             // Hide Notify button itself
             const notifyBtn = container.querySelector(
@@ -756,7 +773,7 @@
                     "div.d-flex.align-items-center.justify-content-between.mb-1"
                   );
                   if (!headerRow) return;
-                  // Target actions container where Add Item lives and append Notify beside it
+                  // Target actions container and append Notify beside existing controls
                   const actions = headerRow.querySelector(".d-flex.gap-2");
                   if (!actions) {
                     setTimeout(() => ensureButtons(), 100);
@@ -819,7 +836,7 @@
               ensureButtons();
               syncNotifyVisibility();
             }, 150);
-            // Render-wait loop: poll for cards rendered (via __DR_BYREC__ or .dr-add-item)
+            // Render-wait loop: poll for cards rendered (via __DR_BYREC__)
             (function waitForRender(maxMs) {
               let waited = 0;
               let delay = 100;
@@ -828,10 +845,7 @@
                   const hasFlag =
                     typeof window.__DR_BYREC__ !== "undefined" &&
                     Array.isArray(window.__DR_BYREC__);
-                  const hasBtn = !!document.querySelector(
-                    "#resultContainer .dr-add-item"
-                  );
-                  if (hasFlag || hasBtn) {
+                  if (hasFlag) {
                     ensureButtons();
                     return;
                   }

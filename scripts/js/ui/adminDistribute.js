@@ -4,6 +4,88 @@ function diLogError(context, error){
   } catch(_){ }
 }
 
+function diCloseToast(button){
+  try {
+    const toast = button?.closest?.('.di-toast');
+    if (toast) toast.remove();
+  } catch (err) {
+    diLogError('diCloseToast failed', err);
+  }
+}
+
+try {
+  if (typeof window.diCloseToast !== 'function') {
+    window.diCloseToast = diCloseToast;
+  }
+} catch(_){ }
+
+function diFormatNumber(val){
+  const num = Number(val);
+  return Number.isFinite(num) ? num.toLocaleString() : '0';
+}
+
+async function diFetchSoonExpireItems(limit = 5){
+  try {
+    const params = new URLSearchParams({ group: 'merge', page: '1', limit: String(limit * 3) });
+    params.set('t', String(Date.now()));
+    const res = await fetch(`${INVENTORY_API_BASE}/list?${params.toString()}`, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json().catch(() => null);
+    const items = Array.isArray(data?.data?.items) ? data.data.items : [];
+    const soon = items.filter((it) => {
+      const status = String(it?.derived_status || '').toLowerCase();
+      return status === 'expiring soon' || status === 'soon to expire';
+    });
+    soon.sort((a, b) => {
+      const qa = Number(a?.status_breakdown?.soon ?? a?.total_quantity ?? a?.quantity ?? 0);
+      const qb = Number(b?.status_breakdown?.soon ?? b?.total_quantity ?? b?.quantity ?? 0);
+      return qb - qa;
+    });
+    return soon.slice(0, limit);
+  } catch (err) {
+    diLogError('diFetchSoonExpireItems failed', err);
+    return null;
+  }
+}
+
+async function diBuildSoonExpireContent(){
+  const wrapper = document.createElement('div');
+  wrapper.className = 'small w-100';
+  const heading = document.createElement('div');
+  heading.className = 'fw-semibold mb-1';
+  heading.textContent = 'Soon-to-expire inventory';
+  wrapper.appendChild(heading);
+
+  const rows = await diFetchSoonExpireItems(5);
+  if (!rows || rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.textContent = 'No items currently marked as soon to expire.';
+    wrapper.appendChild(empty);
+    return wrapper;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'table table-borderless table-sm mb-0 text-body';
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr class="text-muted"><th>Category</th><th>Item name</th><th class="text-end">Qty</th></tr>';
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  rows.forEach((it) => {
+    const category = it?.category ?? it?.product_category ?? '—';
+    const name = it?.item_name ?? it?.product_name ?? 'Unnamed item';
+    const quantity = it?.status_breakdown?.soon ?? it?.total_quantity ?? it?.quantity ?? 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="pe-3">${category || '—'}</td><td class="pe-3">${name}</td><td class="text-end">${diFormatNumber(quantity)}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
 function diResolveApiBase(){
   return (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
     ? window.API_BASE_URL
@@ -63,6 +145,137 @@ async function loadDistributableSettings(){
     return await diDistributablePromise;
   } finally {
     diDistributablePromise = null;
+  }
+}
+
+async function diMaybeShowAllocationToast(){
+  try {
+    if (window.__diAllocToastShown) return;
+    const allocPane = document.getElementById('di-alloc');
+    const allocTabBtn = document.getElementById('di-alloc-tab');
+    const isActive =
+      (allocPane && allocPane.classList.contains('show') && allocPane.classList.contains('active')) ||
+      (allocTabBtn && allocTabBtn.classList.contains('active'));
+    if (!isActive) return;
+    window.__diAllocToastShown = true;
+    const content = await diBuildSoonExpireContent().catch(() => null);
+    if (content) diShowPersistentToast(content, 'warning');
+    else diShowPersistentToast('Unable to load soon-to-expire items right now.', 'warning');
+  } catch (err) {
+    diLogError('diMaybeShowAllocationToast failed', err);
+  }
+}
+
+function diShowPersistentToast(message, variant = 'success'){
+  try {
+    const container = diEnsureToastContainer();
+    if (!container) return;
+
+    const colorClass = variant === 'danger' ? 'alert-danger' : variant === 'warning' ? 'alert-warning' : 'alert-success';
+    const toastEl = document.createElement('div');
+    toastEl.className = `di-toast alert ${colorClass} d-flex align-items-start gap-3 shadow border-0 mb-2`;
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    toastEl.style.minWidth = '240px';
+    toastEl.style.maxWidth = '420px';
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'flex-grow-1 pe-2';
+    if (message instanceof Node) {
+      bodyEl.appendChild(message);
+    } else {
+      bodyEl.textContent = message ?? '';
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'di-toast-close btn btn-light btn-sm d-inline-flex align-items-center justify-content-center border-0 px-2';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.fontSize = '20px';
+    closeBtn.style.lineHeight = '1';
+    closeBtn.style.minWidth = '28px';
+    closeBtn.style.height = '28px';
+    closeBtn.style.borderRadius = '999px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.pointerEvents = 'auto';
+    const stopAll = (ev) => {
+      try { ev.preventDefault(); } catch(_) {}
+      try { ev.stopPropagation(); } catch(_) {}
+      try { ev.stopImmediatePropagation(); } catch(_) {}
+    };
+    ['mousedown','mouseup','pointerdown','pointerup','touchstart','touchend'].forEach((evt) => {
+      closeBtn.addEventListener(evt, stopAll, true);
+    });
+    closeBtn.addEventListener('click', (ev) => {
+      stopAll(ev);
+      diCloseToast(closeBtn);
+    });
+
+    toastEl.appendChild(bodyEl);
+    toastEl.appendChild(closeBtn);
+    container.appendChild(toastEl);
+  } catch (err) {
+    diLogError('diShowPersistentToast failed', err);
+  }
+}
+
+function diHandleToastContainerClick(ev){
+  try {
+    const btn = ev.target.closest?.('.di-toast-close');
+    if (!btn) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    diCloseToast(btn);
+  } catch (err) {
+    diLogError('diHandleToastContainerClick failed', err);
+  }
+}
+
+function diHandleToastContainerKeydown(ev){
+  try {
+    const btn = ev.target.closest?.('.di-toast-close');
+    if (!btn) return;
+    if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    diCloseToast(btn);
+  } catch (err) {
+    diLogError('diHandleToastContainerKeydown failed', err);
+  }
+}
+
+function diEnsureToastContainer(){
+  try {
+    const existing = document.getElementById('diToastContainer');
+    if (existing) {
+      if (!existing.__diCloseBound) {
+        existing.addEventListener('click', diHandleToastContainerClick, true);
+        existing.addEventListener('keydown', diHandleToastContainerKeydown, true);
+        existing.__diCloseBound = true;
+      }
+      existing.style.cursor = '';
+      return existing;
+    }
+    const body = document.body;
+    if (!body) return null;
+    const toastContainer = document.createElement('div');
+    toastContainer.id = 'diToastContainer';
+    toastContainer.className = 'position-fixed p-3';
+    toastContainer.style.zIndex = '1100';
+    toastContainer.style.left = '24px';
+    toastContainer.style.bottom = '24px';
+    toastContainer.__diCloseBound = true;
+    toastContainer.addEventListener('click', diHandleToastContainerClick, true);
+    toastContainer.addEventListener('keydown', diHandleToastContainerKeydown, true);
+    body.appendChild(toastContainer);
+    return toastContainer;
+  } catch (err) {
+    diLogError('diEnsureToastContainer failed', err);
+    return null;
   }
 }
 
@@ -221,6 +434,27 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
 
   const maxCache = new Map();
 
+  function primeMaxAvailable(cat, name, qty, unit){
+    try {
+      const key = cacheKey(cat, name);
+      if (!key) return;
+      const normalizedQty = Math.max(0, parseInt(qty ?? 0, 10) || 0);
+      const normalizedUnit = (unit || '').trim();
+      const existing = maxCache.get(key);
+      if (existing) {
+        const existingQty = Math.max(0, parseInt(existing.qty ?? 0, 10) || 0);
+        if (existingQty >= normalizedQty) {
+          if (!existing.unit && normalizedUnit) {
+            existing.unit = normalizedUnit;
+            maxCache.set(key, existing);
+          }
+          return;
+        }
+      }
+      maxCache.set(key, { qty: normalizedQty, unit: normalizedUnit });
+    } catch (_) {}
+  }
+
   function addAllocItemToRecipient(recipientId, cat, name, qty, unit, statusLabel){
     try{
       if (!recipientId) return;
@@ -246,6 +480,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           <i class="bi bi-x-lg text-danger"></i>
         </button>`;
       list.appendChild(li);
+      const originalQty = Math.max(1, parseInt(qty || 1, 10) || 1);
       // Bind edit/delete handlers and prevent carousel from sliding on interaction
       const qtyInput = li.querySelector('.alloc-qty-input');
       if (qtyInput){
@@ -257,6 +492,10 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         const enforceMax = async ()=>{
           try {
             const current = Math.max(0, parseInt(qtyInput.value || '0', 10) || 0);
+            if (current === 0) {
+              qtyInput.value = String(originalQty);
+              return;
+            }
             let cached = maxCache.get(key);
             if (!cached) {
               cached = await resolveMaxAvailable(cat, name);
@@ -320,7 +559,6 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
     window.__diAllocControlsBound = true;
     const addBtn = qs('#diGlobalAddBtn');
     const autoAllBtn = qs('#diGlobalAutoAllBtn');
-    const selCat = qs('#diGlobalCat');
     const selName = qs('#diGlobalName');
     const qtyInp = qs('#diGlobalQty');
     const getSelectLabel = (el)=>{
@@ -339,22 +577,31 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
     };
     if (addBtn){
       addBtn.addEventListener('click', ()=>{
-        const cat = getSelectLabel(selCat);
-        const name = getSelectLabel(selName);
+        let name = getSelectLabel(selName);
+        let cat = '';
         let qty = parseInt(qtyInp?.value||'0',10)||0;
         if (qty<=0) qty = 1;
         const rid = getActiveAllocRecipientId();
-        if (!rid || !name){
+        if (!rid){
           try { console.warn('[DI][alloc] add: invalid inputs', { rid, cat, name, qty }); } catch(_){ }
           const meta = qs('#diAllocMeta'); if (meta) meta.textContent = 'Please select an item name.';
           return;
         }
-        // Try to get unit from Select2 result metadata stored as __unit
         let unit = '';
         try {
           const sel2Data = (window.jQuery && jQuery.fn && jQuery('#diGlobalName').select2) ? jQuery('#diGlobalName').select2('data') : [];
-          if (Array.isArray(sel2Data) && sel2Data[0] && sel2Data[0].__unit) unit = sel2Data[0].__unit;
+          if (Array.isArray(sel2Data) && sel2Data[0]) {
+            const meta = sel2Data[0];
+            if (!name) name = (meta.text || meta.id || '').trim();
+            if (meta.__category) cat = meta.__category;
+            if (meta.__unit) unit = meta.__unit;
+          }
         } catch(_){ }
+        if (!name){
+          try { console.warn('[DI][alloc] add: invalid inputs', { rid, cat, name, qty }); } catch(_){ }
+          const meta = qs('#diAllocMeta'); if (meta) meta.textContent = 'Please select an item name.';
+          return;
+        }
         addAllocItemToRecipient(rid, cat, name, qty, unit);
       });
     }
@@ -362,7 +609,6 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       try { console.log('[DI][alloc] auto-all controls attached'); } catch(_){ }
       autoAllBtn.addEventListener('click', ()=>{
         try { console.log('[DI][alloc] auto-all clicked', { selectedIds: window.__diAllocIds }); } catch(_){ }
-        const cat = getSelectLabel(selCat); // optional filter
         const ids = Array.isArray(window.__diAllocIds)?window.__diAllocIds:[];
         if (!ids.length){
           const meta = qs('#diAllocMeta');
@@ -383,7 +629,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           } else {
             try { console.warn('[DI][alloc] auto-all: meta node missing before run'); } catch(_){ }
           }
-          tryAutoAllAllItems(cat, ids)
+          tryAutoAllAllItems(null, ids)
             .then(res => {
               const metaNode = qs('#diAllocMeta');
               if (!metaNode) {
@@ -480,6 +726,8 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           }
           const fraction = getDistributableFraction();
           const allocatableTotal = Math.floor(totalQty * fraction);
+          primeMaxAvailable(cat, name, totalQty, it.unit);
+
           ensurePop().then((popMap)=>{
             const recipients = (window.Allocation && typeof window.Allocation.recipientsWithPopulation==='function')
               ? window.Allocation.recipientsWithPopulation(eligibleIds, popMap)
@@ -507,7 +755,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
     });
   }
 
-  // Allocate ALL available inventory items (optionally filtered by category) across recipients
+  // Allocate ALL available inventory items across recipients
   async function tryAutoAllAllItems(cat, ids){
     try {
       await loadDistributableSettings();
@@ -519,7 +767,6 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       return { applied:false, reason: 'no_recipients' };
     }
     const params = new URLSearchParams({ group: 'merge', page: '1', limit: '100' });
-    if (cat) params.set('category', cat);
 
     const ensurePopAll = async ()=>{
       try{
@@ -618,6 +865,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       } catch(_){ }
 
       const eligible = recipients.slice();
+      primeMaxAvailable(category, name, totalQty, it.unit);
       const allocs = window.Allocation.allocateItems(totalQty, eligible);
       if (!Array.isArray(allocs) || !allocs.length) continue;
       let itemUnits = 0;
@@ -790,7 +1038,10 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         try { attachAllocGlobalControls(); } catch(_){ }
         try { initAllocSelects(); } catch(_){ }
         try { attachAllocateNow(); } catch(_){ }
+        diMaybeShowAllocationToast();
       });
+      // If allocation tab is already active (e.g., forced by fallback script), show the toast once shortly after init
+      setTimeout(diMaybeShowAllocationToast, 150);
       // Optional: when returning to Recipients tab, update Selected count
       if (recipientsTab){
         recipientsTab.addEventListener('shown.bs.tab', ()=>{ try { updateSelectedCount(); } catch(_){ } });
@@ -798,41 +1049,11 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
     } catch(_){ }
   }
 
-  // Initialize Select2 for Category and Item Name on Allocation tab
+  // Initialize Select2 for Item Name on Allocation tab
   function initAllocSelects(){
     try{
       if (window.jQuery && jQuery.fn && jQuery.fn.select2){
         const $ = window.jQuery;
-        if ($('#diGlobalCat').length){
-          if ($('#diGlobalCat').data('select2')) { $('#diGlobalCat').select2('destroy'); }
-          $('#diGlobalCat').select2({
-            placeholder: 'Category',
-            width: '100%',
-            allowClear: true,
-            minimumInputLength: 1,
-            ajax: {
-              // Use Inventory API list (group=merge) and derive unique categories client-side
-              url: 'php/api/inventory/index.php/list',
-              dataType: 'json',
-              delay: 250,
-              data: p => ({ q: p.term || '', group: 'merge', page: 1, limit: 50 }),
-              processResults: d => {
-                try {
-                  const items = d?.data?.items || [];
-                  const seen = new Set();
-                  const cats = [];
-                  items.forEach(it => {
-                    const c = (it.category ?? it.product_category ?? '').trim();
-                    if (c && !seen.has(c)) { seen.add(c); cats.push({ id: c, text: c }); }
-                  });
-                  return { results: cats };
-                } catch(_){ return { results: [] }; }
-              }
-            }
-          }).on('select2:select', function(){
-            try { $('#diGlobalName').val(null).trigger('change'); } catch(_){ }
-          });
-        }
         if ($('#diGlobalName').length){
           if ($('#diGlobalName').data('select2')) { $('#diGlobalName').select2('destroy'); }
           $('#diGlobalName').select2({
@@ -841,11 +1062,11 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
             allowClear: true,
             minimumInputLength: 1,
             ajax: {
-              // Use Inventory API list (group=merge) filtered by category to pull item_name
+              // Use Inventory API list (group=merge) to pull item_name
               url: 'php/api/inventory/index.php/list',
               dataType: 'json',
               delay: 250,
-              data: p => ({ q: p.term || '', category: $('#diGlobalCat').val() || '', group: 'merge', page: 1, limit: 50 }),
+              data: p => ({ q: p.term || '', group: 'merge', page: 1, limit: 50 }),
               processResults: d => {
                 try {
                   const items = d?.data?.items || [];
@@ -864,12 +1085,12 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
                     }
                     const totalQty = parseInt(it?.total_quantity ?? it?.quantity ?? 0, 10) || 0;
                     if (!seen.has(name)){
-                      seen.set(name, { id: name, text: name, __qty: totalQty, __lowQty: totalQty < 20, __unit: (it?.unit||'') });
+                      seen.set(name, { id: name, text: name, __qty: totalQty, __lowQty: totalQty < 20, __unit: (it?.unit||''), __category: (it?.category ?? it?.product_category ?? '').trim() });
                     } else {
                       // Accumulate quantity if same name appears multiple times (safety)
                       const cur = seen.get(name);
                       const sum = (parseInt(cur.__qty,10)||0) + totalQty;
-                      cur.__qty = sum; cur.__lowQty = sum < 20; if (!cur.__unit && it?.unit) cur.__unit = it.unit;
+                      cur.__qty = sum; cur.__lowQty = sum < 20; if (!cur.__unit && it?.unit) cur.__unit = it.unit; if (!cur.__category && (it?.category || it?.product_category)) cur.__category = (it?.category ?? it?.product_category ?? '').trim();
                       seen.set(name, cur);
                     }
                   });

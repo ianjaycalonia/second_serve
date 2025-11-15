@@ -6,6 +6,8 @@
     console.debug("[receivedItems] script loaded");
   } catch (_) {}
 
+  const AUTO_REFRESH_INTERVAL_MS = 15000;
+
   // Derive API base URL similar to other scripts
   const API_BASE_URL =
     typeof window.API_BASE_URL === "string" && window.API_BASE_URL
@@ -31,6 +33,49 @@
       } catch (_) {}
       return null;
     }
+  }
+
+  function showAcknowledgementChoice() {
+    try {
+      const modalEl = document.getElementById("acknowledgeChoiceModal");
+      if (!modalEl || !window.bootstrap || !bootstrap.Modal) {
+        openChat();
+        return;
+      }
+      const chatBtn = document.getElementById("ackChoiceChatBtn");
+      const scheduleBtn = document.getElementById("ackChoiceScheduleBtn");
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+      const wireOnce = (btn, handler) => {
+        if (!btn) return;
+        btn.addEventListener("click", () => {
+          handler();
+          modal.hide();
+        }, { once: true });
+      };
+
+      wireOnce(chatBtn, openChat);
+      wireOnce(scheduleBtn, () => {
+        window.location.href = "Schedule.html";
+      });
+
+      modal.show();
+    } catch (_) {
+      openChat();
+    }
+  }
+
+  function openChat() {
+    try {
+      const trigger = document.querySelector(
+        "[data-messages-trigger], [data-bs-target='#messagesModal']"
+      );
+      if (trigger) {
+        trigger.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true })
+        );
+      }
+    } catch (_) {}
   }
 
   function qs(sel, root = document) {
@@ -170,13 +215,55 @@
   }
   const seenAllocationIds = loadSeenAllocationIds();
 
+  let refreshInFlight = false;
+  let refreshQueued = false;
+  let refreshPromise = null;
+  let autoRefreshTimer = null;
+
   // Refresh allocation data from server
+  function scheduleAutoRefresh(){
+    if (autoRefreshTimer) {
+      clearTimeout(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+    autoRefreshTimer = setTimeout(async () => {
+      autoRefreshTimer = null;
+      if (document.hidden) {
+        scheduleAutoRefresh();
+        return;
+      }
+      try {
+        await refreshAllocations();
+      } catch (err) {
+        try {
+          console.error("[receivedItems] auto-refresh failed", err);
+        } catch (_) {}
+      }
+    }, AUTO_REFRESH_INTERVAL_MS);
+  }
+
+  function stopAutoRefresh(){
+    if (autoRefreshTimer) {
+      clearTimeout(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+  }
+
   async function refreshAllocations() {
+    stopAutoRefresh();
+    if (refreshInFlight) {
+      refreshQueued = true;
+      return refreshPromise;
+    }
+
+    refreshInFlight = true;
+    refreshQueued = false;
     const tbody = qs("main table tbody");
     const main = document.querySelector("main");
     let banner = document.getElementById("riFeedback");
 
-    try {
+    const runRefresh = (async () => {
+      try {
       console.debug("[receivedItems] refreshAllocations: starting");
     } catch (_) {}
     try {
@@ -209,8 +296,15 @@
       try {
         console.error("[receivedItems] refreshAllocations: no tbody found");
       } catch (_) {}
+      refreshInFlight = false;
+      refreshPromise = null;
+      if (refreshQueued) {
+        refreshQueued = false;
+        refreshAllocations();
+      }
       return;
     }
+
     try {
       const user = getStoredUser();
       const role = user && user.role ? String(user.role).toLowerCase() : "";
@@ -318,7 +412,7 @@
           const pickupAt = a.scheduled_pickup_at
             ? fmtDate(a.scheduled_pickup_at)
             : "";
-          const chevron = "bi-chevron-up";
+          const chevron = "bi-chevron-right";
           const itemsHtml = (Array.isArray(a.items) ? a.items : [])
             .map((it) => `• ${escapeHtml(`${it.quantity}x ${it.item_name}`)}`)
             .join("<br/>");
@@ -344,9 +438,6 @@
             </button>`;
           } else if (status.toLowerCase() === "acknowledged") {
             actionsHtml = `
-            <button type="button" class="btn btn-sm btn-outline-primary btn-schedule" data-bs-toggle="tooltip" data-bs-placement="top" title="Pick Up Items" aria-label="Pick Up Items">
-              <i class="bi bi-truck"></i>
-            </button>
             <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
               <i class="bi bi-x-circle"></i>
             </button>`;
@@ -371,7 +462,7 @@
           <tr data-aid="${id}" data-run-id="${runId}">
             <td>${createdAt}</td>
             <td>
-              <button class="btn btn-sm btn-outline-secondary alloc-toggle" type="button" aria-expanded="false" aria-label="View items">
+              <button class="btn btn-sm btn-outline-primary alloc-toggle rounded-circle" type="button" aria-expanded="false" aria-label="View donated items" title="View donated items">
                 <i class="bi ${chevron}"></i>
               </button>
               <div class="d-inline-block ms-2 align-middle items-inline d-none">${itemsHtml}</div>
@@ -461,7 +552,20 @@
         banner.className = "d-none";
       }
       throw e;
+    } finally {
+      refreshInFlight = false;
+      refreshPromise = null;
+      if (refreshQueued) {
+        refreshQueued = false;
+        refreshAllocations();
+      } else {
+        scheduleAutoRefresh();
+      }
     }
+    })();
+
+    refreshPromise = runRefresh;
+    return runRefresh;
   }
 
   // Attach event handlers to all buttons
@@ -501,7 +605,6 @@
       const itemsDiv = tr.querySelector(".items-inline");
       const statusBadge = tr.querySelector(".badge");
       const ackBtn = tr.querySelector(".btn-ack");
-      const scheduleBtn = tr.querySelector(".btn-schedule");
       const completeBtn = tr.querySelector(".btn-complete");
       const cancelBtn = tr.querySelector(".btn-cancel");
 
@@ -509,7 +612,6 @@
         console.debug("[receivedItems] attachEventHandlers: allocation", aid, {
           toggleBtn: !!toggleBtn,
           ackBtn: !!ackBtn,
-          scheduleBtn: !!scheduleBtn,
           completeBtn: !!completeBtn,
           cancelBtn: !!cancelBtn,
           status: statusBadge?.textContent,
@@ -522,13 +624,13 @@
           const isShown = !itemsDiv.classList.contains("d-none");
           if (isShown) {
             itemsDiv.classList.add("d-none");
-            icon.classList.remove("bi-chevron-down");
-            icon.classList.add("bi-chevron-up");
+            icon.classList.remove("bi-chevron-up");
+            icon.classList.add("bi-chevron-right");
             toggleBtn.setAttribute("aria-expanded", "false");
           } else {
             itemsDiv.classList.remove("d-none");
-            icon.classList.remove("bi-chevron-up");
-            icon.classList.add("bi-chevron-down");
+            icon.classList.remove("bi-chevron-right");
+            icon.classList.add("bi-chevron-up");
             toggleBtn.setAttribute("aria-expanded", "true");
           }
         });
@@ -594,13 +696,7 @@
             }
             // Refresh data from server
             await refreshAllocations();
-            showToast("Please chat the foodbank to setup your pickup schedule", { delay: 6000 });
-            setTimeout(() => {
-              const trigger = document.querySelector('[data-messages-trigger], [data-bs-target="#messagesModal"]');
-              if (trigger) {
-                trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-              }
-            }, 150);
+            showAcknowledgementChoice();
           } catch (e) {
             ackBtn.disabled = false;
             showToast("Failed to acknowledge.");
@@ -608,20 +704,13 @@
         });
       }
 
-      // Schedule Pickup via modal confirmation
-      if (scheduleBtn) {
-        scheduleBtn.addEventListener("click", () => {
-          try {
-            console.debug(
-              "[receivedItems] scheduleBtn clicked for allocation:",
-              aid
-            );
-          } catch (_) {}
-          const modalEl = document.getElementById("pickupConfirmModal");
-          const confirmBtn = document.getElementById("confirmPickupBtn");
+      // Complete via confirmation modal
+      if (completeBtn) {
+        completeBtn.addEventListener("click", () => {
+          const modalEl = document.getElementById("completeConfirmModal");
+          const confirmBtn = document.getElementById("confirmCompleteBtn");
           if (!modalEl || !confirmBtn) {
-            // Fallback to immediate action if modal missing
-            doPickup();
+            doComplete();
             return;
           }
           const modal =
@@ -629,79 +718,22 @@
               ? bootstrap.Modal.getOrCreateInstance(modalEl)
               : null;
           if (!modal) {
-            doPickup();
+            doComplete();
             return;
           }
 
-          // Ensure previous listeners are cleared
           const newBtn = confirmBtn.cloneNode(true);
           confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
 
           newBtn.addEventListener("click", async () => {
             modal.hide();
-            await doPickup();
+            await doComplete();
           });
+
           modal.show();
         });
 
-        async function doPickup() {
-          try {
-            scheduleBtn.disabled = true;
-            let ok = false,
-              msg = "";
-            const attempt = async () => {
-              if (
-                window.AllocationsAPI &&
-                typeof window.AllocationsAPI.schedule === "function"
-              ) {
-                await window.AllocationsAPI.schedule(aid);
-                return true;
-              } else {
-                const url = `${API_BASE_URL}/allocations/index.php?action=pickup&allocation_id=${encodeURIComponent(String(aid))}`;
-                const res = await fetch(url, {
-                  method: "POST",
-                  credentials: "include",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
-                  },
-                  body: JSON.stringify({ allocation_id: aid }),
-                });
-                const j = await res.json().catch(() => null);
-                if (res.ok && j?.success) return true;
-                msg = (j && (j.error || j.message)) || `HTTP ${res.status}`;
-                return false;
-              }
-            };
-            ok = await attempt();
-            if (!ok) {
-              // silent one-time retry to smooth out first-attempt races
-              await new Promise((r) => setTimeout(r, 200));
-              ok = await attempt();
-            }
-            if (!ok) {
-              showToast(`Failed to pick up items. ${msg}`);
-              scheduleBtn.disabled = false;
-              return;
-            }
-            await refreshAllocations();
-            showToast("Items picked up successfully.");
-          } catch (e) {
-            try {
-              console.error(
-                "[receivedItems] scheduleBtn/doPickup exception:",
-                e
-              );
-            } catch (_) {}
-            scheduleBtn.disabled = false;
-            showToast("Failed to pick up items.");
-          }
-        }
-      }
-
-      // Complete
-      if (completeBtn) {
-        completeBtn.addEventListener("click", async () => {
+        async function doComplete() {
           try {
             completeBtn.disabled = true;
             let ok = false,
@@ -739,14 +771,13 @@
               completeBtn.disabled = false;
               return;
             }
-            // Refresh data from server
             await refreshAllocations();
             showToast("Allocation completed.");
           } catch (e) {
             completeBtn.disabled = false;
             showToast("Failed to complete.");
           }
-        });
+        }
       }
 
       // Cancel
@@ -971,7 +1002,7 @@
   }
 
   function escapeHtml(s) {
-    return (s || "").replace(/[&<>"']|\n/g, function (c) {
+    return (s || "").replace(/[&<>"]|\n/g, function (c) {
       switch (c) {
         case "&":
           return "&amp;";
@@ -1001,4 +1032,14 @@
     } catch (_) {}
     loadAllocations();
   }
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      refreshAllocations();
+    }
+  });
+
+  window.addEventListener("beforeunload", () => {
+    stopAutoRefresh();
+  });
 })();

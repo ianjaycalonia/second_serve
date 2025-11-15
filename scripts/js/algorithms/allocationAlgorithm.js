@@ -3,13 +3,26 @@
   const Allocation = {};
   let distributableFraction = 0.9;
 
+  function toRecipientId(value){
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? String(parsed) : null;
+  }
+
+  function toRecipientIdArray(list){
+    return (Array.isArray(list) ? list : [])
+      .map(toRecipientId)
+      .filter(id => id !== null);
+  }
+
+  function normalizeTotalItems(totalItems){
+    const val = Number(totalItems);
+    return Number.isFinite(val) && val > 0 ? val : 0;
+  }
+
   // Create an in-memory allocation state for the given recipient IDs
   Allocation.createState = function(recipientIds){
-    const ids = (Array.isArray(recipientIds)?recipientIds:[])
-      .map(v=>parseInt(v,10))
-      .filter(Number.isFinite)
-      .map(String);
-    const itemsByRecipient = {};
+    const ids = toRecipientIdArray(recipientIds);
+    const itemsByRecipient = Object.create(null);
     ids.forEach(id => { itemsByRecipient[id] = []; });
     return { recipients: ids, itemsByRecipient };
   };
@@ -18,7 +31,7 @@
   // item: { name: string, category?: string, qty?: number }
   Allocation.addItem = function(state, recipientId, item){
     if (!state || !state.itemsByRecipient) return false;
-    const rid = String(parseInt(recipientId,10));
+    const rid = toRecipientId(recipientId);
     if (!rid || !(rid in state.itemsByRecipient)) return false;
     const name = String(item?.name||'').trim();
     if (!name) return false;
@@ -40,7 +53,8 @@
 
   // Get items for recipient
   Allocation.getRecipientItems = function(state, recipientId){
-    const rid = String(parseInt(recipientId,10));
+    const rid = toRecipientId(recipientId);
+    if (!rid) return [];
     const list = state?.itemsByRecipient?.[rid];
     return Array.isArray(list) ? list.slice() : [];
   };
@@ -48,22 +62,18 @@
   // Replace entire recipient list (e.g., when Selected changes)
   Allocation.resetRecipients = function(state, recipientIds){
     if (!state) return Allocation.createState(recipientIds);
-    const ids = (Array.isArray(recipientIds)?recipientIds:[])
-      .map(v=>parseInt(v,10))
-      .filter(Number.isFinite)
-      .map(String);
-    const next = Allocation.createState(ids);
-    // Optionally, we could map over previous items for ids that still exist.
-    return next;
+    const ids = toRecipientIdArray(recipientIds);
+    return Allocation.createState(ids);
   };
 
   // Utility: largest remainder rounding to hit an exact integer total
   function largestRemainderRound(values, targetTotal){
     const n = values.length;
     if (n === 0) return [];
-    const floors = values.map(v => Math.floor(v));
+    const target = Math.max(0, Math.round(targetTotal || 0));
+    const floors = values.map(v => Math.floor(Math.max(0, v)));
     let sum = floors.reduce((a,b)=>a+b,0);
-    let remaining = Math.max(0, Math.round(targetTotal - sum));
+    let remaining = Math.max(0, target - sum);
     const remainders = values.map((v,i)=> ({ i, r: v - floors[i] }));
     remainders.sort((a,b)=> b.r - a.r);
     for (let k=0; k<remainders.length && remaining>0; k++){
@@ -116,7 +126,7 @@
   // Map selected ids to the shape expected by allocateItems
   Allocation.recipientsWithPopulation = function(ids, popMap){
     try{
-      const arr = Array.isArray(ids) ? ids : [];
+      const arr = toRecipientIdArray(ids);
       const pm = (popMap instanceof Map) ? popMap : new Map();
       return arr.map(id => ({ id, population: pm.get(Number(id)) }));
     } catch(_){ return []; }
@@ -129,7 +139,7 @@
     try{
       const recs = Array.isArray(recipients)? recipients.slice() : [];
       if (!recs.length) return [];
-      const total = Math.max(0, parseFloat(totalItems||0));
+      const total = normalizeTotalItems(totalItems);
       const allocatable = Math.floor(total * distributableFraction);
       if (allocatable <= 0) return recs.map(r => ({ id: String(r.id), allocation: 0 }));
 
@@ -178,7 +188,7 @@
       // Fallback: equal split among recipients, floor, and adjust
       const recs = Array.isArray(recipients)? recipients.slice() : [];
       if (!recs.length) return [];
-      const total = Math.max(0, parseFloat(totalItems||0));
+      const total = normalizeTotalItems(totalItems);
       const allocatable = Math.floor(total * distributableFraction);
       const base = allocatable / recs.length;
       const ints = largestRemainderRound(recs.map(()=>base), allocatable);

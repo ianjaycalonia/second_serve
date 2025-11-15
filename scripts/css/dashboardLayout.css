@@ -123,6 +123,18 @@ aside {
   flex-direction: column;
   gap: 10px;
   white-space: nowrap;
+  overflow-y: auto;       /* ← make scrollable */
+  flex-shrink: 0;         /* ← prevent shrinking */
+  scrollbar-width: thin;
+  
+aside::-webkit-scrollbar {
+  width: 6px;
+}
+
+aside::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
 
   .nav-link {
     display: flex;
@@ -234,10 +246,17 @@ main {
 
       .card-text {
         flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
 
         h3 {
-          font-size: 3em;
+          font-size: clamp(1.75rem, 4vw, 3rem);
           font-weight: bold;
+          line-height: 1.1;
+          max-width: 100%;
+          overflow-wrap: anywhere;
         }
 
         small {
@@ -375,25 +394,31 @@ main {
   transition: transform 0.3s;
 }
 
-/* Normal sidebar: icon and text aligned horizontally */
+/* Desktop sidebar links (expanded) */
 .dashboard-link {
   display: flex;
   align-items: center;
-  gap: 8px; /* space between icon and text */
+  gap: 10px; /* always 10px between icon and text */
+  transition: all 0.3s ease;
 }
-.dashboard-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-/* When sidebar is collapsed */
+
+/* Collapsed sidebar (desktop) */
 .sidebar.collapsed .dashboard-link {
-  justify-content: center; /* centers content horizontally */
+  justify-content: center; /* center icon when collapsed */
+  gap: 0; /* remove gap when collapsed */
+}
+
+/* Keep gap 10px for mobile even if sidebar is "collapsed" */
+@media (max-width: 768px) {
+  .dashboard-link {
+    gap: 10px !important;
+  }
 }
 
 .sidebar.collapsed .dashboard-link .sidebar-text {
   display: none; /* hide the text when collapsed */
 }
+
 .dashboard-link {
   transition: all 0.3s ease;
 }
@@ -423,8 +448,8 @@ main {
   aside {
     position: fixed;
     left: 0;
-    top: 0;
-    height: 100vh;
+    top: 50px;
+    height: calc(100vh - 50px);
     width: 300px;
     max-width: 80vw;
     background: var(--primary-background);
@@ -433,7 +458,8 @@ main {
     transform: translateX(-100%);
     transition: transform 0.3s ease;
     display: none;
-
+    gap: 10px;
+     overflow-y: auto; /* ← scrollable */
     a:not(:last-child) {
       margin-bottom: 10px;
     }
@@ -451,7 +477,7 @@ main {
     padding: 20px;
     position: sticky;
     top: 0;
-    z-index: 1000;
+    z-index: 3000;
     background: var(--primary-background);
 
     .nav-items {
@@ -466,61 +492,65 @@ main {
     width: 100vw;
   }
 
-  .sidebar-backdrop {
-    display: none !important; /* Always hidden on mobile */
-    position: fixed;
-    inset: 0;
-    background: transparent;
-    z-index: 1999;
-  }
-}
-/* 📱 Responsive Sidebar Fix */
-@media (max-width: 992px) {
-  body {
-    display: block;
-    overflow-x: hidden;
-  }
-
-  nav {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 1050;
-  }
-
-  aside {
-    position: fixed;
-    top: 60px;
-    left: -260px;
-    width: 260px;
-    height: calc(100vh - 60px);
-    background-color: var(--primary-background);
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
-    transition: left 0.3s ease;
-    z-index: 1040;
-  }
-
-  aside.active {
-    left: 0;
-  }
-
-  .sidebar-backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 1000;
-  }
-
-  .sidebar-backdrop.show {
-    display: block;
-  }
-
-  main {
-    margin-top: 70px;
-    padding: 15px;
-  }
+  /* Mobile sidebar backdrop */
+/* Mobile sidebar backdrop */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0; /* top:0; right:0; bottom:0; left:0 */
+  background-color: rgba(0, 0, 0, 0.4); /* gray overlay */
+  z-index: 1999;
+  display: none; /* hidden by default */
+  transition: opacity 0.3s ease;
 }
 
+
+body.sidebar-open .sidebar-backdrop {
+  display: block;
+  opacity: 1;
+}
+
+}
+aside {
+  display: flex !important;        
+  flex-direction: column !important; 
+  gap: 10px !important;            
+}
+.modal {
+  z-index: 10000 !important;
+  position: fixed !important;
+}
+#messagesModal {
+  z-index: 10001 !important;  
+}
+#eventModal {
+  z-index: 10002 !important;
+}
+.modal-backdrop {
+  z-index: 9998 !important;   
+}
+#notificationsModal {
+  z-index: 9999 !important;  
+  position: fixed !important; 
+}
+
+#notificationsModal ~ .modal-backdrop {
+  z-index: 9998 !important;   
+}
+/* Chevron styling */
+.dropdown-chevron {
+  transition: transform 0.3s;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+/* Rotate chevron when dropdown is open */
+a[aria-expanded="true"] .dropdown-chevron {
+  transform: rotate(90deg);
+}
+/*Dropdown background color*/
+#distributionMenu {
+  background-color: gray; /* light gray */
+  border-radius: 5px; 
+  padding: 10px; 
+}
 

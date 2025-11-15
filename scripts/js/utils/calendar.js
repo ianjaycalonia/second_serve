@@ -8,7 +8,36 @@
   const qs = (s, r=document)=> r.querySelector(s);
 
   function getUser(){
-    try{ const s = sessionStorage.getItem('user'); return s ? JSON.parse(s) : null; }catch(_){ return null; }
+    try {
+      if (window.__SESSION_USER && typeof window.__SESSION_USER === 'object') {
+        return window.__SESSION_USER;
+      }
+
+    } catch(_) { /* ignore */ }
+    try {
+      const s = sessionStorage.getItem('user');
+      return s ? JSON.parse(s) : null;
+    } catch(_) {
+      return null;
+    }
+  }
+
+  function updateSelectedListActive(){
+    const listEl = qs('#selectedDayList');
+    if (!listEl) return;
+    listEl.querySelectorAll('.selected-day-item').forEach(item=>{
+      const idNum = Number(item.dataset.eventId);
+      item.classList.toggle('active', Number.isFinite(selectedEventId) && idNum === selectedEventId);
+    });
+  }
+
+  function getSelectedEventData(){
+    if (!selectedDayEvents || !selectedDayEvents.length) return null;
+    if (Number.isFinite(selectedEventId)){
+      const found = selectedDayEvents.find(ev => Number(ev.id) === selectedEventId);
+      if (found) return found;
+    }
+    return null;
   }
 
   function toDatetimeLocal(value){
@@ -23,8 +52,465 @@
       return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
     } catch(_) { return ''; }
   }
+  function formatDateInput(date){
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  }
+  function formatTimeInput(date){
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+  }
   function role(){ return ((getUser()?.role)||'').toLowerCase(); }
-  function userId(){ return Number(getUser()?.user_id || getUser()?.id || 0) || 0; }
+  function userId(){
+    const raw = getUser();
+    const candidates = [raw?.user_id, raw?.id, raw?.userId, raw?.account_id];
+    for (const value of candidates){
+      const n = Number(value);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return 0;
+  }
+  function currentUserOrganization(){
+    const user = getUser();
+    if (!user) return '';
+    return user.organization_name || user.org_name || user.display_name || user.name || user.email || '';
+  }
+  function toNumber(value){
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  function defaultTypeForCurrentRole(){
+    const r = role();
+    if (r === 'donor') return 'donor';
+    if (r === 'recipient') return 'recipient';
+    return 'admin';
+  }
+  function normalizeEventData(raw, fallbackType){
+    const data = raw ? { ...raw } : {};
+    const userDefault = fallbackType || defaultTypeForCurrentRole();
+    let type = String(data.event_type || data.role_type || '').toLowerCase();
+    const donorId = toNumber(data.donor_id ?? data.donor_user_id ?? data.partner_id);
+    const recipientId = toNumber(data.recipient_id ?? data.recipient_user_id ?? data.beneficiary_id);
+    if (!type){
+      if (recipientId) type = 'recipient';
+      else if (donorId) type = 'donor';
+      else type = userDefault;
+    }
+    const createdBy = toNumber(data.created_by_user_id ?? data.created_by ?? data.created_by_id ?? data.owner_id ?? data.user_id);
+    let createdFor = toNumber(
+      data.created_for_user_id ??
+      data.created_for ??
+      data.target_user_id ??
+      (type === 'donor' ? (data.donor_user_id ?? data.donor_owner_id ?? data.donor_id) : null) ??
+      (type === 'recipient' ? (data.recipient_user_id ?? data.recipient_owner_id ?? data.recipient_id) : null)
+    );
+    const idCandidate = data.id ?? data.event_id;
+    const idNumeric = toNumber(idCandidate);
+    data.id = idNumeric ?? (idCandidate ?? null);
+    data.event_type = type;
+    data.created_by_user_id = createdBy ?? null;
+    data.created_for_user_id = createdFor ?? null;
+    data.donor_id = donorId ?? null;
+    data.recipient_id = recipientId ?? null;
+    return data;
+  }
+  function eventIsForCurrentUser(eventData){
+    const uid = userId();
+    if (!uid) return false;
+    return [
+      eventData.created_by_user_id,
+      eventData.created_for_user_id,
+      eventData.donor_id,
+      eventData.recipient_id
+    ].some(id => Number(id) === uid);
+  }
+
+  function escapeHtml(value){
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  let recipientQueue = [];
+  let lastViewedEvent = null;
+  let lastSelectedDate = null;
+  let selectedDayEvents = [];
+  let selectedEventId = null;
+  let calendarInstance = null;
+  let resizeRaf = null;
+
+  function hasContent(value){
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string') return value.trim() !== '';
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (Array.isArray(value)) return value.length > 0;
+    if (value instanceof Date) return !Number.isNaN(value.getTime());
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return false;
+  }
+
+  function formatDateTime(value){
+    if (!value) return '—';
+    try {
+      const d = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    } catch(_){ return '—'; }
+  }
+
+  function getDateKey(value){
+    if (!value) return null;
+    if (typeof value === 'string' && value.length >= 10) return value.slice(0,10);
+    try {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return null;
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${yyyy}-${mm}-${dd}`;
+    } catch(_){ return null; }
+  }
+
+  function clearViewModal(){
+    const map = {
+      '#viewEventTitle': '—',
+      '#viewEventType': '—',
+      '#viewEventStatus': '',
+      '#viewEventStart': '—',
+      '#viewEventEnd': '—',
+      '#viewEventRecipients': '—',
+      '#viewEventDonor': '—',
+      '#viewEventLocation': '—',
+      '#viewEventNotes': '—',
+      '#viewEventCreatedBy': '—',
+      '#viewEventUpdated': '—'
+    };
+    Object.entries(map).forEach(([sel,val])=>{ const el = qs(sel); if (el) el.textContent = val; });
+  }
+
+  function resetViewRows(){
+    document.querySelectorAll('[data-view-row]').forEach(node=>{
+      const def = node.getAttribute('data-default-label');
+      if (def && node.hasAttribute('data-view-label')) node.textContent = def;
+      node.classList.remove('d-none');
+    });
+  }
+
+  function setViewRowVisibility(key, visible, label){
+    const nodes = document.querySelectorAll(`[data-view-row="${key}"]`);
+    nodes.forEach(node=>{
+      if (label && node.hasAttribute('data-view-label')) node.textContent = label;
+      node.classList.toggle('d-none', !visible);
+    });
+  }
+
+  function formatTime(value){
+    if (!value) return '—';
+    try {
+      const d = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch(_){ return '—'; }
+  }
+
+  function populateViewModal(eventData){
+    clearViewModal();
+    resetViewRows();
+    const data = normalizeEventData(eventData || {});
+    if (hasContent(data.title)) qs('#viewEventTitle').textContent = data.title;
+    if (hasContent(data.event_type)) qs('#viewEventType').textContent = data.event_type;
+    if (hasContent(data.status)) qs('#viewEventStatus').textContent = data.status;
+    qs('#viewEventStart').textContent = formatDateTime(data.start);
+    if (hasContent(data.end)) {
+      qs('#viewEventEnd').textContent = formatDateTime(data.end);
+    } else {
+      qs('#viewEventEnd').textContent = '—';
+    }
+    const recipientsEl = qs('#viewEventRecipients');
+    const recNames = [];
+    if (Array.isArray(data.recipients) && data.recipients.length){
+      data.recipients.forEach(r=>{ if (hasContent(r.display_name || r.name)) recNames.push(r.display_name || r.name); });
+    }
+    if (!recNames.length && hasContent(data.recipient_display || data.recipient_name)) recNames.push(data.recipient_display || data.recipient_name);
+    if (recNames.length > 1){
+      const list = document.createElement('ul');
+      list.className = 'mb-0';
+      recNames.forEach(name=>{
+        const li = document.createElement('li');
+        li.textContent = name;
+        list.appendChild(li);
+      });
+      recipientsEl.textContent = '';
+      recipientsEl.appendChild(list);
+    } else {
+      recipientsEl.textContent = recNames.length ? recNames[0] : '—';
+    }
+    qs('#viewEventDonor').textContent = hasContent(data.donor_display || data.donor_name) ? (data.donor_display || data.donor_name) : '—';
+    qs('#viewEventLocation').textContent = hasContent(data.location) ? data.location : '—';
+    qs('#viewEventNotes').textContent = hasContent(data.notes) ? data.notes : '—';
+    const createdLabel = data.created_by_display || data.created_by_name || data.created_by_user_name || data.created_by_email;
+    qs('#viewEventCreatedBy').textContent = hasContent(createdLabel) ? createdLabel : '—';
+    qs('#viewEventUpdated').textContent = hasContent(data.updated_at) ? formatDateTime(data.updated_at) : '—';
+
+    const type = (data.event_type || '').toLowerCase();
+    if (type === 'recipient'){
+      // For recipient pickups, show only time and recipients
+      setViewRowVisibility('start', true, 'Time');
+      qs('#viewEventStart').textContent = formatTime(data.start);
+      setViewRowVisibility('end', false);
+      setViewRowVisibility('donor', false);
+      setViewRowVisibility('location', false);
+      setViewRowVisibility('notes', false);
+      setViewRowVisibility('created', false);
+      setViewRowVisibility('updated', false);
+    } else {
+      setViewRowVisibility('start', true);
+      const isPickup = type === 'donor' || type === 'recipient';
+      setViewRowVisibility('end', Boolean(!isPickup && hasContent(data.end)));
+      setViewRowVisibility('recipients', Boolean(!isPickup && hasContent(data.recipients) && data.recipients.length > 0));
+      setViewRowVisibility('location', true);
+      setViewRowVisibility('notes', true);
+      setViewRowVisibility('created', true);
+      setViewRowVisibility('updated', true);
+    }
+
+    lastViewedEvent = data;
+  }
+
+  function updateEditButtonState(){
+    const btn = qs('#editEventBtn');
+    if (!btn) return;
+    let candidate = null;
+    if (lastViewedEvent && canEditEvent(lastViewedEvent)) candidate = lastViewedEvent;
+    if (!candidate){
+      const sel = getSelectedEventData();
+      if (sel && canEditEvent(sel)) candidate = sel;
+    }
+    btn.disabled = !candidate;
+    if (!candidate) {
+      btn.title = 'Select an event you can edit';
+      btn.dataset.eventId = '';
+    } else {
+      btn.removeAttribute('title');
+      btn.dataset.eventId = candidate.id ?? '';
+    }
+  }
+
+  function showViewModal(eventData){
+    populateViewModal(eventData);
+    const dateKey = getDateKey(eventData?.start);
+    if (dateKey && dateKey === lastSelectedDate){
+      const idNum = Number(eventData?.id);
+      if (Number.isFinite(idNum)) selectedEventId = idNum;
+      updateSelectedListActive();
+    }
+    updateEditButtonState();
+    const modalEl = document.getElementById('eventViewModal');
+    if (!modalEl) return;
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+  }
+
+  function renderSelectedDay(dateStr, events){
+    const dateEl = qs('#selectedDayDate');
+    const listEl = qs('#selectedDayList');
+    selectedDayEvents = Array.isArray(events) ? events : [];
+    if (dateEl){
+      dateEl.textContent = dateStr ? new Date(dateStr).toDateString() : 'Select a date';
+    }
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (!selectedDayEvents.length){
+      selectedEventId = null;
+      listEl.innerHTML = '<li class="list-group-item text-center text-muted py-3">No events scheduled for this day.</li>';
+      updateEditButtonState();
+      return;
+    }
+    const availableIds = selectedDayEvents.map(ev => Number(ev.id)).filter(Number.isFinite);
+    if (!availableIds.includes(selectedEventId)){
+      selectedEventId = availableIds.length ? availableIds[0] : null;
+    }
+    selectedDayEvents.forEach(ev=>{
+      const item = document.createElement('li');
+      const idNum = Number(ev.id);
+      item.className = 'list-group-item selected-day-item' + (idNum === selectedEventId ? ' active' : '');
+      item.dataset.eventId = String(ev.id);
+      const startStr = new Date(ev.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      const endStr = ev.end ? new Date(ev.end).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+      const roleBadge = role()==='admin' ? `<span class="badge ${ev.event_type==='donor'?'bg-primary':ev.event_type==='recipient'?'bg-success':'bg-warning text-dark'} ms-2">${ev.event_type}</span>` : '';
+      const location = ev.location ? `<div class="small text-muted">${escapeHtml(ev.location)}</div>` : '';
+      item.innerHTML = `
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div class="flex-grow-1">
+            <div class="fw-semibold">${escapeHtml(ev.title||'Event')}${roleBadge}</div>
+            <div class="small text-muted">${startStr}${endStr?(' - '+endStr):''}</div>
+            ${location}
+          </div>
+          <div>
+            <button type="button" class="btn btn-sm btn-outline-secondary selected-day-open" data-event-id="${ev.id}">View</button>
+          </div>
+        </div>`;
+      listEl.appendChild(item);
+    });
+    updateSelectedListActive();
+    updateEditButtonState();
+  }
+
+  function highlightSelectedDate(dateStr){
+    if (!dateStr) return;
+    try {
+      document.querySelectorAll('.fc-daygrid-day').forEach(el=> el.classList.remove('selected-day'));
+      const target = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+      if (target) target.classList.add('selected-day');
+    } catch(_){ }
+  }
+
+  function queueCalendarResize(){
+    if (!calendarInstance) return;
+    if (resizeRaf) return;
+    resizeRaf = window.requestAnimationFrame(()=>{
+      resizeRaf = null;
+      try { calendarInstance.updateSize(); } catch(_){ }
+    });
+  }
+
+  function resetRecipientQueue(initial, syncHidden = true){
+    if (Array.isArray(initial) && initial.length){
+      const seen = new Set();
+      recipientQueue = initial.reduce((acc, raw)=>{
+        const idNum = Number(raw?.id || raw?.recipient_id);
+        if (!Number.isFinite(idNum) || idNum <= 0 || seen.has(idNum)) return acc;
+        seen.add(idNum);
+        let text = raw?.text || raw?.label || raw?.display_name || raw?.name || '';
+        if (!text){ text = `Recipient #${idNum}`; }
+        acc.push({ id: idNum, text });
+        return acc;
+      }, []);
+    } else {
+      recipientQueue = [];
+    }
+    renderRecipientTags();
+    if (syncHidden) syncRecipientHiddenFromQueue();
+  }
+
+  function getRecipientQueueIds(){
+    return recipientQueue.map(r => r.id);
+  }
+
+  function addRecipientToQueue(item){
+    if (!item || !item.id) return false;
+    const idNum = Number(item.id);
+    if (!Number.isFinite(idNum) || idNum <= 0) return false;
+    if (recipientQueue.some(r => r.id === idNum)) return false;
+    recipientQueue.push({ id: idNum, text: item.text || `Recipient #${idNum}` });
+    renderRecipientTags();
+    syncRecipientHiddenFromQueue();
+    return true;
+  }
+
+  function removeRecipientFromQueue(id){
+    const idNum = Number(id);
+    if (!Number.isFinite(idNum)) return;
+    const before = recipientQueue.length;
+    recipientQueue = recipientQueue.filter(r => r.id !== idNum);
+    if (recipientQueue.length !== before){
+      renderRecipientTags();
+      syncRecipientHiddenFromQueue();
+    }
+  }
+
+  function renderRecipientTags(){
+    const container = qs('#evRecipientTags');
+    if (!container) return;
+    if (!recipientQueue.length){
+      container.innerHTML = '<span class="text-muted">No recipients added.</span>';
+      return;
+    }
+    const chips = recipientQueue.map(r => (
+      `<span class="badge text-bg-primary d-inline-flex align-items-center me-2 mb-2" data-recipient-chip="${r.id}">${escapeHtml(r.text)}<button type="button" class="btn-close btn-close-white btn-sm ms-2" aria-label="Remove" data-remove-recipient="${r.id}"></button></span>`
+    ));
+    container.innerHTML = chips.join('');
+  }
+
+  function syncRecipientHiddenFromQueue(){
+    const hidden = qs('#evRecipient');
+    if (!hidden) return;
+    if (recipientQueue.length){
+      hidden.value = String(recipientQueue[0].id);
+      return;
+    }
+    const select = qs('#evRecipientSelect');
+    if (!select){ hidden.value = ''; return; }
+    let val = select.value;
+    if (!val && typeof window.$ === 'function' && $(select).select2){
+      val = $(select).val();
+    }
+    hidden.value = val ? String(val) : '';
+  }
+
+  function addRecipientFromCurrentSelection(){
+    const select = qs('#evRecipientSelect');
+    if (!select) return false;
+    let val = select.value;
+    if (!val && typeof window.$ === 'function' && $(select).select2){
+      val = $(select).val();
+    }
+    const idNum = Number(val);
+    if (!Number.isFinite(idNum) || idNum <= 0) return false;
+    let text = '';
+    if (typeof window.$ === 'function' && $(select).select2){
+      const data = $(select).select2('data');
+      if (Array.isArray(data) && data[0]){
+        text = data[0].text || data[0].id || '';
+        if (data[0].address) applyLocationFromAddress(data[0].address);
+        rememberOptionAddress(select, idNum, data[0].address);
+      }
+    }
+    if (!text){
+      const opt = select.options && select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+      text = opt ? opt.text : '';
+      if (opt && opt.dataset?.address) applyLocationFromAddress(opt.dataset.address);
+    }
+    const added = addRecipientToQueue({ id: idNum, text });
+    if (added){
+      if (typeof window.$ === 'function' && $(select).select2){
+        $(select).val(null).trigger('change');
+      } else {
+        select.value = '';
+      }
+    }
+    return added;
+  }
+  function canCreateEvents(){
+    const r = role();
+    return r === 'admin' || r === 'donor' || r === 'recipient';
+  }
+  function canCreateEventOfType(type){
+    const r = role();
+    if (r === 'admin') return true;
+    if (r === 'donor') return type === 'donor';
+    if (r === 'recipient') return type === 'recipient';
+    return false;
+  }
+  function canViewEvent(eventData){
+    const r = role();
+    if (r === 'admin') return true;
+    if (r === 'donor') return eventData.event_type === 'admin' || eventData.event_type === 'donor';
+    if (r === 'recipient') return eventData.event_type === 'admin' || eventData.event_type === 'recipient';
+    return false;
+  }
+  function canEditEvent(eventData){
+    const r = role();
+    if (r === 'admin') return true;
+    const involved = eventIsForCurrentUser(eventData);
+    if (!involved) return false;
+    if (r === 'donor') return eventData.event_type === 'donor' || eventData.event_type === 'admin';
+    if (r === 'recipient') return eventData.event_type === 'recipient' || eventData.event_type === 'admin';
+    return false;
+  }
 
   function showMsg(el, msg, type){ if (!el) return; try{ el.innerHTML = msg ? `<div class="alert alert-${type} py-2 mb-0">${msg}</div>` : ''; }catch(_){} }
   function showCalModal(message){
@@ -118,27 +604,99 @@
       const inj = ['evRecipientName','evRecipientAddress'];
       inj.forEach(id=>{ const el = document.getElementById(id); if (el && el.parentNode) el.parentNode.removeChild(el); });
       // Restore default labels
-      const startInput0 = qs('#evStart');
-      if (startInput0){ const lbl0 = startInput0.closest('.mb-2')?.querySelector('label'); if (lbl0) lbl0.textContent = 'Start'; }
+      const startTime0 = qs('#evStartTime'); if (startTime0) startTime0.value = '';
+      const endTime0 = qs('#evEndTime');
+      if (endTime0){
+        endTime0.value = '';
+        const endWrap0 = endTime0.parentElement;
+        if (endWrap0) endWrap0.style.display = '';
+      }
+      const dateInput0 = qs('#evDate'); if (dateInput0) dateInput0.value = '';
+      const startLbl0 = document.querySelector('label[for="evStartTime"]'); if (startLbl0) startLbl0.textContent = 'Start Time';
+      const endLbl0 = document.querySelector('label[for="evEndTime"]'); if (endLbl0) endLbl0.textContent = 'End Time';
       // Restore wrappers' visibility
       const recWrap0 = qs('#wrapRecipient'); if (recWrap0) recWrap0.style.display = '';
       const donWrap0 = qs('#wrapDonor'); if (donWrap0) donWrap0.style.display = '';
       const loc0 = qs('#evLocation'); if (loc0){ const w = loc0.closest('.mt-2') || loc0.parentElement; if (w) w.style.display = ''; }
       // Re-enable all form controls by default (role logic will adjust afterward)
       const form0 = qs('#eventForm'); if (form0){ form0.querySelectorAll('input,select,textarea,button').forEach(c=>{ if (c.id !== 'deleteEventBtn') c.disabled = false; }); }
+      // Clear select2 fields
+      const donorSel0 = qs('#evDonorSelect');
+      if (donorSel0){
+        if (typeof window.$ === 'function' && $(donorSel0).select2) { $(donorSel0).val(null).trigger('change'); }
+        else donorSel0.value = '';
+      }
+      const recipientSel0 = qs('#evRecipientSelect');
+      if (recipientSel0){
+        if (typeof window.$ === 'function' && $(recipientSel0).select2) {
+          $(recipientSel0).val(null).trigger('change');
+          $(recipientSel0).prop('disabled', false);
+        }
+        else recipientSel0.value = '';
+      }
+      const recipientHidden0 = qs('#evRecipient'); if (recipientHidden0) recipientHidden0.value = '';
+      const donorDisplay0 = qs('#evDonorDisplay');
+      if (donorDisplay0){
+        donorDisplay0.style.display = 'none';
+        donorDisplay0.innerHTML = '';
+      }
     }catch(_){ }
     // Populate
-    qs('#evId').value = data?.id || '';
-    qs('#evTitle').value = data?.title || '';
+    const normalized = normalizeEventData(data);
+    const presetDate = data?.preset_date || data?.presetDate || null;
+    lastViewedEvent = normalized;
+    const r = role();
+    const isRecipientEvent = normalized.event_type === 'recipient';
+    const isAdmin = r === 'admin';
+    const myId = userId();
+    const involved = eventIsForCurrentUser(normalized);
+    let canEdit = canEditEvent(normalized);
+    const existingRecipients = Array.isArray(normalized?.recipients)
+      ? normalized.recipients.map(item => ({
+          id: item.id || item.recipient_id,
+          text: item.display_name || item.name || item.text || '',
+          address: item.address || item.recipient_address || item.location || ''
+        }))
+      : [];
+    resetRecipientQueue(isAdmin && isRecipientEvent ? existingRecipients : [], false);
+    renderRecipientTags();
+    const tagsWrap = qs('#evRecipientTags');
+    if (tagsWrap) {
+      if (isAdmin && isRecipientEvent) {
+        tagsWrap.style.display = '';
+      } else {
+        tagsWrap.style.display = 'none';
+        tagsWrap.innerHTML = '';
+      }
+    }
+
+    qs('#evId').value = normalized?.id || '';
+    qs('#evTitle').value = normalized?.title || data?.title || '';
     // Populate start/end using robust formatter for datetime-local (avoid using any external arg)
-    const startVal = data?.start || '';
-    const endVal = data?.end || '';
-    const evStartEl = qs('#evStart'); if (evStartEl) evStartEl.value = toDatetimeLocal(startVal);
-    const evEndEl = qs('#evEnd'); if (evEndEl) evEndEl.value = toDatetimeLocal(endVal);
-    qs('#evRecipient').value = data?.recipient_id || '';
-    qs('#evDonor').value = data?.donor_id || '';
-    qs('#evLocation').value = data?.location || '';
-    qs('#evNotes').value = data?.notes || '';
+    const startIso = data?.start || normalized.start || '';
+    const endIso = data?.end || normalized.end || '';
+    const startDate = startIso ? new Date(startIso) : null;
+    const endDate = endIso ? new Date(endIso) : null;
+    const dateInput = qs('#evDate');
+    const startTimeInput = qs('#evStartTime');
+    const endTimeInput = qs('#evEndTime');
+    if (dateInput) dateInput.value = startDate ? formatDateInput(startDate) : '';
+    if (startTimeInput) startTimeInput.value = startDate ? formatTimeInput(startDate) : '';
+    if (endTimeInput) endTimeInput.value = endDate ? formatTimeInput(endDate) : '';
+    if (!data?.id && presetDate && dateInput){
+      if (!dateInput.value) dateInput.value = presetDate;
+      if (startTimeInput) startTimeInput.value = '';
+      if (endTimeInput) endTimeInput.value = '';
+    }
+    if (existingRecipients.length){
+      qs('#evRecipient').value = String(existingRecipients[0].id);
+      if (!normalized.location && existingRecipients[0].address) applyLocationFromAddress(existingRecipients[0].address);
+    } else {
+      qs('#evRecipient').value = normalized?.recipient_id || '';
+    }
+    qs('#evDonor').value = normalized?.donor_id || '';
+    qs('#evLocation').value = normalized?.location || data?.location || '';
+    qs('#evNotes').value = normalized?.notes || data?.notes || '';
 
     // Ensure an informational hint element exists
     (function ensureHint(){
@@ -171,13 +729,31 @@
     const wrapRec = qs('#wrapRecipient');
     const wrapDon = qs('#wrapDonor');
     const wrapDtDefault = qs('#wrapDateTimeDefault');
-    const wrapDtAdmin = qs('#wrapDateTimeAdmin');
     const wrapStatus = qs('#wrapStatus');
     const donorSelect = qs('#evDonorSelect');
+    const recipientSelect = qs('#evRecipientSelect');
+    const recipientHidden = qs('#evRecipient');
+
+    function applyLocationFromAddress(address){
+      const addr = typeof address === 'string' ? address.trim() : '';
+      if (!addr) return;
+      const locInput = qs('#evLocation');
+      if (!locInput) return;
+      locInput.value = addr;
+      const locWrap = locInput.closest('.mt-2') || locInput.parentElement;
+      if (locWrap && role() !== 'recipient') locWrap.style.display = '';
+    }
+
+    function rememberOptionAddress(selectEl, value, address){
+      if (!selectEl || !address) return;
+      const opts = Array.from(selectEl.options || []);
+      const match = opts.find(opt => String(opt.value) === String(value));
+      if (match) match.dataset.address = address;
+    }
     // Initialize Select2 for donor search if available and admin
     function ensureDonorSelect() {
-      if (!donorSelect) return;
-      if (typeof $ === 'function' && $(donorSelect).select2 && !$(donorSelect).data('select2')){
+      if (!donorSelect || typeof window.$ !== 'function') return;
+      if ($(donorSelect).select2 && !$(donorSelect).data('select2')){
         $(donorSelect).select2({
           dropdownParent: $('#eventModal'),
           placeholder: 'Search donor organizations',
@@ -191,7 +767,11 @@
             data: params => ({ action:'list', role:'donor', q: params.term||'' }),
             processResults: (data)=>{
               const items = (data?.data?.items)||[];
-              return { results: items.map(u=>({ id: u.user_id, text: u.organization_name || u.name || ('Donor #'+u.user_id) })) };
+              return { results: items.map(u=>({
+                id: u.user_id,
+                text: u.organization_name || u.name || ('Donor #'+u.user_id),
+                address: u.address || null
+              })) };
             },
             error: function(xhr){
               try {
@@ -200,40 +780,174 @@
             }
           },
           minimumInputLength: 1
+        }).on('select2:select', function(ev){
+          const dataItem = ev.params?.data;
+          if (dataItem?.address) applyLocationFromAddress(dataItem.address);
+          rememberOptionAddress(donorSelect, dataItem?.id, dataItem?.address);
+        }).on('change', function(){
+          const opt = this.options[this.selectedIndex];
+          if (opt && opt.dataset?.address) applyLocationFromAddress(opt.dataset.address);
         });
       }
     }
-    function setDonorSelectValue(id, text){
-      if (!donorSelect || typeof $ !== 'function' || !$(donorSelect).select2) return;
-      const option = new Option(text || ('Donor #'+id), id, true, true);
-      $(donorSelect).append(option).trigger('change');
+    function ensureRecipientSelect() {
+      if (!recipientSelect || typeof window.$ !== 'function') return;
+      if ($(recipientSelect).select2 && !$(recipientSelect).data('select2')){
+        $(recipientSelect).select2({
+          dropdownParent: $('#eventModal'),
+          placeholder: 'Search recipient organizations',
+          allowClear: true,
+          width: 'resolve',
+          ajax: {
+            url: `${API_BASE_URL}/users/index.php`,
+            delay: 300,
+            dataType: 'json',
+            xhrFields: { withCredentials: true },
+            data: params => ({ action:'list', role:'recipient', q: params.term||'' }),
+            processResults: (data)=>{
+              const items = (data?.data?.items)||[];
+              return { results: items.map(u=>({
+                id: u.user_id,
+                text: u.organization_name || u.name || ('Recipient #'+u.user_id),
+                address: u.address || null
+              })) };
+            }
+          },
+          minimumInputLength: 1
+        }).on('select2:select', function(ev){
+          const dataItem = ev.params?.data;
+          if (dataItem?.address) applyLocationFromAddress(dataItem.address);
+          rememberOptionAddress(recipientSelect, dataItem?.id, dataItem?.address);
+        }).on('change', function(){
+          const opt = this.options[this.selectedIndex];
+          if (opt && opt.dataset?.address) applyLocationFromAddress(opt.dataset.address);
+        });
+      }
+    }
+    function syncRecipientHiddenFromSelect(){
+      if (!recipientHidden) return;
+      const val = recipientSelect && recipientSelect.value ? Number(recipientSelect.value) : null;
+      recipientHidden.value = val ? String(val) : '';
+    }
+    function setDonorSelectValue(id, text, address){
+      if (!donorSelect) return;
+      if (typeof window.$ === 'function' && $(donorSelect).select2){
+        const option = new Option(text || ('Donor #'+id), id, true, true);
+        if (address) option.dataset.address = address;
+        $(donorSelect).append(option).trigger('change');
+      } else {
+        let opt = Array.from(donorSelect.options || []).find(o=>String(o.value)===String(id));
+        if (!opt){
+          opt = new Option(text || ('Donor #'+id), id, true, true);
+          donorSelect.appendChild(opt);
+        } else {
+          opt.selected = true;
+        }
+        if (address) opt.dataset.address = address;
+        donorSelect.value = String(id);
+        applyLocationFromAddress(address);
+      }
+      rememberOptionAddress(donorSelect, id, address);
+    }
+    function setRecipientSelectValue(id, text, address){
+      if (!recipientSelect) return;
+      if (typeof window.$ === 'function' && $(recipientSelect).select2){
+        const option = new Option(text || ('Recipient #'+id), id, true, true);
+        if (address) option.dataset.address = address;
+        $(recipientSelect).append(option).trigger('change');
+      } else {
+        let opt = Array.from(recipientSelect.options || []).find(o=>String(o.value)===String(id));
+        if (!opt){
+          opt = document.createElement('option');
+          opt.value = String(id);
+          opt.textContent = text || `Recipient #${id}`;
+          recipientSelect.appendChild(opt);
+        }
+        if (address) opt.dataset.address = address;
+        recipientSelect.value = String(id);
+        applyLocationFromAddress(address);
+      }
+      rememberOptionAddress(recipientSelect, id, address);
+      syncRecipientHiddenFromSelect();
+    }
+    if (recipientSelect){
+      recipientSelect.addEventListener('change', syncRecipientHiddenFromSelect);
+      if (!recipientSelect.dataset.locationBound){
+        recipientSelect.addEventListener('change', ()=>{
+          const opt = recipientSelect.options && recipientSelect.selectedIndex >= 0 ? recipientSelect.options[recipientSelect.selectedIndex] : null;
+          if (opt && opt.dataset?.address) applyLocationFromAddress(opt.dataset.address);
+        });
+        recipientSelect.dataset.locationBound = '1';
+      }
+      if (isAdmin && isRecipientEvent){
+        if (typeof window.$ === 'function' && $(recipientSelect).select2){
+          existingRecipients.forEach(r => {
+            if (r?.id){
+              const option = new Option(r.text || ('Recipient #'+r.id), r.id, false, false);
+              if (r.address) option.dataset.address = r.address;
+              $(recipientSelect).append(option);
+            }
+          });
+          $(recipientSelect).trigger('change');
+        } else {
+          // Fallback when Select2 is unavailable: ensure options exist for current recipients
+          existingRecipients.forEach(r => {
+            if (!r?.id) return;
+            const exists = Array.from(recipientSelect.options || []).some(opt => Number(opt.value) === Number(r.id));
+            if (!exists){
+              const opt = document.createElement('option');
+              opt.value = String(r.id);
+              opt.textContent = r.text || `Recipient #${r.id}`;
+              if (r.address) opt.dataset.address = r.address;
+              recipientSelect.appendChild(opt);
+            }
+          });
+          if (existingRecipients.length){
+            recipientSelect.value = String(existingRecipients[0].id);
+            syncRecipientHiddenFromSelect();
+          }
+        }
+      }
+    }
+    if (donorSelect){
+      if (typeof window.$ === 'function' && $(donorSelect).select2){ $(donorSelect).prop('disabled', !canEdit && r!=='admin'); }
+      donorSelect.disabled = !canEdit && r !== 'admin';
+      if (!donorSelect.dataset.locationBound){
+        donorSelect.addEventListener('change', ()=>{
+          const opt = donorSelect.options && donorSelect.selectedIndex >= 0 ? donorSelect.options[donorSelect.selectedIndex] : null;
+          if (opt && opt.dataset?.address) applyLocationFromAddress(opt.dataset.address);
+        });
+        donorSelect.dataset.locationBound = '1';
+      }
     }
     function inferTypeFromData(d){
-      if (!d) return 'admin';
-      if (d.recipient_id) return 'recipient';
-      if (d.donor_id) return 'donor';
-      return 'admin';
+      const norm = normalizeEventData(d);
+      return norm.event_type || 'admin';
     }
     function applyTypeUI(t){
       const rNow = role();
       // Recipient ID shown only to admin when setting recipient-type events
-      if (wrapRec) wrapRec.style.display = (t==='recipient' && rNow==='admin') ? '' : 'none';
-      // Donor selector visible only for admin when scheduling donor pickups
-      if (wrapDon) wrapDon.style.display = (t==='donor' && rNow==='admin') ? '' : 'none';
-      if (wrapDtDefault) wrapDtDefault.style.display = (rNow==='admin' && t==='donor') ? 'none' : '';
-      if (wrapDtAdmin) wrapDtAdmin.style.display = (rNow==='admin' && t==='donor') ? '' : 'none';
-      if (wrapStatus) wrapStatus.style.display = (rNow==='admin') ? 'none' : '';
-      // Donor/Recipient do not use End time; hide its column
-      const endInput = qs('#evEnd');
-      const endCol = endInput ? endInput.closest('.col-6') : null;
-      if (endCol) {
-        if (rNow==='donor' || rNow==='recipient' || rNow==='admin') {
-          endCol.style.display = 'none';
-          if (endInput) endInput.value = '';
+      if (wrapRec) {
+        const show = (t==='recipient' && rNow==='admin');
+        wrapRec.style.display = show ? '' : 'none';
+        const addBtn = qs('#addRecipientBtn');
+        const tagsWrapEl = qs('#evRecipientTags');
+        if (addBtn) addBtn.style.display = show ? '' : 'none';
+        if (tagsWrapEl) tagsWrapEl.style.display = show ? '' : 'none';
+        if (show) {
+          ensureRecipientSelect();
+          renderRecipientTags();
         } else {
-          endCol.style.display = '';
+          resetRecipientQueue([], true);
+          if (tagsWrapEl) tagsWrapEl.innerHTML = '';
         }
       }
+      // Donor selector visible only for admin when scheduling donor pickups
+      if (wrapDon){
+        const showDonor = (t==='donor' && (rNow==='admin' || rNow==='donor'));
+        wrapDon.style.display = showDonor ? '' : 'none';
+      }
+      if (wrapStatus) wrapStatus.style.display = (rNow==='admin') ? 'none' : '';
       // Hide Location for recipients
       const locInput = qs('#evLocation');
       if (locInput) {
@@ -241,10 +955,19 @@
         if (rNow==='recipient') { if (locWrap) locWrap.style.display = 'none'; locInput.value = ''; }
         else { if (locWrap) locWrap.style.display = ''; }
       }
+      const endTimeInput = qs('#evEndTime');
+      const endTimeWrap = endTimeInput ? endTimeInput.parentElement : null;
+      if (endTimeInput){
+        if (t==='donor' || t==='recipient'){
+          endTimeInput.value = '';
+          if (endTimeWrap) endTimeWrap.style.display = 'none';
+        } else if (endTimeWrap) {
+          endTimeWrap.style.display = '';
+        }
+      }
       if (t==='donor' && rNow==='admin') { ensureDonorSelect(); }
     }
-    const r = role();
-    let initType = inferTypeFromData(data);
+    let initType = inferTypeFromData(normalized);
     if (typeSel){
       // Restrict options based on role
       const allowOptions = (r==='admin') ? ['admin','donor','recipient'] : (r==='donor') ? ['donor'] : (r==='recipient') ? ['recipient'] : ['admin'];
@@ -272,75 +995,141 @@
     }
 
     // If editing an existing admin-created donor pickup, try set donor select (use donor_display when available)
-    if (r==='admin' && donorSelect && data?.donor_id){
-      ensureDonorSelect();
-      setDonorSelectValue(data.donor_id, data.donor_display || data.donor_name || undefined);
+    if (r==='admin'){
+      if (donorSelect && normalized?.donor_id){
+        ensureDonorSelect();
+        setDonorSelectValue(normalized.donor_id, normalized.donor_display || normalized.donor_name || undefined, normalized.donor_address || data?.donor_address);
+      }
+      if (recipientSelect && normalized?.recipient_id){
+        ensureRecipientSelect();
+        setRecipientSelectValue(normalized.recipient_id, normalized.recipient_display || normalized.recipient_name || undefined, normalized.recipient_address || data?.recipient_address);
+      }
+    }
+    if (recipientSelect && existingRecipients.length){
+      ensureRecipientSelect();
+      const first = existingRecipients[0];
+      if (first?.id){
+        setRecipientSelectValue(first.id, first.text || first.display_name || first.name || undefined);
+      }
     }
 
     // Role-based controls
-    // r already computed above
-    const myId = userId();
-    const isOwner = data?.created_by ? Number(data.created_by) === myId : true;
-    const involved = (r==='admin') || (r==='donor' && (Number(data?.donor_id||0)===myId || isOwner)) || (r==='recipient' && (Number(data?.recipient_id||0)===myId || isOwner));
-    // Admins can generally edit, EXCEPT recipient schedules should be read-only for admins
-    const isRecipientEvent = !!(data?.recipient_id);
-    let canEdit = (r==='admin') ? !isRecipientEvent : involved;
 
-    ['evTitle','evStart','evEnd','evRecipient','evDonor','evLocation','evNotes'].forEach(id=>{
+    ['evTitle','evStart','evEnd','evDonor','evLocation','evNotes'].forEach(id=>{
       const el = qs('#'+id); if (el) el.disabled = !canEdit;
     });
+    if (recipientHidden) recipientHidden.disabled = (r!=='admin' && !canEdit);
+    if (donorSelect){
+      if (typeof window.$ === 'function' && $(donorSelect).select2){ $(donorSelect).prop('disabled', !canEdit); }
+      donorSelect.disabled = !canEdit;
+    }
+    if (recipientSelect){
+      const lockRecipientSelect = !canEdit && r !== 'admin';
+      if (typeof window.$ === 'function' && $(recipientSelect).select2){ $(recipientSelect).prop('disabled', lockRecipientSelect); }
+      recipientSelect.disabled = lockRecipientSelect;
+    }
     const delBtn = qs('#deleteEventBtn'); if (delBtn) delBtn.style.display = (canEdit && data?.id) ? '' : 'none';
     const saveBtn = qs('#saveEventBtn'); if (saveBtn) saveBtn.disabled = !canEdit;
-    // Additionally, prevent changing Event Type when admin views recipient events
-    if (r==='admin' && isRecipientEvent && typeSel){ typeSel.disabled = true; }
-    // For admin viewing recipient events: hide numeric Recipient ID, show name read-only
     try {
-      if (r==='admin' && isRecipientEvent){
-        const recInput = qs('#evRecipient');
-        const recWrap = recInput ? recInput.closest('.col-6') : null;
-        if (recWrap) recWrap.style.display = 'none';
-        let disp = document.getElementById('evRecipientName');
-        if (!disp){
-          disp = document.createElement('div');
-          disp.id = 'evRecipientName';
-          disp.className = 'mb-2';
-          disp.innerHTML = '<label class="form-label mb-1">Recipient</label><input type="text" class="form-control form-control-sm" disabled />';
-          const row = recWrap ? recWrap.parentElement : qs('#eventForm');
-          if (row) row.insertBefore(disp, (recWrap? recWrap.nextSibling : row.firstChild));
+      const recInput = qs('#evRecipient');
+      const recWrap = recInput ? recInput.closest('.col-6') : null;
+      const donorInput = qs('#evDonor');
+      const donorWrap = donorInput ? donorInput.closest('.col-6') : qs('#wrapDonor');
+      const donorDisplayEl = qs('#evDonorDisplay');
+      const disp = document.getElementById('evRecipientName');
+      if (disp && disp.parentElement) disp.parentElement.removeChild(disp);
+      if (recWrap) recWrap.style.display = '';
+      if (donorDisplayEl){
+        donorDisplayEl.style.display = 'none';
+        donorDisplayEl.innerHTML = '';
+      }
+
+      if (recipientSelect){
+        if (typeof window.$ === 'function' && $(recipientSelect).select2){ $(recipientSelect).prop('disabled', !canEdit && r!=='admin'); }
+        recipientSelect.disabled = !canEdit && r !== 'admin';
+      }
+      if (donorSelect){
+        if (typeof window.$ === 'function' && $(donorSelect).select2){ $(donorSelect).prop('disabled', !canEdit && r!=='admin'); }
+        donorSelect.disabled = !canEdit && r !== 'admin';
+        if (!donorSelect.dataset.locationBound){
+          donorSelect.addEventListener('change', ()=>{
+            const opt = donorSelect.options && donorSelect.selectedIndex >= 0 ? donorSelect.options[donorSelect.selectedIndex] : null;
+            if (opt && opt.dataset?.address) applyLocationFromAddress(opt.dataset.address);
+          });
+          donorSelect.dataset.locationBound = '1';
         }
-        const input = disp.querySelector('input');
-        if (input) input.value = data?.recipient_display || data?.recipient_name || ('Recipient #'+ String(data?.recipient_id||''));
-        // Address display
-        let addr = document.getElementById('evRecipientAddress');
-        if (!addr){
-          addr = document.createElement('div');
-          addr.id = 'evRecipientAddress';
-          addr.className = 'mb-2';
-          addr.innerHTML = '<label class="form-label mb-1">Address/Location</label><input type="text" class="form-control form-control-sm" disabled />';
-          const row = disp.parentElement || qs('#eventForm');
-          if (row) row.insertBefore(addr, disp.nextSibling);
+      }
+
+      if (r === 'recipient'){
+        const org = currentUserOrganization();
+        if (recipientSelect){
+          if (typeof window.$ === 'function' && $(recipientSelect).data('select2')){
+            try { $(recipientSelect).select2('destroy'); } catch(_){ }
+          }
+          recipientSelect.style.display = 'none';
+          const existing = recipientSelect.nextElementSibling;
+          if (existing && existing.classList && existing.classList.contains('select2')){
+            existing.parentElement?.removeChild(existing);
+          }
         }
-        const addrInput = addr.querySelector('input');
-        if (addrInput) addrInput.value = data?.recipient_address || data?.location || '';
-        // Change Start label to Date & Time
-        const startInput = qs('#evStart');
-        if (startInput){
-          const lbl = startInput.closest('.mb-2')?.querySelector('label');
-          if (lbl) lbl.textContent = 'Date & Time';
+        const addBtn = qs('#addRecipientBtn');
+        if (addBtn) addBtn.style.display = 'none';
+        const tagsWrapEl = qs('#evRecipientTags');
+        if (tagsWrapEl) {
+          tagsWrapEl.innerHTML = '';
+          tagsWrapEl.style.display = '';
+          tagsWrapEl.innerHTML = `<div class="form-control form-control-sm bg-light" aria-readonly="true">${escapeHtml(org || 'My organization')}</div>`;
         }
-        // Hide Location field for admin on recipient entries
-        const locInputAdmin = qs('#evLocation');
-        if (locInputAdmin){
-          const locWrapAdmin = locInputAdmin.closest('.mt-2') || locInputAdmin.parentElement;
-          if (locWrapAdmin) locWrapAdmin.style.display = 'none';
-          locInputAdmin.value = '';
+        if (recInput) recInput.value = String(userId());
+        const locInput = qs('#evLocation');
+        if (locInput){
+          locInput.value = 'Food Bank Warehouse';
+          const locWrap = locInput.closest('.mt-2') || locInput.parentElement;
+          if (locWrap) locWrap.style.display = 'none';
+        }
+      } else if (r === 'donor'){
+        const org = normalized?.donor_display || normalized?.donor_name || currentUserOrganization();
+        if (donorWrap) donorWrap.style.display = '';
+        if (donorSelect){
+          if (typeof window.$ === 'function' && $(donorSelect).data('select2')){
+            try { $(donorSelect).select2('destroy'); } catch(_){ }
+          }
+          donorSelect.style.display = 'none';
+          const existingDonor = donorSelect.nextElementSibling;
+          if (existingDonor && existingDonor.classList && existingDonor.classList.contains('select2')){
+            existingDonor.parentElement?.removeChild(existingDonor);
+          }
+        }
+        if (donorDisplayEl){
+          donorDisplayEl.style.display = '';
+          donorDisplayEl.innerHTML = `<div class="form-control form-control-sm bg-light" aria-readonly="true">${escapeHtml(org || 'My organization')}</div>`;
+        }
+        if (donorInput) donorInput.value = String(userId());
+        const locInput = qs('#evLocation');
+        if (locInput){
+          const locWrap = locInput.closest('.mt-2') || locInput.parentElement;
+          if (locWrap) locWrap.style.display = 'none';
+          locInput.value = '';
+        }
+      } else if (r !== 'admin'){
+        const locInput = qs('#evLocation');
+        if (locInput){
+          const locWrap = locInput.closest('.mt-2') || locInput.parentElement;
+          if (locWrap) locWrap.style.display = 'none';
+          locInput.value = '';
+        }
+      } else {
+        const locInput = qs('#evLocation');
+        if (locInput){
+          const locWrap = locInput.closest('.mt-2') || locInput.parentElement;
+          if (locWrap) locWrap.style.display = '';
         }
       }
     } catch(_){ }
 
     // Prefill separate date/time inputs for admin donor-type UI
     try {
-      const t = typeSel ? typeSel.value : inferTypeFromData(data);
+      const t = typeSel ? typeSel.value : inferTypeFromData(normalized);
       if (r==='admin' && t==='donor'){
         const startIso = data?.start || '';
         if (startIso){
@@ -360,7 +1149,7 @@
   }
 
   function collectForm(){
-    const t = (qs('#evType')?.value)||'admin';
+    const t = (qs('#evType')?.value)||defaultTypeForCurrentRole();
     const r = role();
     const uid = userId();
     // Resolve donor from select2 if present
@@ -368,14 +1157,26 @@
     const donorSelect = qs('#evDonorSelect');
     if (donorSelect && donorSelect.value) donorId = Number(donorSelect.value);
     if (!donorId) { donorId = qs('#evDonor')?.value ? Number(qs('#evDonor').value) : null; }
-    let recipientId = qs('#evRecipient').value ? Number(qs('#evRecipient').value) : null;
+    let recipientId = null;
+    let recipientIds = [];
+    const recipientSelect = qs('#evRecipientSelect');
+    if (recipientSelect && recipientSelect.value) recipientId = Number(recipientSelect.value);
+    if (!recipientId) { recipientId = qs('#evRecipient')?.value ? Number(qs('#evRecipient').value) : null; }
+    if (!canCreateEventOfType(t)) {
+      return null;
+    }
     // Enforce per role
     if (r==='donor') { donorId = uid; recipientId = null; }
     else if (r==='recipient') { recipientId = uid; donorId = null; }
     else if (r==='admin') {
       if (t==='admin'){ donorId = null; recipientId = null; }
-      else if (t==='donor'){ recipientId = null; /* donorId from field */ }
-      else if (t==='recipient'){ donorId = null; /* recipientId from field */ }
+      else if (t==='donor'){ recipientId = null; }
+      else if (t==='recipient'){
+        donorId = null;
+        recipientIds = getRecipientQueueIds();
+        if (!recipientIds.length && recipientId) recipientIds = [recipientId];
+        if (recipientIds.length) recipientId = Number(recipientIds[0]);
+      }
     }
     let titleVal = qs('#evTitle').value.trim();
     if (!titleVal) {
@@ -387,25 +1188,19 @@
       else if (t==='recipient') titleVal = 'Recipient Pickup/Availability';
     }
     // Build start/end: for admin 'donor' (Pickup), compose from evDate/evTime with no end
-    let startIso;
-    let endIso;
-    if (r==='admin' && t==='donor'){
-      const d = qs('#evDate')?.value;
-      const tm = qs('#evTime')?.value || '09:00';
-      if (d) {
-        startIso = new Date(`${d}T${tm}`).toISOString();
-        endIso = null;
-      } else {
-        // Fallback to datetime-local if not provided
-        startIso = new Date(qs('#evStart').value).toISOString();
-        endIso = qs('#evEnd').value ? new Date(qs('#evEnd').value).toISOString() : null;
-      }
-    } else {
-      startIso = new Date(qs('#evStart').value).toISOString();
-      endIso = qs('#evEnd').value ? new Date(qs('#evEnd').value).toISOString() : null;
+    const dateVal = qs('#evDate')?.value || '';
+    const startTimeVal = qs('#evStartTime')?.value || '';
+    const endTimeVal = qs('#evEndTime')?.value || '';
+    let startIso = null;
+    let endIso = null;
+    if (dateVal && startTimeVal){
+      startIso = new Date(`${dateVal}T${startTimeVal}`).toISOString();
+    }
+    if (dateVal && endTimeVal){
+      endIso = new Date(`${dateVal}T${endTimeVal}`).toISOString();
     }
 
-    return {
+    const payload = {
       id: qs('#evId').value || null,
       title: titleVal,
       start: startIso,
@@ -414,8 +1209,11 @@
       donor_id: donorId,
       location: qs('#evLocation').value.trim() || null,
       notes: qs('#evNotes').value.trim() || null,
-      // status removed from UI; backend defaults to 'scheduled' if omitted
+      event_type: t,
+      created_for_user_id: (r==='admin') ? (t==='admin' ? null : (t==='donor' ? donorId : recipientId)) : uid,
     };
+    if (recipientIds.length) payload.recipient_ids = recipientIds;
+    return payload;
   }
 
   async function init(){
@@ -455,8 +1253,126 @@
     const dd = String(startOfToday.getDate()).padStart(2,'0');
     const todayStr = `${yyyy}-${mm}-${dd}`;
 
-    // Initialize calendar
+    const addRecipientBtn = qs('#addRecipientBtn');
+    if (addRecipientBtn){
+      addRecipientBtn.addEventListener('click', (ev)=>{
+        ev.preventDefault();
+        const added = addRecipientFromCurrentSelection();
+        if (!added){
+          const sel = qs('#evRecipientSelect');
+          const hasValue = sel && (sel.value || (typeof window.$ === 'function' && $(sel).select2 && $(sel).val()));
+          if (!hasValue){
+            const msg = qs('#calFeedback');
+            showMsg(msg, 'Select a recipient first, then press “Add”.', 'warning');
+            setTimeout(()=> showMsg(msg, '', 'info'), 2500);
+          }
+        } else {
+          showMsg(feedback, '', 'info');
+        }
+      });
+    }
+
+    const recipientTagsWrap = qs('#evRecipientTags');
+    if (recipientTagsWrap){
+      recipientTagsWrap.addEventListener('click', (ev)=>{
+        const btn = ev.target.closest('[data-remove-recipient]');
+        if (!btn) return;
+        ev.preventDefault();
+        removeRecipientFromQueue(btn.getAttribute('data-remove-recipient'));
+      });
+    }
+
+    const viewModalEl = document.getElementById('eventViewModal');
+    if (viewModalEl){
+      viewModalEl.addEventListener('hidden.bs.modal', ()=>{
+        lastViewedEvent = null;
+        updateEditButtonState();
+      });
+    }
+
+    const editBtn = qs('#editEventBtn');
+    if (editBtn){
+      editBtn.addEventListener('click', ()=>{
+        let targetEvent = null;
+        if (lastViewedEvent && canEditEvent(lastViewedEvent)) {
+          targetEvent = lastViewedEvent;
+        } else {
+          const selected = getSelectedEventData();
+          if (selected && canEditEvent(selected)) targetEvent = normalizeEventData(selected);
+        }
+        if (!targetEvent){
+          showCalModal('Select an event you can edit first');
+          return;
+        }
+        const viewModal = viewModalEl ? bootstrap.Modal.getInstance(viewModalEl) : null;
+        viewModal?.hide();
+        openModal(targetEvent);
+      });
+    }
+
+    const selectedDayList = qs('#selectedDayList');
+    if (selectedDayList){
+      selectedDayList.addEventListener('click', (e)=>{
+        const trigger = e.target.closest('.selected-day-open, .selected-day-item');
+        if (!trigger) return;
+        const id = Number(trigger.getAttribute('data-event-id') || trigger.dataset.eventId);
+        if (!Number.isFinite(id)) return;
+        const match = lastItems.find(item => Number(item.id) === id || Number(item.event_id) === id);
+        if (!match) return;
+        selectedEventId = id;
+        updateSelectedListActive();
+        updateEditButtonState();
+        if (trigger.classList.contains('selected-day-open')){
+          e.preventDefault();
+          const ev = normalizeEventData(match);
+          if (canViewEvent(ev)) showViewModal(ev);
+        }
+      });
+    }
+
+    const layout = qs('#scheduleLayout');
+    const resizer = qs('#scheduleResizer');
+    const selectedPane = qs('.selected-pane');
+    const calendarPane = qs('.calendar-pane');
+    if (layout && resizer && selectedPane && calendarPane){
+      const minWidth = Number(selectedPane.dataset.minWidth) || 240;
+      const maxWidth = Number(selectedPane.dataset.maxWidth) || 520;
+      const calendarMin = Number(layout.dataset.calendarMin) || 520;
+      let startX = 0;
+      let startWidth = 0;
+      const onMove = (ev)=>{
+        const delta = ev.clientX - startX;
+        let newWidth = startWidth - delta;
+        if (!Number.isFinite(newWidth)) return;
+        const layoutWidth = layout.getBoundingClientRect().width;
+        const calendarWidth = layoutWidth - newWidth - resizer.getBoundingClientRect().width;
+        if (calendarWidth < calendarMin){
+          newWidth = layoutWidth - calendarMin - resizer.getBoundingClientRect().width;
+        }
+        newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+        layout.style.setProperty('--selected-pane-width', `${Math.round(newWidth)}px`);
+        queueCalendarResize();
+      };
+      const onUp = ()=>{
+        document.body.classList.remove('schedule-resizing');
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        queueCalendarResize();
+      };
+      resizer.addEventListener('pointerdown', (ev)=>{
+        if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+        ev.preventDefault();
+        startX = ev.clientX;
+        startWidth = selectedPane.getBoundingClientRect().width;
+        layout.style.setProperty('--selected-pane-width', `${Math.round(startWidth)}px`);
+        document.body.classList.add('schedule-resizing');
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp, { once: true });
+      });
+    }
+
     const calendarEl = document.getElementById('calendar');
+    if (!calendarEl) return;
     let lastItems = [];
     const calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: 'dayGridMonth',
@@ -469,69 +1385,50 @@
       slotMinTime: '06:00:00',
       slotMaxTime: '21:00:00',
       eventDisplay: 'block',
-      selectable: true,
+      selectable: canCreateEvents(),
       eventTimeFormat: { hour:'2-digit', minute:'2-digit', hour12:false },
       selectAllow: (selectionInfo)=> {
         // Disallow creating selections starting before today
         return selectionInfo.start >= startOfToday;
       },
+      select: ()=>{},
       eventAllow: (dropInfo, draggedEvent)=> {
-        // Prevent dragging/resizing events into the past
-        const start = dropInfo.start; // Date
-        return start >= startOfToday;
+        const start = dropInfo.start;
+        if (start < startOfToday) return false;
+        const data = normalizeEventData(draggedEvent?.extendedProps || {});
+        return canEditEvent(data);
       },
-      eventDidMount: (info)=>{
-        // Make the event title itself a clickable link that opens the modal
-        try{
-          const titleEl = info.el.querySelector('.fc-event-title');
-          if (titleEl && !titleEl.querySelector('a.ev-open')){
-            const link = document.createElement('a');
-            link.href = '#';
-            link.className = 'ev-open';
-            link.style.color = 'inherit';
-            link.style.textDecoration = 'underline';
-            // move existing title content inside the link
-            while (titleEl.firstChild){ link.appendChild(titleEl.firstChild); }
-            titleEl.appendChild(link);
-            link.addEventListener('click', (e)=>{
-              e.preventDefault(); e.stopPropagation();
-              const ev = info.event;
-              const data = { ...(ev.extendedProps||{}) };
-              data.id = Number(ev.id);
-              data.title = ev.title;
-              data.start = ev.start?.toISOString();
-              data.end = ev.end?.toISOString() || null;
-              openModal(data);
-            });
-          }
-        } catch(_){}
-      },
+      eventDidMount: ()=>{},
       datesSet: async (info)=>{
         try{
           const items = await listEvents(info.startStr, info.endStr);
           lastItems = items;
           calendar.removeAllEvents();
-          items.forEach(ev => {
-            const mine = (Number(ev.created_by)===userId());
+          items.forEach(rawEv => {
+            const ev = normalizeEventData(rawEv);
+            if (!canViewEvent(ev)) return;
+            const mine = eventIsForCurrentUser(ev) || Number(ev.created_by_user_id) === userId();
             const cls = [ mine ? 'event-owned' : 'event-assigned' ];
             let textColor;
-            // Primary coloring rule: based on last editor's role (editor_role)
-            const editor = (ev.editor_role||'').toLowerCase();
+            const editor = (rawEv.editor_role||rawEv.last_updated_role||'').toLowerCase();
             if (editor === 'donor') { textColor = '#00a0b0'; }
             else if (editor === 'recipient') { textColor = '#ed3f34'; }
             else if (editor === 'admin') { textColor = '#76818d'; }
-            else if (ev.is_busy) {
+            else if (rawEv.is_busy) {
               // busy block for privacy
               textColor = '#6c757d';
             } else {
               // Fallback when editor_role is not available: color by role_type
-              if (ev.role_type === 'donor') { textColor = '#00a0b0'; }
-              else if (ev.role_type === 'recipient') { textColor = '#ed3f34'; }
+              const roleType = ev.event_type;
+              if (roleType === 'donor') { textColor = '#00a0b0'; }
+              else if (roleType === 'recipient') { textColor = '#ed3f34'; }
               else { textColor = '#76818d'; }
             }
             calendar.addEvent({
-              id: String(ev.id), title: ev.title,
-              start: ev.start, end: ev.end || undefined,
+              id: String(ev.id),
+              title: rawEv.title || ev.title,
+              start: rawEv.start || ev.start,
+              end: rawEv.end || ev.end || undefined,
               extendedProps: ev,
               classNames: cls,
               textColor
@@ -540,71 +1437,84 @@
         } catch(e){ showCalModal(e.message || 'Failed to load events'); }
       },
       dateClick: (info)=>{
-        // Show list of events for the clicked day in a modal instead of create
+        lastSelectedDate = info.dateStr;
+        highlightSelectedDate(info.dateStr);
         const dayStart = new Date(info.dateStr + 'T00:00:00');
         const dayEnd = new Date(info.dateStr + 'T23:59:59');
-        // Filter items that overlap the clicked day
-        const items = (lastItems||[]).filter(ev=>{
+        const items = (lastItems||[]).map(normalizeEventData).filter(ev=>{
+          if (!canViewEvent(ev)) return false;
           const s = new Date(ev.start);
           const e = ev.end ? new Date(ev.end) : s;
           return (s <= dayEnd && e >= dayStart);
         });
-        // Populate modal
-        const listEl = qs('#dayEventsList');
-        const dateEl = qs('#dayEventsDate');
-        if (dateEl) dateEl.textContent = new Date(info.dateStr).toDateString();
-        if (listEl){
-          listEl.innerHTML = '';
-          if (!items.length){
-            listEl.innerHTML = '<li class="list-group-item text-center text-muted">No events</li>';
-          } else {
-            items.forEach(ev=>{
-              const startStr = new Date(ev.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-              const endStr = ev.end ? new Date(ev.end).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
-              const busyBadge = ev.is_busy ? '<span class="badge bg-secondary ms-2">Busy</span>' : '';
-              const roleBadge = (role()==='admin') ? `<span class="badge ${ev.role_type==='donor'?'bg-primary':ev.role_type==='recipient'?'bg-success':'bg-warning text-dark'} ms-2">${ev.role_type}</span>` : '';
-              const li = document.createElement('li');
-              li.className = 'list-group-item d-flex justify-content-between align-items-start';
-              li.innerHTML = `<div>
-                  <div class="fw-semibold"><a href="#" class="ev-open-link" style="text-decoration:none;">${ev.title||'Event'}</a> ${busyBadge} ${roleBadge}</div>
-                  <div class="small text-muted">${startStr}${endStr?(' - '+endStr):''}</div>
-                </div>`;
-              li.querySelector('.ev-open-link').addEventListener('click', (e)=>{
-                e.preventDefault();
-                const evForOpen = { ...ev, id: ev.id, start: ev.start, end: ev.end || null, title: ev.title };
-                bootstrap.Modal.getOrCreateInstance(document.getElementById('dayEventsModal')).hide();
-                openModal(evForOpen);
-              });
-              listEl.appendChild(li);
-            });
-          }
-        }
-        const mdl = bootstrap.Modal.getOrCreateInstance(document.getElementById('dayEventsModal'));
-        mdl.show();
+        renderSelectedDay(info.dateStr, items);
       },
       eventClick: (arg)=>{
-        // Clone extendedProps before mutating to avoid modifying a frozen object
-        const ev = { ...(arg.event.extendedProps || {}) };
-        ev.id = Number(arg.event.id);
-        ev.title = arg.event.title;
-        ev.start = arg.event.start?.toISOString();
-        ev.end = arg.event.end?.toISOString() || null;
-        openModal(ev);
+        const raw = { ...(arg.event.extendedProps || {}),
+          id: Number(arg.event.id),
+          title: arg.event.title,
+          start: arg.event.start?.toISOString(),
+          end: arg.event.end?.toISOString() || null
+        };
+        const ev = normalizeEventData(raw);
+        if (!canViewEvent(ev)) { showCalModal('You do not have permission to view this event'); return; }
+        const dateKey = getDateKey(ev.start);
+        if (dateKey){
+          lastSelectedDate = dateKey;
+          highlightSelectedDate(dateKey);
+          const dayStart = new Date(`${dateKey}T00:00:00`);
+          const dayEnd = new Date(`${dateKey}T23:59:59`);
+          const items = (lastItems||[]).map(normalizeEventData).filter(item=>{
+            if (!canViewEvent(item)) return false;
+            const s = new Date(item.start);
+            const e = item.end ? new Date(item.end) : s;
+            return (s <= dayEnd && e >= dayStart);
+          });
+          renderSelectedDay(dateKey, items);
+          const idNum = Number(ev.id);
+          if (Number.isFinite(idNum)){
+            selectedEventId = idNum;
+            updateSelectedListActive();
+          }
+        }
+        updateEditButtonState();
       }
     });
+    calendarInstance = calendar;
     calendar.render();
 
     // New event button
-    qs('#newEventBtn')?.addEventListener('click', ()=> openModal({ status:'scheduled' }));
+    const newBtn = qs('#newEventBtn');
+    if (newBtn){
+      if (!canCreateEvents()) newBtn.style.display = 'none';
+      else newBtn.addEventListener('click', ()=> {
+        lastViewedEvent = null;
+        updateEditButtonState();
+        const defaults = { status:'scheduled', event_type: defaultTypeForCurrentRole() };
+        if (lastSelectedDate) defaults.preset_date = lastSelectedDate;
+        if (role()==='recipient'){
+          defaults.event_type = 'recipient';
+          defaults.recipient_id = userId();
+          defaults.recipients = [{ id: userId(), text: currentUserOrganization() }];
+        }
+        openModal(defaults);
+      });
+    }
     qs('#refreshCalBtn')?.addEventListener('click', ()=> {
       if (calendar.refetchEvents) { calendar.refetchEvents(); }
       else { calendar.gotoDate(new Date(calendar.getDate())); }
+      if (lastSelectedDate){
+        setTimeout(()=>{
+          highlightSelectedDate(lastSelectedDate);
+        }, 50);
+      }
     });
 
     // Save
     qs('#saveEventBtn')?.addEventListener('click', async ()=>{
       try{
         const data = collectForm();
+        if (!data) { showCalModal('You do not have permission to save this event type'); return; }
         if (!data.title || !data.start) { showCalModal('Title and start are required'); return; }
         // All roles: disallow creating/updating to past times
         const now = new Date();
@@ -616,8 +1526,12 @@
           const mins = d.getHours()*60 + d.getMinutes();
           if (mins < (10*60) || mins > (16*60)) { showCalModal('Recipients can only book between 10:00 and 16:00'); return; }
         }
-        if (data.id){ await updateEvent(data.id, data); }
-        else { await createEvent(data); }
+        if (data.id){
+          if (!canEditEvent(normalizeEventData(data))) { showCalModal('You do not have permission to update this event'); return; }
+          await updateEvent(data.id, data);
+        } else {
+          await createEvent(data);
+        }
         bootstrap.Modal.getInstance(qs('#eventModal'))?.hide();
         showCalModal('Event saved');
         calendar.gotoDate(new Date(calendar.getDate())); // trigger datesSet reload
@@ -628,6 +1542,8 @@
     qs('#deleteEventBtn')?.addEventListener('click', async ()=>{
       try{
         const id = Number(qs('#evId').value||0)||0; if (!id) return;
+        const evData = normalizeEventData({ id });
+        if (!canEditEvent(evData)) { showCalModal('You do not have permission to delete this event'); return; }
         await deleteEvent(id);
         bootstrap.Modal.getInstance(qs('#eventModal'))?.hide();
         showCalModal('Event deleted');

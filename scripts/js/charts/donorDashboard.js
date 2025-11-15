@@ -56,39 +56,108 @@
         </tr>`;
         }
 
+        function normaliseLines(text) {
+          return String(text || "")
+            .split(/\r?\n/)
+            .map((line) => line.replace(/\s{2,}/g, " ").trim())
+            .filter(Boolean);
+        }
+
+        async function extractTextFromImage(file, report) {
+          if (!window.Tesseract || !Tesseract.recognize) {
+            throw new Error("Image OCR library not loaded");
+          }
+          report("Recognizing text in image (this may take a few seconds)...");
+          const result = await Tesseract.recognize(file, "eng", {
+            logger: (msg) => {
+              if (msg && typeof msg.progress === "number" && msg.status) {
+                const pct = Math.round(msg.progress * 100);
+                report(`${msg.status} ${pct}%`);
+              }
+            },
+          });
+          return result?.data?.text || "";
+        }
+
+        async function extractTextFromPdf(file, report) {
+          if (!window.pdfjsLib) {
+            throw new Error("PDF processing library not loaded");
+          }
+          try {
+            if (
+              window.pdfjsLib.GlobalWorkerOptions &&
+              !window.pdfjsLib.GlobalWorkerOptions.workerSrc
+            ) {
+              window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+                "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+            }
+          } catch (_) {}
+          report("Reading PDF pages...");
+          const buf = await file.arrayBuffer();
+          const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+          let text = "";
+          for (let i = 1; i <= pdf.numPages; i += 1) {
+            report(`Extracting text (page ${i}/${pdf.numPages})...`);
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const strings = content.items
+              ? content.items.map((item) => item.str || "")
+              : [];
+            text += strings.join(" ") + "\n";
+          }
+          return text;
+        }
+
+        async function extractTextFromFile(file, report) {
+          const mime = (file && file.type ? String(file.type).toLowerCase() : "").trim();
+          if (!file) throw new Error("No file selected");
+          if (!mime || mime === "text/plain") {
+            report("Reading text file...");
+            return await file.text();
+          }
+          if (mime === "application/pdf" || file.name?.toLowerCase().endsWith(".pdf")) {
+            return await extractTextFromPdf(file, report);
+          }
+          if (mime.startsWith("image/")) {
+            return await extractTextFromImage(file, report);
+          }
+          try {
+            report("Attempting to read file as text...");
+            return await file.text();
+          } catch (_) {
+            throw new Error("Unsupported file type for OCR");
+          }
+        }
+
         function runOcrUpload(file) {
           const $status = $("#ocrStatus");
           const $preview = $("#ocrPreview");
           const $tbody = $("#ocrPreviewBody");
           const $apply = $("#ocrApplyBtn");
-          const fd = new FormData();
-          fd.append("file", file);
-          $status.text("Uploading and parsing...").show();
-          $.ajax({
-            url: `${API_BASE_URL}/donations/index.php/ocr`,
-            method: "POST",
-            data: fd,
-            processData: false,
-            contentType: false,
-            dataType: "json",
-            xhrFields: { withCredentials: true },
-            success: function (resp) {
-              const lines = Array.isArray(resp?.data) ? resp.data : [];
+          $apply.prop("disabled", true);
+          $preview.hide();
+          $tbody.empty();
+          const updateStatus = (msg) => {
+            if (!msg) return;
+            $status.text(msg).show();
+          };
+          updateStatus("Processing file...");
+          extractTextFromFile(file, updateStatus)
+            .then((text) => {
+              const lines = normaliseLines(text);
               const parsed = [];
               for (const line of lines) {
                 const p = parseLineToNameQty(line);
                 if (p && p.name) parsed.push(p);
               }
               if (!parsed.length) {
-                $status
-                  .text(
-                    "No items detected. Ensure each line contains one item name."
-                  )
-                  .fadeOut(4000);
+                updateStatus(
+                  "No items detected. Make sure each line has a name and quantity (e.g., 'Rice 10')."
+                );
+                setTimeout(() => $status.fadeOut(4000), 500);
                 $preview.hide();
                 return;
               }
-              // Populate preview table
               $tbody.empty();
               let counter = 1;
               const MAX = 50;
@@ -97,20 +166,16 @@
               }
               $apply.prop("disabled", false);
               $preview.show();
-              $status
-                .text(
-                  `Parsed ${Math.min(
-                    parsed.length,
-                    MAX
-                  )} item(s). Review and click Apply.`
-                )
-                .fadeOut(4000);
-            },
-            error: function (err) {
-              const msg = err?.responseJSON?.error || "OCR failed";
-              $status.text(msg).fadeOut(4000);
-            },
-          });
+              updateStatus(
+                `Parsed ${Math.min(parsed.length, MAX)} item(s). Review and click Apply.`
+              );
+              setTimeout(() => $status.fadeOut(4000), 800);
+            })
+            .catch((err) => {
+              const message = err && err.message ? err.message : "OCR failed";
+              updateStatus(message);
+              setTimeout(() => $status.fadeOut(4000), 2000);
+            });
         }
 
         // Click upload -> open file picker

@@ -1,276 +1,501 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Food Donation Management System</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet"/>
-  <link rel="stylesheet" href="scripts/css/index.css">
-</head>
-<body>
-  <!-- Navigation -->
-  <nav class="navbar navbar-expand-lg bg-white shadow-sm py-2">
-    <div class="container d-flex align-items-center">
-      <a class="navbar-brand fw-bold d-flex align-items-center" href="#">
-        <img src="images/simply_share.png" alt="Simply Share Logo" class="brand-logo me-2" />
-        <span class="brand-text">Second Serve by <span class="brand-primary">Simply</span><span class="brand-accent">Share</span></span>
-      </a>
-      <div class="ms-auto">
-        <button type="button" class="btn btn-outline-light me-2" data-bs-toggle="modal" data-bs-target="#authModal" data-auth-mode="login">
-          Login
-        </button>
-        <button type="button" class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#authModal" data-auth-mode="register">
-          Sign Up
-        </button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Food Donation Management System</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="scripts/css/index.css" />
+  </head>
+  <body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg bg-white shadow-sm py-2">
+      <div class="container d-flex align-items-center">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="#">
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="brand-logo me-2"
+          />
+          <span class="brand-text"
+            >Second Serve by <span class="brand-primary">Simply</span
+            ><span class="brand-accent">Share</span></span
+          >
+        </a>
+        <div class="ms-auto">
+          <button
+            type="button"
+            class="btn btn-outline-light me-2"
+            data-bs-toggle="modal"
+            data-bs-target="#authModal"
+            data-auth-mode="login"
+          >
+            Login
+          </button>
+          <button
+            type="button"
+            class="btn btn-accent"
+            data-bs-toggle="modal"
+            data-bs-target="#authModal"
+            data-auth-mode="register"
+          >
+            Sign Up
+          </button>
+        </div>
       </div>
-    </div>
-  </nav>
+    </nav>
 
-  <!-- Hero Section -->
-  <section class="hero-section">
-    <div class="container text-center">
-      <h1 class="display-4 fw-bold mb-4">Fight Hunger, Share Hope</h1>
-      <p class="lead mb-5">Connecting surplus food with those who need it most</p>
-      <a href="#login" class="btn btn-light btn-lg px-4 me-2">Get Started</a>
-      <a href="#how-it-works" class="btn btn-outline-light btn-lg px-4">Learn More</a>
-    </div>
-  </section>
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <div class="container text-center">
+        <h1 class="display-4 fw-bold mb-4">Fight Hunger, Share Hope</h1>
+        <p class="lead mb-5">
+          Connecting surplus food with those who need it most
+        </p>
+        <a href="#login" class="btn btn-light btn-lg px-4 me-2">Get Started</a>
+        <a href="#how-it-works" class="btn btn-outline-light btn-lg px-4"
+          >Learn More</a
+        >
+      </div>
+    </section>
 
-  <!-- Login Options -->
-  <section id="login" class="py-5">
-    <div class="container">
-      <h2 class="text-center mb-5">Login to Your Account</h2>
-      <div class="row justify-content-center">
-        <!-- Admin Login -->
-        <div class="col-md-4">
-          <div class="login-card card h-100">
-            <div class="card-body text-center">
-              <i class="bi bi-shield-lock login-icon"></i>
-              <h3>Admin</h3>
-              <p class="text-muted mb-4">Access the admin dashboard to manage the platform</p>
-              <button type="button" class="btn btn-login" data-bs-toggle="modal" data-bs-target="#authModal" data-auth-mode="login" data-role="admin">Login as Admin</button>
+    <!-- Login Options -->
+    <section id="login" class="py-5">
+      <div class="container">
+        <h2 class="text-center mb-5">Login to Your Account</h2>
+        <div class="row justify-content-center">
+          <!-- Admin Login -->
+          <div class="col-md-4">
+            <div class="login-card card h-100">
+              <div class="card-body text-center">
+                <i class="bi bi-shield-lock login-icon"></i>
+                <h3>Admin</h3>
+                <p class="text-muted mb-4">
+                  Access the admin dashboard to manage the platform
+                </p>
+                <button
+                  type="button"
+                  class="btn btn-login"
+                  data-bs-toggle="modal"
+                  data-bs-target="#authModal"
+                  data-auth-mode="login"
+                  data-role="admin"
+                >
+                  Login as Admin
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Donor Login -->
+          <div class="col-md-4">
+            <div class="login-card card h-100">
+              <div class="card-body text-center">
+                <i
+                  class="bi bi-heart-fill login-icon"
+                  style="color: #e91e63"
+                ></i>
+                <h3>Donor</h3>
+                <p class="text-muted mb-4">
+                  Donate food and make a difference in your community
+                </p>
+                <button
+                  type="button"
+                  class="btn btn-login"
+                  data-bs-toggle="modal"
+                  data-bs-target="#authModal"
+                  data-auth-mode="login"
+                  data-role="donor"
+                >
+                  Login as Donor
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recipient Login -->
+          <div class="col-md-4">
+            <div class="login-card card h-100">
+              <div class="card-body text-center">
+                <i
+                  class="bi bi-people-fill login-icon"
+                  style="color: #4caf50"
+                ></i>
+                <h3>Recipient</h3>
+                <p class="text-muted mb-4">
+                  Find and receive food donations in your area
+                </p>
+                <button
+                  type="button"
+                  class="btn btn-login"
+                  data-bs-toggle="modal"
+                  data-bs-target="#authModal"
+                  data-auth-mode="login"
+                  data-role="recipient"
+                >
+                  Login as Recipient
+                </button>
+              </div>
             </div>
           </div>
         </div>
-        
-        <!-- Donor Login -->
-        <div class="col-md-4">
-          <div class="login-card card h-100">
-            <div class="card-body text-center">
-              <i class="bi bi-heart-fill login-icon" style="color: #e91e63;"></i>
-              <h3>Donor</h3>
-              <p class="text-muted mb-4">Donate food and make a difference in your community</p>
-              <button type="button" class="btn btn-login" data-bs-toggle="modal" data-bs-target="#authModal" data-auth-mode="login" data-role="donor">Login as Donor</button>
-            </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="how-it-works" class="py-5 bg-light">
+      <div class="container">
+        <h2 class="text-center mb-5">How It Works</h2>
+        <div class="row text-center">
+          <div class="col-md-4 mb-4">
+            <i class="bi bi-collection feature-icon"></i>
+            <h4>1. Donate Food</h4>
+            <p>
+              Register as a donor and list surplus food items you'd like to
+              donate.
+            </p>
+          </div>
+          <div class="col-md-4 mb-4">
+            <i class="bi bi-truck feature-icon"></i>
+            <h4>2. We Collect</h4>
+            <p>Our team schedules a pickup at your convenience.</p>
+          </div>
+          <div class="col-md-4 mb-4">
+            <i class="bi bi-heart-fill feature-icon" style="color: #e91e63"></i>
+            <h4>3. We Distribute</h4>
+            <p>Food is distributed to those in need through our network.</p>
           </div>
         </div>
-        
-        <!-- Recipient Login -->
-        <div class="col-md-4">
-          <div class="login-card card h-100">
-            <div class="card-body text-center">
-              <i class="bi bi-people-fill login-icon" style="color: #4caf50;"></i>
-              <h3>Recipient</h3>
-              <p class="text-muted mb-4">Find and receive food donations in your area</p>
-              <button type="button" class="btn btn-login" data-bs-toggle="modal" data-bs-target="#authModal" data-auth-mode="login" data-role="recipient">Login as Recipient</button>
-            </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-6">
+            <h5>Second Serve</h5>
+            <p>Connecting surplus food with those who need it most.</p>
+          </div>
+          <div class="col-md-3">
+            <h5>Quick Links</h5>
+            <ul class="list-unstyled">
+              <li><a href="#" class="text-white">Home</a></li>
+              <li><a href="#" class="text-white">About Us</a></li>
+              <li><a href="#" class="text-white">Contact</a></li>
+            </ul>
+          </div>
+          <div class="col-md-3">
+            <h5>Contact Us</h5>
+            <p>Email: info@secondserve.com<br />Phone: (123) 456-7890</p>
           </div>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Features Section -->
-  <section id="how-it-works" class="py-5 bg-light">
-    <div class="container">
-      <h2 class="text-center mb-5">How It Works</h2>
-      <div class="row text-center">
-        <div class="col-md-4 mb-4">
-          <i class="bi bi-collection feature-icon"></i>
-          <h4>1. Donate Food</h4>
-          <p>Register as a donor and list surplus food items you'd like to donate.</p>
-        </div>
-        <div class="col-md-4 mb-4">
-          <i class="bi bi-truck feature-icon"></i>
-          <h4>2. We Collect</h4>
-          <p>Our team schedules a pickup at your convenience.</p>
-        </div>
-        <div class="col-md-4 mb-4">
-          <i class="bi bi-heart-fill feature-icon" style="color: #e91e63;"></i>
-          <h4>3. We Distribute</h4>
-          <p>Food is distributed to those in need through our network.</p>
+        <hr class="mt-4 mb-3" style="border-color: rgba(255, 255, 255, 0.1)" />
+        <div class="text-center">
+          <p class="mb-0">&copy; 2025 Second Serve. All rights reserved.</p>
         </div>
       </div>
-    </div>
-  </section>
+    </footer>
 
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="container">
-      <div class="row">
-        <div class="col-md-6">
-          <h5>Second Serve</h5>
-          <p>Connecting surplus food with those who need it most.</p>
-        </div>
-        <div class="col-md-3">
-          <h5>Quick Links</h5>
-          <ul class="list-unstyled">
-            <li><a href="#" class="text-white">Home</a></li>
-            <li><a href="#" class="text-white">About Us</a></li>
-            <li><a href="#" class="text-white">Contact</a></li>
-          </ul>
-        </div>
-        <div class="col-md-3">
-          <h5>Contact Us</h5>
-          <p>Email: info@secondserve.com<br>Phone: (123) 456-7890</p>
-        </div>
-      </div>
-      <hr class="mt-4 mb-3" style="border-color: rgba(255,255,255,0.1);">
-      <div class="text-center">
-        <p class="mb-0">&copy; 2025 Second Serve. All rights reserved.</p>
-      </div>
-    </div>
-  </footer>
+    <!-- Auth Modal -->
+    <div
+      class="modal fade"
+      id="authModal"
+      tabindex="-1"
+      aria-labelledby="authModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="authModalLabel">
+              Welcome to Second Serve
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <ul class="nav nav-tabs nav-fill mb-4" id="authTabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button
+                  class="nav-link active"
+                  id="login-tab"
+                  data-bs-toggle="tab"
+                  data-bs-target="#login-tab-pane"
+                  type="button"
+                  role="tab"
+                >
+                  Login
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button
+                  class="nav-link"
+                  id="register-tab"
+                  data-bs-toggle="tab"
+                  data-bs-target="#register-tab-pane"
+                  type="button"
+                  role="tab"
+                >
+                  Register
+                </button>
+              </li>
+            </ul>
 
-  <!-- Auth Modal -->
-  <div class="modal fade" id="authModal" tabindex="-1" aria-labelledby="authModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="authModalLabel">Welcome to Second Serve</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <ul class="nav nav-tabs nav-fill mb-4" id="authTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-              <button class="nav-link active" id="login-tab" data-bs-toggle="tab" data-bs-target="#login-tab-pane" type="button" role="tab">
-                Login
-              </button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button class="nav-link" id="register-tab" data-bs-toggle="tab" data-bs-target="#register-tab-pane" type="button" role="tab">
-                Register
-              </button>
-            </li>
-          </ul>
+            <div class="tab-content" id="authTabsContent">
+              <!-- Login Tab -->
+              <div
+                class="tab-pane fade show active"
+                id="login-tab-pane"
+                role="tabpanel"
+                aria-labelledby="login-tab"
+                tabindex="0"
+              >
+                <form id="loginForm">
+                  <div class="mb-3">
+                    <label for="loginEmail" class="form-label"
+                      >Email address</label
+                    >
+                    <input
+                      type="email"
+                      class="form-control"
+                      id="loginEmail"
+                      required
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label for="loginPassword" class="form-label"
+                      >Password</label
+                    >
+                    <div class="input-group">
+                      <input
+                        type="password"
+                        class="form-control"
+                        id="loginPassword"
+                        required
+                      />
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary"
+                        id="loginPasswordToggle"
+                        data-password-toggle="loginPassword"
+                        aria-label="Toggle password visibility"
+                      >
+                        <i class="bi bi-eye"></i>
+                      </button>
+                    </div>
+                    <div
+                      id="loginPasswordCapsHint"
+                      class="form-text text-danger d-none"
+                    >
+                      Caps Lock is on
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="loginRole" class="form-label">Login as</label>
+                    <select class="form-select" id="loginRole" required>
+                      <option value="">Select your role</option>
+                      <option value="admin">Administrator</option>
+                      <option value="donor">Food Donor</option>
+                      <option value="recipient">Recipient Organization</option>
+                    </select>
+                  </div>
+                  <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary">Login</button>
+                  </div>
+                </form>
+              </div>
 
-          <div class="tab-content" id="authTabsContent">
-            <!-- Login Tab -->
-            <div class="tab-pane fade show active" id="login-tab-pane" role="tabpanel" aria-labelledby="login-tab" tabindex="0">
-              <form id="loginForm">
-                <div class="mb-3">
-                  <label for="loginEmail" class="form-label">Email address</label>
-                  <input type="email" class="form-control" id="loginEmail" required>
-                </div>
-                <div class="mb-3">
-                  <label for="loginPassword" class="form-label">Password</label>
-                  <div class="input-group">
-                    <input type="password" class="form-control" id="loginPassword" required>
-                    <button type="button" class="btn btn-outline-secondary" id="loginPasswordToggle" data-password-toggle="loginPassword" aria-label="Toggle password visibility">
-                      <i class="bi bi-eye"></i>
+              <!-- Register Tab -->
+              <div
+                class="tab-pane fade"
+                id="register-tab-pane"
+                role="tabpanel"
+                aria-labelledby="register-tab"
+                tabindex="0"
+              >
+                <form id="registerForm">
+                  <div class="mb-3">
+                    <label for="registerName" class="form-label"
+                      >Full Name</label
+                    >
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="registerName"
+                      required
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label for="registerEmail" class="form-label"
+                      >Email address</label
+                    >
+                    <input
+                      type="email"
+                      class="form-control"
+                      id="registerEmail"
+                      required
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label for="registerPassword" class="form-label"
+                      >Password</label
+                    >
+                    <div class="input-group">
+                      <input
+                        type="password"
+                        class="form-control"
+                        id="registerPassword"
+                        required
+                      />
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary"
+                        id="registerPasswordToggle"
+                        data-password-toggle="registerPassword"
+                        aria-label="Toggle password visibility"
+                      >
+                        <i class="bi bi-eye"></i>
+                      </button>
+                    </div>
+                    <div
+                      id="registerPasswordCapsHint"
+                      class="form-text text-danger d-none"
+                    >
+                      Caps Lock is on
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="registerConfirmPassword" class="form-label"
+                      >Confirm Password</label
+                    >
+                    <div class="input-group">
+                      <input
+                        type="password"
+                        class="form-control"
+                        id="registerConfirmPassword"
+                        required
+                      />
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary"
+                        id="registerConfirmPasswordToggle"
+                        data-password-toggle="registerConfirmPassword"
+                        aria-label="Toggle password visibility"
+                      >
+                        <i class="bi bi-eye"></i>
+                      </button>
+                    </div>
+                    <div
+                      id="registerConfirmCapsHint"
+                      class="form-text text-danger d-none"
+                    >
+                      Caps Lock is on
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="registerRole" class="form-label"
+                      >Register as</label
+                    >
+                    <select class="form-select" id="registerRole" required>
+                      <option value="">Select your role</option>
+                      <option value="donor">Food Donor</option>
+                      <option value="recipient">Recipient Organization</option>
+                    </select>
+                  </div>
+                  <div
+                    class="mb-3"
+                    id="wrapDonorCategory"
+                    style="display: none"
+                  >
+                    <label for="registerDonorCategory" class="form-label"
+                      >Donor Category (optional)</label
+                    >
+                    <select class="form-select" id="registerDonorCategory">
+                      <option value="">Select a category</option>
+                    </select>
+                  </div>
+                  <div
+                    class="mb-3"
+                    id="wrapBeneficiaryCategory"
+                    style="display: none"
+                  >
+                    <label for="registerBeneficiaryCategory" class="form-label"
+                      >Beneficiary Category (optional)</label
+                    >
+                    <select
+                      class="form-select"
+                      id="registerBeneficiaryCategory"
+                    >
+                      <option value="">Select a category</option>
+                    </select>
+                  </div>
+                  <div class="mb-3">
+                    <label for="registerOrganization" class="form-label"
+                      >Organization Name (optional)</label
+                    >
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="registerOrganization"
+                      placeholder="e.g., ABC Corp / Community Org"
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label for="registerContact" class="form-label"
+                      >Contact Number (optional)</label
+                    >
+                    <input
+                      type="tel"
+                      class="form-control"
+                      id="registerContact"
+                      placeholder="e.g., 0917 123 4567"
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label for="registerAddress" class="form-label"
+                      >Address (optional)</label
+                    >
+                    <textarea
+                      class="form-control"
+                      id="registerAddress"
+                      rows="2"
+                      placeholder="Street, City, Province"
+                    ></textarea>
+                  </div>
+                  <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-success">
+                      Create Account
                     </button>
                   </div>
-                  <div id="loginPasswordCapsHint" class="form-text text-danger d-none">Caps Lock is on</div>
-                </div>
-                <div class="mb-3">
-                  <label for="loginRole" class="form-label">Login as</label>
-                  <select class="form-select" id="loginRole" required>
-                    <option value="">Select your role</option>
-                    <option value="admin">Administrator</option>
-                    <option value="donor">Food Donor</option>
-                    <option value="recipient">Recipient Organization</option>
-                  </select>
-                </div>
-                <div class="d-grid gap-2">
-                  <button type="submit" class="btn btn-primary">Login</button>
-                </div>
-              </form>
-            </div>
-
-            <!-- Register Tab -->
-            <div class="tab-pane fade" id="register-tab-pane" role="tabpanel" aria-labelledby="register-tab" tabindex="0">
-              <form id="registerForm">
-                <div class="mb-3">
-                  <label for="registerName" class="form-label">Full Name</label>
-                  <input type="text" class="form-control" id="registerName" required>
-                </div>
-                <div class="mb-3">
-                  <label for="registerEmail" class="form-label">Email address</label>
-                  <input type="email" class="form-control" id="registerEmail" required>
-                </div>
-                <div class="mb-3">
-                  <label for="registerPassword" class="form-label">Password</label>
-                  <div class="input-group">
-                    <input type="password" class="form-control" id="registerPassword" required>
-                    <button type="button" class="btn btn-outline-secondary" id="registerPasswordToggle" data-password-toggle="registerPassword" aria-label="Toggle password visibility">
-                      <i class="bi bi-eye"></i>
-                    </button>
-                  </div>
-                  <div id="registerPasswordCapsHint" class="form-text text-danger d-none">Caps Lock is on</div>
-                </div>
-                <div class="mb-3">
-                  <label for="registerConfirmPassword" class="form-label">Confirm Password</label>
-                  <div class="input-group">
-                    <input type="password" class="form-control" id="registerConfirmPassword" required>
-                    <button type="button" class="btn btn-outline-secondary" id="registerConfirmPasswordToggle" data-password-toggle="registerConfirmPassword" aria-label="Toggle password visibility">
-                      <i class="bi bi-eye"></i>
-                    </button>
-                  </div>
-                  <div id="registerConfirmCapsHint" class="form-text text-danger d-none">Caps Lock is on</div>
-                </div>
-                <div class="mb-3">
-                  <label for="registerRole" class="form-label">Register as</label>
-                  <select class="form-select" id="registerRole" required>
-                    <option value="">Select your role</option>
-                    <option value="donor">Food Donor</option>
-                    <option value="recipient">Recipient Organization</option>
-                  </select>
-                </div>
-                <div class="mb-3" id="wrapDonorCategory" style="display:none;">
-                  <label for="registerDonorCategory" class="form-label">Donor Category (optional)</label>
-                  <select class="form-select" id="registerDonorCategory">
-                    <option value="">Select a category</option>
-                  </select>
-                </div>
-                <div class="mb-3" id="wrapBeneficiaryCategory" style="display:none;">
-                  <label for="registerBeneficiaryCategory" class="form-label">Beneficiary Category (optional)</label>
-                  <select class="form-select" id="registerBeneficiaryCategory">
-                    <option value="">Select a category</option>
-                  </select>
-                </div>
-                <div class="mb-3">
-                  <label for="registerOrganization" class="form-label">Organization Name (optional)</label>
-                  <input type="text" class="form-control" id="registerOrganization" placeholder="e.g., ABC Corp / Community Org">
-                </div>
-                <div class="mb-3">
-                  <label for="registerContact" class="form-label">Contact Number (optional)</label>
-                  <input type="tel" class="form-control" id="registerContact" placeholder="e.g., 0917 123 4567">
-                </div>
-                <div class="mb-3">
-                  <label for="registerAddress" class="form-label">Address (optional)</label>
-                  <textarea class="form-control" id="registerAddress" rows="2" placeholder="Street, City, Province"></textarea>
-                </div>
-                <div class="d-grid gap-2">
-                  <button type="submit" class="btn btn-success">Create Account</button>
-                </div>
-              </form>
+                </form>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- JavaScript Libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <!-- Shared config and API helpers (Phase 1) -->
-  <script src="scripts/js/config/constants.js?v=20250925"></script>
-  <script src="scripts/js/api/http.js?v=20250925"></script>
-  <script src="scripts/js/api/communications.js?v=20250925"></script>
-  <!-- Custom Scripts -->
-  <script src="scripts/js/utils/auth.js?v=20250925"></script>
-</body>
+    <!-- JavaScript Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Shared config and API helpers (Phase 1) -->
+    <script src="scripts/js/config/constants.js?v=20250925"></script>
+    <script src="scripts/js/api/http.js?v=20250925"></script>
+    <script src="scripts/js/api/communications.js?v=20250925"></script>
+    <!-- Custom Scripts -->
+    <script src="scripts/js/utils/auth.js?v=20250925"></script>
+  </body>
 </html>
-

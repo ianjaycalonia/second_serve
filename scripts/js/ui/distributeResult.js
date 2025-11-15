@@ -248,7 +248,7 @@
       if (!actionsTh) return;
       // Consider an action visible if any primary action button exists and is actually visible
       const candidates = container.querySelectorAll(
-        ".dr-add-item, .dr-notify-one, .dr-del"
+        ".dr-notify-one, .dr-del"
       );
       let anyActionVisible = false;
       const isVisible = (el) => {
@@ -291,7 +291,7 @@
   function applyLock() {
     if (!isLocked) return;
     // Disable and prevent typing in inputs
-    container.querySelectorAll(".dr-name, .dr-qty").forEach((el) => {
+    container.querySelectorAll(".dr-qty").forEach((el) => {
       el.disabled = true;
       el.readOnly = true; // Extra prevention
     });
@@ -581,14 +581,6 @@
       });
 
     // (autoAllocateBtn handler bound below, outside applyLock)
-    // Disable add/remove action buttons while locked (keep column visible)
-    container.querySelectorAll(".dr-add-item").forEach((btn) => {
-      try {
-        if (typeof btn.disabled !== "undefined") btn.disabled = true;
-        btn.setAttribute("aria-disabled", "true");
-        if (btn.classList) btn.classList.add("disabled");
-      } catch (_) {}
-    });
     // Disable remove buttons
     container.querySelectorAll(".dr-del").forEach((el) => {
       try {
@@ -709,7 +701,8 @@
             tr.dataset.rec = String(rid);
             tr.dataset.status = String(status).toLowerCase();
             // Expose grouping keys for validation
-            tr.dataset.name = String(it.item_name || it.name || "");
+            const itemNameRaw = String(it.item_name || it.name || "");
+            tr.dataset.name = itemNameRaw.trim();
             tr.dataset.category = String(it.category || a.product_category || "");
 
             const statusLower = String(status || "").toLowerCase();
@@ -726,15 +719,27 @@
               : "";
             const actionsCell = `<td>
                 <div class="d-flex justify-content-center gap-2">
-                  <button class="btn btn-sm btn-outline-success dr-add-item${disabledClass}" data-rec="${rid}" title="Add Item" ${disabledAttr}>
-                    <i class="bi bi-plus-circle"></i>
-                  </button>
                   ${notifyBtnHtml}
                   <button type="button" class="btn btn-sm btn-outline-danger dr-del${disabledClass}" title="Remove" ${disabledAttr}>
                     <i class="bi bi-x"></i>
                   </button>
                 </div>
               </td>`;
+
+            const safeName = itemNameRaw
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+              .replace(/"/g, "&quot;");
+
+            const baseNameAttrs = 'readonly aria-readonly="true" tabindex="-1"';
+            const nameAttrs = isNotified
+              ? `${baseNameAttrs} disabled aria-disabled="true"`
+              : baseNameAttrs;
+
+            const quantityAttrs = isNotified
+              ? 'disabled aria-disabled="true"'
+              : '';
 
             tr.innerHTML = `
               <td>${base} ${
@@ -744,12 +749,12 @@
               <td>${dt}</td>
               <td>
                 <input type="text" class="form-control form-control-sm dr-name" 
-                  value="${(it.item_name || "").replace(/"/g, "&quot;")}" 
-                  placeholder="Item name">
+                  value="${safeName}" 
+                  placeholder="Item name" ${nameAttrs}>
               </td>
               <td>
                 <input type="number" class="form-control form-control-sm dr-qty" 
-                  value="${it.quantity}" min="0" step="1" inputmode="numeric" pattern="\\d*" required>
+                  value="${it.quantity}" min="0" step="1" inputmode="numeric" pattern="\\d*" required ${quantityAttrs}>
               </td>
               ${actionsCell}`;
 
@@ -766,6 +771,13 @@
   unifiedTableWrap.appendChild(table);
   frag.appendChild(unifiedTableWrap);
   container.appendChild(frag);
+  try {
+    container.querySelectorAll(".dr-name").forEach((el) => {
+      el.readOnly = true;
+      el.setAttribute("aria-readonly", "true");
+      el.setAttribute("tabindex", "-1");
+    });
+  } catch (_) {}
   // Hide actions header if appropriate on initial render
   try {
     updateActionsHeaderVisibility();
@@ -828,6 +840,8 @@
     });
     return sums;
   }
+  const previousQuantities = new WeakMap();
+
   async function validateAndClamp(inputEl) {
     try {
       const tr = inputEl.closest('tr');
@@ -838,8 +852,21 @@
       const k = keyFor(name, cat);
       const otherSums = groupSums(inputEl);
       const others = otherSums.get(k) || 0;
+      if (!previousQuantities.has(inputEl)) {
+        const initial = parseInt(inputEl.value || '0', 10) || 0;
+        previousQuantities.set(inputEl, initial > 0 ? initial : 0);
+      }
       let val = parseInt(inputEl.value || '0', 10) || 0;
       if (val < 0) val = 0;
+      if (val === 0) {
+        const prior = previousQuantities.get(inputEl) || 0;
+        if (prior > 0) {
+          inputEl.value = String(prior);
+          return;
+        }
+      } else {
+        previousQuantities.set(inputEl, val);
+      }
       const available = await fetchAvailable(name, cat);
       const maxForThisRow = Math.max(0, available - others);
       if (val > maxForThisRow) {
@@ -851,6 +878,16 @@
     } catch (_) {}
   }
   // Bind listeners
+  container.addEventListener('focusin', function(e){
+    const qty = e.target && e.target.classList && e.target.classList.contains('dr-qty');
+    if (!qty) return;
+    const current = Math.max(0, parseInt(e.target.value || '0', 10) || 0);
+    if (current > 0) {
+      previousQuantities.set(e.target, current);
+    } else if (!previousQuantities.has(e.target)) {
+      previousQuantities.set(e.target, 0);
+    }
+  });
   container.addEventListener('input', function(e){
     const qty = e.target && e.target.classList && e.target.classList.contains('dr-qty');
     if (!qty) return;
@@ -1034,7 +1071,8 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       // Lock UI for this recipient and reflect status change
       if (tb) {
-        tb.querySelectorAll('.dr-name, .dr-qty').forEach((el) => { try { el.disabled = true; el.readOnly = true; } catch(_){} });
+        tb.querySelectorAll('.dr-qty').forEach((el) => { try { el.disabled = true; el.readOnly = true; } catch(_){} });
+        tb.querySelectorAll('.dr-name').forEach((el) => { try { el.readOnly = true; el.setAttribute('aria-readonly','true'); el.setAttribute('tabindex','-1'); } catch(_){} });
         tb.querySelectorAll('.dr-del').forEach((btn) => { try { btn.disabled = true; btn.classList.add('disabled'); } catch(_){} });
         // Update all rows to notified status so visibility logic hides the bell
         tb.querySelectorAll('tr').forEach((tr) => {
@@ -1049,8 +1087,6 @@
         });
         const headerNotify = container.querySelector(`.dr-notify-one[data-rec="${rid}"]`);
         if (headerNotify) headerNotify.classList.add('d-none');
-        const addBtn = container.querySelector(`.dr-add-item[data-rec="${rid}"]`);
-        if (addBtn) { try { addBtn.disabled = true; addBtn.classList.add('disabled'); } catch(_){} }
         // Re-sync visibility based on new statuses
         try {
           const evt = new Event('dr-sync-notify', { bubbles: true });
@@ -1079,9 +1115,14 @@
   let pollingStopped = false;
 
   function releaseLockUI() {
-    container.querySelectorAll(".dr-name, .dr-qty").forEach((el) => {
+    container.querySelectorAll(".dr-qty").forEach((el) => {
       el.disabled = false;
       el.readOnly = false;
+    });
+    container.querySelectorAll(".dr-name").forEach((el) => {
+      el.readOnly = true;
+      el.setAttribute("aria-readonly", "true");
+      el.setAttribute("tabindex", "-1");
     });
   }
 
@@ -1253,15 +1294,19 @@
         }
         // Prefer current year, then fallback to any match
         const nowY = new Date().getFullYear();
-        let match = rows.find((r) => {
-          const d = r.created_at ? new Date(r.created_at) : null;
-          return d && d.getFullYear() === nowY && isoWeekNumber(d) === wTarget;
-        });
-        if (!match) {
-          match = rows.find((r) => {
+        let match = rows.find(
+          (r) => {
             const d = r.created_at ? new Date(r.created_at) : null;
-            return d && isoWeekNumber(d) === wTarget;
-          });
+            return d && d.getFullYear() === nowY && isoWeekNumber(d) === wTarget;
+          }
+        );
+        if (!match) {
+          match = rows.find(
+            (r) => {
+              const d = r.created_at ? new Date(r.created_at) : null;
+              return d && isoWeekNumber(d) === wTarget;
+            }
+          );
         }
         if (match && match.period_key) {
           window.location.href = `DistributeResult.html?run_id=${encodeURIComponent(
@@ -1398,10 +1443,7 @@
   // Mark dirty when any existing editable input changes or delete is requested
   container.addEventListener("input", (e) => {
     const t = e.target;
-    if (
-      t &&
-      (t.classList?.contains("dr-name") || t.classList?.contains("dr-qty"))
-    ) {
+    if (t && t.classList?.contains("dr-qty")) {
       if (isLocked) {
         e.preventDefault();
         return;
@@ -1411,18 +1453,13 @@
     }
   });
   container.addEventListener("keydown", (e) => {
-    if (
-      isLocked &&
-      (e.target.classList?.contains("dr-name") ||
-        e.target.classList?.contains("dr-qty"))
-    ) {
+    if (isLocked && e.target.classList?.contains("dr-qty")) {
       e.preventDefault();
     }
     // Save on Enter key for convenience
     if (
       !isLocked &&
-      (e.target.classList?.contains("dr-name") ||
-        e.target.classList?.contains("dr-qty"))
+      e.target.classList?.contains("dr-qty")
     ) {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -1485,13 +1522,22 @@
     showToast(msg, type);
   }
 
+  function getRowName(tr) {
+    if (!tr) return "";
+    const ds = (tr.dataset?.name || "").trim();
+    if (ds) return ds;
+    const input = tr.querySelector(".dr-name");
+    if (input) return (input.value || "").trim();
+    return "";
+  }
+
   // Auto-save on blur for name/qty edits
   async function saveRowIfNeeded(tr) {
     if (!tr) return;
     const itemId = parseInt(tr.getAttribute("data-item-id") || "0", 10) || 0;
     const allocId =
       parseInt(tr.getAttribute("data-allocation-id") || "0", 10) || 0;
-    const name = tr.querySelector(".dr-name")?.value?.trim() || "";
+    const name = getRowName(tr);
     const qty = Math.max(
       0,
       parseInt(tr.querySelector(".dr-qty")?.value || "0", 10) || 0
@@ -1541,7 +1587,12 @@
           window.AllocationsAPI &&
           typeof window.AllocationsAPI.addItem === "function"
         ) {
-          await window.AllocationsAPI.addItem(allocId, name, null, qty);
+          await window.AllocationsAPI.addItem(
+            allocId,
+            name,
+            null,
+            qty
+          );
           ok = true; // category null here
         } else {
           const res = await fetch(
@@ -1585,13 +1636,7 @@
     "blur",
     (e) => {
       const t = e.target;
-      if (
-        !(
-          t &&
-          (t.classList?.contains("dr-name") || t.classList?.contains("dr-qty"))
-        )
-      )
-        return;
+      if (!(t && t.classList?.contains("dr-qty"))) return;
       const tr = t.closest("tr");
       if (!tr) return;
       saveRowIfNeeded(tr);
@@ -1642,47 +1687,55 @@
       tr.remove();
     }
   });
-  // Handlers: Add Item, Save Changes, Notify All (run)
-  container.querySelectorAll(".dr-add-item").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
+  // Handlers: Save Changes, Notify All (run)
+  container.querySelectorAll(".dr-del").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
       if (isLocked) return;
-      const rid =
-        parseInt(e.currentTarget.getAttribute("data-rec") || "0", 10) || 0;
-      const tb = container.querySelector(
-        `tbody.dr-recipient[data-rec="${rid}"]`
-      );
-      if (!tb) return;
-      // We need an allocation_id to attach new item; pick the first allocation row for this recipient
-      const firstRow = tb.querySelector("tr[data-allocation-id]");
-      const allocId = firstRow
-        ? parseInt(firstRow.getAttribute("data-allocation-id") || "0", 10) || 0
-        : 0;
-      const tr = document.createElement("tr");
-      tr.setAttribute("data-allocation-id", String(allocId || ""));
-      tr.setAttribute("data-item-id", "");
-      const __now = new Date();
-      const __dt = `${String(__now.getDate()).padStart(2, "0")}/${String(
-        __now.getMonth() + 1
-      ).padStart(2, "0")}/${__now.getFullYear()} ${String(
-        __now.getHours()
-      ).padStart(2, "0")}:${String(__now.getMinutes()).padStart(2, "0")}`;
-      tr.innerHTML = `
-              <td>Allocated</td>
-              <td>${__dt}</td>
-              <td><input type="text" class="form-control form-control-sm dr-name" value="" placeholder="Item name"></td>
-              <td><input type="number" class="form-control form-control-sm dr-qty" value="0" min="0" step="1"></td>
-              <td><button type="button" class="btn btn-sm btn-outline-danger dr-del" title="Remove"><i class="bi bi-x"></i></button></td>`;
-      tb.appendChild(tr);
-      tr.querySelector(".dr-name")?.addEventListener("input", markDirty);
-      tr.querySelector(".dr-qty")?.addEventListener("input", markDirty);
-      // delete handler is delegated globally below
-      markDirty();
+      const tr = e.target.closest("tr");
+      if (!tr) return;
+      const confirmed = confirmDelete();
+      if (!confirmed) return;
+      const itemId = parseInt(tr.getAttribute("data-item-id") || "0", 10) || 0;
+      if (itemId > 0) {
+        try {
+          if (
+            window.AllocationsAPI &&
+            typeof window.AllocationsAPI.deleteItem === "function"
+          ) {
+            await window.AllocationsAPI.deleteItem(itemId);
+          } else {
+            const res = await fetch(
+              `${API_BASE_URL}/allocations/index.php?action=delete_item`,
+              {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({ item_id: itemId }),
+              }
+            );
+            const j = await res.json().catch(() => null);
+            if (!res.ok || !j?.success)
+              throw new Error(j?.error || `HTTP ${res.status}`);
+          }
+          tr.remove();
+        } catch (err) {
+          const em = err?.message || "Failed to delete item";
+          showMsg(feedback, em, "danger");
+          showToast(em, "danger", 2500);
+        }
+      } else {
+        // Unsaved row, just remove from DOM
+        tr.remove();
+      }
     });
   });
 
   // Per-recipient Notify button (manual notify) - delegated (single registration)
   container.addEventListener("click", async (e) => {
-    const btn = e.target?.closest?.(".dr-notify");
+    const btn = e.target?.closest?.(".dr-notify-one");
     if (!btn) return;
     // Allow notifying even if UI is locked; it's a notification action only
     const rid = parseInt(btn.getAttribute("data-rec") || "0", 10) || 0;
@@ -1695,7 +1748,7 @@
     }
     const parts = [];
     tb.querySelectorAll("tr").forEach((tr) => {
-      const name = tr.querySelector(".dr-name")?.value?.trim() || "";
+      const name = getRowName(tr);
       const qty = tr.querySelector(".dr-qty")?.value || "";
       if (name && qty) parts.push(`${qty}x ${name}`);
     });
@@ -1902,6 +1955,7 @@
 
   // Helper: update UI to mark a recipient as notified and persist server-side
   async function markRecipientNotified(rid, tb) {
+    if (!rid) return false;
     let persistOk = true;
     try {
       // Update rows and status badge
@@ -1916,7 +1970,7 @@
       });
 
       // Disable action buttons for this recipient (keep column visible)
-      tb.querySelectorAll(".dr-add-item, .dr-notify, .dr-del").forEach((el) => {
+      tb.querySelectorAll(".dr-notify-one, .dr-del").forEach((el) => {
         try {
           if (typeof el.disabled !== "undefined") el.disabled = true;
           el.setAttribute("aria-disabled", "true");
@@ -1964,10 +2018,13 @@
     let persistFailures = 0;
     for (const tb of bodies) {
       const rid = parseInt(tb.getAttribute("data-rec") || "0", 10) || 0;
-      if (!rid) continue;
+      if (!rid) {
+        persistFailures++;
+        continue;
+      }
       const parts = [];
       tb.querySelectorAll("tr").forEach((tr) => {
-        const name = tr.querySelector(".dr-name")?.value?.trim() || "";
+        const name = getRowName(tr);
         const qty = tr.querySelector(".dr-qty")?.value || "";
         if (name && qty) parts.push(`${qty}x ${name}`);
       });

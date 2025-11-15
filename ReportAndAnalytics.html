@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Admin Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Reports and Analytics</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -159,6 +160,24 @@
         <span class="sidebar-text">Donation</span>
       </a>
 
+      <a
+        href="DistributionPickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
+      </a>
+
       <div class="nav-item position-relative">
         <a
           href="#distributionMenu"
@@ -182,7 +201,7 @@
           </span>
         </a>
         <div class="collapse" id="distributionMenu">
-          <ul class="nav flex-column ms-3">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
             <li class="nav-item">
               <a class="nav-link" href="RecipientsList.html">
                 <img
@@ -214,17 +233,6 @@
                   width="35"
                   height="35"
                 />Result
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="Schedule.html">
-                <img
-                  src="images/calendar.gif"
-                  alt="Dashboard Icon"
-                  class="dashboard-icon"
-                  width="35"
-                  height="35"
-                />Schedule
               </a>
             </li>
           </ul>
@@ -262,7 +270,7 @@
           width="35"
           height="35"
         />
-        <span class="sidebar-text">Recipient</span>
+        <span class="sidebar-text">Recipients</span>
       </a>
       <a
         href="ReportAndAnalytics.html"
@@ -298,30 +306,62 @@
         />
         <span class="sidebar-text">Inventory</span>
       </a>
+      <a
+        href="Schedule.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
+      </a>
     </aside>
 
     <!-- Main Content -->
     <main>
-      <div aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item">
-            <a href="AdminDashboard.html">Dashboard</a>
-          </li>
-          <li class="breadcrumb-item active" aria-current="page">
-            Reports & Analytics
-          </li>
-        </ol>
-      </div>
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div aria-label="breadcrumb">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+              <a href="AdminDashboard.html">Dashboard</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">
+              Reports & Analytics
+            </li>
+          </ol>
+        </div>
 
-      <div class="d-flex justify-content-end align-items-center mb-3">
-        <button
-          type="button"
-          class="btn btn-primary"
-          data-bs-toggle="modal"
-          data-bs-target="#exportModal"
-        >
-          Export
-        </button>
+        <div class="d-flex align-items-center gap-3">
+          <div class="d-flex align-items-center gap-2">
+            <label
+              for="analyticsTimeframeSelect"
+              class="form-label mb-0 fw-semibold"
+              >Timeframe:</label
+            >
+            <select class="form-select w-auto" id="analyticsTimeframeSelect">
+              <option value="daily" selected>Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-bs-toggle="modal"
+            data-bs-target="#exportModal"
+          >
+            Export
+          </button>
+        </div>
       </div>
 
       <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
@@ -335,7 +375,7 @@
                 </div>
                 <div class="card-text">
                   <h3 class="mb-0" id="totalWeightKg">0</h3>
-                  <small class="text-muted">This month</small>
+                  <small class="text-muted">All time</small>
                 </div>
               </div>
             </div>
@@ -344,14 +384,14 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Total Donations</h6>
+              <h6 class="card-title">Total Product In</h6>
               <div class="card-elements">
                 <div class="card-icon">
                   <i class="bi bi-basket-fill"></i>
                 </div>
                 <div class="card-text">
                   <h3 class="mb-0" id="totalDonations">0</h3>
-                  <small class="text-muted">Donated</small>
+                  <small class="text-muted">Product In</small>
                 </div>
               </div>
             </div>
@@ -361,14 +401,14 @@
         <div class="col">
           <div class="card card-accent h-100">
             <div class="card-body">
-              <h6 class="card-title">Total Pickups</h6>
+              <h6 class="card-title">Total Product Out</h6>
               <div class="card-elements">
                 <div class="card-icon">
                   <i class="bi bi-truck"></i>
                 </div>
                 <div class="card-text">
                   <h3 class="mb-0" id="totalPickups">0</h3>
-                  <small class="text-muted">Picked Up</small>
+                  <small class="text-muted">Product Out</small>
                 </div>
               </div>
             </div>
@@ -394,60 +434,38 @@
 
         <div class="col-12 col-lg-6">
           <div class="card card-accent p-4 w-100 h-100">
-            <div class="d-flex justify-content-between mb-3">
-              <h6 class="mb-0">Donation Volume</h6>
-              <select class="form-select w-auto" id="donationVolumeRange">
-                <option value="daily" selected>Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0">Product In Volume</h6>
+              <span
+                class="badge bg-light text-dark border"
+                id="donationVolumeBadge"
+                >Daily</span
+              >
             </div>
             <div style="height: 100%">
               <canvas id="lineChart"></canvas>
             </div>
             <div class="fs-6 mb-2 text-center">
-              <span id="donationTimeframe">Daily</span> Donations
-            </div>
-
-            <div
-              class="d-flex align-items-center justify-content-center mt-auto"
-            >
-              <span class="ms-2">Change View:</span>
-              <select class="form-select form-select-sm w-auto ms-2">
-                <option selected>Region</option>
-                <option>City</option>
-              </select>
+              <span id="donationTimeframe">Daily</span> Product In
             </div>
           </div>
         </div>
 
         <div class="col-12 col-lg-6">
           <div class="card card-accent p-4 w-100 h-100">
-            <div class="d-flex justify-content-between mb-3">
-              <h6 class="mb-0">Pickup Volume</h6>
-              <select class="form-select w-auto" id="pickupVolumeRange">
-                <option value="daily" selected>Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0">Product Out Volume</h6>
+              <span
+                class="badge bg-light text-dark border"
+                id="pickupVolumeBadge"
+                >Daily</span
+              >
             </div>
             <div style="height: 100%">
               <canvas id="barChart"></canvas>
             </div>
             <div class="fs-6 mb-2 text-center">
-              <span id="pickupTimeframe">Daily</span> Pickups
-            </div>
-
-            <div
-              class="d-flex align-items-center justify-content-center mt-auto"
-            >
-              <span class="ms-2">Change View:</span>
-              <select class="form-select form-select-sm w-auto ms-2">
-                <option selected>Region</option>
-                <option>City</option>
-              </select>
+              <span id="pickupTimeframe">Daily</span> Product Out
             </div>
           </div>
         </div>
@@ -580,6 +598,5 @@
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
-    <script src="scripts/js/ui/reportCountup.js"></script>
   </body>
 </html>
