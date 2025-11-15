@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const toggleBtn = document.getElementById("sidebarToggle");
   const backdrop = document.querySelector(".sidebar-backdrop");
-  const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+  const isMobile = () => window.matchMedia("(max-width: 992px)").matches;
 
   // Harden initial state: ensure backdrop is hidden and body not marked open
   try {
@@ -164,11 +164,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (isMobile() && sidebar) {
         sidebar.style.transform = "translateX(-100%)";
         // Delay hiding to allow transform to apply; but ensure it's not blocking
-        setTimeout(() => {
-          try {
-            sidebar.style.display = "none";
-          } catch (_) {}
-        }, 150);
+        setTimeout(() => { try { sidebar.style.display = "none"; } catch(_) {} }, 150);
       }
     } catch (_) {}
     hideTooltips();
@@ -204,14 +200,6 @@ document.addEventListener("DOMContentLoaded", () => {
       hideTooltips();
     } else {
       closeSidebar();
-
-      try {
-        if (sidebar) {
-          sidebar.style.display = ""; // This clears the 'display: none'
-          sidebar.style.transform = ""; // This clears the 'transform: translateX'
-        }
-      } catch (_) {}
-
       sidebar.classList.add("collapsed");
       body.classList.add("sidebar-collapsed");
       showTooltips();
@@ -256,3 +244,71 @@ document.addEventListener("DOMContentLoaded", () => {
     hideTooltips();
   }
 });
+document.addEventListener("DOMContentLoaded", () => {
+  const sidebarToggle = document.getElementById("sidebarToggle");
+  const sidebar = document.querySelector("aside");
+  const backdrop = document.querySelector(".sidebar-backdrop");
+
+  if (!sidebarToggle || !sidebar) return;
+
+  // ✅ Toggle sidebar (mobile)
+  sidebarToggle.addEventListener("click", () => {
+    const isActive = sidebar.classList.toggle("active");
+    backdrop.classList.toggle("show", isActive);
+  });
+
+  // ✅ Click outside sidebar to close (mobile)
+  backdrop.addEventListener("click", () => {
+    sidebar.classList.remove("active");
+    backdrop.classList.remove("show");
+  });
+
+  // ✅ Auto-reset behavior when resizing
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 992) {
+      // Desktop mode → always show sidebar, no overlay
+      sidebar.classList.add("active");
+      backdrop.classList.remove("show");
+      sidebar.style.left = "0"; // ensure visible
+    } else {
+      // Mobile mode → only show if user toggled it
+      if (!sidebar.classList.contains("active")) {
+        sidebar.style.left = ""; // let CSS handle hidden state
+      }
+    }
+  });
+
+  // ✅ Optional: ensure correct initial state on page load
+  if (window.innerWidth > 992) {
+    sidebar.classList.add("active");
+  } else {
+    sidebar.classList.remove("active");
+  }
+});
+
+  // ✅ Your existing sidebar toggle code (don’t remove)
+  document.addEventListener("DOMContentLoaded", () => {
+    const toggleBtn = document.querySelector(".toggle-sidebar-btn");
+    const body = document.body;
+
+    toggleBtn?.addEventListener("click", () => {
+      body.classList.toggle("sidebar-hidden"); // or whatever class you use
+    });
+  });
+
+  // ✅ ADD THIS BELOW — the fix for resizing
+  document.addEventListener("DOMContentLoaded", () => {
+    const sidebar = document.querySelector("aside");
+    const body = document.body;
+
+    if (!sidebar || !body) return;
+
+    window.addEventListener("resize", () => {
+      if (window.innerWidth >= 992) {
+        // Desktop size
+        body.classList.remove("sidebar-hidden");
+        sidebar.style.transform = "";
+        sidebar.style.display = "";
+      }
+    });
+  });
