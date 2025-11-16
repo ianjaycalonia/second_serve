@@ -704,6 +704,7 @@
             const itemNameRaw = String(it.item_name || it.name || "");
             tr.dataset.name = itemNameRaw.trim();
             tr.dataset.category = String(it.category || a.product_category || "");
+            tr.dataset.unit = String(it.unit || it.unit_label || "");
 
             const statusLower = String(status || "").toLowerCase();
             const isNotified = statusLower === "notified";
@@ -1750,7 +1751,11 @@
     tb.querySelectorAll("tr").forEach((tr) => {
       const name = getRowName(tr);
       const qty = tr.querySelector(".dr-qty")?.value || "";
-      if (name && qty) parts.push(`${qty}x ${name}`);
+      const unit = tr.dataset.unit || "";
+      if (name && qty) {
+        const unitPart = unit ? ` ${unit}` : "";
+        parts.push(`${qty}${unitPart} ${name}`.trim());
+      }
     });
     const msg = parts.length
       ? `You have been allocated items. Check your Received Items. Items: ${parts
@@ -2026,7 +2031,11 @@
       tb.querySelectorAll("tr").forEach((tr) => {
         const name = getRowName(tr);
         const qty = tr.querySelector(".dr-qty")?.value || "";
-        if (name && qty) parts.push(`${qty}x ${name}`);
+        const unit = tr.dataset.unit || "";
+        if (name && qty) {
+          const unitPart = unit ? ` ${unit}` : "";
+          parts.push(`${qty}${unitPart} ${name}`.trim());
+        }
       });
       const msg = parts.length
         ? `You have been allocated items. Check your Received Items. Items: ${parts

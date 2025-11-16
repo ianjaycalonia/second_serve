@@ -16,12 +16,16 @@
     currentTemplateId: null,
     run: {
       template: null,
-      kits: 1,
+      kits: 0,
       allocations: {},
+      maxKits: null,
+      lotCache: Object.create(null),
     },
     lotModal: null,
     toast: null,
   };
+
+  const RUN_QUANTITY_HELP_DEFAULT = "Select a template to calculate the maximum kits automatically.";
 
   const REPACK_TOAST_VARIANTS = ["primary", "success", "warning", "danger", "info", "secondary"];
 
@@ -37,6 +41,20 @@
           "'": "&#39;",
         }[c])
     );
+  }
+
+  function escapeAttr(str){
+    return (str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function formatWholeQuantity(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "0";
+    return String(Math.round(num));
   }
 
   function showRepackToast(message, variant = "primary") {
@@ -106,6 +124,11 @@
       console.error("Failed to load taxonomy for repack module", err);
       showRepackToast("Failed to load taxonomy (categories/units)", "danger");
     }
+  }
+
+  function setRunQuantityHelp(message) {
+    const helpEl = document.getElementById("repackRunQuantityHelp");
+    if (helpEl) helpEl.textContent = message || RUN_QUANTITY_HELP_DEFAULT;
   }
 
   function syncRepackDatalists() {
@@ -613,6 +636,23 @@
         renderTemplateList(document.getElementById("repackTemplateSearchInput")?.value || "");
       });
     }
+    const modalEl = document.getElementById("repackTemplatesModal");
+    if (modalEl && !modalEl.dataset.clearBound) {
+      modalEl.dataset.clearBound = "1";
+      modalEl.addEventListener("hidden.bs.modal", () => {
+        clearTemplateForm();
+        const feedback = document.getElementById("repackTemplateFormFeedback");
+        if (feedback) feedback.textContent = "";
+        const searchInputEl = document.getElementById("repackTemplateSearchInput");
+        if (searchInputEl) {
+          const previous = searchInputEl.value;
+          searchInputEl.value = "";
+          if (previous) {
+            renderTemplateList("");
+          }
+        }
+      });
+    }
   }
 
   async function openTemplateModal() {
@@ -631,8 +671,10 @@
 
   function resetRunState() {
     repackState.run.template = null;
-    repackState.run.kits = 1;
+    repackState.run.kits = 0;
     repackState.run.allocations = {};
+    repackState.run.maxKits = null;
+    repackState.run.lotCache = Object.create(null);
   }
 
   function populateRunTemplateOptions(preferredId = null) {
@@ -679,7 +721,7 @@
       product,
       category,
       unit,
-      units: unitsProduced ? `${unitsProduced}` : "0",
+      units: formatWholeQuantity(unitsProduced),
     };
     Object.entries(map).forEach(([key, value]) => {
       const dd = summary.querySelector(`dd[data-field="${key}"]`);
@@ -697,18 +739,31 @@
       if (statusEl) statusEl.textContent = "Select a template to begin.";
       return;
     }
-    const kits = Math.max(1, Number(repackState.run.kits || 1));
+    const kits = Number(repackState.run.kits || 0);
+    if (!Number.isFinite(kits) || kits <= 0) {
+      if (statusEl) statusEl.textContent = "Enter kits to produce.";
+      return;
+    }
     const rows = [];
     let allSatisfied = true;
     template.components.forEach((component) => {
       const componentId = component.kit_component_id;
       const required = (Number(component.quantity_per_kit || 0) || 0) * kits;
       const allocation = repackState.run.allocations[componentId] || { lots: [] };
+      const availableTotal = allocation.lots.reduce(
+        (sum, lot) => sum + Number((lot.available ?? lot.quantity ?? 0) || 0),
+        0
+      );
       const allocated = allocation.lots.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
       if (allocated !== required) allSatisfied = false;
       const lotsSummary = allocation.lots.length
         ? allocation.lots
-            .map((lot) => `Lot #${lot.inventory_id}: ${lot.quantity}`)
+            .map((lot) => {
+              const availableLabel = Number.isFinite(Number(lot.available))
+                ? ` / ${formatWholeQuantity(lot.available)} available`
+                : "";
+              return `Lot #${lot.inventory_id}: ${formatWholeQuantity(lot.quantity)}${availableLabel}`;
+            })
             .join("<br>")
         : "No lots selected";
       rows.push(`
@@ -717,9 +772,16 @@
             <div class="fw-semibold">${escapeHtml(component.product_name || "")}</div>
             <div class="small text-muted">${escapeHtml(component.category_label || "")}</div>
           </td>
-          <td class="text-nowrap">${required} ${escapeHtml(component.unit_label || "")}</td>
+          <td class="text-nowrap">${formatWholeQuantity(required)} ${escapeHtml(component.unit_label || "")}</td>
+          <td class="text-nowrap">${
+            Number.isFinite(availableTotal) && availableTotal > 0
+              ? escapeHtml(formatWholeQuantity(availableTotal))
+              : availableTotal === 0
+              ? "0"
+              : "—"
+          } ${escapeHtml(component.unit_label || "")}</td>
           <td class="text-nowrap">
-            ${allocated} ${escapeHtml(component.unit_label || "")}
+            ${formatWholeQuantity(allocated)} ${escapeHtml(component.unit_label || "")}
             <div class="small text-muted">${lotsSummary}</div>
           </td>
           <td class="text-end">
@@ -749,18 +811,35 @@
       submitBtn.disabled = true;
       return;
     }
-    const kits = Math.max(1, Number(repackState.run.kits || 1));
-    if (!kits) {
+    const kits = Number(repackState.run.kits || 0);
+    if (!Number.isFinite(kits) || kits <= 0) {
       submitBtn.disabled = true;
+      if (feedbackEl && !message) feedbackEl.textContent = "Enter kits to produce.";
       return;
     }
+    let unsatisfied = null;
     const allSatisfied = template.components.every((component) => {
       const required = (Number(component.quantity_per_kit || 0) || 0) * kits;
       const allocation = repackState.run.allocations[component.kit_component_id] || { lots: [] };
       const allocated = allocation.lots.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
-      return allocated === required && required > 0;
+      const satisfied = allocated === required && required > 0;
+      if (!satisfied && !unsatisfied) {
+        unsatisfied = {
+          name: component.product_name || "Component",
+          required,
+          allocated,
+        };
+      }
+      return satisfied;
     });
     submitBtn.disabled = !allSatisfied;
+    if (!allSatisfied && feedbackEl) {
+      if (unsatisfied) {
+        feedbackEl.textContent = `Not enough quantity for ${unsatisfied.name}.`;
+      } else if (!message) {
+        feedbackEl.textContent = "Allocate lots for every component.";
+      }
+    }
   }
 
   async function fetchTemplateDetail(templateId) {
@@ -796,7 +875,11 @@
   function setRunTemplate(template) {
     repackState.run.template = template;
     repackState.run.allocations = {};
-    repackState.run.kits = Math.max(1, Number(document.getElementById("repackRunQuantity")?.value || 1));
+    repackState.run.maxKits = null;
+    repackState.run.lotCache = Object.create(null);
+    const inputEl = document.getElementById("repackRunQuantity");
+    const requested = Number(inputEl?.value || 0);
+    repackState.run.kits = template ? Math.max(1, requested || 1) : 0;
     renderRunSummary();
     renderRunComponentsTable();
   }
@@ -825,6 +908,7 @@
     if (value < 1) value = 1;
     input.value = String(value);
     repackState.run.kits = value;
+    recomputeAllocationsForCurrentKits();
     renderRunSummary();
     renderRunComponentsTable();
   }
@@ -882,22 +966,34 @@
     const summary = document.getElementById("repackLotSummary");
     if (!context || !tbody) return;
     const search = filter.trim().toLowerCase();
-    let allocated = 0;
+    context.lastFilter = filter;
+    if (!Array.isArray(context.selection)) context.selection = [];
+    const selectionMap = new Map(
+      context.selection.map((lot) => [Number(lot.inventory_id), Number(lot.quantity || 0)])
+    );
+    const allocated = context.selection.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
     const rows = context.lots
       .filter((lot) => {
         if (!search) return true;
         return String(lot.inventory_id).includes(search);
       })
       .map((lot) => {
-        const existing = context.selection?.find((sel) => sel.inventory_id === lot.inventory_id);
-        const value = existing ? existing.quantity : "";
+        const lotId = Number(lot.inventory_id);
+        const selectedQty = selectionMap.get(lotId) || 0;
+        const checkedAttr = selectedQty > 0 ? " checked" : "";
+        const allocationLabel = selectedQty > 0
+          ? `${formatWholeQuantity(selectedQty)} allocated / ${formatWholeQuantity(lot.quantity || 0)} available`
+          : `${formatWholeQuantity(lot.quantity || 0)} available`;
         return `
-          <tr data-lot-id="${lot.inventory_id}" data-available="${lot.quantity}">
-            <td>#${lot.inventory_id}</td>
-            <td>${lot.quantity}</td>
+          <tr data-lot-id="${lotId}" data-available="${lot.quantity}">
+            <td>#${lotId}</td>
+            <td>${formatWholeQuantity(lot.quantity)}</td>
             <td>${lot.expiry_date ? escapeHtml(lot.expiry_date) : "—"}</td>
-            <td>
-              <input type="number" class="form-control form-control-sm repack-lot-input" min="0" max="${lot.quantity}" value="${value}" />
+            <td class="text-center">
+              <div class="form-check m-0">
+                <input class="form-check-input repack-lot-toggle" type="checkbox" data-lot-id="${lotId}"${checkedAttr} aria-label="Use lot #${lotId}" />
+              </div>
+              <div class="small text-muted">${allocationLabel}</div>
             </td>
           </tr>
         `;
@@ -905,11 +1001,176 @@
     tbody.innerHTML = rows.length
       ? rows.join("")
       : '<tr><td colspan="4" class="text-center text-muted py-3">No lots found.</td></tr>';
+
+    tbody.querySelectorAll(".repack-lot-toggle").forEach((toggle) => {
+      toggle.addEventListener("change", (event) => {
+        const lotId = Number(event.target.dataset.lotId);
+        if (!Number.isFinite(lotId)) return;
+        setLotSelection(lotId, Boolean(event.target.checked));
+      });
+    });
+
     if (summary) {
-      const existingTotal = (context.selection || []).reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
-      allocated = existingTotal;
-      summary.textContent = `Allocated ${allocated} / ${context.required}`;
+      const remaining = Math.max(Number(context.required || 0) - allocated, 0);
+      summary.textContent = `Allocated ${formatWholeQuantity(allocated)} / ${formatWholeQuantity(context.required)}${
+        remaining > 0 ? ` · Remaining ${formatWholeQuantity(remaining)}` : ""
+      }`;
     }
+  }
+
+  function setLotSelection(lotId, selected) {
+    const context = repackState.lotModal;
+    if (!context) return;
+    if (!Array.isArray(context.selection)) context.selection = [];
+    const feedback = document.getElementById("repackLotFeedback");
+    if (feedback) feedback.textContent = "";
+    const required = Number(context.required || 0);
+    const lot = context.lots.find((item) => Number(item.inventory_id) === lotId);
+    const currentTotal = context.selection.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+    const existingEntry = context.selection.find((item) => Number(item.inventory_id) === lotId);
+    const totalWithoutLot = existingEntry ? currentTotal - Number(existingEntry.quantity || 0) : currentTotal;
+
+    if (!selected) {
+      context.selection = context.selection.filter((item) => Number(item.inventory_id) !== lotId);
+      commitLotSelection();
+      renderLotModalTable(context.lastFilter || "");
+      return;
+    }
+
+    if (!lot) {
+      commitLotSelection();
+      renderLotModalTable(context.lastFilter || "");
+      return;
+    }
+
+    const remaining = required - totalWithoutLot;
+    if (remaining <= 0) {
+      if (feedback) feedback.textContent = "Requirement already satisfied. Unselect another lot to reassign.";
+      commitLotSelection();
+      renderLotModalTable(context.lastFilter || "");
+      return;
+    }
+
+    const assignable = Math.min(Number(lot.quantity || 0), remaining);
+    if (assignable <= 0) {
+      if (feedback) feedback.textContent = "No quantity remaining to allocate for this lot.";
+      commitLotSelection();
+      renderLotModalTable(context.lastFilter || "");
+      return;
+    }
+
+    context.selection = context.selection.filter((item) => Number(item.inventory_id) !== lotId);
+    context.selection.push({
+      inventory_id: lotId,
+      quantity: assignable,
+      available: Number(lot.quantity || 0) || 0,
+    });
+    commitLotSelection();
+    renderLotModalTable(context.lastFilter || "");
+  }
+
+  function buildLotAllocation(lots, required, preferredIds = []) {
+    if (!Array.isArray(lots) || !lots.length || required <= 0) {
+      return { assignments: [], remaining: Math.max(required, 0) };
+    }
+
+    const order = [];
+    preferredIds
+      .filter((id) => Number.isFinite(id))
+      .forEach((id) => {
+        if (!order.includes(id)) order.push(id);
+      });
+    lots.forEach((lot) => {
+      const id = Number(lot.inventory_id);
+      if (!Number.isFinite(id)) return;
+      if (!order.includes(id)) order.push(id);
+    });
+
+    let remaining = Math.max(0, Number(required) || 0);
+    const assignments = [];
+
+    order.forEach((lotId) => {
+      if (remaining <= 0) return;
+      const lot = lots.find((item) => Number(item.inventory_id) === lotId);
+      if (!lot) return;
+      const available = Number(lot.quantity ?? lot.available ?? 0) || 0;
+      if (available <= 0) return;
+      const assignable = Math.min(available, remaining);
+      if (assignable > 0) {
+        assignments.push({ inventory_id: lotId, quantity: assignable, available });
+        remaining -= assignable;
+      }
+    });
+
+    return { assignments, remaining };
+  }
+
+  function recomputeAllocationsForCurrentKits() {
+    const template = repackState.run.template;
+    if (!template) return;
+    const kits = Math.max(1, Number(repackState.run.kits || 1));
+    template.components.forEach((component) => {
+      const componentId = component.kit_component_id;
+      const required = (Number(component.quantity_per_kit || 0) || 0) * kits;
+      const cachedLots = repackState.run.lotCache?.[componentId];
+      if (!Array.isArray(cachedLots) || !cachedLots.length || required <= 0) {
+        return;
+      }
+      const preferred = (repackState.run.allocations[componentId]?.lots || [])
+        .map((lot) => Number(lot.inventory_id))
+        .filter(Number.isFinite);
+      const { assignments } = buildLotAllocation(cachedLots, required, preferred);
+      if (assignments.length) {
+        repackState.run.allocations[componentId] = {
+          lots: assignments.map((entry) => ({
+            inventory_id: Number(entry.inventory_id),
+            quantity: Number(entry.quantity || 0),
+            available: Number(entry.available || 0),
+          })),
+        };
+      } else {
+        delete repackState.run.allocations[componentId];
+      }
+    });
+  }
+
+  function autoFillLotSelection() {
+    const ctx = repackState.lotModal;
+    if (!ctx) return;
+    const required = Math.max(0, Number(ctx.required || 0));
+    const lots = Array.isArray(ctx.lots) ? ctx.lots : [];
+    const preferred = Array.isArray(ctx.selection)
+      ? ctx.selection.map((sel) => Number(sel.inventory_id)).filter(Number.isFinite)
+      : [];
+    const { assignments, remaining } = buildLotAllocation(lots, required, preferred);
+    ctx.selection = assignments;
+    ctx.unmetRequirement = remaining;
+  }
+
+  function commitLotSelection() {
+    const ctx = repackState.lotModal;
+    if (!ctx) return;
+    if (!Array.isArray(ctx.selection)) ctx.selection = [];
+    const required = Number(ctx.required || 0);
+    const total = ctx.selection.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+    const lotsById = Array.isArray(ctx.lots)
+      ? new Map(ctx.lots.map((lot) => [Number(lot.inventory_id), Number(lot.quantity || 0) || 0]))
+      : new Map();
+    if (total === required && required > 0) {
+      repackState.run.allocations[ctx.componentId] = {
+        lots: ctx.selection.map((lot) => ({
+          inventory_id: Number(lot.inventory_id),
+          quantity: Number(lot.quantity || 0),
+          available: Number(lot.available ?? lotsById.get(Number(lot.inventory_id)) ?? lot.quantity ?? 0) || 0,
+        })),
+      };
+    } else {
+      delete repackState.run.allocations[ctx.componentId];
+    }
+    if (!repackState.run.lotCache) repackState.run.lotCache = Object.create(null);
+    repackState.run.lotCache[ctx.componentId] = Array.isArray(ctx.lots) ? ctx.lots : [];
+    renderRunComponentsTable();
+    updateRunSubmitState();
   }
 
   function openLotModalForComponent(componentId) {
@@ -937,6 +1198,10 @@
     if (searchInput) searchInput.value = "";
     fetchComponentLots(component).then((lots) => {
       repackState.lotModal.lots = lots;
+      if (!repackState.run.lotCache) repackState.run.lotCache = Object.create(null);
+      repackState.run.lotCache[componentId] = lots;
+      autoFillLotSelection();
+      commitLotSelection();
       renderLotModalTable();
     });
     const modalEl = document.getElementById("repackLotModal");
@@ -949,37 +1214,15 @@
   function applyLotSelection() {
     const ctx = repackState.lotModal;
     if (!ctx) return;
+    if (!Array.isArray(ctx.selection)) ctx.selection = [];
     const feedback = document.getElementById("repackLotFeedback");
     if (feedback) feedback.textContent = "";
-    const inputs = document.querySelectorAll("#repackLotTable tbody tr");
-    const selections = [];
-    let invalid = false;
-    inputs.forEach((row) => {
-      const input = row.querySelector(".repack-lot-input");
-      if (!input) return;
-      const quantity = parseInt(input.value || "0", 10) || 0;
-      const available = parseInt(row.getAttribute("data-available") || "0", 10) || 0;
-      const lotId = parseInt(row.getAttribute("data-lot-id") || "0", 10) || 0;
-      if (quantity < 0) {
-        input.value = "";
-        return;
-      }
-      if (quantity > available) {
-        if (feedback) feedback.textContent = `Lot #${lotId} exceeds available quantity.`;
-        invalid = true;
-        return;
-      }
-      if (quantity > 0) {
-        selections.push({ inventory_id: lotId, quantity });
-      }
-    });
-    if (invalid) return;
-    const total = selections.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
-    if (total !== ctx.required) {
-      if (feedback) feedback.textContent = `Allocation must total exactly ${ctx.required}.`;
+    const total = ctx.selection.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+    if (total !== Number(ctx.required || 0)) {
+      if (feedback) feedback.textContent = `Allocate lots totaling exactly ${ctx.required}.`;
       return;
     }
-    repackState.run.allocations[ctx.componentId] = { lots: selections };
+    commitLotSelection();
     if (ctx.modal) ctx.modal.hide();
     renderRunComponentsTable();
     updateRunSubmitState();
@@ -988,7 +1231,7 @@
   async function executeRepackRun() {
     const template = repackState.run.template;
     if (!template) return;
-    const kits = Math.max(1, Number(repackState.run.kits || 1));
+    const kits = Math.max(1, Number(repackState.run.kits || 0));
     const submitBtn = document.getElementById("repackRunSubmitBtn");
     const feedback = document.getElementById("repackRunFeedback");
     if (feedback) feedback.textContent = "";
@@ -1130,6 +1373,8 @@
         if (!ctx) return;
         const lots = await fetchComponentLots(ctx.component);
         repackState.lotModal.lots = lots;
+        if (!repackState.run.lotCache) repackState.run.lotCache = Object.create(null);
+        repackState.run.lotCache[ctx.componentId] = lots;
         renderLotModalTable(document.getElementById("repackLotSearchInput")?.value || "");
       });
     }
@@ -1436,6 +1681,109 @@
     }
   });
 
+  async function openLotDetails(itemName, category, totalLots){
+    const modalEl = document.getElementById("inventoryLotsModal");
+    if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) return;
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    const titleEl = document.getElementById("inventoryLotsModalLabel");
+    const metaEl = document.getElementById("lotDetailsMeta");
+    const loadingEl = document.getElementById("lotDetailsLoading");
+    const emptyEl = document.getElementById("lotDetailsEmpty");
+    const tableWrapper = document.getElementById("lotDetailsTableWrapper");
+    const tbody = document.getElementById("lotDetailsTableBody");
+    if (!loadingEl || !emptyEl || !tbody) {
+      modal.show();
+      return;
+    }
+
+    if (titleEl){
+      const lotLabel = totalLots > 1 ? `${totalLots} lots` : "Lot details";
+      titleEl.textContent = `${itemName} • ${lotLabel}`;
+    }
+    if (metaEl){
+      metaEl.textContent = category ? `Category: ${category}` : "Uncategorised";
+    }
+
+    loadingEl.classList.remove("d-none");
+    emptyEl.classList.add("d-none");
+    if (tableWrapper){
+      tableWrapper.classList.add("d-none");
+    }
+    tbody.innerHTML = "";
+
+    modal.show();
+
+    try {
+      const url = new URL(`${API_BASE_URL}/inventory/index.php/lot-details`, window.location.origin);
+      url.searchParams.set("item_name", itemName);
+      url.searchParams.set("category", category || "");
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      if (!json?.success) {
+        throw new Error(json?.error || "Unable to load lot details.");
+      }
+      const lots = Array.isArray(json?.data?.lots) ? json.data.lots : [];
+      loadingEl.classList.add("d-none");
+      if (!lots.length) {
+        emptyEl.textContent = "No lots found for this item.";
+        emptyEl.classList.remove("d-none");
+        if (tableWrapper){
+          tableWrapper.classList.add("d-none");
+        }
+        return;
+      }
+
+      emptyEl.classList.add("d-none");
+      const rows = lots.map((lot) => {
+        const lotId = lot.lot_id ? escapeHtml(String(lot.lot_id)) : "—";
+        const quantity = escapeHtml(String(lot.quantity ?? 0));
+        const unit = escapeHtml(lot.unit || "—");
+        const added = lot.added_at ? formatDateTime(lot.added_at) : "—";
+        const expiry = lot.expiry_date ? formatDate(lot.expiry_date) : "—";
+        const status = escapeHtml(lot.status || "—");
+        return `
+          <tr>
+            <td>${lotId}</td>
+            <td class="text-end">${quantity}</td>
+            <td>${unit}</td>
+            <td>${added}</td>
+            <td>${expiry}</td>
+            <td>${status}</td>
+          </tr>`;
+      }).join("");
+      tbody.innerHTML = rows;
+      if (tableWrapper){
+        tableWrapper.classList.remove("d-none");
+      }
+    } catch (err) {
+      console.error("Failed to load lot details", err);
+      loadingEl.classList.add("d-none");
+      emptyEl.textContent = err?.message || "Failed to load lot details.";
+      emptyEl.classList.remove("d-none");
+      if (tableWrapper){
+        tableWrapper.classList.add("d-none");
+      }
+    }
+  }
+
+  document.addEventListener("click", async function (e) {
+    const btnLot = e.target.closest(".inv-view-lots");
+    if (!btnLot) return;
+    e.preventDefault();
+    const itemName = btnLot.getAttribute("data-item-name") || "";
+    const category = btnLot.getAttribute("data-category") || "";
+    const totalLots = parseInt(btnLot.getAttribute("data-total-lots") || "0", 10) || 0;
+    await openLotDetails(itemName, category, totalLots);
+  });
+
   // When discard modal is closed, apply immediate visual deduction if available
   (function bindDiscardHiddenImmediateUpdate(){
     try {
@@ -1483,8 +1831,6 @@
       }
     } catch (_) {}
   });
-
-
 
   // Delegated handler: Discard quantity (opens modal, requires note)
   document.addEventListener("click", function (e) {
@@ -1676,6 +2022,23 @@
     }
   }
 
+  function formatDateTime(dateTimeStr){
+    if (!dateTimeStr) return '—';
+    try {
+      const date = new Date(dateTimeStr);
+      if (isNaN(date.getTime())) return dateTimeStr;
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (_) {
+      return dateTimeStr;
+    }
+  }
+
   // Helper function to create status badge with tooltip
   function statusBadge(status, breakdown) {
     if (!breakdown) return badge(status);
@@ -1717,17 +2080,23 @@
     }
     
     const rows = filtered.map((r) => {
-      const item = escapeHtml(r.item_name || "");
-      const cat = escapeHtml(r.category || "");
-      const totalQty = (r.total_quantity ?? r.quantity ?? 0);
-      const qty = totalQty + "";
+      const rawItemName = r.item_name || "";
+      const displayItem = escapeHtml(rawItemName);
+      const rawCategory = r.category || "";
+      const displayCategory = escapeHtml(rawCategory);
+      const totalQty = Number(r.total_quantity ?? r.quantity ?? 0) || 0;
+      const qty = formatWholeQuantity(totalQty);
       const unit = escapeHtml(r.unit || "");
       const soonest = formatDate(r.earliest_expiry);
       const tagsRaw = r.tags_concat || r.tags || "" || "";
       const tags = escapeHtml(tagsRaw);
       const status = statusBadge(r.derived_status || "In Stock", r.status_breakdown);
-      const data = `data-item-name="${item}" data-category="${cat}" data-tags="${tags}"`;
-      
+      const totalLots = Number(r.total_lots ?? 0);
+      const dataAttributes = `data-item-name="${escapeAttr(rawItemName)}" data-category="${escapeAttr(rawCategory)}" data-tags="${escapeAttr(tagsRaw)}" data-total-lots="${escapeAttr(String(totalLots))}"`;
+      const lotButton = totalLots > 1
+        ? `<button type="button" class="btn btn-sm btn-outline-info inv-view-lots" ${dataAttributes} title="View lots"><i class="bi bi-eye"></i></button>`
+        : "";
+
       // Status breakdown is still available in the tooltip on the status badge
       
       const actions = `
@@ -1737,9 +2106,10 @@
           </button>
           <div class="dropdown-menu p-2 text-center">
             <div class="d-flex align-items-center justify-content-center" style="gap:6px;">
-              <button type="button" class="btn btn-sm btn-outline-warning inv-edit-tags" ${data} title="Edit Tags"><i class="bi bi-tags"></i></button>
-              <button type="button" class="btn btn-sm btn-outline-secondary inv-issue-onsite" ${data} title="On-site Giveaway"><i class="bi bi-people"></i></button>
-              <button type="button" class="btn btn-sm btn-outline-danger inv-discard" ${data} title="Discard"><i class="bi bi-trash"></i></button>
+              ${lotButton}
+              <button type="button" class="btn btn-sm btn-outline-warning inv-edit-tags" ${dataAttributes} title="Edit Tags"><i class="bi bi-tags"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-secondary inv-issue-onsite" ${dataAttributes} title="On-site Giveaway"><i class="bi bi-people"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-danger inv-discard" ${dataAttributes} title="Discard"><i class="bi bi-trash"></i></button>
             </div>
           </div>
         </div>`;
@@ -1747,10 +2117,10 @@
       return `
         <tr>
           <td>
-            <div class="fw-medium">${item}</div>
-            ${r.total_lots > 1 ? `<small class="text-muted">${r.total_lots} lots</small>` : ''}
+            <div class="fw-medium">${displayItem}</div>
+            ${totalLots > 1 ? `<small class="text-muted">${totalLots} lots</small>` : ''}
           </td>
-          <td>${cat}</td>
+          <td>${displayCategory}</td>
           <td class="text-nowrap">${qty}</td>
           <td class="text-nowrap">${unit || '—'}</td>
           <td class="text-nowrap">${soonest}</td>
@@ -2475,8 +2845,8 @@
         const iEntryDate = pick("entry_date", "added_at");
         const iDonEmail = ix("donor_email");
         const iDonOrg = pick("donor_org", "donor_organization", "donor_name");
-        const iDonCategory = ix("donor_category");
         const iDonName = ix("donor_name");
+        const iDonCategory = ix("donor_category");
         const iEntryBy = ix("entry_by");
         const payloadRows = [];
         for (const r of rows) {

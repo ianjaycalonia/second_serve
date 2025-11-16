@@ -9,7 +9,7 @@ const SUPPORTED_SETTINGS = [
     'di_auto_open_alloc',
     'require_ack_checkbox',
     'inventory_soon_expire_lead_days',
-    'allocation_far_recipient_weight',
+    'expiry_lead_time_days',
     'distribution_distributable_percent',
     'recipient_cancellation_hours',
 ];
@@ -19,9 +19,14 @@ const DEFAULT_SETTING_VALUES = [
     'di_auto_open_alloc' => '0',
     'require_ack_checkbox' => '0',
     'inventory_soon_expire_lead_days' => '7',
-    'allocation_far_recipient_weight' => '1.5',
+    'expiry_lead_time_days' => '14',
     'distribution_distributable_percent' => '90',
     'recipient_cancellation_hours' => '24',
+];
+
+const SETTING_ROLE_OVERRIDES = [
+    // Expiry lead time must be visible to donors/recipients so entry forms can enforce the rule client-side.
+    'expiry_lead_time_days' => ['admin', 'donor', 'recipient']
 ];
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -61,11 +66,10 @@ function normalizeSettingValue(string $key, $value){
             if ($days < 0) { $days = 0; }
             return (string)$days;
 
-        case 'allocation_far_recipient_weight':
-            if (!is_numeric($value)) { $value = 0; }
-            $weight = max(0, (float)$value);
-            $formatted = rtrim(rtrim(sprintf('%.4F', $weight), '0'), '.');
-            return $formatted === '' ? '0' : $formatted;
+        case 'expiry_lead_time_days':
+            $days = (int)$value;
+            if ($days < 0) { $days = 0; }
+            return (string)$days;
 
         case 'distribution_distributable_percent':
             $percent = (int)$value;
@@ -86,12 +90,13 @@ function normalizeSettingValue(string $key, $value){
 try {
     switch ($action) {
         case 'get':
-            requireRole(['admin']);
             $key = isset($_GET['key']) ? trim((string)$_GET['key']) : '';
             if ($key === '') { sendJson(['success'=>false,'error'=>'key required'], 400); }
             if (!in_array($key, SUPPORTED_SETTINGS, true)){
                 sendJson(['success'=>false,'error'=>'unsupported key'], 400);
             }
+            $roles = SETTING_ROLE_OVERRIDES[$key] ?? ['admin'];
+            requireRole($roles);
             $default = DEFAULT_SETTING_VALUES[$key] ?? null;
             $val = getSetting($key, $default);
             sendJson(['success'=>true, 'data'=>['key'=>$key,'value'=>$val]]);

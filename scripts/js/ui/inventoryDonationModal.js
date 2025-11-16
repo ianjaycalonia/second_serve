@@ -15,6 +15,101 @@
     const $addItemBtn = $("#addItemBtn");
     const $donorSelect = $("#donationDonorSelect");
 
+    let expiryLeadDays = 0;
+    let expiryMinDate = "";
+    let expiryLeadLoaded = false;
+    let expiryLeadToastShown = false;
+
+    function formatDateInput(date) {
+      if (!(date instanceof Date) || isNaN(date.getTime())) return "";
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function computeExpiryMinDate(days) {
+      const base = new Date();
+      base.setHours(0, 0, 0, 0);
+      const safeDays = Number.isFinite(days) ? Math.max(0, days) : 0;
+      base.setDate(base.getDate() + safeDays);
+      return formatDateInput(base);
+    }
+
+    function warnLeadAdjustment() {
+      if (!expiryLeadDays || expiryLeadToastShown) return;
+      expiryLeadToastShown = true;
+      const msg =
+        expiryLeadDays === 1
+          ? "Expiry date must be at least 1 day from today."
+          : `Expiry date must be at least ${expiryLeadDays} days from today.`;
+      showToast(msg, "warning");
+    }
+
+    function enforceExpiryLead($field, shouldWarn = true) {
+      if (!$field || !expiryLeadLoaded || !expiryMinDate) return true;
+      const value = String($field.val() || "").trim();
+      if (!value) return true;
+      if (value < expiryMinDate) {
+        $field.val(expiryMinDate);
+        if (shouldWarn) warnLeadAdjustment();
+      }
+      $field.removeClass("is-invalid");
+      return true;
+    }
+
+    function applyExpiryConstraints($inputs) {
+      if (!$inputs || !$inputs.length || !expiryLeadLoaded) return;
+      if (expiryMinDate) {
+        $inputs.each(function () {
+          this.setAttribute("min", expiryMinDate);
+          enforceExpiryLead($(this), false);
+        });
+      } else {
+        $inputs.each(function () {
+          this.removeAttribute("min");
+        });
+      }
+    }
+
+    async function loadExpiryLeadTime() {
+      if (expiryLeadLoaded) return;
+      let days = 0;
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/system/settings.php?action=get&key=expiry_lead_time_days&t=${Date.now()}`,
+          {
+            method: "GET",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          }
+        );
+        if (res.ok) {
+          const payload = await res.json().catch(() => null);
+          if (payload?.success) {
+            const raw =
+              payload?.data?.value !== undefined
+                ? payload.data.value
+                : payload?.value;
+            const parsed = parseInt(raw, 10);
+            if (Number.isFinite(parsed) && parsed >= 0) {
+              days = parsed;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(
+          "[InventoryDonationModal] Unable to load expiry lead time",
+          err
+        );
+      } finally {
+        expiryLeadDays = days;
+        expiryMinDate = computeExpiryMinDate(days);
+        expiryLeadLoaded = true;
+        applyExpiryConstraints($itemsContainer.find(".item-expiry"));
+      }
+    }
+
     function showToast(msg, variant) {
       try {
         const body = document.getElementById("toastBody");
@@ -113,6 +208,7 @@
     }
 
     initDonorSelect();
+    loadExpiryLeadTime();
 
     function setSubmitting(isLoading) {
       if (isLoading) {
@@ -264,6 +360,7 @@
       $itemsContainer.append(itemRowTemplate(id));
       const $row = $itemsContainer.find(`.item-row[data-id="${id}"]`);
       initSelect2($row.find(".item-name-select"));
+      applyExpiryConstraints($row.find(".item-expiry"));
     }
     function removeItemRow(btn) {
       $(btn).closest(".item-row").remove();
@@ -272,6 +369,9 @@
     $addItemBtn.on("click", addItemRow);
     $itemsContainer.on("click", ".btn-outline-danger", function () {
       removeItemRow(this);
+    });
+    $itemsContainer.on("change blur", ".item-expiry", function () {
+      enforceExpiryLead($(this));
     });
 
     // Removed category-dependent item suggestion handler
@@ -459,10 +559,16 @@
         const $row = $(this);
         const name = String($row.find(".item-name-select").val() || "").trim();
         const qty = parseInt($row.find(".item-qty").val(), 10);
-        const expiry = String($row.find(".item-expiry").val() || "").trim();
+        const $expiryField = $row.find(".item-expiry");
+        const expiry = String($expiryField.val() || "").trim();
         if (!name || name.length < 1) { $row.find(".item-name-select").addClass("is-invalid"); ok = false; }
         if (!qty || qty < 1) { $row.find(".item-qty").addClass("is-invalid"); ok = false; }
-        if (!expiry) { $row.find(".item-expiry").addClass("is-invalid"); ok = false; }
+        if (!expiry) {
+          $expiryField.addClass("is-invalid");
+          ok = false;
+        } else {
+          enforceExpiryLead($expiryField, true);
+        }
         // Category removed from form
       });
       return ok;
@@ -534,6 +640,9 @@
     // Ensure at least one row when modal opens and init selects
     $modal.on("shown.bs.modal", function () {
       initDonorSelect();
+      expiryLeadToastShown = false;
+      loadExpiryLeadTime();
+      applyExpiryConstraints($itemsContainer.find(".item-expiry"));
       if ($itemsContainer.find(".item-row").length === 0) addItemRow();
       $itemsContainer.find(".item-row").each(function () {
         const $row = $(this);

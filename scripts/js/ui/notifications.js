@@ -90,7 +90,7 @@
         case 'allocation_ready': return '📦';
         case 'allocation_acknowledged': return '✅';
         case 'allocation_cancelled': return '❌';
-        case 'donation_missing_metadata': return '⚠️';
+        case 'data_missing': return '⚠️';
         default: return '🔔';
       }
     })((n.type || '').toLowerCase());
@@ -215,7 +215,7 @@
           } else if (!dest && nType === 'donation_cancelled') {
             if (role === 'donor') dest = 'MyDonations.html';
             else if (role === 'admin') dest = 'Donation.html';
-          } else if (!dest && nType === 'donation_missing_metadata') {
+          } else if (!dest && nType === 'data_missing') {
             if (role === 'admin') dest = 'taxonomy.html#assignment';
           } else if (!dest && nType.startsWith('allocation_')) {
             dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributionPickup.html';

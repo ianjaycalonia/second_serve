@@ -245,41 +245,28 @@ class Inventory
         if ($mode === 'recipient' && empty($recipientId)) { throw new Exception('recipient_id is required for recipient mode'); }
 
         $this->ensureTables();
-        $manageTransaction = !$this->db->inTransaction();
-        if ($manageTransaction) {
-            $this->db->beginTransaction();
+        
+        $row = $this->db->query("SELECT inventory_id, quantity FROM inventory WHERE inventory_id = ? FOR UPDATE", [$inventoryId])->fetch();
+        if (!$row) { throw new Exception('Inventory item not found'); }
+        $current = (int)$row['quantity'];
+        if ($quantity > $current) { throw new Exception('Insufficient stock'); }
+        $newQty = $current - $quantity;
+        $this->db->query("UPDATE inventory SET quantity = ? WHERE inventory_id = ?", [$newQty, $inventoryId]);
+        $this->db->query(
+            "INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
+             VALUES (?, 'out', ?, ?, ?, ?, ?, NOW())",
+            [$inventoryId, $quantity, $mode, $recipientId, $note, $performedBy]
+        );
+        
+        // Apply trigger logic for inventory movement
+        $movementId = (int)$this->db->lastInsertId();
+        if ($movementId > 0) {
+            require_once __DIR__ . '/TriggerLogic.php';
+            $triggerLogic = new TriggerLogic();
+            $triggerLogic->syncInventoryMovementDonationItem($movementId, $inventoryId);
         }
-        try {
-            $row = $this->db->query("SELECT inventory_id, quantity FROM inventory WHERE inventory_id = ? FOR UPDATE", [$inventoryId])->fetch();
-            if (!$row) { throw new Exception('Inventory item not found'); }
-            $current = (int)$row['quantity'];
-            if ($quantity > $current) { throw new Exception('Insufficient stock'); }
-            $newQty = $current - $quantity;
-            $this->db->query("UPDATE inventory SET quantity = ? WHERE inventory_id = ?", [$newQty, $inventoryId]);
-            $this->db->query(
-                    "INSERT INTO inventory_movements (inventory_id, direction, quantity, mode, recipient_id, note, performed_by, created_at)
-                     VALUES (?, 'out', ?, ?, ?, ?, ?, NOW())",
-                [$inventoryId, $quantity, $mode, $recipientId, $note, $performedBy]
-            );
-            
-            // Apply trigger logic for inventory movement
-            $movementId = (int)$this->db->lastInsertId();
-            if ($movementId > 0) {
-                require_once __DIR__ . '/TriggerLogic.php';
-                $triggerLogic = new TriggerLogic();
-                $triggerLogic->syncInventoryMovementDonationItem($movementId, $inventoryId);
-            }
-            
-            if ($manageTransaction) {
-                $this->db->commit();
-            }
-            return ['new_quantity' => $newQty];
-        } catch (Exception $e) {
-            if ($manageTransaction && $this->db->inTransaction()) {
-                $this->db->rollBack();
-            }
-            throw $e;
-        }
+        
+        return ['new_quantity' => $newQty];
     }
 
     /**

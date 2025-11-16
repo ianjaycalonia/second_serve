@@ -695,7 +695,7 @@ INSERT INTO `settings` (`key`, `value`) VALUES
   ('di_auto_open_alloc', '0'),
   ('require_ack_checkbox', '0'),
   ('inventory_soon_expire_lead_days', '7'),
-  ('allocation_far_recipient_weight', '1.5'),
+  ('expiry_lead_time_days', '14'),
   ('distribution_distributable_percent', '90'),
   ('recipient_cancellation_hours', '24')
 ON DUPLICATE KEY UPDATE `value`=VALUES(`value`);

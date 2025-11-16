@@ -295,7 +295,7 @@ try {
                             try {
                                 $notif->create([
                                     'user_id' => (int)$admin['user_id'],
-                                    'type' => 'donation_missing_metadata',
+                                    'type' => 'data_missing',
                                     'reference_type' => 'donation_item',
                                     'reference_id' => (int)$alert['donation_item_id'],
                                     'message' => sprintf('Donation item "%s" is missing: %s.', $label, $missingLabel),

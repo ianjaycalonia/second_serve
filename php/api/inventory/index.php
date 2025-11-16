@@ -136,6 +136,87 @@ try {
         requireRole(['admin']);
     }
 
+    if ($method === 'GET' && preg_match('#^/lot-details/?$#', $sub)) {
+        $itemName = trim((string)($_GET['item_name'] ?? ''));
+        $categoryFilter = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
+        if ($itemName === '') {
+            sendJson(['success' => false, 'error' => 'item_name required'], 400);
+        }
+
+        $db = Database::getInstance();
+        $soonLeadDaysRaw = inv_get_setting('inventory_soon_expire_lead_days', null);
+        $soonLeadDays = is_numeric($soonLeadDaysRaw) ? (int)$soonLeadDaysRaw : 7;
+        if ($soonLeadDays < 0) { $soonLeadDays = 0; }
+        $soonLeadDays = min($soonLeadDays, 365);
+
+        $params = [$itemName];
+        $catSql = '';
+        if ($categoryFilter === '') {
+            $catSql = " AND IFNULL(CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')), '') = ''";
+        } else {
+            $catSql = " AND IFNULL(CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')), '') = ?";
+            $params[] = $categoryFilter;
+        }
+
+        $sql = "SELECT 
+                    inv.inventory_id AS lot_id,
+                    inv.quantity,
+                    inv.added_at,
+                    di.expiry_date,
+                    COALESCE(u.label, u.code) AS unit
+                FROM inventory inv
+                INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                LEFT JOIN categories c ON c.category_id = di.category_id
+                LEFT JOIN units u ON u.unit_id = di.unit_id
+                WHERE di.product_name = ? {$catSql}
+                ORDER BY 
+                    CASE WHEN di.expiry_date IS NULL THEN 1 ELSE 0 END,
+                    di.expiry_date,
+                    inv.added_at";
+
+        $rows = $db->query($sql, $params)->fetchAll();
+
+        $today = new DateTime('today');
+        $lots = [];
+        foreach ($rows as $row) {
+            $status = 'In Stock';
+            $expiryDate = $row['expiry_date'] ?? null;
+            if (!empty($expiryDate)) {
+                try {
+                    $exp = new DateTime($expiryDate);
+                    if ($exp < $today) {
+                        $status = 'Expired';
+                    } else {
+                        $diff = (int)$today->diff($exp)->format('%r%a');
+                        if ($diff >= 0 && $diff <= $soonLeadDays) {
+                            $status = 'Expiring Soon';
+                        }
+                    }
+                } catch (Exception $e) {
+                    // leave status as default
+                }
+            }
+
+            $lots[] = [
+                'lot_id' => (int)($row['lot_id'] ?? 0),
+                'quantity' => (int)($row['quantity'] ?? 0),
+                'unit' => $row['unit'] ?? null,
+                'added_at' => $row['added_at'] ?? null,
+                'expiry_date' => $expiryDate,
+                'status' => $status,
+            ];
+        }
+
+        sendJson([
+            'success' => true,
+            'data' => [
+                'item_name' => $itemName,
+                'category' => $categoryFilter,
+                'lots' => $lots,
+            ],
+        ]);
+    }
+
     // GET /api/inventory/backfill-in?days=14
     // Admin-only: backfill missing 'in' movements for inventory lots created within the window
     if ($method === 'GET' && preg_match('#^/(backfill-in|backfill-in/)\z#', $sub)) {

@@ -23,11 +23,27 @@
       body: body ? JSON.stringify(body) : undefined,
     });
     const text = await res.text();
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new Error("Unexpected response: " + text.slice(0, 120));
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Unexpected response: " + text.slice(0, 120));
+      }
     }
+
+    const success = data && typeof data === "object" ? data.success : undefined;
+    if (!res.ok || success === false) {
+      const message =
+        (data && typeof data === "object" && (data.error || data.message)) ||
+        `Request failed (HTTP ${res.status})`;
+      const err = new Error(message);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+
+    return data;
   }
 
   // Categories
@@ -150,11 +166,18 @@
 
   // Assignment/Missing Metadata
   const assignmentBody = document.getElementById("assignmentTableBody");
-  const assignmentRefreshBtn = document.getElementById("assignmentRefreshBtn");
-  const assignmentCountBadge = document.getElementById("assignmentCountBadge");
+  const masterRefreshBtn = document.getElementById("masterRefreshBtn");
+  const masterSearchInput = document.getElementById("masterSearch");
+  const masterPageSizeSelect = document.getElementById("masterPageSize");
+  const masterPrevBtn = document.getElementById("masterPrevBtn");
+  const masterNextBtn = document.getElementById("masterNextBtn");
+  const masterPaginationInfo = document.getElementById("masterPaginationInfo");
+
+  let masterPage = 1;
+  let masterPageSize = masterPageSizeSelect ? parseInt(masterPageSizeSelect.value, 10) || 20 : 20;
+  let masterTotal = 0;
 
   const assignModalEl = document.getElementById("assignmentModal");
-  console.log("assignModalEl:", assignModalEl);
   const assignItemName = document.getElementById("assignItemName");
   const assignItemContext = document.getElementById("assignItemContext");
   const assignWeightInput = document.getElementById("assignWeightInput");
@@ -169,22 +192,17 @@
   let currentAssignment = null;
 
   function ensureAssignmentSelect2() {
-    if (
-      !$assignCategorySelect ||
-      !$assignCategorySelect.length ||
-      !$assignUnitSelect ||
-      !$assignUnitSelect.length
-    )
-      return;
-    const dropdownParent = assignModalEl ? window.jQuery(assignModalEl) : null;
+    if (!window.jQuery) return;
+    if (!$assignCategorySelect || !$assignCategorySelect.length) return;
+    if (!$assignUnitSelect || !$assignUnitSelect.length) return;
+    const dropdownParent = assignModalEl ? window.jQuery(assignModalEl) : undefined;
     if (!$assignCategorySelect.hasClass("select2-hidden-accessible")) {
       $assignCategorySelect.select2({
         tags: true,
         width: "100%",
+        dropdownParent,
         placeholder:
-          $assignCategorySelect.data("placeholder") ||
-          "Select or create category",
-        dropdownParent: dropdownParent || undefined,
+          $assignCategorySelect.data("placeholder") || "Select or create category",
         ajax: {
           delay: 250,
           url: API_BASE + "/categories",
@@ -204,7 +222,7 @@
           xhrFields: { withCredentials: true },
           cache: true,
         },
-        createTag: function (params) {
+        createTag: (params) => {
           const term = (params.term || "").trim();
           if (!term) return null;
           return { id: "newcat:" + term, text: term, newTag: true };
@@ -215,9 +233,9 @@
       $assignUnitSelect.select2({
         tags: true,
         width: "100%",
+        dropdownParent,
         placeholder:
           $assignUnitSelect.data("placeholder") || "Select or create unit",
-        dropdownParent: dropdownParent || undefined,
         ajax: {
           delay: 250,
           url: API_BASE + "/units",
@@ -235,7 +253,7 @@
           xhrFields: { withCredentials: true },
           cache: true,
         },
-        createTag: function (params) {
+        createTag: (params) => {
           const term = (params.term || "").trim();
           if (!term) return null;
           return { id: "newunit:" + term, text: term, newTag: true };
@@ -245,156 +263,228 @@
   }
 
   function openAssignmentModal(item) {
-    console.log("Opening assignment modal for item", item.product_name);
-    if (!assignModalEl) {
-      console.error("Assignment modal element not found");
-      return;
-    }
+    if (!assignModalEl || !item) return;
     ensureAssignmentSelect2();
-    const modal = new bootstrap.Modal(assignModalEl);
     currentAssignment = item;
     if (assignItemName)
       assignItemName.textContent = item.product_name || "Unnamed Item";
     if (assignItemContext)
-      assignItemContext.textContent = `Donation #${item.donation_id} · Item ID ${item.donation_item_id}`;
+      assignItemContext.textContent = `Donation #${item.donation_id || "—"} · Item ID ${item.donation_item_id}`;
     if (assignWeightInput)
-      assignWeightInput.value =
-        item.total_weight != null ? String(item.total_weight) : "";
-    if (assignFeedback) assignFeedback.textContent = "";
+      assignWeightInput.value = item.total_weight != null ? String(item.total_weight) : "";
     if ($assignCategorySelect) {
-      if ($assignCategorySelect.hasClass("select2-hidden-accessible")) {
-        $assignCategorySelect.val(null).trigger("change");
-        if (item.category_id) {
-          const label = item.category_label || "Category #" + item.category_id;
-          const option = new Option(
-            label,
-            "cat:" + item.category_id,
-            true,
-            true
-          );
-          $assignCategorySelect.append(option).trigger("change");
-        }
-      } else {
-        $assignCategorySelect.val(
-          item.category_id ? "cat:" + item.category_id : ""
-        );
+      $assignCategorySelect.val(null).trigger("change");
+      if (item.category_id && item.category_label) {
+        const opt = new Option(item.category_label, "cat:" + item.category_id, true, true);
+        $assignCategorySelect.append(opt).trigger("change");
       }
     }
     if ($assignUnitSelect) {
-      if ($assignUnitSelect.hasClass("select2-hidden-accessible")) {
-        $assignUnitSelect.val(null).trigger("change");
-        if (item.unit_id) {
-          const label = item.unit_label || "Unit #" + item.unit_id;
-          const option = new Option(label, "unit:" + item.unit_id, true, true);
-          $assignUnitSelect.append(option).trigger("change");
-        }
-      } else {
-        $assignUnitSelect.val(item.unit_id ? "unit:" + item.unit_id : "");
+      $assignUnitSelect.val(null).trigger("change");
+      if (item.unit_id && item.unit_label) {
+        const opt = new Option(item.unit_label, "unit:" + item.unit_id, true, true);
+        $assignUnitSelect.append(opt).trigger("change");
       }
     }
-    modal.show();
+    if (assignFeedback) assignFeedback.textContent = "";
+    new bootstrap.Modal(assignModalEl).show();
   }
 
-  async function loadAssignments() {
-    if (!assignmentBody) return;
-    assignmentBody.innerHTML =
-      '<tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr>';
+  async function loadSingleMissingItem(donationItemId) {
     try {
-      const data = await apiGet("/missing-metadata", {});
-      if (data && data.success === false) {
-        const msg = data.error
-          ? escapeHtml(data.error)
-          : "Failed to load items";
-        assignmentBody.innerHTML = `<tr><td colspan="7" class="text-danger py-3">${msg}</td></tr>`;
-        if (assignmentCountBadge) {
-          assignmentCountBadge.style.display = "none";
-          assignmentCountBadge.textContent = "";
-        }
+      const resp = await apiGet(`/missing-metadata/${donationItemId}`);
+      if (!resp?.success) {
+        const msg = resp?.error || "Failed to load item";
+        showToast(msg, "danger");
+        return null;
+      }
+      return resp.item;
+    } catch (err) {
+      showToast(String(err.message || err), "danger");
+      return null;
+    }
+  }
+
+  function formatDateString(value) {
+    if (!value) return "—";
+    try {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return value;
+      return d.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch (_) {
+      return value;
+    }
+  }
+
+  function formatNumber(value, decimals = 2) {
+    if (value === null || value === undefined || Number.isNaN(value)) return "—";
+    try {
+      return Number(value).toLocaleString(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      });
+    } catch (_) {
+      return String(value);
+    }
+  }
+
+  async function loadMasterItems(forcePage) {
+    if (!assignmentBody) return;
+    if (typeof forcePage === "number" && forcePage >= 1) {
+      masterPage = forcePage;
+    }
+    assignmentBody.innerHTML =
+      '<tr><td colspan="10" class="text-center text-muted py-3">Loading...</td></tr>';
+    try {
+      const query = masterSearchInput ? masterSearchInput.value.trim() : "";
+      const params = {
+        page: masterPage,
+        page_size: masterPageSize,
+      };
+      if (query) params.q = query;
+      const data = await apiGet("/master-items", params);
+      if (!data?.success) {
+        const msg = data?.error ? escapeHtml(data.error) : "Failed to load items";
+        assignmentBody.innerHTML = `<tr><td colspan="10" class="text-danger py-3">${msg}</td></tr>`;
+        updatePaginationUI(0, 0, 0);
         return;
       }
-      const items = Array.isArray(data?.items) ? data.items : [];
-      if (assignmentCountBadge) {
-        if (items.length > 0) {
-          assignmentCountBadge.textContent = String(items.length);
-          assignmentCountBadge.style.display = "";
-        } else {
-          assignmentCountBadge.style.display = "none";
-          assignmentCountBadge.textContent = "";
-        }
-      }
+      const items = Array.isArray(data.items) ? data.items : [];
+      const total = Number.isFinite(data.total) ? Number(data.total) : 0;
+      const page = Number.isFinite(data.page) ? Number(data.page) : 1;
+      const pageSize = Number.isFinite(data.page_size) ? Number(data.page_size) : masterPageSize;
+      masterTotal = total;
+      masterPage = page;
+      masterPageSize = pageSize > 0 ? pageSize : masterPageSize;
       if (!items.length) {
         assignmentBody.innerHTML =
-          '<tr><td colspan="7" class="text-center text-muted py-3">All items have metadata assigned.</td></tr>';
+          '<tr><td colspan="10" class="text-center text-muted py-3">No items found.</td></tr>';
+        updatePaginationUI(total, page, pageSize);
         return;
       }
+
       const rows = items
-        .map((it) => {
-          const donor = escapeHtml(it.donor_name || "—");
-          const missing = Array.isArray(it.missing)
-            ? it.missing.join(", ")
-            : "";
-          const missingHtml = missing
-            ? `<span class="badge text-bg-warning">${escapeHtml(
-                missing
+        .map((item) => {
+          const hasMissing = !!item.missing_any;
+          const statusBadge = hasMissing
+            ? `<span class="badge text-bg-warning">Missing: ${escapeHtml(
+                (item.missing_labels || []).join(", ") || "Metadata"
               )}</span>`
             : '<span class="badge text-bg-success">Complete</span>';
-          const submitted = it.submitted_at
-            ? new Date(it.submitted_at).toLocaleString()
-            : "—";
-          const expiry = it.expiry_date
-            ? new Date(it.expiry_date).toLocaleDateString()
-            : "—";
+          const rowClass = hasMissing ? "table-warning" : "";
+          const unitLabel = item.unit_label || item.unit_code || "—";
+          const totalWeight = item.total_weight_kg != null ? Number(item.total_weight_kg) : null;
+          const editBtn = item.sample_donation_item_id
+            ? `<button type="button" class="btn btn-sm btn-outline-primary" data-action="assign-edit" data-id="${item.sample_donation_item_id}">
+                <i class="bi bi-pencil"></i>
+              </button>`
+            : "";
+          const removeBtn = `<button type="button" class="btn btn-sm btn-outline-danger" data-action="assign-remove" data-product="${escapeHtml(
+            item.product_name || ""
+          )}"><i class="bi bi-trash"></i></button>`;
           return `
-          <tr>
-            <td>
-              <div class="fw-semibold">${escapeHtml(
-                it.product_name || "Unnamed Item"
-              )}</div>
-              <div class="small text-muted">Donation #${
-                it.donation_id || "—"
-              } · Item ID ${it.donation_item_id}</div>
-            </td>
-            <td>${missingHtml}</td>
-            <td>${donor}</td>
-            <td class="text-center">${it.quantity || 0}</td>
-            <td>${expiry}</td>
-            <td>${submitted}</td>
-            <td class="fit-content">
-              <button type="button" class="btn btn-sm btn-outline-primary" data-action="assign-edit" data-id="${
-                it.donation_item_id
-              }">Edit</button>
-            </td>
-          </tr>
-        `;
+            <tr class="${rowClass}">
+              <td>${escapeHtml(item.product_name || "—")}</td>
+              <td>${escapeHtml(item.primary_category || "—")}</td>
+              <td>${escapeHtml(item.secondary_category || "—")}</td>
+              <td>${escapeHtml(unitLabel)}</td>
+              <td class="text-end">${formatNumber(item.unit_cost, 2)}</td>
+              <td class="text-end">${formatNumber(totalWeight, 3)}</td>
+              <td>${formatDateString(item.first_recorded)}</td>
+              <td>${formatDateString(item.last_restocked)}</td>
+              <td>${statusBadge}</td>
+              <td class="text-center">
+                <div class="d-inline-flex gap-2">
+                  ${editBtn}
+                  ${removeBtn}
+                </div>
+              </td>
+            </tr>`;
         })
         .join("");
       assignmentBody.innerHTML = rows;
-      assignmentBody
-        .querySelectorAll('button[data-action="assign-edit"]')
-        .forEach((btn) => {
-          btn.addEventListener("click", () => {
-            console.log("Edit button clicked");
-            const id = parseInt(btn.getAttribute("data-id"), 10);
-            console.log("ID:", id);
-            const item = items.find((it) => Number(it.donation_item_id) === id);
-            console.log("Item:", item);
-            if (!item) return;
-            openAssignmentModal(item);
+      updatePaginationUI(total, page, pageSize);
+
+      Array.from(assignmentBody.querySelectorAll('button[data-action="assign-edit"]')).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = parseInt(btn.getAttribute("data-id") || "0", 10) || 0;
+          if (!id) return;
+          loadSingleMissingItem(id).then((item) => {
+            if (item) openAssignmentModal(item);
           });
         });
+      });
+      Array.from(assignmentBody.querySelectorAll('button[data-action="assign-remove"]')).forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const name = btn.getAttribute("data-product") || "";
+          if (!name) return;
+          const confirmed = confirm(
+            `This will remove all donation items for "${name}" that lack metadata. Continue?`
+          );
+          if (!confirmed) return;
+          try {
+            await apiSend("DELETE", `/master-items`, { product_name: name });
+            showToast(`Removed incomplete entries for ${name}`, "success");
+            loadMasterItems();
+          } catch (err) {
+            showToast(String(err.message || err), "danger");
+          }
+        });
+      });
     } catch (err) {
       assignmentBody.innerHTML =
-        '<tr><td colspan="7" class="text-danger py-3">Failed to load items</td></tr>';
+        '<tr><td colspan="10" class="text-danger py-3">Failed to load items</td></tr>';
       showToast(String(err.message || err), "danger");
+      updatePaginationUI(0, 0, masterPageSize);
     }
   }
 
-  if (assignmentRefreshBtn)
-    assignmentRefreshBtn.addEventListener("click", loadAssignments);
+  function updatePaginationUI(total, page, pageSize) {
+    if (masterPaginationInfo) {
+      if (!total) {
+        masterPaginationInfo.textContent = "Showing 0-0 of 0";
+      } else {
+        const start = (page - 1) * pageSize + 1;
+        const end = Math.min(start + pageSize - 1, total);
+        masterPaginationInfo.textContent = `Showing ${start}-${end} of ${total}`;
+      }
+    }
+    const hasPrev = page > 1;
+    const maxPage = pageSize > 0 ? Math.ceil(total / pageSize) : 1;
+    const hasNext = page < maxPage;
+    if (masterPrevBtn) masterPrevBtn.disabled = !hasPrev;
+    if (masterNextBtn) masterNextBtn.disabled = !hasNext;
+  }
+
+  if (masterRefreshBtn)
+    masterRefreshBtn.addEventListener("click", () => loadMasterItems(1));
+  if (masterSearchInput)
+    masterSearchInput.addEventListener("input", debounce(() => loadMasterItems(1), 300));
+  if (masterPageSizeSelect)
+    masterPageSizeSelect.addEventListener("change", () => {
+      const value = parseInt(masterPageSizeSelect.value, 10);
+      if (Number.isFinite(value) && value > 0) {
+        masterPageSize = value;
+        loadMasterItems(1);
+      }
+    });
+  if (masterPrevBtn)
+    masterPrevBtn.addEventListener("click", () => {
+      if (masterPage > 1) loadMasterItems(masterPage - 1);
+    });
+  if (masterNextBtn)
+    masterNextBtn.addEventListener("click", () => {
+      const maxPage = masterPageSize > 0 ? Math.ceil(masterTotal / masterPageSize) : 1;
+      if (masterPage < maxPage) loadMasterItems(masterPage + 1);
+    });
 
   const assignmentTabTrigger = document.getElementById("assignment-tab");
   if (assignmentTabTrigger) {
-    assignmentTabTrigger.addEventListener("shown.bs.tab", loadAssignments);
+    assignmentTabTrigger.addEventListener("shown.bs.tab", loadMasterItems);
   }
 
   function activateAssignmentTabFromHash() {
@@ -420,7 +510,7 @@
         let categoryPayload = {};
         if ($assignCategorySelect) {
           const val = $assignCategorySelect.val();
-          if (val && typeof val === "string") {
+          if (typeof val === "string" && val) {
             if (val.startsWith("cat:")) {
               categoryPayload.category_id = parseInt(val.slice(4), 10) || null;
             } else if (val.startsWith("newcat:")) {
@@ -431,7 +521,7 @@
         let unitPayload = {};
         if ($assignUnitSelect) {
           const val = $assignUnitSelect.val();
-          if (val && typeof val === "string") {
+          if (typeof val === "string" && val) {
             if (val.startsWith("unit:")) {
               unitPayload.unit_id = parseInt(val.slice(5), 10) || null;
             } else if (val.startsWith("newunit:")) {
@@ -439,9 +529,7 @@
             }
           }
         }
-        const weightRaw = assignWeightInput
-          ? assignWeightInput.value.trim()
-          : "";
+        const weightRaw = assignWeightInput ? assignWeightInput.value.trim() : "";
         const payload = Object.assign({}, categoryPayload, unitPayload, {
           weight: weightRaw === "" ? null : parseFloat(weightRaw),
         });
@@ -449,9 +537,7 @@
           `${API_BASE}/missing-metadata/${currentAssignment.donation_item_id}`,
           {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             credentials: "include",
             body: JSON.stringify(payload),
           }
@@ -469,9 +555,8 @@
           showToast(msg, "danger");
         } else {
           showToast("Metadata updated successfully", "success");
-          const modal = bootstrap.Modal.getInstance(assignModalEl);
-          if (modal) modal.hide();
-          loadAssignments();
+          bootstrap.Modal.getInstance(assignModalEl)?.hide();
+          loadMasterItems();
         }
       } catch (err) {
         const msg = String(err.message || err);
@@ -592,8 +677,9 @@
         hideModal(catEditModal);
         loadCategories();
       } catch (err) {
-        catEditFeedback.textContent = String(err.message || err);
-        showToast("Failed to save category", "danger");
+        catEditFeedback.textContent = "";
+        const message = String(err.message || err || "Failed to save category");
+        showToast(message, "danger");
       }
     });
 
@@ -664,8 +750,9 @@
         hideModal(unitEditModal);
         loadUnits();
       } catch (err) {
-        unitEditFeedback.textContent = String(err.message || err);
-        showToast("Failed to save unit", "danger");
+        unitEditFeedback.textContent = "";
+        const message = String(err.message || err || "Failed to save unit");
+        showToast(message, "danger");
       }
     });
 
@@ -680,5 +767,5 @@
   // Initial loads
   loadCategories();
   loadUnits();
-  loadAssignments();
+  loadMasterItems();
 })();

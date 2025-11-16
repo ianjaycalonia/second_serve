@@ -620,7 +620,7 @@
   function updateHeaderMeta(){
     try{
       const host = qs('#diCurrentWeek'); if (!host) return;
-      const base = diGetBaseDate(); const weekStart=getWeekStart(); const idx=planWeekIndexForDate(base);
+      const base = diGetBaseDate(); const weekStart=getWeekStart(); const idx=planWeekIndexByWeekStart(base);
       const month = `${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}`; const periodKey=`${month}-W${idx}`;
       const start=(function(){ const d=new Date(base); const target=(weekStart==='monday')?1:0; const dow=d.getDay(); const diff=(dow-target+7)%7; d.setDate(d.getDate()-diff); d.setHours(0,0,0,0); return d; })();
       const end=new Date(start); end.setDate(end.getDate()+6);

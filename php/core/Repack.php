@@ -186,6 +186,9 @@ class RepackService
             $inputMap[$cid] = $lots;
         }
 
+        $earliestExpiryTs = null;
+        $earliestExpiryValue = null;
+
         $this->db->beginTransaction();
         try {
             $this->db->query(
@@ -215,6 +218,20 @@ class RepackService
                     $snapshot = $this->fetchInventorySnapshot($inventoryId);
                     if ($quantity > (int)$snapshot['quantity']) {
                         throw new Exception('Insufficient quantity in inventory lot ' . $inventoryId);
+                    }
+
+                    $snapshotExpiry = $snapshot['expiry_date'] ?? null;
+                    if (!empty($snapshotExpiry)) {
+                        try {
+                            $exp = new DateTimeImmutable($snapshotExpiry);
+                            $ts = $exp->getTimestamp();
+                            if ($earliestExpiryTs === null || $ts < $earliestExpiryTs) {
+                                $earliestExpiryTs = $ts;
+                                $earliestExpiryValue = $exp->format('Y-m-d');
+                            }
+                        } catch (Exception $e) {
+                            // Ignore invalid expiry formats
+                        }
                     }
 
                     $this->inventory->moveOut($inventoryId, $quantity, $userId, 'repack', null, $note);
@@ -248,6 +265,8 @@ class RepackService
                 throw new Exception('Output quantity must be positive');
             }
 
+            $outputExpiry = $earliestExpiryValue;
+
             $this->db->query(
                 "INSERT INTO donations (batch_id, donor_id, admin_in_charge, procurement_type, donor_name, entry_date, remarks, status, created_at)
                  VALUES (NULL, NULL, ?, 'donated', ?, NOW(), ?, 'Completed', NOW())",
@@ -264,13 +283,14 @@ class RepackService
 
             $this->db->query(
                 'INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags, created_at)
-                 VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NOW())',
+                 VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NOW())',
                 [
                     $donationId,
                     $template['output_product_name'],
                     $template['output_category_id'] ?: null,
                     $outputQuantity,
                     $template['output_unit_id'] ?: null,
+                    $outputExpiry,
                     'Repack Kit',
                 ]
             );
@@ -610,7 +630,7 @@ class RepackService
     private function fetchInventorySnapshot(int $inventoryId): array
     {
         $row = $this->db->query(
-            "SELECT inv.inventory_id, inv.quantity, di.donation_item_id, di.product_name, di.category_id, di.unit_id,
+            "SELECT inv.inventory_id, inv.quantity, di.donation_item_id, di.product_name, di.category_id, di.unit_id, di.expiry_date,
                     cat.primary_name AS category_primary, cat.secondary_name,
                     COALESCE(un.label, un.code) AS unit_label
              FROM inventory inv

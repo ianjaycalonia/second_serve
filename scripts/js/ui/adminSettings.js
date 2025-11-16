@@ -4,7 +4,7 @@
   const CONFIGS = [
     { key: 'require_ack_checkbox', id: 'cfgMsgAckCheckbox', type: 'checkbox' },
     { key: 'inventory_soon_expire_lead_days', id: 'cfgSoonExpireLead', type: 'int', min: 0 },
-    { key: 'allocation_far_recipient_weight', id: 'cfgFarRecipientWeight', type: 'float', min: 0 },
+    { key: 'expiry_lead_time_days', id: 'cfgFarRecipientWeight', type: 'int', min: 0 },
     { key: 'distribution_distributable_percent', id: 'cfgDistributablePercent', type: 'percent' },
     { key: 'recipient_cancellation_hours', id: 'cfgCancellationHours', type: 'int', min: 0 }
   ];

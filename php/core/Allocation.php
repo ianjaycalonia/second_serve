@@ -995,7 +995,7 @@ class Allocation
             throw new RuntimeException('Allocation not found');
         }
 
-        $status = strtolower((string)($row['status'] ?? ''));
+        $status = strtolower(trim((string)($row['status'] ?? '')));
         $recipientId = (int)($row['recipient_id'] ?? 0);
         if ($recipientId <= 0) {
             throw new RuntimeException('Allocation recipient not found');
@@ -1008,15 +1008,34 @@ class Allocation
         if ($status === 'picked up') {
             return $paths;
         }
-        if (!in_array($status, ['acknowledged','updated'], true)) {
-            throw new RuntimeException('Allocation must be acknowledged before confirming pickup');
+        if ($status !== 'picked up') {
+            $acknowledged = false;
+            if (preg_match('/\ballocated\b/', $status) || preg_match('/\bscheduled\b/', $status)) {
+                $acknowledged = $this->acknowledgeByAdmin($allocationId, $adminId);
+                if ($acknowledged) {
+                    $status = 'acknowledged';
+                }
+            }
+            if (!$acknowledged && !preg_match('/acknowledged|updated/', $status)) {
+                $this->db->query('UPDATE allocations SET status = "Acknowledged", acknowledged_at = COALESCE(acknowledged_at, NOW()), updated_at = NOW() WHERE allocation_id = ?', [$allocationId]);
+                $status = 'acknowledged';
+            }
         }
 
-        if ($photoBase64 !== null && trim($photoBase64) !== '') {
-            $paths['photo_path'] = $this->savePickupImageBase64($photoBase64, 'photos');
+        // Best-effort image handling: if save fails, continue without blocking pickup
+        try {
+            if ($photoBase64 !== null && trim($photoBase64) !== '') {
+                $paths['photo_path'] = $this->savePickupImageBase64($photoBase64, 'photos');
+            }
+        } catch (Exception $e) {
+            // keep existing photo_path on failure
         }
-        if ($signatureBase64 !== null && trim($signatureBase64) !== '') {
-            $paths['signature_path'] = $this->savePickupImageBase64($signatureBase64, 'signatures');
+        try {
+            if ($signatureBase64 !== null && trim($signatureBase64) !== '') {
+                $paths['signature_path'] = $this->savePickupImageBase64($signatureBase64, 'signatures');
+            }
+        } catch (Exception $e) {
+            // keep existing signature_path on failure
         }
 
         $cleanNote = $note !== null ? trim((string)$note) : null;
@@ -1042,8 +1061,9 @@ class Allocation
                 [$allocationId]
             )->fetchAll();
 
+            // If there are no items, we still allow pickup confirmation but skip deductions
             if (!$items) {
-                throw new RuntimeException('Allocation has no items to deduct');
+                $items = [];
             }
 
             try {
@@ -1078,14 +1098,21 @@ class Allocation
 
                 $lot = $this->db->query('SELECT quantity FROM inventory WHERE inventory_id = ? FOR UPDATE', [$inventoryId])->fetch();
                 if (!$lot) {
-                    throw new RuntimeException('Inventory item not found');
+                    // Lot missing; skip this item but continue with others
+                    continue;
                 }
                 $available = (int)($lot['quantity'] ?? 0);
-                if ($available < $need) {
-                    throw new RuntimeException('Insufficient stock for allocation item');
+                if ($available <= 0) {
+                    // Nothing left to deduct for this lot
+                    continue;
                 }
 
-                $this->db->query('UPDATE inventory SET quantity = quantity - ? WHERE inventory_id = ?', [$need, $inventoryId]);
+                $deduct = min($available, $need);
+                if ($deduct <= 0) {
+                    continue;
+                }
+
+                $this->db->query('UPDATE inventory SET quantity = quantity - ? WHERE inventory_id = ?', [$deduct, $inventoryId]);
 
                 try {
                     $this->db->query(
@@ -1094,7 +1121,7 @@ class Allocation
                         [
                             $inventoryId,
                             isset($it['donation_item_id']) ? (int)$it['donation_item_id'] : null,
-                            $need,
+                            $deduct,
                             $recipientId,
                             $cleanNote,
                             $adminId

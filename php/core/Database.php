@@ -122,7 +122,16 @@ class Database {
      * Rollback transaction
      */
     public function rollBack() {
-        return $this->pdo->rollBack();
+        try {
+            if (!$this->pdo->inTransaction()) {
+                error_log("Rollback requested but no active transaction.");
+                return false;
+            }
+            return $this->pdo->rollBack();
+        } catch (PDOException $e) {
+            error_log("Rollback failed: " . $e->getMessage());
+            return false;
+        }
     }
 
     /**

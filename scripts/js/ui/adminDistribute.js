@@ -1402,18 +1402,40 @@ function annotateCardsWithWeeksEx(weeksEx){ try { return window.annotateCardsWit
     // Not used for indexing anymore; kept for reference
     const base=diGetBaseDate(); return [0,1,2,3].map(i=> new Date(base.getFullYear(), base.getMonth(), base.getDate()+i*7));
   }
-  function planWeekIndexByWeekStart(base){ try { return window.planWeekIndexByWeekStart(base); } catch(_){ return planWeekIndexForDate(base); } }
+  function planWeekIndexByWeekStart(base){
+    try { return window.planWeekIndexByWeekStart(base); } catch(_){
+      try {
+        const weekStart = getWeekStart();
+        const monthFirst = new Date(base.getFullYear(), base.getMonth(), 1);
+        monthFirst.setHours(0,0,0,0);
+        const wsDow = weekStart === 'monday' ? 1 : 0;
+        const firstDow = monthFirst.getDay();
+        const offset = (firstDow - wsDow + 7) % 7;
+        const firstWeekStart = new Date(monthFirst.getFullYear(), monthFirst.getMonth(), 1 - offset);
+        const starts = [0,1,2,3].map(i => new Date(firstWeekStart.getFullYear(), firstWeekStart.getMonth(), firstWeekStart.getDate() + i * 7));
+        const target = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+        target.setHours(0,0,0,0);
+        for (let i = 0; i < starts.length; i++){
+          const start = new Date(starts[i]);
+          const end = new Date(start);
+          end.setDate(start.getDate() + 6);
+          if (target >= start && target <= end) return i + 1;
+        }
+      } catch(_){ }
+      const fallback = planWeekIndexForDate(base);
+      return fallback < 1 ? 1 : fallback > 4 ? 4 : fallback;
+    } }
   // Compute current week bucket using FIXED buckets (1-7=W1, 8-14=W2, 15-21=W3, 22+=W4)
-  function resolveCurrentWeekBucket(){ try { return window.resolveCurrentWeekBucket(); } catch(_){ const idx = planWeekIndexForDate(diGetBaseDate()); return idx===1?'W1':idx===2?'W2':idx===3?'W3':'W4'; } }
+  function resolveCurrentWeekBucket(){ try { return window.resolveCurrentWeekBucket(); } catch(_){ const idx = planWeekIndexByWeekStart(diGetBaseDate()); return idx===1?'W1':idx===2?'W2':idx===3?'W3':'W4'; } }
 
   // Use today's date (not #diBaseDate) for selection logic to avoid stale input forcing W1
-  function getCurrentBucketNow(){ try { return window.getCurrentBucketNow(); } catch(_){ const idx = planWeekIndexForDate(new Date()); return idx===1?'W1':idx===2?'W2':idx===3?'W3':'W4'; } }
+  function getCurrentBucketNow(){ try { return window.getCurrentBucketNow(); } catch(_){ const idx = planWeekIndexByWeekStart(new Date()); return idx===1?'W1':idx===2?'W2':idx===3?'W3':'W4'; } }
 
-  // Build a period_key from base date using FIXED buckets (W1..W4)
-  function getPeriodKeyFromInputs(){ try { return window.getPeriodKeyFromInputs(); } catch(_){ const base=diGetBaseDate(); const month=`${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}`; const idx=planWeekIndexForDate(base); return `${month}-W${idx}`; } }
+  // Build a period_key from base date using week-start aware indexing
+  function getPeriodKeyFromInputs(){ try { return window.getPeriodKeyFromInputs(); } catch(_){ const base=diGetBaseDate(); const month=`${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}`; const idx=planWeekIndexByWeekStart(base); return `${month}-W${idx}`; } }
 
-  // Compute the previous period key using FIXED week index (if current is W1, go to previous month W4)
-  function getPreviousPeriodKey(){ try { return window.getPreviousPeriodKey(); } catch(_){ const base=diGetBaseDate(); let year=base.getFullYear(); let monthNum=base.getMonth()+1; const idx=planWeekIndexForDate(base); let prevIdx=idx-1; if (prevIdx<1){ prevIdx=4; monthNum-=1; if (monthNum<1){ monthNum=12; year-=1; } } const mm=String(monthNum).padStart(2,'0'); return `${year}-${mm}-W${prevIdx}`; } }
+  // Compute the previous period key using week-start aware indexing
+  function getPreviousPeriodKey(){ try { return window.getPreviousPeriodKey(); } catch(_){ const base = diGetBaseDate(); const weekStart=getWeekStart(); const idx=planWeekIndexByWeekStart(base); let prevIdx=idx-1; if (prevIdx<1){ prevIdx=4; } const monthNum=base.getMonth()+1; if (prevIdx===4){ monthNum-=1; if (monthNum<1){ monthNum=12; const year=base.getFullYear(); year-=1; } } const mm=String(monthNum).padStart(2,'0'); const year=base.getFullYear(); return `${year}-${mm}-W${prevIdx}`; } }
 
   // Query server to compute previous week carryovers and expose them globally
   async function finalizeCurrentWeekIfPossible(){ try { return await window.finalizeCurrentWeekIfPossible(); } catch(_){ } }
