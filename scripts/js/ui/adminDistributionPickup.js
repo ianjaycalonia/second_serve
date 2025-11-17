@@ -138,6 +138,13 @@
       }
       if (runs.length) {
         runs = sortRunsDescending(runs);
+        const expectedPk = getCurrentPeriodKey();
+        if (expectedPk){
+          const match = runs.find(r => String(r.period_key || '').trim() === expectedPk);
+          if (match && match.run_id) {
+            return Number(match.run_id);
+          }
+        }
         return runs[0]?.run_id ? Number(runs[0].run_id) : null;
       }
       if (runs.length) {
@@ -190,6 +197,18 @@
     const match = /^([0-9]{4})-([0-9]{2})-W([1-5])$/i.exec(String(key || '').trim());
     if (!match) return null;
     return { year: Number(match[1]), month: Number(match[2]), week: Number(match[3]) };
+  }
+
+  function getCurrentPeriodKey(){
+    try {
+      const d = new Date();
+      const day = d.getDate();
+      const idx = day <= 7 ? 1 : day <= 14 ? 2 : day <= 21 ? 3 : 4;
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return `${d.getFullYear()}-${mm}-W${idx}`;
+    } catch(_){
+      return '';
+    }
   }
 
   function sortRunsDescending(list){

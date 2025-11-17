@@ -907,9 +907,17 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         if (!ids.length){ return; }
         // 1) Create a run
         const apiBase = (typeof API_BASE_URL === 'string' && API_BASE_URL) ? API_BASE_URL : '/php/api';
+        let periodKey = null;
+        try {
+          if (typeof window.diGetPeriodKey === 'function') {
+            periodKey = window.diGetPeriodKey();
+          } else if (typeof window.getPeriodKeyFromInputs === 'function') {
+            periodKey = window.getPeriodKeyFromInputs();
+          }
+        } catch(_){ }
         const runRes = await fetch(`${apiBase}/allocations/index.php?action=create_run`, {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ note: 'Allocate Now from DistributeItems', period_key: null })
+          body: JSON.stringify({ note: 'Allocate Now from DistributeItems', period_key: periodKey || null })
         });
         const runJ = await runRes.json().catch(()=>null);
         const runId = (runRes.ok && runJ?.success && runJ?.data?.run_id) ? parseInt(runJ.data.run_id,10)||0 : 0;

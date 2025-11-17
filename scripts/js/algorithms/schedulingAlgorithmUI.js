@@ -620,10 +620,17 @@
   function updateHeaderMeta(){
     try{
       const host = qs('#diCurrentWeek'); if (!host) return;
-      const base = diGetBaseDate(); const weekStart=getWeekStart(); const idx=planWeekIndexByWeekStart(base);
-      const month = `${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}`; const periodKey=`${month}-W${idx}`;
-      const start=(function(){ const d=new Date(base); const target=(weekStart==='monday')?1:0; const dow=d.getDay(); const diff=(dow-target+7)%7; d.setDate(d.getDate()-diff); d.setHours(0,0,0,0); return d; })();
-      const end=new Date(start); end.setDate(end.getDate()+6);
+      const base = diGetBaseDate();
+      // Use the same fixed month buckets as Scheduling.getPeriodKeyFromDate / weekIndexForDate
+      const idx = (window.Scheduling && typeof window.Scheduling.weekIndexForDate === 'function')
+        ? window.Scheduling.weekIndexForDate(base)
+        : planWeekIndexForDate(base);
+      const month = `${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}`;
+      const periodKey = `${month}-W${idx}`;
+      const startDay = idx===1 ? 1 : idx===2 ? 8 : idx===3 ? 15 : 22;
+      const start = new Date(base.getFullYear(), base.getMonth(), startDay);
+      start.setHours(0,0,0,0);
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate()+6);
       const fmt=(d)=> `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       host.textContent = `Current week: W${idx} • ${periodKey} • ${fmt(start)} to ${fmt(end)}`;
     } catch(_){ }
