@@ -62,6 +62,14 @@ document.addEventListener('DOMContentLoaded', function(){
     const recipWrap = document.getElementById('wrapBeneficiaryCategory');
     const positionField = document.getElementById('positionField');
     const positionInput = document.getElementById('registerPosition');
+    const fullNameWrap = document.getElementById('wrapFullName');
+    const recipNameWrap = document.getElementById('wrapRecipientName');
+    const addrTextareaWrap = document.getElementById('wrapAddressTextarea');
+    const recipAddrPartsWrap = document.getElementById('wrapRecipientAddressParts');
+    const populationWrap = document.getElementById('wrapPopulationServed');
+    const beneficiarySelect = document.getElementById('registerBeneficiaryCategory');
+    const detailsWrapper = document.getElementById('registerDetailsWrapper');
+
     const toggleHiddenClass = (el, show) => {
         if (!el) return;
         if (show) {
@@ -72,16 +80,36 @@ document.addEventListener('DOMContentLoaded', function(){
     };
     const updateVis = () => {
         const v = (roleSel?.value||'').toLowerCase();
-        toggleHiddenClass(donorWrap, v === 'donor');
-        toggleHiddenClass(recipWrap, v === 'recipient');
+        const isDonor = v === 'donor';
+        const isRecipient = v === 'recipient';
+        const hasRole = isDonor || isRecipient;
+
+        toggleHiddenClass(detailsWrapper, hasRole);
+
+        toggleHiddenClass(donorWrap, isDonor);
+        toggleHiddenClass(recipWrap, isRecipient);
+
         if (positionField && positionInput) {
-            if (v === 'recipient') {
+            if (isRecipient) {
                 toggleHiddenClass(positionField, true);
                 positionInput.required = true;
             } else {
                 toggleHiddenClass(positionField, false);
                 positionInput.required = false;
                 positionInput.classList.remove('is-invalid');
+            }
+        }
+
+        toggleHiddenClass(fullNameWrap, !isRecipient);
+        toggleHiddenClass(recipNameWrap, isRecipient);
+        toggleHiddenClass(addrTextareaWrap, !isRecipient);
+        toggleHiddenClass(recipAddrPartsWrap, isRecipient);
+        toggleHiddenClass(populationWrap, isRecipient);
+
+        if (beneficiarySelect) {
+            beneficiarySelect.required = isRecipient;
+            if (!isRecipient) {
+                beneficiarySelect.classList.remove('is-invalid');
             }
         }
     };
@@ -267,6 +295,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 const registerFormEl = document.getElementById('registerForm');
                 if (registerFormEl) registerFormEl.reset();
             } catch (_) { /* ignore reset errors */ }
+
+            // Reset role selection and hide registration details back to default
+            try {
+                const roleSel = document.getElementById('registerRole');
+                if (roleSel) {
+                    roleSel.value = '';
+                    roleSel.dispatchEvent(new Event('change'));
+                }
+            } catch (_) { /* ignore */ }
 
             document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
             document.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
@@ -494,12 +531,37 @@ document.addEventListener('DOMContentLoaded', function() {
         registerForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const name = document.getElementById('registerName').value.trim();
+            const role = document.getElementById('registerRole').value;
+            let name = document.getElementById('registerName').value.trim();
             const email = document.getElementById('registerEmail').value.trim();
             const password = document.getElementById('registerPassword').value;
             const confirmPassword = document.getElementById('registerConfirmPassword').value;
-            const role = document.getElementById('registerRole').value;
             const submitBtn = this.querySelector('button[type="submit"]');
+
+            // For recipients, compose full name and address from split fields
+            if (role === 'recipient') {
+                const first = (document.getElementById('registerFirstName')?.value || '').trim();
+                const middle = (document.getElementById('registerMiddleInitial')?.value || '').trim();
+                const last = (document.getElementById('registerLastName')?.value || '').trim();
+                const suffix = (document.getElementById('registerSuffix')?.value || '').trim();
+                if (first || middle || last || suffix) {
+                    const parts = [];
+                    if (first) parts.push(first);
+                    if (middle) parts.push(middle.replace(/\.+$/g, '') + '.');
+                    if (last) parts.push(last);
+                    if (suffix) parts.push(suffix);
+                    name = parts.join(' ').replace(/\s+/g, ' ').trim();
+                    const nameInput = document.getElementById('registerName');
+                    if (nameInput) nameInput.value = name;
+                }
+
+                const brgy = (document.getElementById('registerBarangay')?.value || '').trim();
+                const city = (document.getElementById('registerCity')?.value || '').trim();
+                const addrInput = document.getElementById('registerAddress');
+                if (addrInput && (brgy || city)) {
+                    addrInput.value = [brgy, city].filter(Boolean).join(', ');
+                }
+            }
             
             // Clear previous errors
             ['registerName', 'registerEmail', 'registerPassword', 'registerConfirmPassword', 'registerRole'].forEach(clearError);
@@ -539,6 +601,15 @@ document.addEventListener('DOMContentLoaded', function() {
             // Determine optional taxonomy fields based on role
             const donorCategoryId = role === 'donor' ? Number(document.getElementById('registerDonorCategory')?.value || '') || undefined : undefined;
             const beneficiaryCategoryId = role === 'recipient' ? Number(document.getElementById('registerBeneficiaryCategory')?.value || '') || undefined : undefined;
+            // Recipient population (Population Served)
+            let totalResidents;
+            if (role === 'recipient') {
+                const rawPop = document.getElementById('registerPopulation')?.value || '';
+                const n = Number(rawPop);
+                if (rawPop !== '' && Number.isFinite(n) && n >= 0) {
+                    totalResidents = n;
+                }
+            }
 
             // Call register API
             $.ajax({
@@ -554,7 +625,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     contact_number: document.getElementById('registerContact').value.trim() || undefined,
                     address: document.getElementById('registerAddress').value.trim() || undefined,
                     donor_category_id: donorCategoryId,
-                    beneficiary_category_id: beneficiaryCategoryId
+                    beneficiary_category_id: beneficiaryCategoryId,
+                    total_residents: totalResidents
                 }),
                 contentType: 'application/json',
                 dataType: 'json',

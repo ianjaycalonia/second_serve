@@ -63,11 +63,6 @@
             <i class="bi bi-person me-2"></i>Profile
           </a>
         </li>
-        <li>
-          <a class="dropdown-item" href="donorSettings.html">
-            <i class="bi bi-gear me-2"></i>Settings
-          </a>
-        </li>
         <li><hr class="dropdown-divider" /></li>
         <li>
           <a class="dropdown-item text-danger logout-btn" href="#">
@@ -79,11 +74,6 @@
         <li>
           <a class="dropdown-item" href="recipientProfile.html">
             <i class="bi bi-person me-2"></i>Profile
-          </a>
-        </li>
-        <li>
-          <a class="dropdown-item" href="recipientSettings.html">
-            <i class="bi bi-gear me-2"></i>Settings
           </a>
         </li>
         <li><hr class="dropdown-divider" /></li>

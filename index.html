@@ -335,162 +335,270 @@
                       <option value="recipient">Recipient Organization</option>
                     </select>
                   </div>
-                  <div class="mb-3">
-                    <label for="registerName" class="form-label"
-                      >Full Name <span class="text-danger">*</span></label
-                    >
-                    <input
-                      type="text"
-                      class="form-control"
-                      id="registerName"
-                      required
-                    />
-                    <div class="invalid-feedback">Please provide your full name</div>
-                  </div>
-                  <div class="mb-3 d-none" id="positionField">
-                    <label for="registerPosition" class="form-label"
-                      >Position/Designation <span class="text-danger">*</span></label
-                    >
-                    <input
-                      type="text"
-                      class="form-control"
-                      id="registerPosition"
-                      placeholder="e.g., Program Coordinator"
-                    />
-                    <div class="invalid-feedback">Please provide your position/designation</div>
-                  </div>
-                  <div class="mb-3">
-                    <label for="registerEmail" class="form-label"
-                      >Email address</label
-                    >
-                    <input
-                      type="email"
-                      class="form-control"
-                      id="registerEmail"
-                      required
-                    />
-                  </div>
-                  <div class="mb-3">
-                    <label for="registerPassword" class="form-label"
-                      >Password</label
-                    >
-                    <div class="input-group">
+                  <div id="registerDetailsWrapper" class="d-none">
+                  <div class="border rounded-3 p-3 mb-3">
+                    <h6 class="mb-2">Organization details</h6>
+                    <div class="mb-3">
+                      <label for="registerOrganization" class="form-label"
+                        >Organization Name <span class="text-danger">*</span></label
+                      >
                       <input
-                        type="password"
+                        type="text"
                         class="form-control"
-                        id="registerPassword"
+                        id="registerOrganization"
+                        placeholder="e.g., ABC Corp / Community Org"
                         required
                       />
-                      <button
-                        type="button"
-                        class="btn btn-outline-secondary"
-                        id="registerPasswordToggle"
-                        data-password-toggle="registerPassword"
-                        aria-label="Toggle password visibility"
-                      >
-                        <i class="bi bi-eye"></i>
-                      </button>
+                      <div class="invalid-feedback">
+                        Please provide your organization name
+                      </div>
                     </div>
                     <div
-                      id="registerPasswordCapsHint"
-                      class="form-text text-danger d-none"
+                      class="mb-3 d-none"
+                      id="wrapDonorCategory"
                     >
-                      Caps Lock is on
+                      <label for="registerDonorCategory" class="form-label"
+                        >Donor Category (optional)</label
+                      >
+                      <select class="form-select" id="registerDonorCategory">
+                        <option value="">Select a category</option>
+                      </select>
+                    </div>
+                    <div
+                      class="mb-3 d-none"
+                      id="wrapBeneficiaryCategory"
+                    >
+                      <label
+                        for="registerBeneficiaryCategory"
+                        class="form-label"
+                        >Org Category <span class="text-danger">*</span></label
+                      >
+                      <select
+                        class="form-select"
+                        id="registerBeneficiaryCategory"
+                      >
+                        <option value="">Select a category</option>
+                      </select>
+                    </div>
+                    <div
+                      class="mb-3 d-none"
+                      id="wrapPopulationServed"
+                    >
+                      <label for="registerPopulation" class="form-label"
+                        >Population Served</label
+                      >
+                      <input
+                        type="number"
+                        min="0"
+                        class="form-control"
+                        id="registerPopulation"
+                        inputmode="numeric"
+                      />
+                    </div>
+                    <div
+                      class="row g-2 mb-3 d-none"
+                      id="wrapRecipientAddressParts"
+                    >
+                      <div class="col-12 col-md-6">
+                        <label for="registerBarangay" class="form-label"
+                          >Barangay</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="registerBarangay"
+                          placeholder="Barangay"
+                        />
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label for="registerCity" class="form-label"
+                          >City / Municipality</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="registerCity"
+                          placeholder="City or Municipality"
+                        />
+                      </div>
+                    </div>
+                    <div class="mb-3" id="wrapAddressTextarea">
+                      <label for="registerAddress" class="form-label"
+                        >Address <span class="text-danger">*</span></label
+                      >
+                      <textarea
+                        class="form-control"
+                        id="registerAddress"
+                        rows="2"
+                        placeholder="Street, City, Province"
+                        required
+                      ></textarea>
+                      <div class="invalid-feedback">
+                        Please provide your complete address
+                      </div>
                     </div>
                   </div>
-                  <div class="mb-3">
-                    <label for="registerConfirmPassword" class="form-label"
-                      >Confirm Password</label
-                    >
-                    <div class="input-group">
+
+                  <div class="border rounded-3 p-3 mb-3">
+                    <h6 class="mb-2">Representative details</h6>
+                    <div class="mb-3" id="wrapFullName">
+                      <label for="registerName" class="form-label"
+                        >Full Name <span class="text-danger">*</span></label
+                      >
                       <input
-                        type="password"
+                        type="text"
                         class="form-control"
-                        id="registerConfirmPassword"
+                        id="registerName"
                         required
                       />
-                      <button
-                        type="button"
-                        class="btn btn-outline-secondary"
-                        id="registerConfirmPasswordToggle"
-                        data-password-toggle="registerConfirmPassword"
-                        aria-label="Toggle password visibility"
+                      <div class="invalid-feedback">
+                        Please provide your full name
+                      </div>
+                    </div>
+                    <div class="mb-3 d-none" id="wrapRecipientName">
+                      <label class="form-label"
+                        >Name of Representative
+                        <span class="text-danger">*</span></label
                       >
-                        <i class="bi bi-eye"></i>
-                      </button>
+                      <div class="row g-2">
+                        <div class="col-12 col-md-4">
+                          <input
+                            type="text"
+                            class="form-control"
+                            id="registerFirstName"
+                            placeholder="First name"
+                          />
+                        </div>
+                        <div class="col-4 col-md-2">
+                          <input
+                            type="text"
+                            class="form-control"
+                            id="registerMiddleInitial"
+                            maxlength="2"
+                            placeholder="M.I."
+                          />
+                        </div>
+                        <div class="col-8 col-md-4">
+                          <input
+                            type="text"
+                            class="form-control"
+                            id="registerLastName"
+                            placeholder="Last name"
+                          />
+                        </div>
+                        <div class="col-4 col-md-2">
+                          <input
+                            type="text"
+                            class="form-control"
+                            id="registerSuffix"
+                            placeholder="Suffix"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div
-                      id="registerConfirmCapsHint"
-                      class="form-text text-danger d-none"
-                    >
-                      Caps Lock is on
+                    <div class="mb-3 d-none" id="positionField">
+                      <label for="registerPosition" class="form-label"
+                        >Position/Designation
+                        <span class="text-danger">*</span></label
+                      >
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="registerPosition"
+                        placeholder="e.g., Program Coordinator"
+                      />
+                      <div class="invalid-feedback">
+                        Please provide your position/designation
+                      </div>
+                    </div>
+                    <div class="mb-3">
+                      <label for="registerContact" class="form-label"
+                        >Contact Number
+                        <span class="text-danger">*</span></label
+                      >
+                      <input
+                        type="tel"
+                        class="form-control"
+                        id="registerContact"
+                        placeholder="e.g., 0917 123 4567"
+                        required
+                        pattern="[0-9+\s-]+"
+                      />
+                      <div class="invalid-feedback">
+                        Please provide a valid contact number
+                      </div>
+                    </div>
+                    <div class="mb-3">
+                      <label for="registerEmail" class="form-label"
+                        >Email address</label
+                      >
+                      <input
+                        type="email"
+                        class="form-control"
+                        id="registerEmail"
+                        required
+                      />
+                    </div>
+                    <div class="mb-3">
+                      <label for="registerPassword" class="form-label"
+                        >Password</label
+                      >
+                      <div class="input-group">
+                        <input
+                          type="password"
+                          class="form-control"
+                          id="registerPassword"
+                          required
+                        />
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary"
+                          id="registerPasswordToggle"
+                          data-password-toggle="registerPassword"
+                          aria-label="Toggle password visibility"
+                        >
+                          <i class="bi bi-eye"></i>
+                        </button>
+                      </div>
+                      <div
+                        id="registerPasswordCapsHint"
+                        class="form-text text-danger d-none"
+                      >
+                        Caps Lock is on
+                      </div>
+                    </div>
+                    <div class="mb-3">
+                      <label
+                        for="registerConfirmPassword"
+                        class="form-label"
+                        >Confirm Password</label
+                      >
+                      <div class="input-group">
+                        <input
+                          type="password"
+                          class="form-control"
+                          id="registerConfirmPassword"
+                          required
+                        />
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary"
+                          id="registerConfirmPasswordToggle"
+                          data-password-toggle="registerConfirmPassword"
+                          aria-label="Toggle password visibility"
+                        >
+                          <i class="bi bi-eye"></i>
+                        </button>
+                      </div>
+                      <div
+                        id="registerConfirmCapsHint"
+                        class="form-text text-danger d-none"
+                      >
+                        Caps Lock is on
+                      </div>
                     </div>
                   </div>
-                  <div
-                    class="mb-3 d-none"
-                    id="wrapDonorCategory"
-                  >
-                    <label for="registerDonorCategory" class="form-label"
-                      >Donor Category (optional)</label
-                    >
-                    <select class="form-select" id="registerDonorCategory">
-                      <option value="">Select a category</option>
-                    </select>
-                  </div>
-                  <div
-                    class="mb-3 d-none"
-                    id="wrapBeneficiaryCategory"
-                  >
-                    <label for="registerBeneficiaryCategory" class="form-label"
-                      >Beneficiary Category (optional)</label
-                    >
-                    <select
-                      class="form-select"
-                      id="registerBeneficiaryCategory"
-                    >
-                      <option value="">Select a category</option>
-                    </select>
-                  </div>
-                  <div class="mb-3">
-                    <label for="registerOrganization" class="form-label"
-                      >Organization Name <span class="text-danger">*</span></label
-                    >
-                    <input
-                      type="text"
-                      class="form-control"
-                      id="registerOrganization"
-                      placeholder="e.g., ABC Corp / Community Org"
-                      required
-                    />
-                    <div class="invalid-feedback">Please provide your organization name</div>
-                  </div>
-                  <div class="mb-3">
-                    <label for="registerContact" class="form-label"
-                      >Contact Number <span class="text-danger">*</span></label
-                    >
-                    <input
-                      type="tel"
-                      class="form-control"
-                      id="registerContact"
-                      placeholder="e.g., 0917 123 4567"
-                      required
-                      pattern="[0-9+\s-]+"
-                    />
-                    <div class="invalid-feedback">Please provide a valid contact number</div>
-                  </div>
-                  <div class="mb-3">
-                    <label for="registerAddress" class="form-label"
-                      >Address <span class="text-danger">*</span></label
-                    >
-                    <textarea
-                      class="form-control"
-                      id="registerAddress"
-                      rows="2"
-                      placeholder="Street, City, Province"
-                      required
-                    ></textarea>
-                    <div class="invalid-feedback">Please provide your complete address</div>
-                  </div>
+
                   <div class="d-grid gap-2">
                     <button type="submit" class="btn btn-success">
                       Create Account

@@ -168,6 +168,12 @@ class Auth {
             throw new Exception('Invalid user role');
         }
 
+        $totalResidents = null;
+        if ($data['role'] === 'recipient' && array_key_exists('total_residents', $data) && $data['total_residents'] !== '' && $data['total_residents'] !== null) {
+            $totalResidents = (int)$data['total_residents'];
+            if ($totalResidents < 0) { $totalResidents = null; }
+        }
+
         $user = $this->register(
             $data['name'],
             $data['email'],
@@ -178,7 +184,8 @@ class Auth {
             $data['contact_number'] ?? null,
             $data['address'] ?? null,
             isset($data['donor_category_id']) ? (int)$data['donor_category_id'] : null,
-            isset($data['beneficiary_category_id']) ? (int)$data['beneficiary_category_id'] : null
+            isset($data['beneficiary_category_id']) ? (int)$data['beneficiary_category_id'] : null,
+            $totalResidents
         );
 
         // Auto-login only if status is approved; otherwise return pending status
@@ -204,7 +211,7 @@ class Auth {
         ];
     }
 
-    public function register(string $name, string $email, string $password, string $role, ?string $organization_name = null, ?string $organization_type = null, ?string $contact_number = null, ?string $address = null, ?int $donor_category_id = null, ?int $beneficiary_category_id = null): array {
+    public function register(string $name, string $email, string $password, string $role, ?string $organization_name = null, ?string $organization_type = null, ?string $contact_number = null, ?string $address = null, ?int $donor_category_id = null, ?int $beneficiary_category_id = null, ?int $total_residents = null): array {
         // Ensure email not taken
         $existing = $this->db->query(
             'SELECT user_id FROM users WHERE email = ?',
@@ -229,16 +236,16 @@ class Auth {
             );
             // Insert profile according to role
             if ($role === 'recipient') {
-                // Insert base recipient profile (align to schema: no organization_type column)
+                // Insert base recipient profile (align to schema: include optional total_residents)
                 if ($beneficiary_category_id) {
                     $this->db->query(
-                        'INSERT INTO recipient_profiles (user_id, organization_name, beneficiary_category_id, address) VALUES (?,?,?,?)',
-                        [$userId, $organization_name, $beneficiary_category_id, $address]
+                        'INSERT INTO recipient_profiles (user_id, organization_name, beneficiary_category_id, address, total_residents) VALUES (?,?,?,?,?)',
+                        [$userId, $organization_name, $beneficiary_category_id, $address, $total_residents]
                     );
                 } else {
                     $this->db->query(
-                        'INSERT INTO recipient_profiles (user_id, organization_name, address) VALUES (?,?,?)',
-                        [$userId, $organization_name, $address]
+                        'INSERT INTO recipient_profiles (user_id, organization_name, address, total_residents) VALUES (?,?,?,?)',
+                        [$userId, $organization_name, $address, $total_residents]
                     );
                 }
                 // If contact info provided, create a primary recipient contact and set primary_contact_id
