@@ -201,6 +201,8 @@ class RepackService
                 throw new Exception('Failed to create repack operation');
             }
 
+            $totalInputWeight = 0.0;
+
             foreach ($componentsMap as $componentId => $component) {
                 $requiredFloat = (float)$component['quantity_per_kit'] * $kitsProduced;
                 $required = $this->assertIntegerQuantity($requiredFloat, 'component ' . $componentId);
@@ -218,6 +220,16 @@ class RepackService
                     $snapshot = $this->fetchInventorySnapshot($inventoryId);
                     if ($quantity > (int)$snapshot['quantity']) {
                         throw new Exception('Insufficient quantity in inventory lot ' . $inventoryId);
+                    }
+
+                    // Accumulate input weight using donation_items.total_weight when available
+                    if (isset($snapshot['total_weight']) && isset($snapshot['donation_quantity'])) {
+                        $donQty = (float)$snapshot['donation_quantity'];
+                        $donWeight = (float)$snapshot['total_weight'];
+                        if ($donQty > 0 && $donWeight > 0) {
+                            $perUnitWeight = $donWeight / $donQty;
+                            $totalInputWeight += $perUnitWeight * $quantity;
+                        }
                     }
 
                     $snapshotExpiry = $snapshot['expiry_date'] ?? null;
@@ -265,6 +277,8 @@ class RepackService
                 throw new Exception('Output quantity must be positive');
             }
 
+            $totalOutputWeight = $totalInputWeight > 0 ? round($totalInputWeight, 3) : null;
+
             $outputExpiry = $earliestExpiryValue;
 
             $this->db->query(
@@ -283,13 +297,14 @@ class RepackService
 
             $this->db->query(
                 'INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags, created_at)
-                 VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NOW())',
+                 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NOW())',
                 [
                     $donationId,
                     $template['output_product_name'],
                     $template['output_category_id'] ?: null,
                     $outputQuantity,
                     $template['output_unit_id'] ?: null,
+                    $totalOutputWeight,
                     $outputExpiry,
                     'Repack Kit',
                 ]
@@ -630,8 +645,17 @@ class RepackService
     private function fetchInventorySnapshot(int $inventoryId): array
     {
         $row = $this->db->query(
-            "SELECT inv.inventory_id, inv.quantity, di.donation_item_id, di.product_name, di.category_id, di.unit_id, di.expiry_date,
-                    cat.primary_name AS category_primary, cat.secondary_name,
+            "SELECT inv.inventory_id,
+                    inv.quantity,
+                    di.donation_item_id,
+                    di.product_name,
+                    di.category_id,
+                    di.unit_id,
+                    di.expiry_date,
+                    di.total_weight,
+                    di.quantity AS donation_quantity,
+                    cat.primary_name AS category_primary,
+                    cat.secondary_name,
                     COALESCE(un.label, un.code) AS unit_label
              FROM inventory inv
              INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id

@@ -2,6 +2,9 @@
 /**
  * Auth core: handles authentication-related business logic
  */
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/Notification.php';
+
 class Auth {
     private Database $db;
 
@@ -66,8 +69,15 @@ class Auth {
             throw new Exception('Incorrect password');
         }
 
-        if ($user['status'] !== 'approved') {
-            throw new Exception('Account not approved');
+        $status = strtolower((string)($user['status'] ?? ''));
+        if ($status !== 'approved') {
+            // Pending accounts: explicitly indicate pending approval
+            if ($status === 'pending') {
+                throw new Exception('Account is pending approval');
+            }
+
+            // All other non-approved states (inactive, rejected, etc.) surface a neutral system error
+            throw new Exception('A system error occurred. Please try again later or contact the system administrator.');
         }
 
         // If the user is required to change password, block normal login
@@ -211,8 +221,8 @@ class Auth {
             $row = $this->db->query('SELECT COALESCE(MAX(user_id),0)+1 AS next_id FROM users')->fetch();
             $userId = (int)($row['next_id'] ?? 1);
             // Insert minimal user with explicit user_id
-            // New recipients require admin approval; donors are auto-approved
-            $status = ($role === 'recipient') ? 'pending' : 'approved';
+            // New recipients and donors require admin approval before activation
+            $status = in_array($role, ['recipient', 'donor'], true) ? 'pending' : 'approved';
             $this->db->query(
                 "INSERT INTO users (user_id, name, email, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())",
                 [$userId, $name, $email, $hashed, $role, $status]
@@ -278,20 +288,30 @@ class Auth {
 
             // Notify all admins of new registration (donor/recipient)
             try {
-                if (in_array($role, ['donor','recipient'])) {
-                    $admins = $this->db->query('SELECT user_id FROM users WHERE role = \"admin\"')->fetchAll();
+                if (in_array($role, ['donor','recipient'], true)) {
+                    $admins = $this->db->query("SELECT user_id FROM users WHERE role = 'admin'")->fetchAll();
                     if ($admins) {
+                        $notif = new Notification();
                         $type = $role === 'recipient' ? 'new_recipient' : 'new_donor';
                         $msg = ($role === 'recipient' ? 'New recipient registered: ' : 'New donor registered: ') . ($name ?: $email);
                         foreach ($admins as $a) {
-                            $this->db->query(
-                                'INSERT INTO notifications (user_id, type, reference_type, reference_id, message, read_status, created_at) VALUES (?,?,?,?,?,0,NOW())',
-                                [(int)$a['user_id'], $type, 'user', $userId, $msg]
-                            );
+                            $uid = (int)($a['user_id'] ?? 0);
+                            if ($uid <= 0) continue;
+                            try {
+                                $notif->create([
+                                    'user_id' => $uid,
+                                    'type' => $type,
+                                    'reference_type' => 'user',
+                                    'reference_id' => $userId,
+                                    'message' => $msg,
+                                ]);
+                            } catch (Exception $inner) {
+                                error_log('Notification create failed for admin ' . $uid . ': ' . $inner->getMessage());
+                            }
                         }
                     }
                 }
-            } catch (Exception $e) { /* non-fatal */ }
+            } catch (Exception $e) { error_log('Admin registration notification error: ' . $e->getMessage()); /* non-fatal */ }
 
             return array_merge($base ?: [], $profile ?: []);
         } catch (Exception $e) {

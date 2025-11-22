@@ -73,8 +73,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -117,7 +116,7 @@
       </div>
     </nav>
 
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
 
     <aside class="sidebar collapsed"></aside>
 
@@ -205,7 +204,7 @@
               <h6 class="mb-0">Metrics</h6>
             </div>
 
-            <div style="height: 300px">
+            <div class="recipient-dashboard-chart">
               <canvas id="lineChart"></canvas>
             </div>
           </div>
@@ -215,10 +214,6 @@
           <div class="card card-accent p-4 w-100 h-100 d-flex flex-column">
             <div class="fs-5 mb-3 text-start">Activity Feed</div>
             <div class="flex-grow-1 activity-feed"></div>
-
-            <a href="#" class="text-decoration-none text-center mt-3"
-              >View All Activity >></a
-            >
           </div>
         </div>
       </div>
@@ -265,8 +260,7 @@
 
     <!-- Toast Container -->
     <div
-      class="toast-container position-fixed top-0 end-0 p-3"
-      style="z-index: 1080"
+      class="toast-container position-fixed top-0 end-0 p-3 dashboard-toast-container"
     >
       <div
         id="feedbackToast"

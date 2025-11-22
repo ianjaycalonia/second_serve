@@ -89,6 +89,11 @@ try {
             if ($runId <= 0) { sendJson(['success'=>false,'error'=>'run_id is required'], 400); }
             try {
                 $db = Database::getInstance();
+                $inTxn = false;
+                if (!$db->inTransaction()) {
+                    $db->beginTransaction();
+                    $inTxn = true;
+                }
                 // Ensure run exists
                 $run = $db->query('SELECT run_id FROM allocation_runs WHERE run_id = ? LIMIT 1', [$runId])->fetch();
                 if (!$run) sendJson(['success'=>false,'error'=>'Run not found'], 404);
@@ -1055,8 +1060,15 @@ SQL);
             $recipientId = isset($payload['recipient_id']) ? (int)$payload['recipient_id'] : 0;
             if ($itemName === '' || $qty <= 0) { sendJson(['success'=>false,'error'=>'item_name and positive quantity are required'], 400); }
 
+            $db = Database::getInstance();
+            $inTxn = false;
+            
             try {
-                $db = Database::getInstance();
+                // Start transaction
+                if (!$db->inTransaction()) {
+                    $db->beginTransaction();
+                    $inTxn = true;
+                }
 
                 // Resolve recipient if not provided: prefer name "Foodbank (On-site)", else tag contains 'onsite'
                 if ($recipientId <= 0) {
@@ -1076,7 +1088,7 @@ SQL);
                 $remaining = $qty;
                 $picked = [];
                 $params = [$itemName];
-                $sql = "SELECT inv.inventory_id
+                $sql = "SELECT inv.inventory_id, inv.quantity
                           FROM inventory inv
                           INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
                           LEFT JOIN categories c ON c.category_id = di.category_id
@@ -1119,9 +1131,23 @@ SQL);
                     $db->query('INSERT INTO allocation_items (allocation_id, inventory_id, quantity, created_at) VALUES (?, ?, ?, NOW())', [$allocationId, (int)$p['inventory_id'], (int)$p['quantity']]);
                 }
 
+                // Commit transaction if we started it
+                if ($inTxn) {
+                    $db->commit();
+                }
+
                 // Optional: record note into notifications or leave for now
                 sendJson(['success'=>true, 'data'=>['allocation_id'=>$allocationId]]);
             } catch (Exception $e) {
+                // Rollback transaction if we started it
+                if (isset($inTxn) && $inTxn) {
+                    try { 
+                        $db->rollBack(); 
+                    } catch (Exception $rollbackErr) { 
+                        error_log("Rollback failed: " . $rollbackErr->getMessage());
+                    }
+                }
+                error_log("Onsite issue failed: " . $e->getMessage());
                 sendJson(['success'=>false,'error'=>$e->getMessage()], 400);
             }
             break;

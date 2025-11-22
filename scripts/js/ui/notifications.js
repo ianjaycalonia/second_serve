@@ -206,7 +206,11 @@
           const role = (user?.role || '').toLowerCase();
           let dest = (li.getAttribute('data-dest') || '').trim() || null;
           // Admin: new donation => Donation.html
-          if (!dest && nType === 'donation_created') {
+          if (!dest && nType === 'new_recipient') {
+            dest = role === 'admin' ? 'Recipient.html' : dest;
+          } else if (!dest && nType === 'new_donor') {
+            dest = role === 'admin' ? 'Donors.html' : dest;
+          } else if (!dest && nType === 'donation_created') {
             dest = 'Donation.html';
           } else if (!dest && nType === 'status_updated') {
             // Donors: go to their donations page; Admins: Donation.html
@@ -230,6 +234,9 @@
           if (!dest && refType === 'allocation') dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributionPickup.html';
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
           if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
+          if (!dest && refType === 'user' && role === 'admin') {
+            dest = nType === 'new_donor' ? 'Donors.html' : (nType === 'new_recipient' ? 'Recipient.html' : dest);
+          }
 
           if (dest) {
             // Close modal before navigation for better UX
@@ -256,10 +263,12 @@
           const nType = (li.getAttribute('data-type') || '').toLowerCase();
           const refType = (li.getAttribute('data-ref-type') || '').toLowerCase();
           let dest = (li.getAttribute('data-dest') || '').trim() || null;
-          if (!dest && nType.startsWith('allocation_')) dest = 'ReceivedItems.html';
-          if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) dest = 'ReceivedItems.html';
-          if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
-          if (!dest && (nType === 'schedule_event_created' || refType === 'schedule_event')) dest = 'Schedule.html';
+          if (!dest && nType === 'new_recipient') dest = 'Recipient.html';
+          else if (!dest && nType === 'new_donor') dest = 'Donors.html';
+          else if (!dest && nType.startsWith('allocation_')) dest = 'ReceivedItems.html';
+          else if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) dest = 'ReceivedItems.html';
+          else if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
+          else if (!dest && (nType === 'schedule_event_created' || refType === 'schedule_event')) dest = 'Schedule.html';
           if (dest) {
             try {
               const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);

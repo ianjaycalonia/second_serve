@@ -30,18 +30,207 @@
         });
 
         // OCR tab handlers
-        function parseLineToNameQty(raw) {
-          const s = String(raw || "").trim();
-          if (!s) return null;
-          let name = s,
-            qty = 1;
-          const rx = /(.*?)[xX*\-:\s]+(\d{1,4})$/;
-          const m = s.match(rx);
-          if (m && m[1]) {
-            name = m[1].trim();
-            qty = parseInt(m[2], 10) || 1;
+        const OCR_STOPWORDS = new Set([
+          "qty",
+          "quantity",
+          "total",
+          "subtotal",
+          "amount",
+          "price",
+          "page",
+          "date",
+          "donor",
+          "recipient",
+          "address",
+          "contact",
+          "phone",
+          "email",
+          "remarks",
+          "note",
+          "notes",
+          "signature",
+          "approved",
+          "prepared",
+          "time",
+          "code",
+          "ref",
+          "reference",
+          "invoice",
+          "receipt",
+          "number",
+          "no",
+          "item",
+          "items",
+          "description",
+          "unit",
+          "units",
+          "weight",
+          "status",
+          "type",
+          "summary",
+          "table",
+          "list",
+          "value",
+          "values",
+        ]);
+        const KNOWN_ITEM_FETCH_LIMIT = 500;
+        const ocrKnownItems = { ready: false, attempted: false, entries: [] };
+        let ocrKnownItemsPromise = null;
+
+        function normaliseItemLabel(str) {
+          return String(str || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        }
+
+        function tokensFromNorm(norm) {
+          return norm ? norm.split(" ").filter((token) => token && token.length >= 2) : [];
+        }
+
+        function tidyCandidateName(name) {
+          return String(name || "")
+            .replace(/\s{2,}/g, " ")
+            .replace(/[|,:;\-]+/g, " ")
+            .trim();
+        }
+
+        function ensureKnownItemsLoaded() {
+          if (ocrKnownItems.ready || ocrKnownItems.attempted) {
+            return ocrKnownItemsPromise || Promise.resolve(ocrKnownItems);
           }
-          return { name, qty };
+          if (ocrKnownItemsPromise) return ocrKnownItemsPromise;
+
+          const url = `${API_BASE_URL}/donations/index.php/items?limit=${KNOWN_ITEM_FETCH_LIMIT}`;
+          ocrKnownItemsPromise = fetch(url, {
+            method: "GET",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          })
+            .then((res) => res.json().catch(() => null))
+            .then((data) => {
+              const items = Array.isArray(data?.items) ? data.items : [];
+              const entries = [];
+              const seen = new Set();
+              for (const label of items) {
+                const norm = normaliseItemLabel(label);
+                if (!norm || seen.has(norm)) continue;
+                seen.add(norm);
+                const tokens = tokensFromNorm(norm);
+                entries.push({ label, norm, tokens, tokenSet: new Set(tokens) });
+              }
+              ocrKnownItems.entries = entries;
+              ocrKnownItems.ready = entries.length > 0;
+              ocrKnownItems.attempted = true;
+              return ocrKnownItems;
+            })
+            .catch((err) => {
+              console.warn("[DonorDashboard] Failed to load inventory item names", err);
+              ocrKnownItems.entries = [];
+              ocrKnownItems.ready = false;
+              ocrKnownItems.attempted = true;
+              return ocrKnownItems;
+            })
+            .finally(() => {
+              ocrKnownItemsPromise = null;
+            });
+
+          return ocrKnownItemsPromise;
+        }
+
+        function matchesKnownItem(norm, tokens) {
+          if (!ocrKnownItems.ready || !ocrKnownItems.entries.length) return false;
+          for (const entry of ocrKnownItems.entries) {
+            if (entry.norm === norm) return true;
+            if (entry.norm.length >= 5 && (entry.norm.includes(norm) || norm.includes(entry.norm))) {
+              return true;
+            }
+            if (!tokens || !tokens.length || !entry.tokens.length) continue;
+            let overlap = 0;
+            for (const token of tokens) {
+              if (entry.tokenSet.has(token)) {
+                overlap += 1;
+                if (overlap >= Math.min(2, tokens.length, entry.tokenSet.size)) return true;
+              }
+            }
+            if (tokens.length === 1 && entry.tokenSet.has(tokens[0]) && tokens[0].length >= 4) {
+              return true;
+            }
+          }
+          return false;
+        }
+
+        function isLikelyInventoryLine(name, qty) {
+          if (!Number.isFinite(qty) || qty <= 0) return false;
+          const cleaned = tidyCandidateName(name);
+          if (!cleaned) return false;
+          const letters = (cleaned.match(/[a-z]/gi) || []).length;
+          if (letters < 2) return false;
+          const norm = normaliseItemLabel(cleaned);
+          if (!norm || OCR_STOPWORDS.has(norm)) return false;
+          const tokens = tokensFromNorm(norm);
+          if (!tokens.length) return false;
+          const informativeTokens = tokens.filter((t) => !OCR_STOPWORDS.has(t));
+          if (!informativeTokens.length) return false;
+          if (matchesKnownItem(norm, informativeTokens)) return true;
+          if (informativeTokens.length >= 2) return true;
+          if (informativeTokens.length === 1 && informativeTokens[0].length >= 4) return true;
+          return false;
+        }
+
+        function parseLineToNameQty(raw) {
+          const original = String(raw || "").trim();
+          if (!original) return null;
+
+          const normaliseQty = (val) => {
+            const num = parseInt(val, 10);
+            return Number.isFinite(num) && num > 0 ? num : null;
+          };
+
+          const sanitised = original
+            .replace(/\|/g, " ")
+            .replace(/\t+/g, " ")
+            .replace(/\s{2,}/g, " ")
+            .trim();
+          if (!sanitised) return null;
+
+          const patterns = [
+            {
+              regex:
+                /^(.*?)(?:\bqty|\bquantity)\s*[:\-]?\s*(\d{1,4})(?:\s*(?:pcs?|pieces?|units?|kg|kgs|g|grams|lbs?|lb|packs?|boxes?|bags?))?(?:\b.*)?$/i,
+              type: "nameFirst",
+            },
+            {
+              regex:
+                /^(?:\bqty|\bquantity)\s*[:\-]?\s*(\d{1,4})(?:\s*(?:pcs?|pieces?|units?|kg|kgs|g|grams|lbs?|lb|packs?|boxes?|bags?))?[\s,;:*\\-|]+(.+)$/i,
+              type: "qtyFirst",
+            },
+            {
+              regex:
+                /^(.*?)[\s,;:*\-xX]+(\d{1,4})(?:\s*(?:pcs?|pieces?|units?|kg|kgs|g|grams|lbs?|lb|packs?|boxes?|bags?))?$/i,
+              type: "nameFirst",
+            },
+            {
+              regex:
+                /^(\d{1,4})(?:\s*(?:pcs?|pieces?|units?|kg|kgs|g|grams|lbs?|lb|packs?|boxes?|bags?))?[\s,;:*\-xX]+(.+)$/i,
+              type: "qtyFirst",
+            },
+          ];
+
+          for (const { regex, type } of patterns) {
+            const match = sanitised.match(regex);
+            if (!match) continue;
+            const qty = normaliseQty(type === "nameFirst" ? match[2] : match[1]);
+            let candidateName = type === "nameFirst" ? match[1] : match[2];
+            candidateName = tidyCandidateName(candidateName);
+            if (!candidateName || qty === null) continue;
+            if (isLikelyInventoryLine(candidateName, qty)) {
+              return { name: candidateName, qty };
+            }
+          }
+
+          return null;
         }
 
         function buildPreviewRow(id, name, qty) {
@@ -361,6 +550,7 @@
     let expiryMinDate = "";
     let expiryLeadLoaded = false;
     let expiryLeadToastShown = false;
+    const itemCostCache = Object.create(null);
 
     function formatDateInput(date) {
       if (!(date instanceof Date) || isNaN(date.getTime())) return "";
@@ -452,6 +642,74 @@
       }
     }
 
+    async function fetchUnitCostByName(name) {
+      const raw = (name || "").trim();
+      if (!raw) return null;
+      const key = raw.toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(itemCostCache, key)) {
+        return itemCostCache[key];
+      }
+      let cost = null;
+      try {
+        const url = `${TAXO_BASE_URL}/master-items?` +
+          new URLSearchParams({ q: raw, page_size: "20" }).toString();
+        const res = await fetch(url, {
+          method: "GET",
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          const items = Array.isArray(data?.items) ? data.items : [];
+          if (items.length) {
+            const needle = raw.toLowerCase();
+            const exact =
+              items.find((it) =>
+                String(it.product_name || "")
+                  .toLowerCase()
+                  .trim() === needle
+              ) || items[0];
+            if (
+              exact &&
+              exact.unit_cost !== null &&
+              exact.unit_cost !== undefined &&
+              !Number.isNaN(Number(exact.unit_cost))
+            ) {
+              cost = Number(exact.unit_cost);
+            }
+          }
+        }
+      } catch (_) {
+        // ignore lookup errors; leave cost as null
+      }
+      itemCostCache[key] = cost;
+      return cost;
+    }
+
+    async function autoFillCostForRow($row) {
+      if (!$row || !$row.length) return;
+      const $name = $row.find(".item-name-select");
+      const $qty = $row.find(".item-qty");
+      const $cost = $row.find(".item-cost");
+      if (!$name.length || !$qty.length || !$cost.length) return;
+      const existing = String($cost.val() || "").trim();
+      const autoFlag = String($cost.attr("data-auto") || "").toLowerCase();
+      const canOverride = existing === "" || autoFlag === "1" || autoFlag === "true";
+      if (!canOverride) return;
+      const nameVal = String($name.val() || "").trim();
+      if (!nameVal) return;
+      const qtyVal = Number($qty.val() || "0");
+      const unitCost = await fetchUnitCostByName(nameVal);
+      if (typeof unitCost === "number" && !Number.isNaN(unitCost)) {
+        let total = unitCost;
+        if (Number.isFinite(qtyVal) && qtyVal > 0) {
+          total = unitCost * qtyVal;
+        }
+        $cost.val(total.toFixed(2));
+        $cost.attr("data-auto", "1");
+      }
+    }
+
     // Unit selection removed from donor modal
 
     // No image upload for donors anymore
@@ -500,6 +758,10 @@
       $el.on('select2:open', function(){
         const $search = $(".select2-container--open .select2-search__field");
         if ($search.length) { $search.trigger('input'); }
+      });
+      $el.on("change", function () {
+        const $row = $el.closest(".item-row");
+        autoFillCostForRow($row);
       });
     }
 
@@ -596,6 +858,13 @@
     });
     $itemsContainer.on("change blur", ".item-expiry", function () {
       enforceExpiryLead($(this));
+    });
+    $itemsContainer.on("change blur", ".item-qty", function () {
+      const $row = $(this).closest(".item-row");
+      autoFillCostForRow($row);
+    });
+    $itemsContainer.on("input change", ".item-cost", function () {
+      $(this).removeAttr("data-auto");
     });
 
     function showToast(msg, variant) {

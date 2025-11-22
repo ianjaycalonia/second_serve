@@ -66,6 +66,58 @@ function showImportModal(title, html) {
   }
 }
 
+// Provide a toast helper if one is not already registered globally.
+if (typeof window.showToast !== "function") {
+  const ensureToastContainer = () => {
+    let container = document.getElementById("globalToastContainer");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "globalToastContainer";
+      container.className = "toast-container position-fixed top-0 end-0 p-3";
+      document.body.appendChild(container);
+    }
+    return container;
+  };
+
+  window.showToast = function (message, variant = "success", delayMs = 2400) {
+    try {
+      const container = ensureToastContainer();
+      const color = variant === "danger" ? "danger" : variant === "warning" ? "warning" : variant === "info" ? "info" : "success";
+      const toastEl = document.createElement("div");
+      toastEl.className = `toast align-items-center text-bg-${color} border-0 shadow`;
+      toastEl.setAttribute("role", "alert");
+      toastEl.setAttribute("aria-live", "assertive");
+      toastEl.setAttribute("aria-atomic", "true");
+      toastEl.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${message}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      `;
+      container.appendChild(toastEl);
+      const toast = bootstrap?.Toast?.getOrCreateInstance
+        ? bootstrap.Toast.getOrCreateInstance(toastEl, {
+            delay: delayMs,
+            autohide: true,
+          })
+        : null;
+      if (toast) {
+        toastEl.addEventListener("hidden.bs.toast", () => {
+          toast.dispose();
+          toastEl.remove();
+        });
+        toast.show();
+      } else {
+        // Fallback to alert if Bootstrap toast is unavailable
+        alert(message);
+        toastEl.remove();
+      }
+    } catch (err) {
+      console.warn("Toast display failed", err);
+    }
+  };
+}
+
 (function () {
   "use strict";
 
@@ -531,17 +583,31 @@ function showImportModal(title, html) {
           <ul class="small">${list}</ul>`;
         showImportModal("Import Result", html);
       } else {
-        const html = `
-          <div class="alert alert-success d-flex align-items-center" role="alert">
-            <i class="bi bi-check-circle-fill me-2"></i>
-            <div>
-              Import completed successfully.
+        const inserted = Number(summary.inserted || 0);
+        let toastShown = false;
+        try {
+          if (typeof showToast === "function") {
+            const label = inserted === 1 ? "recipient" : "recipients";
+            showToast(
+              `Imported ${inserted} ${label} successfully.`,
+              "success"
+            );
+            toastShown = true;
+          }
+        } catch (_) {
+          // fall back to modal below
+        }
+        if (!toastShown) {
+          const html = `
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+              <i class="bi bi-check-circle-fill me-2"></i>
+              <div>
+                Import completed successfully.
+              </div>
             </div>
-          </div>
-          <div><span class="badge bg-success">Inserted: ${
-            summary.inserted || 0
-          }</span></div>`;
-        showImportModal("Import Success", html);
+            <div><span class="badge bg-success">Inserted: ${inserted}</span></div>`;
+          showImportModal("Import Success", html);
+        }
       }
 
       // Refresh table

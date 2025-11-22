@@ -74,8 +74,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -118,7 +117,7 @@
       </div>
     </nav>
 
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
 
     <aside class="sidebar collapsed"></aside>
 
@@ -862,12 +861,10 @@
     <div
       aria-live="polite"
       aria-atomic="true"
-      class="position-relative"
-      style="z-index: 1080"
+      class="position-relative received-toast-wrapper"
     >
       <div
-        class="toast-container position-fixed top-0 end-0 p-3"
-        style="z-index: 1090"
+        class="toast-container position-fixed top-0 end-0 p-3 received-toast-container"
       >
         <div
           id="feedbackToast"

@@ -15,13 +15,6 @@
     />
     <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
     <link rel="stylesheet" href="scripts/css/monthlyRecipients.css" />
-    <style>
-      /* Constrain brand logo */
-      .brand img {
-        max-height: 36px;
-        width: auto;
-      }
-    </style>
   </head>
   <body class="sidebar-collapsed">
     <nav>
@@ -41,9 +34,8 @@
 
           <!-- Pending Recipient Approvals -->
           <div
-            class="card card-accent mb-3"
+            class="card card-accent mb-3 d-none"
             id="pendingApprovalsCard"
-            style="display: none"
           >
             <div class="card-body">
               <div
@@ -67,7 +59,7 @@
                       <th>Contact</th>
                       <th>Email</th>
                       <th>Address</th>
-                      <th style="width: 140px">Actions</th>
+                      <th class="pending-actions-col">Actions</th>
                     </tr>
                   </thead>
                   <tbody id="pendingRecipientsBody"></tbody>
@@ -113,8 +105,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -166,7 +157,7 @@
         </div>
       </div>
     </nav>
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
     <aside class="sidebar collapsed">
       <a
         href="AdminDashboard.html"
@@ -595,7 +586,7 @@
         </div>
 
         <!-- Week 5 (conditionally shown) -->
-        <div class="col-12 col-lg-3" id="w5Col" style="display: none">
+        <div class="col-12 col-lg-3 d-none" id="w5Col">
           <div class="card card-accent h-100">
             <div class="card-body d-flex flex-column">
               <div class="d-flex flex-column mb-3">
@@ -649,8 +640,7 @@
               <div class="d-flex align-items-center flex-wrap gap-2">
                 <input
                   id="poolSearch"
-                  class="form-control form-control-sm"
-                  style="width: 220px"
+                  class="form-control form-control-sm pool-search-input"
                   placeholder="Search recipients..."
                 />
                 <div class="small text-muted">Drag to weeks above</div>
@@ -728,8 +718,7 @@
     <!-- Toast container for Recipients List alerts -->
     <div
       id="rlToastContainer"
-      class="position-fixed bottom-0 end-0 p-3"
-      style="z-index: 1080"
+      class="position-fixed bottom-0 end-0 p-3 rl-toast-container"
     ></div>
     <script src="scripts/js/utils/auth.js"></script>
     <script src="scripts/js/ui/messages.js"></script>
@@ -740,244 +729,6 @@
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
-    <script>
-      (function () {
-        const API =
-          typeof window.API_BASE_URL === "string" && window.API_BASE_URL
-            ? window.API_BASE_URL
-            : "/php/api";
-        const card = document.getElementById("pendingApprovalsCard");
-        const tbody = document.getElementById("pendingRecipientsBody");
-        const reloadBtn = document.getElementById("reloadPendingBtn");
-
-        async function fetchPending() {
-          try {
-            const res = await fetch(
-              `${API}/users/index.php?action=listPending&role=recipient`,
-              { credentials: "include" }
-            );
-            const j = await res.json();
-            if (!res.ok || !j?.success) {
-              throw new Error(j?.error || `HTTP ${res.status}`);
-            }
-            const items = Array.isArray(j?.data?.items) ? j.data.items : [];
-            render(items);
-          } catch (e) {
-            render([]);
-          }
-        }
-        function render(items) {
-          if (!tbody || !card) return;
-          tbody.innerHTML = "";
-          if (!items.length) {
-            card.style.display = "none";
-            return;
-          }
-          card.style.display = "";
-          for (const u of items) {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-              <td>${escapeHtml(u.organization_name || u.name || "")}</td>
-              <td>${escapeHtml(u.position_designation || "")} ${escapeHtml(
-              u.contact_number || ""
-            )}</td>
-              <td>${escapeHtml(u.email || "")}</td>
-              <td>${escapeHtml(u.address || "")}</td>
-              <td>
-                <div class="btn-group btn-group-sm">
-                  <button class="btn btn-success" data-act="approve" data-id="${
-                    u.user_id
-                  }"><i class="bi bi-check2"></i></button>
-                  <button class="btn btn-outline-danger" data-act="reject" data-id="${
-                    u.user_id
-                  }"><i class="bi bi-x"></i></button>
-                </div>
-              </td>`;
-            tbody.appendChild(tr);
-          }
-        }
-        function escapeHtml(s) {
-          try {
-            return String(s).replace(
-              /[&<>"]+/g,
-              (c) =>
-                ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
-            );
-          } catch (_) {
-            return "";
-          }
-        }
-        async function postJSON(url, body) {
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify(body || {}),
-          });
-          const j = await res
-            .json()
-            .catch(() => ({ success: false, error: `HTTP ${res.status}` }));
-          if (!res.ok || !j?.success)
-            throw new Error(j?.error || `HTTP ${res.status}`);
-          return j;
-        }
-        async function onClick(e) {
-          const btn = e.target.closest("button[data-act]");
-          if (!btn) return;
-          const id = Number(btn.getAttribute("data-id") || "0") || 0;
-          if (!id) return;
-          const act = btn.getAttribute("data-act");
-          try {
-            btn.disabled = true;
-            if (act === "approve") {
-              await postJSON(`${API}/users/index.php?action=approve`, {
-                user_id: id,
-              });
-            } else if (act === "reject") {
-              await postJSON(`${API}/users/index.php?action=reject`, {
-                user_id: id,
-              });
-            }
-          } catch (err) {
-            /* could add toast here */
-          } finally {
-            btn.disabled = false;
-            fetchPending();
-          }
-        }
-        if (tbody) {
-          tbody.addEventListener("click", onClick);
-        }
-        if (reloadBtn) {
-          reloadBtn.addEventListener("click", function () {
-            fetchPending();
-          });
-        }
-        // initial load
-        fetchPending();
-      })();
-    </script>
-    <script>
-      (function () {
-        function formatLongDate(d) {
-          try {
-            return d.toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "2-digit",
-            });
-          } catch (_) {
-            const months = [
-              "January",
-              "February",
-              "March",
-              "April",
-              "May",
-              "June",
-              "July",
-              "August",
-              "September",
-              "October",
-              "November",
-              "December",
-            ];
-            const mm = months[d.getMonth()] || "";
-            const dd = String(d.getDate()).padStart(2, "0");
-            const yyyy = d.getFullYear();
-            return `${mm} ${dd}, ${yyyy}`;
-          }
-        }
-        function relabelWeeks() {
-          try {
-            const now = new Date();
-            const y = now.getFullYear(),
-              m = now.getMonth();
-            const starts = [
-              new Date(y, m, 1),
-              new Date(y, m, 8),
-              new Date(y, m, 15),
-              new Date(y, m, 22),
-            ];
-            const ids = ["w1Label", "w2Label", "w3Label", "w4Label"];
-            ids.forEach((id, i) => {
-              const el = document.getElementById(id);
-              if (!el) return;
-              const dt = starts[i] || new Date();
-              el.textContent = `Week ${i + 1} (${formatLongDate(dt)})`;
-            });
-            ["w1", "w2", "w3", "w4"].forEach((id, i) => {
-              const dz = document.getElementById(id);
-              if (!dz) return;
-              const dt = starts[i] || new Date();
-              dz.setAttribute(
-                "aria-label",
-                `Week ${i + 1} assignments (${formatLongDate(dt)})`
-              );
-            });
-            [
-              ["saveW1", 0],
-              ["saveW2", 1],
-              ["saveW3", 2],
-              ["saveW4", 3],
-            ].forEach(([id, idx]) => {
-              const b = document.getElementById(id);
-              if (!b) return;
-              const dt = starts[idx] || new Date();
-              const title = `Save Week ${idx + 1} (${formatLongDate(dt)})`;
-              b.setAttribute("title", title);
-              b.setAttribute("data-bs-original-title", title);
-            });
-            try {
-              if (window.__rl_updateCounts) window.__rl_updateCounts();
-            } catch (_) {}
-            const w5Col = document.getElementById("w5Col");
-            if (w5Col && w5Col.style.display !== "none") {
-              const w5Label = document.getElementById("w5Label");
-              if (w5Label) {
-                const w5Start = new Date(y, m, 29);
-                w5Label.textContent = `Week 5 (${formatLongDate(w5Start)})`;
-                try {
-                  if (window.__rl_updateCounts) window.__rl_updateCounts();
-                } catch (_) {}
-              }
-            }
-          } catch (_) {}
-        }
-        function debounce(fn, ms) {
-          let t;
-          return function () {
-            clearTimeout(t);
-            t = setTimeout(fn, ms);
-          };
-        }
-        function setupObserver() {
-          try {
-            const target = document.getElementById("weeksRow");
-            if (!target) return;
-            const run = debounce(relabelWeeks, 50);
-            const obs = new MutationObserver(run);
-            obs.observe(target, {
-              childList: true,
-              subtree: true,
-              characterData: true,
-              attributes: true,
-            });
-            // Initial relabel and a delayed one after async loads
-            relabelWeeks();
-            setTimeout(() => {
-              try {
-                relabelWeeks();
-                if (window.__rl_updateCounts) window.__rl_updateCounts();
-              } catch (_) {}
-            }, 150);
-          } catch (_) {
-            relabelWeeks();
-          }
-        }
-        if (document.readyState === "loading")
-          document.addEventListener("DOMContentLoaded", setupObserver);
-        else setupObserver();
-      })();
-    </script>
+    <script src="scripts/js/ui/adminRecipientsWeeks.js"></script>
   </body>
 </html>

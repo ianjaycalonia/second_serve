@@ -53,6 +53,7 @@
   const catAddBtn = document.getElementById("catAddBtn");
   const catEditModal = document.getElementById("catEditModal");
   const catEditTitle = document.getElementById("catEditTitle");
+  const catCodeInput = document.getElementById("catCodeInput");
   const catPrimaryInput = document.getElementById("catPrimaryInput");
   const catSecondaryInput = document.getElementById("catSecondaryInput");
   const catEditFeedback = document.getElementById("catEditFeedback");
@@ -62,7 +63,7 @@
   async function loadCategories() {
     if (!catBody) return;
     catBody.innerHTML =
-      '<tr><td colspan="4" class="text-center text-muted py-3">Loading...</td></tr>';
+      '<tr><td colspan="5" class="text-center text-muted py-3">Loading...</td></tr>';
     try {
       const data = await apiGet("/categories", {
         q: catSearch.value.trim(),
@@ -71,13 +72,14 @@
       const items = data && data.items ? data.items : [];
       if (!items.length) {
         catBody.innerHTML =
-          '<tr><td colspan="4" class="text-center text-muted py-3">No categories</td></tr>';
+          '<tr><td colspan="5" class="text-center text-muted py-3">No categories</td></tr>';
         return;
       }
       catBody.innerHTML = items
         .map(
           (c) =>
             `<tr class="${c.is_active ? "" : "table-light text-muted"}">
+        <td>${escapeHtml(c.code || "")}</td>
         <td>${escapeHtml(c.primary_name || "")}</td>
         <td>${escapeHtml(c.secondary_name || "")}</td>
         <td>${
@@ -100,7 +102,7 @@
         .join("");
     } catch (err) {
       catBody.innerHTML =
-        '<tr><td colspan="4" class="text-danger py-3">Failed to load categories</td></tr>';
+        '<tr><td colspan="5" class="text-danger py-3">Failed to load categories</td></tr>';
       showToast(String(err.message || err), "danger");
     }
   }
@@ -613,6 +615,7 @@
     catAddBtn.addEventListener("click", () => {
       editingCatId = null;
       catEditTitle.textContent = "Add Category";
+      catCodeInput.value = "";
       catPrimaryInput.value = "";
       catSecondaryInput.value = "";
       catEditFeedback.textContent = "";
@@ -629,8 +632,9 @@
         const row = btn.closest("tr");
         editingCatId = id;
         catEditTitle.textContent = "Edit Category";
-        catPrimaryInput.value = row.children[0].textContent.trim();
-        catSecondaryInput.value = row.children[1].textContent.trim();
+        catCodeInput.value = row.children[0].textContent.trim();
+        catPrimaryInput.value = row.children[1].textContent.trim();
+        catSecondaryInput.value = row.children[2].textContent.trim();
         catEditFeedback.textContent = "";
         showModal(catEditModal);
       } else if (action === "cat-deactivate") {
@@ -654,6 +658,7 @@
   const catSaveBtn = document.getElementById("catSaveBtn");
   if (catSaveBtn)
     catSaveBtn.addEventListener("click", async () => {
+      const code = catCodeInput.value.trim();
       const primary = catPrimaryInput.value.trim();
       const secondary = catSecondaryInput.value.trim();
       if (!primary) {
@@ -663,12 +668,14 @@
       try {
         if (editingCatId) {
           await apiSend("PUT", `/categories/${editingCatId}`, {
+            code: code || null,
             primary_name: primary,
             secondary_name: secondary || null,
           });
           showToast("Category updated", "success");
         } else {
           await apiSend("POST", `/categories`, {
+            code: code || null,
             primary_name: primary,
             secondary_name: secondary || null,
           });
@@ -677,8 +684,12 @@
         hideModal(catEditModal);
         loadCategories();
       } catch (err) {
-        catEditFeedback.textContent = "";
         const message = String(err.message || err || "Failed to save category");
+        if (message.toLowerCase().includes("code")) {
+          catEditFeedback.textContent = message;
+        } else {
+          catEditFeedback.textContent = "";
+        }
         showToast(message, "danger");
       }
     });

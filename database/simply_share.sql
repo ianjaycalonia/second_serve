@@ -317,13 +317,15 @@ CREATE TABLE `food_safety_checks` (
 -- categories (taxonomy for products/inventory/donations)
 CREATE TABLE `categories` (
   `category_id` int(11) NOT NULL AUTO_INCREMENT,
+  `code` varchar(32) DEFAULT NULL,
   `primary_name` varchar(128) NOT NULL,
   `secondary_name` varchar(128) DEFAULT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`category_id`),
-  UNIQUE KEY `uq_categories_primary_secondary` (`primary_name`, `secondary_name`)
+  UNIQUE KEY `uq_categories_primary_secondary` (`primary_name`, `secondary_name`),
+  UNIQUE KEY `uq_categories_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 -- units (lookup for measurement units; UI-controlled list)

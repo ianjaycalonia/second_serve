@@ -141,6 +141,9 @@
   let selectedEventId = null;
   let calendarInstance = null;
   let resizeRaf = null;
+  let cachedCalendarItems = [];
+  let lastRangeInfo = null;
+  let rangeRequestId = 0;
 
   function hasContent(value){
     if (value === null || value === undefined) return false;
@@ -359,6 +362,33 @@
     updateEditButtonState();
   }
 
+  function filterEventsForDate(items, dateStr){
+    if (!dateStr) return [];
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    const dayEnd = new Date(`${dateStr}T23:59:59`);
+    return items
+      .map(normalizeEventData)
+      .filter(ev => {
+        if (!canViewEvent(ev)) return false;
+        const start = new Date(ev.start);
+        if (Number.isNaN(start)) return false;
+        const end = ev.end ? new Date(ev.end) : start;
+        return start <= dayEnd && end >= dayStart;
+      });
+  }
+
+  function renderDateFromCache(dateStr){
+    if (!dateStr) return;
+    const items = filterEventsForDate(cachedCalendarItems, dateStr);
+    renderSelectedDay(dateStr, items);
+  }
+
+  function rerenderSelectedDayFromCache(){
+    if (!lastSelectedDate) return;
+    renderDateFromCache(lastSelectedDate);
+    highlightSelectedDate(lastSelectedDate);
+  }
+
   function highlightSelectedDate(dateStr){
     if (!dateStr) return;
     try {
@@ -512,19 +542,34 @@
     return false;
   }
 
-  function showMsg(el, msg, type){ if (!el) return; try{ el.innerHTML = msg ? `<div class="alert alert-${type} py-2 mb-0">${msg}</div>` : ''; }catch(_){} }
-  function showCalModal(message){
-    try{
-      // If the Event modal is open, hide it first to avoid stacking underlay
-      const ev = document.getElementById('eventModal');
-      if (ev && ev.classList.contains('show')){
-        try{ bootstrap.Modal.getInstance(ev)?.hide(); } catch(_){ }
-      }
-      const mEl = document.getElementById('calAlertModal');
-      const bEl = document.getElementById('calAlertBody');
-      if (bEl) bEl.textContent = String(message||'');
-      if (mEl){ const m = bootstrap.Modal.getOrCreateInstance(mEl); m.show(); }
-    } catch(_){ /* fallback no-op */ }
+  function calendarToast(message, variant = 'info'){
+    const containerId = 'calendarToastContainer';
+    let container = document.getElementById(containerId);
+    if (!container){
+      container = document.createElement('div');
+      container.id = containerId;
+      container.className = 'toast-container position-fixed top-0 end-0 p-3';
+      document.body.appendChild(container);
+    }
+    const toastEl = document.createElement('div');
+    toastEl.className = `toast align-items-center text-bg-${variant === 'error' ? 'danger' : variant === 'success' ? 'success' : variant === 'warn' ? 'warning' : 'secondary'} border-0`;
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    toastEl.innerHTML = `
+      <div class="d-flex">
+        <div class="toast-body">${escapeHtml(String(message || ''))}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>`;
+    container.appendChild(toastEl);
+    try {
+      const toast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000, autohide: true });
+      toast.show();
+      toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove(), { once: true });
+    } catch(_){
+      // Fallback: simple alert
+      alert(String(message || ''));
+    }
   }
 
   async function parseJsonSafe(res){
@@ -791,8 +836,25 @@
       }
     }
     function ensureRecipientSelect() {
-      if (!recipientSelect || typeof window.$ !== 'function') return;
-      if ($(recipientSelect).select2 && !$(recipientSelect).data('select2')){
+      if (!recipientSelect) return;
+      const payload = (function retrieveSchedulePayload(){
+        let stored = null;
+        try {
+          const raw = window.sessionStorage ? window.sessionStorage.getItem('schedule_payload_from_pickup') : null;
+          if (raw) stored = JSON.parse(raw);
+        } catch (_) {
+          stored = null;
+        }
+        if (!stored && window.__schedulePayloadFromPickup && typeof window.__schedulePayloadFromPickup === 'object') {
+          stored = window.__schedulePayloadFromPickup;
+        }
+        return stored && Array.isArray(stored.recipients) ? stored : null;
+      })();
+
+      const hasPayloadRecipients = payload && Array.isArray(payload.recipients) && payload.recipients.length > 0;
+      const canUseSelect2 = typeof window.$ === 'function' && $(recipientSelect).select2;
+
+      if (!hasPayloadRecipients && canUseSelect2 && !$(recipientSelect).data('select2')){
         $(recipientSelect).select2({
           dropdownParent: $('#eventModal'),
           placeholder: 'Search recipient organizations',
@@ -811,9 +873,9 @@
                 text: u.organization_name || u.name || ('Recipient #'+u.user_id),
                 address: u.address || null
               })) };
-            }
-          },
-          minimumInputLength: 1
+            },
+            minimumInputLength: 1
+          }
         }).on('select2:select', function(ev){
           const dataItem = ev.params?.data;
           if (dataItem?.address) applyLocationFromAddress(dataItem.address);
@@ -822,6 +884,67 @@
           const opt = this.options[this.selectedIndex];
           if (opt && opt.dataset?.address) applyLocationFromAddress(opt.dataset.address);
         });
+      }
+
+      if (hasPayloadRecipients) {
+        const recipients = payload.recipients;
+        const dataOptions = recipients
+          .map(rec => {
+            const id = Number(rec.recipient_id || rec.id);
+            if (!Number.isFinite(id)) return null;
+            return {
+              id,
+              text: rec.recipient_name || rec.organization || `Recipient #${id}`,
+              address: rec.address || rec.location || null
+            };
+          })
+          .filter(Boolean);
+
+        const unique = new Map();
+        dataOptions.forEach(item => {
+          if (!unique.has(item.id)) unique.set(item.id, item);
+        });
+        const deduped = Array.from(unique.values());
+
+        if (canUseSelect2 && $(recipientSelect).data('select2')) {
+          try { $(recipientSelect).select2('destroy'); } catch (_) {}
+        }
+        recipientSelect.innerHTML = '';
+        deduped.forEach(item => {
+          const opt = document.createElement('option');
+          opt.value = String(item.id);
+          opt.textContent = item.text;
+          if (item.address) opt.dataset.address = item.address;
+          recipientSelect.appendChild(opt);
+        });
+
+        recipientSelect.disabled = false;
+
+        // Seed recipient queue so chips/hidden field reflect all payload recipients
+        resetRecipientQueue(
+          deduped.map(item => ({ id: item.id, text: item.text, address: item.address })),
+          true
+        );
+        renderRecipientTags();
+        syncRecipientHiddenFromQueue();
+
+        if (canUseSelect2) {
+          $(recipientSelect).select2({
+            dropdownParent: $('#eventModal'),
+            placeholder: 'Select recipient',
+            allowClear: true,
+            width: 'resolve'
+          }).on('select2:select', function(ev){
+            const dataItem = ev.params?.data;
+            if (dataItem?.address) applyLocationFromAddress(dataItem.address);
+            rememberOptionAddress(recipientSelect, dataItem?.id, dataItem?.address);
+          }).on('change', function(){
+            const opt = this.options[this.selectedIndex];
+            if (opt && opt.dataset?.address) applyLocationFromAddress(opt.dataset.address);
+          });
+          // Select2 doesn't reflect queue automatically; clear dropdown selection
+          $(recipientSelect).val(null).trigger('change');
+        }
       }
     }
     function syncRecipientHiddenFromSelect(){
@@ -940,6 +1063,13 @@
         } else {
           resetRecipientQueue([], true);
           if (tagsWrapEl) tagsWrapEl.innerHTML = '';
+          if (recipientSelect){
+            if (typeof window.$ === 'function' && $(recipientSelect).data('select2')){
+              $(recipientSelect).val(null).trigger('change');
+            } else {
+              recipientSelect.value = '';
+            }
+          }
         }
       }
       // Donor selector visible only for admin when scheduling donor pickups
@@ -1032,13 +1162,17 @@
     const saveBtn = qs('#saveEventBtn'); if (saveBtn) saveBtn.disabled = !canEdit;
     try {
       const recInput = qs('#evRecipient');
-      const recWrap = recInput ? recInput.closest('.col-6') : null;
+      const recWrap = document.getElementById('wrapRecipient');
       const donorInput = qs('#evDonor');
       const donorWrap = donorInput ? donorInput.closest('.col-6') : qs('#wrapDonor');
       const donorDisplayEl = qs('#evDonorDisplay');
       const disp = document.getElementById('evRecipientName');
       if (disp && disp.parentElement) disp.parentElement.removeChild(disp);
-      if (recWrap) recWrap.style.display = '';
+      if (recWrap){
+        const typeSel = qs('#evType');
+        const isRecipientType = typeSel && typeSel.value === 'recipient';
+        recWrap.style.display = isRecipientType ? '' : 'none';
+      }
       if (donorDisplayEl){
         donorDisplayEl.style.display = 'none';
         donorDisplayEl.innerHTML = '';
@@ -1301,7 +1435,7 @@
           if (selected && canEditEvent(selected)) targetEvent = normalizeEventData(selected);
         }
         if (!targetEvent){
-          showCalModal('Select an event you can edit first');
+          calendarToast('Select an event you can edit first', 'warn');
           return;
         }
         const viewModal = viewModalEl ? bootstrap.Modal.getInstance(viewModalEl) : null;
@@ -1317,7 +1451,7 @@
         if (!trigger) return;
         const id = Number(trigger.getAttribute('data-event-id') || trigger.dataset.eventId);
         if (!Number.isFinite(id)) return;
-        const match = lastItems.find(item => Number(item.id) === id || Number(item.event_id) === id);
+        const match = cachedCalendarItems.find(item => Number(item.id) === id || Number(item.event_id) === id);
         if (!match) return;
         selectedEventId = id;
         updateSelectedListActive();
@@ -1373,7 +1507,61 @@
 
     const calendarEl = document.getElementById('calendar');
     if (!calendarEl) return;
-    let lastItems = [];
+
+    const loadCalendarRange = async (startIso, endIso)=>{
+      const token = ++rangeRequestId;
+      try {
+        const items = await listEvents(startIso, endIso);
+        if (token !== rangeRequestId) return;
+        cachedCalendarItems = items;
+        calendarInstance?.removeAllEvents();
+        items.forEach(rawEv => {
+          const ev = normalizeEventData(rawEv);
+          if (!canViewEvent(ev)) return;
+          const mine = eventIsForCurrentUser(ev) || Number(ev.created_by_user_id) === userId();
+          const cls = [ mine ? 'event-owned' : 'event-assigned' ];
+          let textColor;
+          const editor = (rawEv.editor_role||rawEv.last_updated_role||'').toLowerCase();
+          if (editor === 'donor') { textColor = '#00a0b0'; }
+          else if (editor === 'recipient') { textColor = '#ed3f34'; }
+          else if (editor === 'admin') { textColor = '#76818d'; }
+          else if (rawEv.is_busy) {
+            textColor = '#6c757d';
+          } else {
+            const roleType = ev.event_type;
+            if (roleType === 'donor') { textColor = '#00a0b0'; }
+            else if (roleType === 'recipient') { textColor = '#ed3f34'; }
+            else { textColor = '#76818d'; }
+          }
+          calendarInstance?.addEvent({
+            id: String(ev.id),
+            title: rawEv.title || ev.title,
+            start: rawEv.start || ev.start,
+            end: rawEv.end || ev.end || undefined,
+            extendedProps: ev,
+            classNames: cls,
+            textColor
+          });
+        });
+        rerenderSelectedDayFromCache();
+      } catch (e) {
+        if (token === rangeRequestId) {
+          calendarToast(e.message || 'Failed to load events', 'error');
+        }
+      }
+    };
+
+    const refreshVisibleRange = ()=>{
+      if (lastRangeInfo && lastRangeInfo.startStr && lastRangeInfo.endStr){
+        return loadCalendarRange(lastRangeInfo.startStr, lastRangeInfo.endStr);
+      }
+      const view = calendarInstance?.view;
+      if (view?.activeStart && view?.activeEnd){
+        return loadCalendarRange(view.activeStart.toISOString(), view.activeEnd.toISOString());
+      }
+      return Promise.resolve();
+    };
+
     const calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: 'dayGridMonth',
       height: 'auto',
@@ -1399,55 +1587,14 @@
         return canEditEvent(data);
       },
       eventDidMount: ()=>{},
-      datesSet: async (info)=>{
-        try{
-          const items = await listEvents(info.startStr, info.endStr);
-          lastItems = items;
-          calendar.removeAllEvents();
-          items.forEach(rawEv => {
-            const ev = normalizeEventData(rawEv);
-            if (!canViewEvent(ev)) return;
-            const mine = eventIsForCurrentUser(ev) || Number(ev.created_by_user_id) === userId();
-            const cls = [ mine ? 'event-owned' : 'event-assigned' ];
-            let textColor;
-            const editor = (rawEv.editor_role||rawEv.last_updated_role||'').toLowerCase();
-            if (editor === 'donor') { textColor = '#00a0b0'; }
-            else if (editor === 'recipient') { textColor = '#ed3f34'; }
-            else if (editor === 'admin') { textColor = '#76818d'; }
-            else if (rawEv.is_busy) {
-              // busy block for privacy
-              textColor = '#6c757d';
-            } else {
-              // Fallback when editor_role is not available: color by role_type
-              const roleType = ev.event_type;
-              if (roleType === 'donor') { textColor = '#00a0b0'; }
-              else if (roleType === 'recipient') { textColor = '#ed3f34'; }
-              else { textColor = '#76818d'; }
-            }
-            calendar.addEvent({
-              id: String(ev.id),
-              title: rawEv.title || ev.title,
-              start: rawEv.start || ev.start,
-              end: rawEv.end || ev.end || undefined,
-              extendedProps: ev,
-              classNames: cls,
-              textColor
-            });
-          });
-        } catch(e){ showCalModal(e.message || 'Failed to load events'); }
+      datesSet: (info)=>{
+        lastRangeInfo = { startStr: info.startStr, endStr: info.endStr };
+        loadCalendarRange(info.startStr, info.endStr);
       },
       dateClick: (info)=>{
         lastSelectedDate = info.dateStr;
         highlightSelectedDate(info.dateStr);
-        const dayStart = new Date(info.dateStr + 'T00:00:00');
-        const dayEnd = new Date(info.dateStr + 'T23:59:59');
-        const items = (lastItems||[]).map(normalizeEventData).filter(ev=>{
-          if (!canViewEvent(ev)) return false;
-          const s = new Date(ev.start);
-          const e = ev.end ? new Date(ev.end) : s;
-          return (s <= dayEnd && e >= dayStart);
-        });
-        renderSelectedDay(info.dateStr, items);
+        renderDateFromCache(info.dateStr);
       },
       eventClick: (arg)=>{
         const raw = { ...(arg.event.extendedProps || {}),
@@ -1457,20 +1604,12 @@
           end: arg.event.end?.toISOString() || null
         };
         const ev = normalizeEventData(raw);
-        if (!canViewEvent(ev)) { showCalModal('You do not have permission to view this event'); return; }
+        if (!canViewEvent(ev)) { calendarToast('You do not have permission to view this event', 'warn'); return; }
         const dateKey = getDateKey(ev.start);
         if (dateKey){
           lastSelectedDate = dateKey;
           highlightSelectedDate(dateKey);
-          const dayStart = new Date(`${dateKey}T00:00:00`);
-          const dayEnd = new Date(`${dateKey}T23:59:59`);
-          const items = (lastItems||[]).map(normalizeEventData).filter(item=>{
-            if (!canViewEvent(item)) return false;
-            const s = new Date(item.start);
-            const e = item.end ? new Date(item.end) : s;
-            return (s <= dayEnd && e >= dayStart);
-          });
-          renderSelectedDay(dateKey, items);
+          renderDateFromCache(dateKey);
           const idNum = Number(ev.id);
           if (Number.isFinite(idNum)){
             selectedEventId = idNum;
@@ -1501,41 +1640,48 @@
       });
     }
     qs('#refreshCalBtn')?.addEventListener('click', ()=> {
-      if (calendar.refetchEvents) { calendar.refetchEvents(); }
-      else { calendar.gotoDate(new Date(calendar.getDate())); }
-      if (lastSelectedDate){
-        setTimeout(()=>{
-          highlightSelectedDate(lastSelectedDate);
-        }, 50);
-      }
+      refreshVisibleRange();
     });
 
     // Save
     qs('#saveEventBtn')?.addEventListener('click', async ()=>{
       try{
         const data = collectForm();
-        if (!data) { showCalModal('You do not have permission to save this event type'); return; }
-        if (!data.title || !data.start) { showCalModal('Title and start are required'); return; }
+        if (!data) { calendarToast('You do not have permission to save this event type', 'warn'); return; }
+        if (!data.title || !data.start) { calendarToast('Title and start are required', 'warn'); return; }
         // All roles: disallow creating/updating to past times
         const now = new Date();
         const startTest = new Date(data.start);
-        if (startTest < now) { showCalModal('Cannot create or update events in the past'); return; }
+        if (startTest < now) { calendarToast('Cannot create or update events in the past', 'warn'); return; }
         // Client-side guard: recipients can only book 10:00-16:00
         if (role()==='recipient'){
           const d = new Date(data.start);
           const mins = d.getHours()*60 + d.getMinutes();
-          if (mins < (10*60) || mins > (16*60)) { showCalModal('Recipients can only book between 10:00 and 16:00'); return; }
+          if (mins < (10*60) || mins > (16*60)) { calendarToast('Recipients can only book between 10:00 and 16:00', 'warn'); return; }
         }
         if (data.id){
-          if (!canEditEvent(normalizeEventData(data))) { showCalModal('You do not have permission to update this event'); return; }
+          if (!canEditEvent(normalizeEventData(data))) { calendarToast('You do not have permission to update this event', 'warn'); return; }
           await updateEvent(data.id, data);
         } else {
-          await createEvent(data);
+          const created = await createEvent(data);
+          const newId = Number(created?.id ?? created?.event_id);
+          if (Number.isFinite(newId)) {
+            data.id = newId;
+            selectedEventId = newId;
+          }
+        }
+        const dateKey = getDateKey(data.start);
+        if (dateKey) {
+          lastSelectedDate = dateKey;
+          const startDate = new Date(`${dateKey}T00:00:00`);
+          if (!Number.isNaN(startDate)) {
+            calendarInstance?.gotoDate(startDate);
+          }
         }
         bootstrap.Modal.getInstance(qs('#eventModal'))?.hide();
-        showCalModal('Event saved');
-        calendar.gotoDate(new Date(calendar.getDate())); // trigger datesSet reload
-      } catch(e){ showCalModal(e.message || 'Failed to save event'); }
+        calendarToast('Event saved', 'success');
+        refreshVisibleRange();
+      } catch(e){ calendarToast(e.message || 'Failed to save event', 'error'); }
     });
 
     // Delete
@@ -1543,12 +1689,15 @@
       try{
         const id = Number(qs('#evId').value||0)||0; if (!id) return;
         const evData = normalizeEventData({ id });
-        if (!canEditEvent(evData)) { showCalModal('You do not have permission to delete this event'); return; }
+        if (!canEditEvent(evData)) { calendarToast('You do not have permission to delete this event', 'warn'); return; }
         await deleteEvent(id);
         bootstrap.Modal.getInstance(qs('#eventModal'))?.hide();
-        showCalModal('Event deleted');
-        calendar.gotoDate(new Date(calendar.getDate()));
-      } catch(e){ showCalModal(e.message || 'Failed to delete event'); }
+        calendarToast('Event deleted', 'success');
+        if (selectedEventId === id) {
+          selectedEventId = null;
+        }
+        refreshVisibleRange();
+      } catch(e){ calendarToast(e.message || 'Failed to delete event', 'error'); }
     });
   }
 

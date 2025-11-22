@@ -70,8 +70,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -123,7 +122,7 @@
         </div>
       </div>
     </nav>
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
     <aside class="sidebar collapsed">
       <a
         href="AdminDashboard.html"
@@ -343,16 +342,25 @@
         >
           <div>
             <h6 class="mb-1">Allocation Logs</h6>
-            <p class="mb-0 text-muted small">
-              Monitor allocation pickups, capture proof, and close the loop.
-            </p>
           </div>
           <div class="d-flex flex-wrap gap-2">
             <button
               id="refreshBtn"
               class="btn btn-outline-primary btn-sm px-2 py-1"
+              title="Refresh allocations"
+              aria-label="Refresh allocations"
             >
               <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <button
+              id="scheduleBtn"
+              class="btn btn-outline-success btn-sm px-2 py-1"
+              title="Schedule pickups"
+              aria-label="Schedule pickups"
+              type="button"
+            >
+              <i class="bi bi-calendar-event"></i>
+              <span class="d-none d-sm-inline ms-1">Schedule</span>
             </button>
           </div>
         </div>
@@ -467,36 +475,23 @@
                         autoplay
                         playsinline
                         muted
-                        style="
-                          display: none;
-                          width: 220px;
-                          max-width: 100%;
-                          border-radius: 0.5rem;
-                        "
+                        class="pickup-camera-feed d-none"
                       ></video>
                       <canvas
                         id="photoCanvas"
-                        style="
-                          display: none;
-                          width: 220px;
-                          max-width: 100%;
-                          height: auto;
-                          border-radius: 0.5rem;
-                        "
+                        class="pickup-photo-canvas d-none"
                       ></canvas>
                     </div>
                     <div class="d-flex flex-wrap gap-2 mt-2">
                       <button
                         id="takePhotoBtn"
-                        class="btn btn-primary btn-sm"
-                        style="display: none"
+                        class="btn btn-primary btn-sm d-none"
                       >
                         <i class="bi bi-camera-fill"></i> Take Photo
                       </button>
                       <button
                         id="retakePhotoBtn"
-                        class="btn btn-outline-secondary btn-sm"
-                        style="display: none"
+                        class="btn btn-outline-secondary btn-sm d-none"
                       >
                         <i class="bi bi-arrow-repeat"></i> Retake
                       </button>
@@ -671,6 +666,15 @@
               >
                 <i class="bi bi-zoom-in"></i>
               </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                id="imgDownloadBtn"
+                title="Download image"
+                aria-label="Download image"
+              >
+                <i class="bi bi-download"></i>
+              </button>
             </div>
             <button
               type="button"
@@ -679,27 +683,21 @@
               aria-label="Close"
             ></button>
           </div>
-          <div class="modal-body" style="min-height: 60vh">
+          <div class="modal-body pickup-image-modal-body">
             <div
               id="imageViewerWrap"
-              class="d-flex align-items-center justify-content-center overflow-auto"
-              style="background: #f8f9fa; max-height: 70vh"
+              class="d-flex align-items-center justify-content-center overflow-auto pickup-image-viewer-wrap"
             >
               <img
                 id="imageViewerImg"
                 src=""
                 alt="Receipt"
-                style="
-                  max-width: 100%;
-                  max-height: 100%;
-                  transform-origin: center center;
-                "
+                class="pickup-image-viewer-img"
               />
             </div>
             <div
               id="imageViewerInfo"
-              class="small text-muted mt-2"
-              style="word-break: break-all"
+              class="small text-muted mt-2 pickup-image-viewer-info"
             ></div>
           </div>
         </div>

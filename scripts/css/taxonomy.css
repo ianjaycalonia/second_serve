@@ -28,3 +28,16 @@
   width: 1%;
   white-space: nowrap;
 }
+
+/* Taxonomy filters and controls */
+.taxonomy-filter-select {
+  max-width: 140px;
+}
+
+.taxonomy-page-size {
+  width: auto;
+}
+
+.taxonomy-master-search {
+  min-width: 260px;
+}

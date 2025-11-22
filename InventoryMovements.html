@@ -68,8 +68,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -121,7 +120,7 @@
       </div>
     </nav>
 
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
     <aside class="sidebar collapsed">
       <a
         href="AdminDashboard.html"
@@ -342,8 +341,7 @@
             <label class="form-label mb-1" for="mvDays">Show last</label>
             <select
               id="mvDays"
-              class="form-select form-select-sm"
-              style="width: 140px"
+              class="form-select form-select-sm mv-filter-select mv-filter-days"
             >
               <option value="1">1 day</option>
               <option value="2" selected>2 days</option>
@@ -356,8 +354,7 @@
             <label class="form-label mb-1" for="mvDirection">Direction</label>
             <select
               id="mvDirection"
-              class="form-select form-select-sm"
-              style="width: 160px"
+              class="form-select form-select-sm mv-filter-select mv-filter-direction"
             >
               <option value="all" selected>All</option>
               <option value="in">In (Accepted)</option>
@@ -368,8 +365,7 @@
             <label class="form-label mb-1" for="mvMode">Mode</label>
             <select
               id="mvMode"
-              class="form-select form-select-sm"
-              style="width: 160px"
+              class="form-select form-select-sm mv-filter-select mv-filter-mode"
             >
               <option value="">All</option>
               <option value="recipient">Recipient</option>
@@ -378,8 +374,7 @@
           </div>
           <div class="ms-auto d-flex gap-2">
             <div
-              class="d-flex align-items-center gap-2"
-              style="min-width: 120px"
+              class="d-flex align-items-center gap-2 mv-page-size-wrap"
             >
               <label class="fs-6 mb-0" for="mvPageSize">Page:</label>
               <select id="mvPageSize" class="form-select form-select-sm">

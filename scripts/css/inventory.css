@@ -107,3 +107,78 @@
     padding: 1.25rem 1rem;
   }
 }
+
+/* Inventory layout helpers (moved from inline styles) */
+.inventory-toast-container {
+  z-index: 12000 !important;
+}
+
+.inventory-toast-container .toast {
+  z-index: 12001 !important;
+}
+
+.inventory-page-control {
+  min-width: 120px;
+}
+
+.inventory-import-preview {
+  max-height: 300px;
+}
+
+.repack-template-list {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.repack-lot-table-wrapper {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.repack-ops-table-wrapper {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+/* OCR status + preview (hidden by default; JS will show/hide) */
+#ocrStatus,
+#ocrPreview {
+  display: none;
+}
+
+.ocr-preview-table th.ocr-col-item {
+  width: 70%;
+}
+
+.ocr-preview-table th.ocr-col-qty {
+  width: 20%;
+}
+
+.ocr-preview-table th.ocr-col-actions {
+  width: 10%;
+}
+
+/* Lot details modal column widths */
+.lot-col-id {
+  width: 12%;
+}
+
+.lot-col-qty {
+  width: 14%;
+}
+
+.lot-col-unit {
+  width: 12%;
+}
+
+.lot-col-added {
+  width: 22%;
+}
+
+.lot-col-expiry {
+  width: 20%;
+}
+
+.lot-col-status {
+  width: 20%;
+}

@@ -17,3 +17,8 @@ table {
     font-weight: 600;
   }
 }
+
+tbody.dr-recipient > tr.dr-rec-header > td {
+  background-color: #f2f4f8;
+  color: #616b7a;
+}

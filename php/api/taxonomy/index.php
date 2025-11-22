@@ -39,6 +39,47 @@ function ensureMasterItemExclusionTable($db){
     $ensured = true;
 }
 
+function taxonomyHasCategoryCodeColumn(): bool {
+    static $has = null;
+    if ($has !== null) {
+        return $has;
+    }
+    try {
+        $db = Database::getInstance();
+        $db->query('SELECT code FROM categories LIMIT 1');
+        $has = true;
+    } catch (Throwable $e) {
+        $has = false;
+    }
+    return $has;
+}
+
+function generateCategoryCode(Database $db, string $primary, ?string $secondary = null): string {
+    $raw = trim($primary . ' ' . ($secondary ?? ''));
+    $raw = strtoupper(preg_replace('/[^A-Z0-9]+/', '', $raw));
+    if ($raw === '') {
+        $raw = 'CAT';
+    }
+    $base = substr($raw, 0, 8) ?: 'CAT';
+    $candidate = $base;
+    $suffix = 1;
+
+    while (true) {
+        $exists = $db->query('SELECT 1 FROM categories WHERE LOWER(code)=? LIMIT 1', [strtolower($candidate)])->fetch();
+        if (!$exists) {
+            return $candidate;
+        }
+        $suffixStr = str_pad((string)$suffix, 2, '0', STR_PAD_LEFT);
+        $maxBaseLen = max(1, 32 - strlen($suffixStr));
+        $candidate = substr($base, 0, $maxBaseLen) . $suffixStr;
+        $suffix++;
+        if ($suffix > 9999) {
+            $candidate = substr($base, 0, 24) . strtoupper(bin2hex(random_bytes(4)));
+            $suffix = 1;
+        }
+    }
+}
+
 try {
 
     // GET /taxonomy/categories
@@ -50,7 +91,19 @@ try {
         $where = 'WHERE 1=1';
         if ($q !== '') { $where .= ' AND (LOWER(primary_name) LIKE ? OR LOWER(COALESCE(secondary_name, "")) LIKE ?)'; $params[] = '%'.strtolower($q).'%'; $params[] = '%'.strtolower($q).'%'; }
         if ($active !== '') { $where .= ' AND is_active = ?'; $params[] = ($active==='1'||strtolower($active)==='true') ? 1 : 0; }
-        $rows = $db->query("SELECT category_id, primary_name, secondary_name, is_active, created_at FROM categories $where ORDER BY primary_name, secondary_name", $params)->fetchAll();
+        $hasCode = taxonomyHasCategoryCodeColumn();
+        $codeSelect = $hasCode ? 'code' : 'NULL AS code';
+        $rows = $db->query("SELECT category_id, $codeSelect, primary_name, secondary_name, is_active, created_at FROM categories $where ORDER BY primary_name, secondary_name", $params)->fetchAll();
+        if ($hasCode) {
+            foreach ($rows as &$row) {
+                if (empty($row['code'])) {
+                    $generated = generateCategoryCode($db, (string)$row['primary_name'], $row['secondary_name'] !== null ? (string)$row['secondary_name'] : null);
+                    $db->query('UPDATE categories SET code=? WHERE category_id=?', [$generated, (int)$row['category_id']]);
+                    $row['code'] = $generated;
+                }
+            }
+            unset($row);
+        }
         sendJson(['success'=>true,'items'=>$rows]);
     }
 
@@ -59,13 +112,28 @@ try {
         requireRole(['admin']);
         $db = Database::getInstance();
         $in = $_POST ?: getJsonInputSafe();
+        $hasCode = taxonomyHasCategoryCodeColumn();
+        $codeRaw = trim((string)($in['code'] ?? ''));
+        $code = $hasCode && $codeRaw !== '' ? strtoupper($codeRaw) : null;
         $primary = trim((string)($in['primary_name'] ?? ''));
         $secondary = trim((string)($in['secondary_name'] ?? ''));
         if ($primary === '') { sendJson(['success'=>false,'error'=>'primary_name is required'],400); }
+        if ($hasCode) {
+            if ($code !== null) {
+                $codeExists = $db->query('SELECT 1 FROM categories WHERE LOWER(code)=?', [strtolower($code)])->fetch();
+                if ($codeExists) { sendJson(['success'=>false,'error'=>'Category code already exists'],409); }
+            } else {
+                $code = generateCategoryCode($db, $primary, $secondary !== '' ? $secondary : null);
+            }
+        }
         // uniqueness (case-insensitive) on (primary, secondary)
         $exists = $db->query('SELECT 1 FROM categories WHERE LOWER(primary_name)=? AND LOWER(COALESCE(secondary_name, ""))=?', [strtolower($primary), strtolower($secondary)])->fetch();
         if ($exists) { sendJson(['success'=>false,'error'=>'Category already exists'],409); }
-        $db->query('INSERT INTO categories (primary_name, secondary_name, is_active, created_at) VALUES (?,?,1,NOW())', [$primary, ($secondary!==''?$secondary:null)]);
+        if ($hasCode) {
+            $db->query('INSERT INTO categories (code, primary_name, secondary_name, is_active, created_at) VALUES (?,?,?,1,NOW())', [$code, $primary, ($secondary!==''?$secondary:null)]);
+        } else {
+            $db->query('INSERT INTO categories (primary_name, secondary_name, is_active, created_at) VALUES (?,?,1,NOW())', [$primary, ($secondary!==''?$secondary:null)]);
+        }
         sendJson(['success'=>true]);
     }
 
@@ -75,10 +143,60 @@ try {
         $id = (int)$m[1];
         $db = Database::getInstance();
         $in = getJsonInputSafe();
+
+        // Enforce uniqueness of (primary_name, secondary_name) on update
+        $hasCode = taxonomyHasCategoryCodeColumn();
+        $selectCols = $hasCode ? 'code, primary_name, secondary_name' : 'NULL AS code, primary_name, secondary_name';
+        $current = $db->query(
+            "SELECT $selectCols FROM categories WHERE category_id = ? LIMIT 1",
+            [$id]
+        )->fetch();
+        if (!$current) {
+            sendJson(['success'=>false,'error'=>'Category not found'],404);
+        }
+        $currentCode = $current['code'] ?? null;
+        $codeProvided = array_key_exists('code', $in);
+        $newCodeRaw = $codeProvided
+            ? trim((string)$in['code'])
+            : (string)($currentCode ?? '');
+        $newCode = $hasCode && $newCodeRaw !== '' ? strtoupper($newCodeRaw) : null;
+        $newPrimary = array_key_exists('primary_name', $in)
+            ? trim((string)$in['primary_name'])
+            : (string)($current['primary_name'] ?? '');
+        $newSecondary = array_key_exists('secondary_name', $in)
+            ? trim((string)$in['secondary_name'])
+            : (string)($current['secondary_name'] ?? '');
+        if ($newPrimary === '') {
+            sendJson(['success'=>false,'error'=>'primary_name is required'],400);
+        }
+        if ($hasCode) {
+            if ($newCode === null && $currentCode === null) {
+                $newCode = generateCategoryCode($db, $newPrimary, $newSecondary !== '' ? $newSecondary : null);
+                $codeProvided = true;
+            }
+            if ($newCode !== null && strtolower((string)$newCode) !== strtolower((string)$currentCode)) {
+                $dupCode = $db->query(
+                    'SELECT 1 FROM categories WHERE category_id <> ? AND LOWER(code)=? LIMIT 1',
+                    [$id, strtolower($newCode)]
+                )->fetch();
+                if ($dupCode) {
+                    sendJson(['success'=>false,'error'=>'Category code already exists'],409);
+                }
+            }
+        }
+        $dup = $db->query(
+            'SELECT 1 FROM categories WHERE category_id <> ? AND LOWER(primary_name)=? AND LOWER(COALESCE(secondary_name, ""))=? LIMIT 1',
+            [$id, strtolower($newPrimary), strtolower($newSecondary)]
+        )->fetch();
+        if ($dup) {
+            sendJson(['success'=>false,'error'=>'Category already exists'],409);
+        }
+
         $fields = [];
         $params = [];
-        if (array_key_exists('primary_name',$in)) { $fields[]='primary_name=?'; $params[] = trim((string)$in['primary_name']); }
-        if (array_key_exists('secondary_name',$in)) { $fields[]='secondary_name=?'; $params[] = ($in['secondary_name']!==''?trim((string)$in['secondary_name']):null); }
+        if ($hasCode && ($codeProvided || ($currentCode === null && $newCode !== null))) { $fields[]='code=?'; $params[] = $newCode; }
+        if (array_key_exists('primary_name',$in)) { $fields[]='primary_name=?'; $params[] = $newPrimary; }
+        if (array_key_exists('secondary_name',$in)) { $fields[]='secondary_name=?'; $params[] = ($newSecondary!==''?$newSecondary:null); }
         if (array_key_exists('is_active',$in)) { $fields[]='is_active=?'; $params[] = $in['is_active']?1:0; }
         if (!$fields) { sendJson(['success'=>false,'error'=>'No fields'],400); }
         $params[] = $id;
@@ -128,9 +246,29 @@ try {
         $id = (int)$m[1];
         $db = Database::getInstance();
         $in = getJsonInputSafe();
+
+        // Enforce uniqueness of unit code on update
+        $current = $db->query('SELECT code FROM units WHERE unit_id = ? LIMIT 1', [$id])->fetch();
+        if (!$current) {
+            sendJson(['success'=>false,'error'=>'Unit not found'],404);
+        }
+        $newCode = array_key_exists('code', $in)
+            ? trim((string)$in['code'])
+            : (string)($current['code'] ?? '');
+        if ($newCode === '') {
+            sendJson(['success'=>false,'error'=>'code is required'],400);
+        }
+        $dup = $db->query(
+            'SELECT 1 FROM units WHERE unit_id <> ? AND LOWER(code)=? LIMIT 1',
+            [$id, strtolower($newCode)]
+        )->fetch();
+        if ($dup) {
+            sendJson(['success'=>false,'error'=>'Unit code already exists'],409);
+        }
+
         $fields = [];
         $params = [];
-        if (array_key_exists('code',$in)) { $fields[]='code=?'; $params[] = trim((string)$in['code']); }
+        if (array_key_exists('code',$in)) { $fields[]='code=?'; $params[] = $newCode; }
         if (array_key_exists('label',$in)) { $fields[]='label=?'; $params[] = ($in['label']!==''?trim((string)$in['label']):null); }
         if (array_key_exists('is_active',$in)) { $fields[]='is_active=?'; $params[] = $in['is_active']?1:0; }
         if (!$fields) { sendJson(['success'=>false,'error'=>'No fields'],400); }
@@ -149,8 +287,8 @@ try {
     }
 
     // GET /taxonomy/master-items
-    if ($method === 'GET' && preg_match('#^/(master-items|master-items/)\z#', $sub)) {
-        requireRole(['admin']);
+    if ($method === 'GET' && preg_match('#^/(master-items|master-items/)\\z#', $sub)) {
+        requireRole(['admin','donor']);
         $db = Database::getInstance();
         ensureMasterItemExclusionTable($db);
         $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';

@@ -139,7 +139,9 @@ class User
             // Handle primary contact updates if provided
             $contactUpdates = [];
             foreach (['contact_person','position_designation','contact_number','email'] as $k) {
-                if (isset($data[$k]) && $data[$k] !== '') { $contactUpdates[$k] = $data[$k]; }
+                if (array_key_exists($k, $data) && $data[$k] !== null) {
+                    $contactUpdates[$k] = $data[$k];
+                }
             }
             if ($contactUpdates) {
                 $row = $this->db->query('SELECT primary_contact_id FROM recipient_profiles WHERE user_id = ?', [$userId])->fetch();

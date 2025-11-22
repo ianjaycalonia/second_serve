@@ -43,6 +43,8 @@ body {
     font-family: "Open Sans", sans-serif;
     font-weight: 400;
     font-size: 0.95rem;
+    overflow-y: auto;
+    max-height: 45vh;
   }
 
   /* Links & CTAs */

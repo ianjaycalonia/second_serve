@@ -33,7 +33,7 @@
         <div class="ms-auto">
           <button
             type="button"
-            class="btn btn-outline-light me-2"
+            class="btn btn-login btn-login-primary me-3"
             data-bs-toggle="modal"
             data-bs-target="#authModal"
             data-auth-mode="login"
@@ -42,7 +42,7 @@
           </button>
           <button
             type="button"
-            class="btn btn-accent"
+            class="btn btn-login btn-login-secondary"
             data-bs-toggle="modal"
             data-bs-target="#authModal"
             data-auth-mode="register"
@@ -100,8 +100,7 @@
             <div class="login-card card h-100">
               <div class="card-body text-center">
                 <i
-                  class="bi bi-heart-fill login-icon"
-                  style="color: #e91e63"
+                  class="bi bi-heart-fill login-icon login-icon-donor"
                 ></i>
                 <h3>Donor</h3>
                 <p class="text-muted mb-4">
@@ -126,8 +125,7 @@
             <div class="login-card card h-100">
               <div class="card-body text-center">
                 <i
-                  class="bi bi-people-fill login-icon"
-                  style="color: #4caf50"
+                  class="bi bi-people-fill login-icon login-icon-recipient"
                 ></i>
                 <h3>Recipient</h3>
                 <p class="text-muted mb-4">
@@ -169,7 +167,7 @@
             <p>Our team schedules a pickup at your convenience.</p>
           </div>
           <div class="col-md-4 mb-4">
-            <i class="bi bi-heart-fill feature-icon" style="color: #e91e63"></i>
+            <i class="bi bi-heart-fill feature-icon feature-icon-heart"></i>
             <h4>3. We Distribute</h4>
             <p>Food is distributed to those in need through our network.</p>
           </div>
@@ -198,7 +196,7 @@
             <p>Email: info@secondserve.com<br />Phone: (123) 456-7890</p>
           </div>
         </div>
-        <hr class="mt-4 mb-3" style="border-color: rgba(255, 255, 255, 0.1)" />
+        <hr class="mt-4 mb-3 footer-divider" />
         <div class="text-center">
           <p class="mb-0">&copy; 2025 Second Serve. All rights reserved.</p>
         </div>
@@ -328,8 +326,18 @@
               >
                 <form id="registerForm">
                   <div class="mb-3">
+                    <label for="registerRole" class="form-label"
+                      >Register as</label
+                    >
+                    <select class="form-select" id="registerRole" required>
+                      <option value="">Select your role</option>
+                      <option value="donor">Food Donor</option>
+                      <option value="recipient">Recipient Organization</option>
+                    </select>
+                  </div>
+                  <div class="mb-3">
                     <label for="registerName" class="form-label"
-                      >Full Name</label
+                      >Full Name <span class="text-danger">*</span></label
                     >
                     <input
                       type="text"
@@ -337,6 +345,19 @@
                       id="registerName"
                       required
                     />
+                    <div class="invalid-feedback">Please provide your full name</div>
+                  </div>
+                  <div class="mb-3 d-none" id="positionField">
+                    <label for="registerPosition" class="form-label"
+                      >Position/Designation <span class="text-danger">*</span></label
+                    >
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="registerPosition"
+                      placeholder="e.g., Program Coordinator"
+                    />
+                    <div class="invalid-feedback">Please provide your position/designation</div>
                   </div>
                   <div class="mb-3">
                     <label for="registerEmail" class="form-label"
@@ -405,20 +426,9 @@
                       Caps Lock is on
                     </div>
                   </div>
-                  <div class="mb-3">
-                    <label for="registerRole" class="form-label"
-                      >Register as</label
-                    >
-                    <select class="form-select" id="registerRole" required>
-                      <option value="">Select your role</option>
-                      <option value="donor">Food Donor</option>
-                      <option value="recipient">Recipient Organization</option>
-                    </select>
-                  </div>
                   <div
-                    class="mb-3"
+                    class="mb-3 d-none"
                     id="wrapDonorCategory"
-                    style="display: none"
                   >
                     <label for="registerDonorCategory" class="form-label"
                       >Donor Category (optional)</label
@@ -428,9 +438,8 @@
                     </select>
                   </div>
                   <div
-                    class="mb-3"
+                    class="mb-3 d-none"
                     id="wrapBeneficiaryCategory"
-                    style="display: none"
                   >
                     <label for="registerBeneficiaryCategory" class="form-label"
                       >Beneficiary Category (optional)</label
@@ -444,36 +453,43 @@
                   </div>
                   <div class="mb-3">
                     <label for="registerOrganization" class="form-label"
-                      >Organization Name (optional)</label
+                      >Organization Name <span class="text-danger">*</span></label
                     >
                     <input
                       type="text"
                       class="form-control"
                       id="registerOrganization"
                       placeholder="e.g., ABC Corp / Community Org"
+                      required
                     />
+                    <div class="invalid-feedback">Please provide your organization name</div>
                   </div>
                   <div class="mb-3">
                     <label for="registerContact" class="form-label"
-                      >Contact Number (optional)</label
+                      >Contact Number <span class="text-danger">*</span></label
                     >
                     <input
                       type="tel"
                       class="form-control"
                       id="registerContact"
                       placeholder="e.g., 0917 123 4567"
+                      required
+                      pattern="[0-9+\s-]+"
                     />
+                    <div class="invalid-feedback">Please provide a valid contact number</div>
                   </div>
                   <div class="mb-3">
                     <label for="registerAddress" class="form-label"
-                      >Address (optional)</label
+                      >Address <span class="text-danger">*</span></label
                     >
                     <textarea
                       class="form-control"
                       id="registerAddress"
                       rows="2"
                       placeholder="Street, City, Province"
+                      required
                     ></textarea>
+                    <div class="invalid-feedback">Please provide your complete address</div>
                   </div>
                   <div class="d-grid gap-2">
                     <button type="submit" class="btn btn-success">
@@ -487,6 +503,12 @@
         </div>
       </div>
     </div>
+
+    <!-- Toast Container -->
+    <div
+      id="toastContainer"
+      class="toast-container position-fixed top-0 end-0 p-3"
+    ></div>
 
     <!-- JavaScript Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

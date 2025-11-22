@@ -71,3 +71,24 @@
   background: #fdecee;
   text-decoration: line-through;
 }
+
+/* Constrained brand logo (moved from inline <style> in RecipientsList.html) */
+.brand img {
+  max-height: 36px;
+  width: auto;
+}
+
+/* Pending approvals table action column width */
+.pending-actions-col {
+  width: 140px;
+}
+
+/* Pool search input width */
+.pool-search-input {
+  width: 220px;
+}
+
+/* Toast container for RecipientsList */
+.rl-toast-container {
+  z-index: 1080;
+}

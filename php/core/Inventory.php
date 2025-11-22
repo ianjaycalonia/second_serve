@@ -10,6 +10,54 @@ class Inventory
         $this->db = Database::getInstance();
     }
 
+    private function hasCategoryCodeColumn(): bool
+    {
+        static $has = null;
+        if ($has !== null) {
+            return $has;
+        }
+        try {
+            $row = $this->db->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='categories' AND COLUMN_NAME='code' LIMIT 1")->fetch();
+            $has = (bool)$row;
+        } catch (Exception $e) {
+            $has = false;
+        }
+        return $has;
+    }
+
+    private function generateCategoryCode(string $primary, ?string $secondary = null): ?string
+    {
+        if (!$this->hasCategoryCodeColumn()) {
+            return null;
+        }
+        $raw = trim($primary . ' ' . ($secondary ?? ''));
+        $raw = strtoupper(preg_replace('/[^A-Z0-9]+/', '', $raw));
+        if ($raw === '') {
+            $raw = 'CAT';
+        }
+        $base = substr($raw, 0, 8) ?: 'CAT';
+        $candidate = $base;
+        $suffix = 1;
+
+        while (true) {
+            $exists = $this->db->query(
+                "SELECT 1 FROM categories WHERE LOWER(code)=? LIMIT 1",
+                [strtolower($candidate)]
+            )->fetch();
+            if (!$exists) {
+                return $candidate;
+            }
+            $suffixStr = str_pad((string)$suffix, 2, '0', STR_PAD_LEFT);
+            $maxBaseLen = max(1, 32 - strlen($suffixStr));
+            $candidate = substr($base, 0, $maxBaseLen) . $suffixStr;
+            $suffix++;
+            if ($suffix > 9999) {
+                $candidate = substr($base, 0, 24) . strtoupper(bin2hex(random_bytes(4)));
+                $suffix = 1;
+            }
+        }
+    }
+
     public function addFromDonationRow(array $donation): void
     {
         if (!$donation || empty($donation['id'])) { return; }
@@ -62,7 +110,6 @@ class Inventory
                 if ($hasPS) {
                     $primary = $category;
                     $secondary = null;
-                    // Split on LAST ' - ' so that compound parents are preserved
                     $pos = strrpos($category, ' - ');
                     if ($pos !== false) {
                         $primary = trim(substr($category, 0, $pos));
@@ -74,10 +121,18 @@ class Inventory
                     )->fetch();
                     if ($rowCat) { $categoryId = (int)$rowCat['category_id']; }
                     else {
-                        $this->db->query(
-                            "INSERT INTO categories (primary_name, secondary_name, is_active, created_at, updated_at) VALUES (?, ?, 1, NOW(), NOW())",
-                            [$primary, $secondary]
-                        );
+                        $code = $this->generateCategoryCode($primary, $secondary);
+                        if ($code !== null) {
+                            $this->db->query(
+                                "INSERT INTO categories (code, primary_name, secondary_name, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, NOW(), NOW())",
+                                [$code, $primary, $secondary]
+                            );
+                        } else {
+                            $this->db->query(
+                                "INSERT INTO categories (primary_name, secondary_name, is_active, created_at, updated_at) VALUES (?, ?, 1, NOW(), NOW())",
+                                [$primary, $secondary]
+                            );
+                        }
                         $categoryId = (int)$this->db->lastInsertId();
                     }
                 } else {
@@ -473,7 +528,6 @@ class Inventory
                     try { $chk = $this->db->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='categories' AND COLUMN_NAME='primary_name' LIMIT 1")->fetch(); $hasPS = (bool)$chk; } catch (Exception $e2) { $hasPS = false; }
                     if ($hasPS) {
                         $primary = $cat; $secondary = null;
-                        // Split on LAST ' - ' so compound parents are preserved
                         $pos = strrpos($cat, ' - ');
                         if ($pos !== false) {
                             $primary = trim(substr($cat, 0, $pos));
@@ -485,7 +539,12 @@ class Inventory
                         )->fetch();
                         if ($rowCat) { $categoryId = (int)$rowCat['category_id']; }
                         else {
-                            $this->db->query("INSERT INTO categories (primary_name, secondary_name, is_active, created_at, updated_at) VALUES (?, ?, 1, NOW(), NOW())", [$primary, $secondary]);
+                            $code = $this->generateCategoryCode($primary, $secondary);
+                            if ($code !== null) {
+                                $this->db->query("INSERT INTO categories (code, primary_name, secondary_name, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, NOW(), NOW())", [$code, $primary, $secondary]);
+                            } else {
+                                $this->db->query("INSERT INTO categories (primary_name, secondary_name, is_active, created_at, updated_at) VALUES (?, ?, 1, NOW(), NOW())", [$primary, $secondary]);
+                            }
                             $categoryId = (int)$this->db->lastInsertId();
                         }
                     } else {
@@ -616,6 +675,9 @@ class Inventory
     // Ensure auxiliary tables used by inventory operations exist
     private function ensureTables(): void
     {
+        if ($this->db->inTransaction()) {
+            return;
+        }
         // Movements audit table (not part of base schema, created on demand)
         $this->db->query(
             "CREATE TABLE IF NOT EXISTS `inventory_movements` (

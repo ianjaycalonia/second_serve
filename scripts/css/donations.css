@@ -1,2 +1,41 @@
 @import url(tableLayout.css);
 @import url(dropdownOptions.css);
+
+/* Donations log page size control (moved from inline styles in Donation.html) */
+.donations-page-size-wrap {
+  min-width: 120px;
+}
+
+.donations-page-size-select {
+  width: auto;
+}
+
+/* Pickup photo camera + canvas (DistributionPickup & Donations image capture) */
+.pickup-camera-feed,
+.pickup-photo-canvas {
+  width: 220px;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+}
+
+/* Shared image viewer modal for receipts (DistributionPickup & Donations) */
+.pickup-image-modal-body {
+  min-height: 60vh;
+}
+
+.pickup-image-viewer-wrap {
+  background: #f8f9fa;
+  max-height: 70vh;
+}
+
+.pickup-image-viewer-img {
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center center;
+  cursor: grab;
+}
+
+.pickup-image-viewer-info {
+  word-break: break-all;
+}

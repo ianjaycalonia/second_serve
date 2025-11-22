@@ -10,7 +10,8 @@
   ];
 
   const state = {
-    original: {}
+    original: {},
+    ackPref: '' // stores '1' when modal suppressed, '' otherwise
   };
 
   const CONFIG_KEYS = CONFIGS.map(cfg => cfg.key);
@@ -101,6 +102,27 @@
     }
   }
 
+  async function loadAckNextStepsPref(){
+    const el = byId('cfgMsgAckCheckbox');
+    if (!el) return;
+    try {
+      const url = `${API_BASE_URL}/users/preferences.php?action=get&key=${encodeURIComponent('ackNextStepsDontShow')}`;
+      const res = await fetchJson(url);
+      const raw = res && res.data && Object.prototype.hasOwnProperty.call(res.data, 'value')
+        ? String(res.data.value ?? '')
+        : '';
+      const lc = raw.toLowerCase();
+      const on = lc === '1' || lc === 'true' || lc === 'yes' || lc === 'on';
+      el.checked = on;
+      const normalizedSetting = on ? '1' : '0';
+      state.original['require_ack_checkbox'] = normalizedSetting;
+      state.ackPref = on ? '1' : '';
+    } catch (err){
+      console.error('[Settings] failed to load ackNextStepsDontShow', err, err?.body);
+      // If this fails, leave the switch using the system setting value.
+    }
+  }
+
   async function loadSettings(){
     const saveBtn = byId('configSaveBtn');
     const discardBtn = byId('configDiscardBtn');
@@ -118,6 +140,7 @@
         const value = data.hasOwnProperty(cfg.key) ? data[cfg.key] : '';
         applyValue(cfg, value);
       });
+      await loadAckNextStepsPref();
     } catch (err){
       console.error('[Settings] load failed', err, err?.body);
       const msg = err?.message || 'Unable to load configurations. Please try again.';
@@ -127,6 +150,57 @@
       setBusy(discardBtn, false);
       toggleFormInputs(false);
     }
+  }
+
+  async function saveAckNextStepsPref(){
+    const el = byId('cfgMsgAckCheckbox');
+    if (!el) return;
+    const value = el.checked ? '1' : '';
+    if (value === state.ackPref) return;
+    try {
+      await fetchJson(`${API_BASE_URL}/users/preferences.php?action=update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'ackNextStepsDontShow', value })
+      });
+      state.ackPref = value;
+      state.original['require_ack_checkbox'] = value === '1' ? '1' : '0';
+    } catch (err){
+      console.error('[Settings] failed to save ackNextStepsDontShow', err, err?.body);
+      throw err;
+    }
+  }
+
+  function bindAckNextStepsSwitch(){
+    const el = byId('cfgMsgAckCheckbox');
+    if (!el) return;
+    el.addEventListener('change', async function(){
+      const desired = el.checked ? '1' : '';
+      if (desired === state.ackPref) return;
+      const previous = state.ackPref;
+      el.disabled = true;
+      try {
+        await fetchJson(`${API_BASE_URL}/users/preferences.php?action=update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'ackNextStepsDontShow', value: desired })
+        });
+        state.ackPref = desired;
+        state.original['require_ack_checkbox'] = desired === '1' ? '1' : '0';
+        toast(
+          desired === '1'
+            ? '“Next steps” modal will stay hidden until you re-enable it.'
+            : '“Next steps” modal will show the next time you acknowledge a donation.',
+          'success'
+        );
+      } catch (err){
+        console.error('[Settings] failed to toggle ackNextStepsDontShow', err, err?.body);
+        el.checked = previous === '1';
+        toast('Unable to update acknowledgement preference. Please try again.', 'danger');
+      } finally {
+        el.disabled = false;
+      }
+    });
   }
 
   async function saveSettings(){
@@ -148,6 +222,7 @@
       if (!res?.success){
         throw new Error(res?.error || 'Unable to save configurations.');
       }
+      await saveAckNextStepsPref();
       Object.keys(payload.settings).forEach(key => {
         state.original[key] = payload.settings[key];
       });
@@ -170,6 +245,8 @@
 
     saveBtn.addEventListener('click', function(){ saveSettings(); });
     discardBtn.addEventListener('click', function(){ restoreOriginal(); });
+
+    bindAckNextStepsSwitch();
 
     const pctInput = byId('cfgDistributablePercent');
     if (pctInput){

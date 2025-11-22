@@ -38,3 +38,38 @@
     color: var(--header-text-color);
   }
 }
+
+/* Donor dashboard CTA button ("Add a Donation") */
+.btn-add-donation {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.btn-add-donation:hover {
+  background-color: var(--dark-color);
+  color: #fff;
+}
+
+/* OCR status + preview are hidden by default; JS will reveal them */
+#ocrStatus,
+#ocrPreview {
+  display: none;
+}
+
+/* OCR preview column widths */
+.ocr-preview-table th.ocr-col-item {
+  width: 70%;
+}
+
+.ocr-preview-table th.ocr-col-qty {
+  width: 20%;
+}
+
+.ocr-preview-table th.ocr-col-actions {
+  width: 10%;
+}
+
+/* Donor dashboard toast container (top-right) */
+.donor-toast-container {
+  z-index: 1080;
+}

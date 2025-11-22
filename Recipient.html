@@ -74,8 +74,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -127,7 +126,7 @@
         </div>
       </div>
     </nav>
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
     <aside class="sidebar collapsed">
       <a
         href="AdminDashboard.html"
@@ -864,67 +863,6 @@
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
-
-    <style>
-      /* Stacked table layout for very small screens */
-      @media (max-width: 575.98px) {
-        /* Nav compaction */
-        nav .nav-items {
-          flex-wrap: wrap;
-          gap: 0.25rem 0.5rem;
-        }
-        nav .nav-icons {
-          gap: 0.25rem;
-        }
-        nav .nav-icons .nav-link {
-          padding: 0.25rem;
-        }
-        nav .toggle .logo {
-          height: 28px;
-        }
-        nav .toggle .btn {
-          padding: 0.25rem 0.4rem;
-        }
-
-        /* Header bar readability */
-        .fw-bold.align-self-center {
-          color: #fff;
-        }
-        #filtersDropdownBtn {
-          color: #fff;
-          border-color: rgba(255, 255, 255, 0.6);
-        }
-
-        /* Mobile import button spans full width */
-        #importRecipientsBtnMobile {
-          width: 100%;
-        }
-
-        table.stacked-table thead {
-          display: none;
-        }
-        table.stacked-table tbody tr {
-          display: block;
-          border: 1px solid #dee2e6;
-          border-radius: 0.25rem;
-          margin-bottom: 0.5rem;
-          padding: 0.5rem;
-        }
-        table.stacked-table tbody tr td {
-          /* Use grid so label and value align cleanly */
-          display: grid;
-          grid-template-columns: 140px 1fr; /* label fixed, value flexible */
-          column-gap: 0.5rem;
-          align-items: start;
-          border: 0 !important;
-          padding: 0.375rem 0 !important;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-        /* Override Bootstrap's d-none on mobile to show all fields in stacked layout */
-        table.stacked-table tbody tr td.d-none,
-        table.stacked-table tbody tr td.d-sm-table-cell,
-        table.stacked-table tbody tr td.d-md-table-cell,
         table.stacked-table tbody tr td.d-lg-table-cell {
           display: flex !important;
         }
@@ -1103,8 +1041,7 @@
               </div>
             </div>
             <div
-              class="table-responsive border rounded"
-              style="max-height: 60vh"
+              class="table-responsive border rounded recipients-preview-table-wrapper"
             >
               <table
                 class="table table-sm table-hover align-middle mb-0"
@@ -1112,7 +1049,7 @@
               >
                 <thead class="table-light">
                   <tr>
-                    <th style="width: 32px">
+                    <th class="recipients-preview-select-col">
                       <input type="checkbox" id="previewMasterCheck" />
                     </th>
                     <th>Name of Beneficiary</th>

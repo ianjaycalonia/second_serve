@@ -14,6 +14,7 @@
     runFilter: document.getElementById('runFilter'),
     searchInput: document.getElementById('searchInput'),
     refreshBtn: document.getElementById('refreshBtn'),
+    scheduleBtn: document.getElementById('scheduleBtn'),
     exportBtn: document.getElementById('exportBtn'),
     pickupModal: document.getElementById('pickupModal'),
     pickupRecipientDetails: document.getElementById('pickupRecipientDetails'),
@@ -510,9 +511,82 @@
         fetchAllocations();
       });
     }
+    if (els.scheduleBtn){
+      els.scheduleBtn.addEventListener('click', () => {
+        if (!allocations.length) {
+          showToast('No allocations available to schedule.', 'warn');
+          return;
+        }
+        const payload = buildSchedulePayload();
+        let stored = false;
+        try {
+          sessionStorage.setItem('schedule_payload_from_pickup', JSON.stringify(payload));
+          stored = true;
+        } catch (err) {
+          if (DEBUG) console.error('[Pickup] failed to store schedule payload', err);
+        }
+        if (!stored) {
+          try {
+            window.__schedulePayloadFromPickup = payload;
+            stored = true;
+          } catch (err) {
+            if (DEBUG) console.error('[Pickup] failed to set window payload', err);
+          }
+        }
+        if (!stored) {
+          showToast('Could not prepare schedule data.', 'error');
+          return;
+        }
+        const dest = new URL('Schedule.html', window.location.origin);
+        dest.searchParams.set('from', 'pickup');
+        window.location.href = dest.pathname + dest.search;
+      });
+    }
     if (els.exportBtn){
       els.exportBtn.addEventListener('click', () => exportCsv());
     }
+  }
+
+  function buildSchedulePayload(){
+    const recipientsMap = new Map();
+    allocations.forEach((row) => {
+      if (!row) return;
+      const rawId = Number(row.recipient_id);
+      const key = Number.isFinite(rawId) && rawId > 0 ? rawId : row.recipient_name || row.organization || row.allocation_id;
+      if (!recipientsMap.has(key)) {
+        recipientsMap.set(key, {
+          recipient_id: Number.isFinite(rawId) && rawId > 0 ? rawId : null,
+          recipient_name: row.recipient_name || null,
+          organization: row.organization || null,
+          phone: row.contact_number || null,
+          allocations: []
+        });
+      }
+      const entry = recipientsMap.get(key);
+      entry.allocations.push({
+        allocation_id: row.allocation_id,
+        status: row.status || null,
+        run_id: row.run_id || null,
+        scheduled_pickup_at: row.scheduled_pickup_at || null,
+        items: Array.isArray(row.items)
+          ? row.items.map((it) => ({
+              allocation_item_id: it.allocation_item_id || null,
+              item_id: it.item_id || null,
+              item_name: it.item_name || it.name || null,
+              quantity: it.quantity != null ? Number(it.quantity) : null,
+              unit: it.unit || null
+            }))
+          : []
+      });
+    });
+
+    return {
+      generated_at: new Date().toISOString(),
+      filters: Object.assign({}, currentFilters),
+      run_id: currentFilters.run ? Number(currentFilters.run) : null,
+      total_recipients: recipientsMap.size,
+      recipients: Array.from(recipientsMap.values())
+    };
   }
 
   function exportCsv(){
@@ -620,6 +694,72 @@
           showToast('Could not initialize the image viewer', 'error');
         }
       }
+    });
+  }
+
+  function bindImageViewerControls() {
+    const img = document.getElementById('imageViewerImg');
+    const wrap = document.getElementById('imageViewerWrap');
+    const zoomInBtn = document.getElementById('imgZoomInBtn');
+    const zoomOutBtn = document.getElementById('imgZoomOutBtn');
+    const zoomResetBtn = document.getElementById('imgZoomResetBtn');
+    const downloadBtn = document.getElementById('imgDownloadBtn');
+    const modalEl = document.getElementById('imageViewerModal');
+
+    if (!img || !wrap || !modalEl) return;
+
+    let scale = 1;
+    const MIN_SCALE = 0.25;
+    const MAX_SCALE = 5;
+
+    const applyScale = () => {
+      img.style.transform = `scale(${scale})`;
+    };
+
+    const reset = () => {
+      scale = 1;
+      applyScale();
+      wrap.scrollTop = 0;
+      wrap.scrollLeft = 0;
+    };
+
+    zoomInBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      scale = Math.min(MAX_SCALE, scale + 0.25);
+      applyScale();
+    });
+
+    zoomOutBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      scale = Math.max(MIN_SCALE, scale - 0.25);
+      applyScale();
+    });
+
+    zoomResetBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      reset();
+    });
+
+    downloadBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const src = img.getAttribute('src');
+      if (!src) return;
+      const link = document.createElement('a');
+      link.href = src;
+      const url = new URL(src, window.location.href);
+      const filename = url.pathname.split('/').filter(Boolean).pop() || 'image.jpg';
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    modalEl.addEventListener('shown.bs.modal', () => {
+      reset();
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+      img.style.transform = '';
     });
   }
 
@@ -1035,11 +1175,12 @@
   let signatureUploadData = null;
 
   function init(){
-    bindFilters();
-    initTableHandlers();
-    bindPickupModal();
+    // Auto-refresh toggle control not implemented; auto refresh runs by default
     handleUploadInputs();
-    fetchRuns();
+    bindPickupModal();
+    bindImageViewerControls();
+    initTableHandlers();
+    bindFilters();
     fetchAllocations();
   }
 

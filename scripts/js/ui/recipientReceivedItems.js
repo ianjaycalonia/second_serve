@@ -412,69 +412,114 @@
           const pickupAt = a.scheduled_pickup_at
             ? fmtDate(a.scheduled_pickup_at)
             : "";
-          const chevron = "bi-chevron-right";
-          const itemsHtml = (Array.isArray(a.items) ? a.items : [])
-            .map((it) => `• ${escapeHtml(`${it.quantity}x ${it.item_name}`)}`)
-            .join("<br/>");
-          let actionsHtml = "";
+          const itemsList = Array.isArray(a.items) ? a.items : [];
+          const itemsCount = itemsList.length;
+          const previewText = itemsCount
+            ? itemsList
+                .slice(0, 2)
+                .map((it) => {
+                  const unitLabel = (it.unit || it.unit_label || "").trim();
+                  const qtyLabel = `${it.quantity ?? ""}${unitLabel ? ` ${unitLabel}` : ""}`.trim();
+                  const combined = [qtyLabel, it.item_name || ""].filter(Boolean).join(" ");
+                  return escapeHtml(combined);
+                })
+                .join(", ") +
+              (itemsCount > 2
+                ? `, +${itemsCount - 2} more`
+                : "")
+            : "No items listed.";
+          const previewHtml = itemsCount
+            ? `<div class="items-preview d-flex flex-wrap align-items-center gap-2 small text-muted">
+                <span class="badge bg-secondary-subtle text-secondary fw-semibold">${itemsCount}</span>
+                <span>${previewText}</span>
+              </div>`
+            : '<div class="items-preview small text-muted">No items listed.</div>';
+          const itemsInlineHtml = itemsCount
+            ? `<div class="items-inline d-none mt-2">
+                <div class="card border-0 shadow-sm">
+                  <div class="card-body p-2">
+                    <ul class="list-group list-group-flush">
+                      ${itemsList
+                        .map((it) => {
+                          const unitLabel = (it.unit || it.unit_label || "").trim();
+                          const qtyUnit = `${it.quantity ?? ""}${unitLabel ? ` ${unitLabel}` : ""}`.trim();
+                          const qty = escapeHtml(qtyUnit || `${it.quantity ?? ""}`);
+                          const name = escapeHtml(it.item_name || "");
+                          const expiry = it.expiry_date
+                            ? `<small class="text-muted ms-2">(exp: ${escapeHtml(it.expiry_date)})</small>`
+                            : "";
+                          return `
+                            <li class="list-group-item border-0 px-2 py-1 d-flex justify-content-between align-items-center">
+                              <div>
+                                <span class="fw-semibold text-dark">${qty}</span>
+                                <span class="ms-1">${name}${expiry}</span>
+                              </div>
+                            </li>`;
+                        })
+                        .join("")}
+                    </ul>
+                  </div>
+                </div>
+              </div>`
+            : '<div class="items-inline d-none"><div class="alert alert-light border mb-0">No items listed.</div></div>';
+          const actions = [
+            `<button type="button" class="btn btn-sm btn-outline-secondary alloc-toggle" data-bs-toggle="tooltip" data-bs-placement="top" title="Show items" aria-label="Show items">
+              <i class="bi bi-eye"></i>
+            </button>`,
+          ];
           if (status.toLowerCase() === "allocated") {
-            actionsHtml = `
-            <button type="button" class="btn btn-sm btn-outline-success btn-ack" data-bs-toggle="tooltip" data-bs-placement="top" title="Acknowledge" aria-label="Acknowledge">
-              <i class="bi bi-check2-circle"></i>
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
-              <i class="bi bi-x-circle"></i>
-            </button>`;
+            actions.push(`
+              <button type="button" class="btn btn-sm btn-outline-success btn-ack" data-bs-toggle="tooltip" data-bs-placement="top" title="Acknowledge" aria-label="Acknowledge">
+                <i class="bi bi-check2-circle"></i>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
+                <i class="bi bi-x-circle"></i>
+              </button>`);
           } else if (
             status.toLowerCase() === "notified" ||
             status.toLowerCase() === "updated"
           ) {
-            actionsHtml = `
-            <button type="button" class="btn btn-sm btn-outline-success btn-ack" data-bs-toggle="tooltip" data-bs-placement="top" title="Acknowledge" aria-label="Acknowledge">
-              <i class="bi bi-check2-circle"></i>
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
-              <i class="bi bi-x-circle"></i>
-            </button>`;
+            actions.push(`
+              <button type="button" class="btn btn-sm btn-outline-success btn-ack" data-bs-toggle="tooltip" data-bs-placement="top" title="Acknowledge" aria-label="Acknowledge">
+                <i class="bi bi-check2-circle"></i>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
+                <i class="bi bi-x-circle"></i>
+              </button>`);
           } else if (status.toLowerCase() === "acknowledged") {
-            actionsHtml = `
-            <button type="button" class="btn btn-sm btn-outline-danger btn-cancel" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel" aria-label="Cancel">
-              <i class="bi bi-x-circle"></i>
-            </button>`;
+            actions.push('<span class="text-muted small">No further actions</span>');
           } else if (
             status.toLowerCase() === "scheduled" ||
             status.toLowerCase() === "picked up"
           ) {
-            actionsHtml = `
-            <button type="button" class="btn btn-sm btn-outline-success btn-complete" data-bs-toggle="tooltip" data-bs-placement="top" title="Complete" aria-label="Complete">
-              <i class="bi bi-check2-circle"></i>
-            </button>
-            <span class="text-muted">&nbsp;</span>`;
+            actions.push(`
+              <button type="button" class="btn btn-sm btn-outline-success btn-complete" data-bs-toggle="tooltip" data-bs-placement="top" title="Complete" aria-label="Complete">
+                <i class="bi bi-check2-circle"></i>
+              </button>`);
           } else if (
             status.toLowerCase() === "completed" ||
             status.toLowerCase() === "cancelled"
           ) {
-            actionsHtml = `<span class="text-muted">No actions</span>`;
+            actions.push('<span class="text-muted small">No further actions</span>');
           } else {
-            actionsHtml = `<span class="text-muted">No actions</span>`;
+            actions.push('<span class="text-muted small">No further actions</span>');
           }
+          const actionsHtml = actions.join("\n");
           return `
           <tr data-aid="${id}" data-run-id="${runId}">
-            <td>${createdAt}</td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary alloc-toggle rounded-circle" type="button" aria-expanded="false" aria-label="View donated items" title="View donated items">
-                <i class="bi ${chevron}"></i>
-              </button>
-              <div class="d-inline-block ms-2 align-middle items-inline d-none">${itemsHtml}</div>
+            <td class="align-middle">${createdAt}</td>
+            <td class="align-middle">
+              ${previewHtml}
+              ${itemsInlineHtml}
             </td>
-            <td>
-              <span class="badge ${statusBadgeClass(status)}">${escapeHtml(
-            status
-          )}</span>
+            <td class="align-middle">
+              <span class="badge ${statusBadgeClass(status)}">${escapeHtml(status)}</span>
             </td>
-            <td>${pickupAt}</td>
-            <td class="d-flex justify-content-center align-items-center gap-2">
-              ${actionsHtml}
+            <td class="align-middle">${pickupAt}</td>
+            <td class="align-middle">
+              <div class="d-flex justify-content-start align-items-center gap-2">
+                ${actionsHtml}
+              </div>
             </td>
           </tr>`;
         })
@@ -620,19 +665,29 @@
 
       // Toggle inline items
       if (toggleBtn && icon && itemsDiv) {
+        const preview = tr.querySelector(".items-preview");
+        const setState = (show) => {
+          itemsDiv.classList.toggle("d-none", !show);
+          if (preview) preview.classList.toggle("d-none", show);
+          icon.className = show ? "bi bi-eye-slash" : "bi bi-eye";
+          const title = show ? "Hide items" : "Show items";
+          toggleBtn.setAttribute("aria-expanded", show ? "true" : "false");
+          toggleBtn.setAttribute("title", title);
+          toggleBtn.setAttribute("aria-label", title);
+          toggleBtn.setAttribute("data-bs-original-title", title);
+          toggleBtn.setAttribute("data-bs-title", title);
+          try {
+            if (window.bootstrap && bootstrap.Tooltip) {
+              const tip = bootstrap.Tooltip.getInstance(toggleBtn);
+              if (tip && typeof tip.setContent === "function") {
+                tip.setContent({ ".tooltip-inner": title });
+              }
+            }
+          } catch (_) {}
+        };
         toggleBtn.addEventListener("click", () => {
           const isShown = !itemsDiv.classList.contains("d-none");
-          if (isShown) {
-            itemsDiv.classList.add("d-none");
-            icon.classList.remove("bi-chevron-up");
-            icon.classList.add("bi-chevron-right");
-            toggleBtn.setAttribute("aria-expanded", "false");
-          } else {
-            itemsDiv.classList.remove("d-none");
-            icon.classList.remove("bi-chevron-right");
-            icon.classList.add("bi-chevron-up");
-            toggleBtn.setAttribute("aria-expanded", "true");
-          }
+          setState(!isShown);
         });
       }
 

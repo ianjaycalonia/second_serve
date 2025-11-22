@@ -76,8 +76,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -129,7 +128,7 @@
         </div>
       </div>
     </nav>
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
     <aside class="sidebar collapsed">
       <a
         href="AdminDashboard.html"
@@ -454,7 +453,7 @@
                 <option>Last week</option>
               </select>
             </div>
-            <div style="height: 100%">
+            <div class="dashboard-chart-wrapper">
               <canvas id="lineChart"></canvas>
             </div>
             <div class="fs-6 mt-3 text-center">Pickups this week</div>
@@ -465,10 +464,6 @@
           <div class="card card-accent p-4 w-100 h-100 d-flex flex-column">
             <div class="mb-3 text-start section-title">Activity Feed</div>
             <div class="flex-grow-1 activity-feed"></div>
-
-            <a href="#" class="text-decoration-none text-center mt-3"
-              >View All Activity >></a
-            >
           </div>
         </div>
       </div>
@@ -549,10 +544,8 @@
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
-
     <div
-      class="toast-container position-fixed bottom-0 end-0 p-3"
-      style="z-index: 1100"
+      class="toast-container position-fixed bottom-0 end-0 p-3 dashboard-toast-container"
     ></div>
   </body>
 </html>

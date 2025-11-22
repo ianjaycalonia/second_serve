@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/Inventory.php';
+require_once __DIR__ . '/../../core/Repack.php';
 
 const INVENTORY_SETTING_DEFAULTS = [
     'inventory_soon_expire_lead_days' => '7',
@@ -366,7 +367,9 @@ try {
                 LEFT JOIN donor_profiles dprof_name ON dprof_name.organization_name = d.donor_name
                 LEFT JOIN donor_categories dc2 ON dc2.id = dprof_name.donor_category_id
                 LEFT JOIN users up ON up.user_id = im.performed_by
-                WHERE im.direction = 'in' AND im.created_at BETWEEN ? AND ?
+                WHERE im.direction = 'in'
+                  AND (im.mode IS NULL OR im.mode <> 'repack')
+                  AND im.created_at BETWEEN ? AND ?
                 ORDER BY im.created_at ASC, im.id ASC";
         try {
             $rows = $db->query($sql, [$startDt, $endDt])->fetchAll();
@@ -458,7 +461,8 @@ try {
                     MAX({$unitBase}) AS unit_label,
                     {$weightSelect},
                     MAX(up.name) AS entry_by,
-                    MAX(COALESCE(alloc.recipient_id, im.recipient_id)) AS recipient_user_id
+                    MAX(COALESCE(alloc.recipient_id, im.recipient_id)) AS recipient_user_id,
+                    MAX(ro.repack_id) AS repack_id
                 FROM inventory_movements im
                 LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
                 LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
@@ -471,22 +475,98 @@ try {
                 LEFT JOIN allocations alloc ON alloc.allocation_id = ai.allocation_id
                 LEFT JOIN users alru ON alru.user_id = alloc.recipient_id
                 LEFT JOIN recipient_profiles alrp ON alrp.user_id = alloc.recipient_id
-                WHERE im.direction = 'out' AND im.created_at BETWEEN ? AND ?
+                LEFT JOIN repack_outputs ro ON ro.inventory_id = im.inventory_id
+                WHERE im.direction = 'out'
+                  AND (im.mode IS NULL OR im.mode <> 'repack')
+                  AND im.created_at BETWEEN ? AND ?
                 GROUP BY im.id
                 ORDER BY im.created_at ASC, im.id ASC";
         $rows = $db->query($sql, [$startDt, $endDt])->fetchAll();
+
+        // Preload repack operation details for any movements tied to repack outputs
+        $repackIds = [];
+        foreach ($rows as $r) {
+            if (!empty($r['repack_id'])) {
+                $rid = (int)$r['repack_id'];
+                if ($rid > 0) {
+                    $repackIds[$rid] = true;
+                }
+            }
+        }
+
+        $repackDetails = [];
+        if (!empty($repackIds)) {
+            $repackService = new RepackService();
+            foreach (array_keys($repackIds) as $rid) {
+                try {
+                    $op = $repackService->getOperation($rid);
+                    if ($op) {
+                        $repackDetails[$rid] = $op;
+                    }
+                } catch (Exception $e) {
+                    // If repack details cannot be loaded, we'll fall back to default row for that movement
+                }
+            }
+        }
+
         $data = [];
         foreach ($rows as $r) {
+            $dateOut = $r['date_out'] ?? '';
+            $beneficiary = $r['beneficiary_agency'] ?? '';
+            $entryBy = $r['entry_by'] ?? '';
+            $recipientUserId = isset($r['recipient_user_id']) ? (int)$r['recipient_user_id'] : null;
+            $movementQty = (int)($r['quantity'] ?? 0);
+            $movementWeight = isset($r['total_weight']) ? (float)$r['total_weight'] : null;
+            $repackId = isset($r['repack_id']) ? (int)$r['repack_id'] : 0;
+
+            // When this movement comes from a repack kit, expand to component rows using
+            // the repack operation's inputs and proportional quantities.
+            if ($repackId > 0 && isset($repackDetails[$repackId]) && $movementQty > 0) {
+                $op = $repackDetails[$repackId];
+                $totalOutput = (int)($op['total_output_quantity'] ?? 0);
+                $inputs = isset($op['inputs']) && is_array($op['inputs']) ? $op['inputs'] : [];
+
+                if ($totalOutput > 0 && !empty($inputs)) {
+                    foreach ($inputs as $input) {
+                        $used = isset($input['quantity_used']) ? (float)$input['quantity_used'] : 0.0;
+                        if ($used <= 0) {
+                            continue;
+                        }
+                        // Scale component usage proportionally to this movement's quantity
+                        $componentQty = (int)round(($used * $movementQty) / $totalOutput);
+                        if ($componentQty <= 0) {
+                            continue;
+                        }
+
+                        $data[] = [
+                            'DATE' => $dateOut,
+                            'BENEFICIARY AGENCY' => $beneficiary,
+                            'PRODUCT NAME' => $input['product_name_snapshot'] ?? '',
+                            'PRODUCT CATEGORY' => $input['category_label'] ?? '',
+                            'QUANTITY' => $componentQty,
+                            'UNIT' => $input['unit_label'] ?? '',
+                            // For repack component rows, omit total weight to avoid double counting.
+                            'TOTAL WEIGHT (KG)' => null,
+                            'ENTRY BY' => $entryBy,
+                            'RECIPIENT_ID' => $recipientUserId,
+                        ];
+                    }
+                    // Skip default row for this movement since we've expanded it to components
+                    continue;
+                }
+            }
+
+            // Default behavior for non-repack movements or when repack details are unavailable
             $data[] = [
-                'DATE' => $r['date_out'] ?? '',
-                'BENEFICIARY AGENCY' => $r['beneficiary_agency'] ?? '',
+                'DATE' => $dateOut,
+                'BENEFICIARY AGENCY' => $beneficiary,
                 'PRODUCT NAME' => $r['item_name'] ?? '',
                 'PRODUCT CATEGORY' => $r['product_category'] ?? '',
-                'QUANTITY' => (int)($r['quantity'] ?? 0),
+                'QUANTITY' => $movementQty,
                 'UNIT' => $r['unit_label'] ?? '',
-                'TOTAL WEIGHT (KG)' => isset($r['total_weight']) ? (float)$r['total_weight'] : null,
-                'ENTRY BY' => $r['entry_by'] ?? '',
-                'RECIPIENT_ID' => isset($r['recipient_user_id']) ? (int)$r['recipient_user_id'] : null,
+                'TOTAL WEIGHT (KG)' => $movementWeight,
+                'ENTRY BY' => $entryBy,
+                'RECIPIENT_ID' => $recipientUserId,
             ];
         }
         sendJson(['success'=>true,'data'=>['rows'=>$data,'start'=>$start,'end'=>$end]]);
@@ -882,23 +962,31 @@ try {
                     im.direction,
                     im.quantity,
                     CASE 
-                        WHEN im.direction = 'in' THEN 
-                            CASE LOWER(COALESCE(im.mode, ''))
-                                WHEN 'purchased' THEN 'Purchased'
-                                ELSE 'Donated'
+                        WHEN im.direction = 'out' THEN 
+                            CASE 
+                                WHEN LOWER(COALESCE(im.mode, '')) = 'repack' THEN 'Repack Component'
+                                ELSE COALESCE(
+                                    NULLIF(rp.organization_name, ''),
+                                    NULLIF(ur.name, ''),
+                                    CASE LOWER(COALESCE(im.mode, ''))
+                                        WHEN 'recipient' THEN 'Recipient'
+                                        WHEN 'onsite' THEN 'On-site'
+                                        WHEN 'discarded' THEN 'Discarded'
+                                        ELSE COALESCE(im.mode, '')
+                                    END
+                                )
                             END
                         ELSE 
                             CASE LOWER(COALESCE(im.mode, ''))
-                                WHEN 'recipient' THEN 'Recipient'
-                                WHEN 'onsite' THEN 'On-site'
-                                WHEN 'discarded' THEN 'Discarded'
-                                ELSE COALESCE(im.mode, '')
+                                WHEN 'purchased' THEN 'Purchased'
+                                WHEN 'repack' THEN 'Repack Product'
+                                ELSE 'Donated'
                             END
                     END AS mode,
                     im.recipient_id,
                     ur.name AS recipient_name,
                     im.performed_by,
-                    COALESCE(NULLIF(rp.organization_name, ''), up.name) AS performed_by_name,
+                    COALESCE(up.name, '') AS performed_by_name,
                     im.created_at,
                     di.product_name AS item_name,
                     CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS category

@@ -72,8 +72,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -125,7 +124,7 @@
       </div>
     </nav>
 
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
     <aside class="sidebar collapsed">
       <a
         href="AdminDashboard.html"
@@ -389,9 +388,8 @@
             >
               Assignment
               <span
-                class="badge bg-danger-subtle text-danger ms-2"
+                class="badge bg-danger-subtle text-danger ms-2 d-none"
                 id="assignmentCountBadge"
-                style="display: none"
               ></span>
             </button>
           </li>
@@ -415,8 +413,7 @@
                   />
                   <select
                     id="catActiveFilter"
-                    class="form-select form-select-sm"
-                    style="max-width: 140px"
+                    class="form-select form-select-sm taxonomy-filter-select"
                   >
                     <option value="" selected>All</option>
                     <option value="1">Active</option>
@@ -433,6 +430,7 @@
                 >
                   <thead class="table-light">
                     <tr>
+                      <th>Code</th>
                       <th>Primary</th>
                       <th>Secondary</th>
                       <th>Active</th>
@@ -441,7 +439,7 @@
                   </thead>
                   <tbody id="catTableBody">
                     <tr>
-                      <td colspan="4" class="text-center text-muted py-3">
+                      <td colspan="5" class="text-center text-muted py-3">
                         Loading...
                       </td>
                     </tr>
@@ -468,8 +466,7 @@
                   />
                   <select
                     id="unitActiveFilter"
-                    class="form-select form-select-sm"
-                    style="max-width: 140px"
+                    class="form-select form-select-sm taxonomy-filter-select"
                   >
                     <option value="" selected>All</option>
                     <option value="1">Active</option>
@@ -521,15 +518,14 @@
                     <label for="masterPageSize" class="form-label mb-0 small text-muted text-nowrap">Rows per page</label>
                     <select
                       id="masterPageSize"
-                      class="form-select form-select-sm"
-                      style="width: auto"
+                      class="form-select form-select-sm taxonomy-page-size"
                     >
                       <option value="20" selected>20</option>
                       <option value="50">50</option>
                       <option value="100">100</option>
                     </select>
                   </div>
-                  <div class="input-group input-group-sm ms-sm-2 flex-grow-1 flex-sm-grow-0" style="min-width: 260px">
+                  <div class="input-group input-group-sm ms-sm-2 flex-grow-1 flex-sm-grow-0 taxonomy-master-search">
                     <span class="input-group-text" id="masterSearchLabel">
                       <i class="bi bi-search"></i>
                     </span>
@@ -613,8 +609,7 @@
 
     <!-- Toast Container (top-right) -->
     <div
-      class="toast-container position-fixed top-0 end-0 p-3"
-      style="z-index: 1080"
+      class="toast-container position-fixed top-0 end-0 p-3 dashboard-toast-container"
     >
       <div
         id="taxonomyToast"
@@ -648,6 +643,11 @@
             ></button>
           </div>
           <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Code (optional)</label>
+              <input type="text" id="catCodeInput" class="form-control" />
+              <div class="form-text">Short identifier like "FD01". Leave blank to keep none.</div>
+            </div>
             <div class="mb-3">
               <label class="form-label">Primary</label>
               <input type="text" id="catPrimaryInput" class="form-control" />

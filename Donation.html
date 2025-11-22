@@ -70,8 +70,7 @@
             />
             <span
               id="messagesBadge"
-              class="badge bg-danger"
-              style="display: none"
+              class="badge bg-danger d-none"
               >0</span
             >
           </a>
@@ -123,7 +122,7 @@
         </div>
       </div>
     </nav>
-    <div class="sidebar-backdrop" style="display: none"></div>
+    <div class="sidebar-backdrop"></div>
     <aside class="sidebar collapsed">
       <a
         href="AdminDashboard.html"
@@ -472,6 +471,19 @@
           <h6>Donations Log</h6>
 
           <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2">
+              <div class="d-flex align-items-center gap-2 donations-page-size-wrap">
+                <label class="form-label mb-0 small" for="donationsPageSize">Show:</label>
+                <select
+                  id="donationsPageSize"
+                  class="form-select form-select-sm donations-page-size-select"
+                >
+                  <option value="20" selected>20</option>
+                  <option value="30">30</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+            </div>
             <div class="d-flex align-items-center search-box">
               <input
                 type="text"
@@ -708,6 +720,10 @@
             <tbody></tbody>
           </table>
         </div>
+
+        <div class="d-flex justify-content-center">
+          <ul id="donationsPagination" class="pagination pagination-sm my-2"></ul>
+        </div>
       </div>
     </main>
 
@@ -809,27 +825,21 @@
               aria-label="Close"
             ></button>
           </div>
-          <div class="modal-body" style="min-height: 60vh">
+          <div class="modal-body pickup-image-modal-body">
             <div
               id="imageViewerWrap"
-              class="d-flex align-items-center justify-content-center overflow-auto"
-              style="background: #f8f9fa; max-height: 70vh"
+              class="d-flex align-items-center justify-content-center overflow-auto pickup-image-viewer-wrap"
             >
               <img
                 id="imageViewerImg"
                 src=""
                 alt="Receipt"
-                style="
-                  max-width: 100%;
-                  max-height: 100%;
-                  transform-origin: center center;
-                "
+                class="pickup-image-viewer-img"
               />
             </div>
             <div
               id="imageViewerInfo"
-              class="small text-muted mt-2"
-              style="word-break: break-all"
+              class="small text-muted mt-2 pickup-image-viewer-info"
             ></div>
           </div>
         </div>
@@ -1130,20 +1140,6 @@
     <!-- Admin Donations: old-school API + consolidated UI -->
     <script src="scripts/js/api/adminDonationApi.js"></script>
     <script src="scripts/js/ui/adminDonationUI.js"></script>
-    <script>
-      (function () {
-        if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", function () {
-            window.AdminDonationUI &&
-              window.AdminDonationUI.init &&
-              window.AdminDonationUI.init();
-          });
-        } else {
-          window.AdminDonationUI &&
-            window.AdminDonationUI.init &&
-            window.AdminDonationUI.init();
-        }
-      })();
-    </script>
+    <script src="scripts/js/ui/adminDonationInit.js"></script>
   </body>
 </html>

@@ -467,21 +467,41 @@
   async function saveTemplate() {
     const feedback = document.getElementById("repackTemplateFormFeedback");
     if (feedback) feedback.textContent = "";
+    
+    // Clear any previous error highlights
+    document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+    
     const data = getTemplateFormData();
+    let isValid = true;
+    
+    // Validate required fields
     if (!data.name) {
-      if (feedback) feedback.textContent = "Template name is required.";
-      return;
+      document.getElementById("repackTemplateName").classList.add('is-invalid');
+      isValid = false;
     }
     if (!data.output_product_name) {
-      if (feedback) feedback.textContent = "Output product name is required.";
-      return;
+      document.getElementById("repackOutputName").classList.add('is-invalid');
+      isValid = false;
     }
     if (!data.output_quantity_per_kit || data.output_quantity_per_kit <= 0) {
-      if (feedback) feedback.textContent = "Units per kit must be greater than zero.";
-      return;
+      document.getElementById("repackOutputQuantity").classList.add('is-invalid');
+      isValid = false;
+    }
+    if (!data.output_category_id) {
+      document.getElementById("repackOutputCategory").classList.add('is-invalid');
+      isValid = false;
+    }
+    if (!data.output_unit_id) {
+      document.getElementById("repackOutputUnit").classList.add('is-invalid');
+      isValid = false;
     }
     if (!Array.isArray(data.components) || !data.components.length) {
+      // No specific element to highlight for components, keep the feedback message
       if (feedback) feedback.textContent = "Add at least one component.";
+      return;
+    }
+    
+    if (!isValid) {
       return;
     }
     const payload = {
@@ -814,7 +834,7 @@
     const kits = Number(repackState.run.kits || 0);
     if (!Number.isFinite(kits) || kits <= 0) {
       submitBtn.disabled = true;
-      if (feedbackEl && !message) feedbackEl.textContent = "Enter kits to produce.";
+      if (feedbackEl && !message) feedbackEl.textContent = "Enter a valid number of kits to produce (1 or more).";
       return;
     }
     let unsatisfied = null;
@@ -879,7 +899,8 @@
     repackState.run.lotCache = Object.create(null);
     const inputEl = document.getElementById("repackRunQuantity");
     const requested = Number(inputEl?.value || 0);
-    repackState.run.kits = template ? Math.max(1, requested || 1) : 0;
+    repackState.run.kits = template ? (requested > 0 ? requested : 0) : 0;
+    if (inputEl) inputEl.value = repackState.run.kits || '';
     renderRunSummary();
     renderRunComponentsTable();
   }
@@ -904,13 +925,27 @@
   function handleRunQuantityChange() {
     const input = document.getElementById("repackRunQuantity");
     if (!input) return;
-    let value = parseInt(input.value || "0", 10) || 1;
-    if (value < 1) value = 1;
-    input.value = String(value);
-    repackState.run.kits = value;
-    recomputeAllocationsForCurrentKits();
-    renderRunSummary();
-    renderRunComponentsTable();
+    
+    // Parse the input value, default to 0 if invalid
+    let value = parseInt(input.value.trim() || "0", 10) || 0;
+    
+    // Update the input field and state
+    input.value = value > 0 ? String(value) : '';
+    repackState.run.kits = value > 0 ? value : 0;
+    
+    // Only update the UI if we have a valid number of kits
+    if (repackState.run.kits > 0) {
+      recomputeAllocationsForCurrentKits();
+      renderRunSummary();
+      renderRunComponentsTable();
+    } else {
+      // Clear the UI if no valid number is entered
+      renderRunSummary();
+      renderRunComponentsTable();
+    }
+    
+    // Update the submit button state
+    updateRunSubmitState();
   }
 
   async function fetchComponentLots(component) {
@@ -934,13 +969,18 @@
       const items = Array.isArray(json?.data?.items) ? json.data.items : [];
       const productName = (component.product_name || "").toLowerCase();
       const categoryLabel = (component.category_label || "").toLowerCase();
+      const now = new Date();
       return items
         .filter((item) => {
           const nameMatch = String(item.item_name || item.product_name || "").toLowerCase() === productName;
           const catMatch = categoryLabel
             ? String(item.category || "").toLowerCase() === categoryLabel
             : true;
-          return nameMatch && catMatch && Number(item.quantity || item.total_quantity || 0) > 0;
+          const hasQuantity = Number(item.quantity || item.total_quantity || 0) > 0;
+          const expiryDate = item.expiry_date || item.earliest_expiry;
+          const isNotExpired = !expiryDate || new Date(expiryDate) >= now;
+          
+          return nameMatch && catMatch && hasQuantity && isNotExpired;
         })
         .map((item) => ({
           inventory_id: Number(item.id || item.inventory_id),
@@ -2308,10 +2348,62 @@
     container.innerHTML = parts.join("");
   }
 
+  // Show a toast notification
+  function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type} border-0 position-fixed`;
+    toast.style.top = '20px';
+    toast.style.right = '20px';
+    toast.style.zIndex = '12002';
+    toast.style.maxWidth = '350px';  // Ensure toast doesn't get too wide
+    toast.role = 'alert';
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+      <div class="d-flex">
+        <div class="toast-body">
+          ${message}
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    `;
+    
+    document.body.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { autohide: true, delay: 5000 });
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+      document.body.removeChild(toast);
+    });
+  }
+
+  // Update button to show loading state
+  function setButtonLoading(button, isLoading) {
+    if (!button) return;
+    
+    if (isLoading) {
+      button.disabled = true;
+      button.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        ${button.getAttribute('data-original-text') || button.textContent}
+      `;
+    } else {
+      button.disabled = false;
+      const originalText = button.getAttribute('data-original-text');
+      if (originalText) {
+        button.textContent = originalText;
+      }
+    }
+  }
+
   // Simple debounce for live search
   function debounce(fn, delay = 300) {
-    let t;
-    return (...args) => { clearTimeout(t); t = setTimeout(() => fn.apply(null, args), delay); };
+    let timeoutId;
+    return function(...args) {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fn.apply(this, args), delay);
+    };
   }
 
   function bindFilters() {
@@ -2638,35 +2730,10 @@
       throw new Error("Unable to create onsite allocation.");
     }
 
-    // Ensure no orphan backdrops, then show success modal
+    // Show success toast
     try {
-      // Remove any lingering bootstrap backdrops
-      document.querySelectorAll(".modal-backdrop").forEach((el) => {
-        try {
-          el.remove();
-        } catch (_) {}
-      });
-      const body = document.getElementById("onsiteSuccessBody");
-      if (body) {
-        body.textContent = `Issued ${quantity} × ${itemName} (${category}). Allocation marked as Completed.`;
-      }
-      const sm = document.getElementById("onsiteSuccessModal");
-      if (sm && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-        const inst = bootstrap.Modal.getOrCreateInstance(sm);
-        inst.show();
-        // When hidden, clean up any stray backdrops again
-        sm.addEventListener(
-          "hidden.bs.modal",
-          () => {
-            document.querySelectorAll(".modal-backdrop").forEach((el) => {
-              try {
-                el.remove();
-              } catch (_) {}
-            });
-          },
-          { once: true }
-        );
-      }
+      const message = `Successfully issued ${quantity} × ${itemName} (${category}).`;
+      showToast(message, 'success');
     } catch (_) {}
     return true;
   }
@@ -2806,23 +2873,19 @@
       }
     });
 
+    // Store original button text
+    submitBtn.setAttribute('data-original-text', submitBtn.textContent.trim());
+    
     submitBtn.addEventListener("click", async () => {
       try {
-        submitBtn.disabled = true;
+        setButtonLoading(submitBtn, true);
         // Map preview rows to expected payload fields
         const header = Array.isArray(previewData.header)
           ? previewData.header
           : [];
         const rows = Array.isArray(previewData.rows) ? previewData.rows : [];
         if (!header.length || !rows.length) {
-          try {
-            const b = document.getElementById("importResultBody");
-            if (b) b.textContent = "No parsed rows to import.";
-            const m = document.getElementById("importResultModal");
-            if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-              bootstrap.Modal.getOrCreateInstance(m).show();
-            }
-          } catch (_) {}
+          showToast("No valid data found in the import file.", "warning");
           return;
         }
         const ix = (name) => header.indexOf(String(name || "").toLowerCase());
@@ -2910,14 +2973,7 @@
           payloadRows.push(rowObj);
         }
         if (!payloadRows.length) {
-          try {
-            const b = document.getElementById("importResultBody");
-            if (b) b.textContent = "No valid rows (need item_name and quantity>=1).";
-            const m = document.getElementById("importResultModal");
-            if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-              bootstrap.Modal.getOrCreateInstance(m).show();
-            }
-          } catch (_) {}
+          showToast("No valid rows to import. Ensure each row has an item name and quantity >= 1.", "warning");
           return;
         }
         const url = `${API_BASE_URL}/inventory/index.php/import`;
@@ -2936,60 +2992,79 @@
         }
         const inserted = j?.data?.inserted ?? 0;
         const errs = Array.isArray(j?.data?.errors) ? j.data.errors : [];
-        // Close modal
+        // Report summary via toast
         try {
-          const modalEl = document.getElementById("importInventoryModal");
-          if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-            bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+          if (errs.length) console.error("Inventory import errors:", errs);
+          
+          let message = `Successfully imported ${inserted} row(s)`;
+          let type = 'success';
+          
+          if (errs.length > 0) {
+            const errorCount = errs.length;
+            message += `, with ${errorCount} error${errorCount > 1 ? 's' : ''}`;
+            type = 'warning';
+            
+            // Show first error in toast if there are any
+            const firstError = errs[0];
+            if (firstError) {
+              message += `: ${firstError.error || 'Unknown error'}`;
+              if (firstError.row) {
+                message += ` (row ${firstError.row})`;
+              }
+              
+              // Add a note if there are more errors
+              if (errorCount > 1) {
+                message += `, and ${errorCount - 1} more`;
+              }
+            }
           }
-        } catch (_) {}
-        // Refresh table
-        const p = window.__inventoryLast?.pagination?.page || 1;
-        await loadAndRender(p);
-        // Report summary via modal (show first few error reasons if any)
-        try { if (errs.length) console.error("Inventory import errors:", errs); } catch (_) {}
-        const firstErrors = errs
-          .slice(0, 5)
-          .map((e) => `#${e?.row ?? "?"}: ${e?.error ?? "unknown error"}`)
-          .join("\n");
-        const msg = `Imported ${inserted} row(s).${
-          errs.length ? ` Skipped ${errs.length} invalid.` : ""
-        }${firstErrors ? `\n\nSample errors:\n${firstErrors}` : ""}`;
-        try {
-          const b = document.getElementById("importResultBody");
-          if (b) b.textContent = msg;
-          const m = document.getElementById("importResultModal");
-          if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-            bootstrap.Modal.getOrCreateInstance(m).show();
-          }
+          
+          showToast(message, type);
+          
+          // Close modal after a short delay to allow toast to be seen
+          setTimeout(() => {
+            try {
+              const modalEl = document.getElementById("importInventoryModal");
+              if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+                const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.hide();
+                
+                // Reset form and preview
+                const form = modalEl.querySelector('form');
+                if (form) form.reset();
+                const previewBody = document.getElementById("importPreviewBody");
+                if (previewBody) previewBody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No data to preview</td></tr>';
+                const previewHead = document.getElementById("importPreviewHead");
+                if (previewHead) previewHead.innerHTML = '';
+                const statusEl = document.getElementById("importParseStatus");
+                if (statusEl) statusEl.textContent = 'Upload a CSV file to preview';
+              }
+            } catch (e) {
+              console.error("Error cleaning up after import:", e);
+            }
+          }, 500);
+          
+          // Refresh table
+          try { window.__invNonExpiredCache = {}; } catch (_) {}
+          const p = window.__inventoryLast?.pagination?.page || 1;
+          await loadAndRender(p);
         } catch (_) {}
       } catch (err) {
         console.error("Import failed:", err);
-        try {
-          const b = document.getElementById("importResultBody");
-          if (b) b.textContent = "Import failed: " + (err?.message || "Unknown error");
-          const m = document.getElementById("importResultModal");
-          if (m && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-            bootstrap.Modal.getOrCreateInstance(m).show();
-          }
-        } catch (_) {}
+        showToast(`Import failed: ${err?.message || 'Unknown error'}`, 'danger');
       } finally {
-        submitBtn.disabled = false;
+        setButtonLoading(submitBtn, false);
       }
     });
   }
 
-  // Rebind import handlers whenever the modal is opened (defensive against cache/init issues)
+  // Bind import handlers on page load
   try {
-    const importModal = document.getElementById("importInventoryModal");
-    if (importModal) {
-      importModal.addEventListener("shown.bs.modal", () => {
-        try {
-          bindImportModal();
-        } catch (_) {}
-      });
-    }
-  } catch (_) {}
+    bindImportModal();
+  } catch (e) {
+    console.error("Failed to bind import handlers:", e);
+    showToast("Failed to initialize import functionality. Please refresh the page.", 'danger');
+  }
 
   // Wire tag edit save button
   try {
@@ -3074,11 +3149,6 @@
       try {
         btn.disabled = true;
         if (fb) fb.textContent = "";
-        updateRowImmediate(itemName, category, (tr, tds) => {
-          const cur = parseInt((tds[2].textContent || "0").replace(/[^0-9]/g, ""), 10) || 0;
-          const next = Math.max(0, cur - quantity);
-          tds[2].textContent = String(next);
-        });
         if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
           bootstrap.Modal.getOrCreateInstance(modalEl).hide();
         }
@@ -3115,6 +3185,7 @@
       btnWrap
         .querySelector("#invRefreshBtn")
         .addEventListener("click", () => {
+          try { window.__invNonExpiredCache = {}; } catch (_) {}
           const page = window.__inventoryLast?.pagination?.page || 1;
           loadAndRender(page);
         });

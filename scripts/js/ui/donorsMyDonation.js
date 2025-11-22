@@ -62,6 +62,134 @@
     } catch (_) { try { console.error(message); } catch(_){} }
   }
 
+  const EXPIRY_SETTING_KEY = "expiry_lead_time_days";
+  let expiryLeadDays = 0;
+  let expiryMinDate = "";
+  let expiryLeadLoaded = false;
+  let expiryLeadPromise = null;
+
+  function formatDateInput(date) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function computeExpiryMinDate(days) {
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+    const safeDays = Number.isFinite(days) ? Math.max(0, days) : 0;
+    base.setDate(base.getDate() + safeDays);
+    return formatDateInput(base);
+  }
+
+  function getExpiryLeadMessage() {
+    if (!expiryLeadDays) {
+      return "Expiry date must not be earlier than today.";
+    }
+    return expiryLeadDays === 1
+      ? "Expiry date must be at least 1 day from today."
+      : `Expiry date must be at least ${expiryLeadDays} days from today.`;
+  }
+
+  async function ensureExpiryLeadTimeLoaded() {
+    if (expiryLeadLoaded) return;
+    if (!expiryLeadPromise) {
+      expiryLeadPromise = (async () => {
+        let days = 0;
+        try {
+          const res = await fetch(
+            `${API_BASE_URL}/system/settings.php?action=get&key=${EXPIRY_SETTING_KEY}&t=${Date.now()}`,
+            {
+              method: "GET",
+              credentials: "include",
+              headers: { Accept: "application/json" },
+            }
+          );
+          if (res.ok) {
+            const payload = await res.json().catch(() => null);
+            if (payload?.success) {
+              const raw =
+                payload?.data?.value !== undefined
+                  ? payload.data.value
+                  : payload?.value;
+              const parsed = parseInt(raw, 10);
+              if (Number.isFinite(parsed) && parsed >= 0) {
+                days = parsed;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("[MyDonations] Unable to load expiry lead time", err);
+        } finally {
+          expiryLeadDays = days;
+          expiryMinDate = computeExpiryMinDate(days);
+          expiryLeadLoaded = true;
+        }
+      })();
+    }
+    try {
+      await expiryLeadPromise;
+    } finally {
+      expiryLeadPromise = null;
+    }
+  }
+
+  function enforceExpiryLead(input, shouldWarn = true) {
+    if (!input) return true;
+    if (!expiryLeadLoaded || !expiryMinDate) return true;
+    const value = (input.value || "").trim();
+    if (!value) return true;
+    if (value < expiryMinDate) {
+      if (shouldWarn) {
+        showError(getExpiryLeadMessage());
+      }
+      input.value = expiryMinDate;
+      if (typeof input.setCustomValidity === "function") {
+        input.setCustomValidity("");
+      }
+      return false;
+    }
+    if (typeof input.setCustomValidity === "function") {
+      input.setCustomValidity("");
+    }
+    return true;
+  }
+
+  function bindExpiryInput(input) {
+    if (!input || input.dataset.expiryBound === "1") return;
+    input.dataset.expiryBound = "1";
+    input.addEventListener("change", () => enforceExpiryLead(input, true));
+    input.addEventListener("blur", () => enforceExpiryLead(input, false));
+    input.addEventListener("input", () => {
+      if (typeof input.setCustomValidity === "function") {
+        input.setCustomValidity("");
+      }
+    });
+  }
+
+  async function applyExpiryConstraints(inputs) {
+    if (!inputs) return;
+    await ensureExpiryLeadTimeLoaded();
+    const list =
+      inputs instanceof NodeList || Array.isArray(inputs)
+        ? Array.from(inputs)
+        : [inputs];
+    list.forEach((input) => {
+      if (!input) return;
+      bindExpiryInput(input);
+      if (expiryLeadLoaded && expiryMinDate) {
+        input.setAttribute("min", expiryMinDate);
+      } else {
+        input.removeAttribute("min");
+      }
+      enforceExpiryLead(input, false);
+    });
+  }
+
+  ensureExpiryLeadTimeLoaded().catch(() => {});
+
   function batchItemRowTemplate(it) {
     const id = it.id || 0;
     const name = escapeHtml(it.name || "");
@@ -153,6 +281,7 @@
       const cont = document.getElementById("batchItemsContainer");
       cont.innerHTML = items.map((it) => batchItemRowTemplate(it)).join("");
       if (window.jQuery) { initBatchItemSelect2(window.jQuery(cont)); }
+      await applyExpiryConstraints(cont.querySelectorAll(".batch-item-expiry"));
       // Initialize tooltips for remove buttons
       try {
         const tooltipTriggerList = Array.prototype.slice.call(
@@ -194,11 +323,18 @@
         const qty = parseInt(row.querySelector(".batch-item-qty").value, 10);
         const costStr = (row.querySelector(".batch-item-cost")?.value || "").trim();
         const cost = costStr === "" ? null : Number(costStr);
-        const expiry = row.querySelector(".batch-item-expiry").value;
-        if (!name || !qty || qty < 1 || !expiry) {
+        const expiryInput = row.querySelector(".batch-item-expiry");
+        if (!expiryInput) {
           showError("Please ensure all items have name, quantity (>=1), and expiry.");
           return;
         }
+        const rawExpiry = expiryInput.value;
+        if (!name || !qty || qty < 1 || !rawExpiry) {
+          showError("Please ensure all items have name, quantity (>=1), and expiry.");
+          return;
+        }
+        enforceExpiryLead(expiryInput, true);
+        const expiry = expiryInput.value;
         items.push({
           id: id > 0 ? id : 0,
           name,
@@ -648,6 +784,10 @@
           })
         );
         if (window.jQuery) { initBatchItemSelect2(window.jQuery(cont)); }
+        const latestRow = cont.lastElementChild;
+        if (latestRow) {
+          applyExpiryConstraints(latestRow.querySelector(".batch-item-expiry"));
+        }
         // Initialize tooltip for the newly added remove button
         try {
           const lastCard = cont.lastElementChild;

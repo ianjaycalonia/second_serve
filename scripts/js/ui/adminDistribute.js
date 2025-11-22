@@ -150,26 +150,54 @@ async function loadDistributableSettings(){
 
 async function diMaybeShowAllocationToast(){
   try {
-    if (window.__diAllocToastShown) return;
     const allocPane = document.getElementById('di-alloc');
     const allocTabBtn = document.getElementById('di-alloc-tab');
     const isActive =
       (allocPane && allocPane.classList.contains('show') && allocPane.classList.contains('active')) ||
       (allocTabBtn && allocTabBtn.classList.contains('active'));
     if (!isActive) return;
-    window.__diAllocToastShown = true;
+
+    // Let CSS on #diToastContainer control placement (top-right via
+    // "toast-container position-fixed top-0 end-0 p-3").
     const content = await diBuildSoonExpireContent().catch(() => null);
-    if (content) diShowPersistentToast(content, 'warning');
-    else diShowPersistentToast('Unable to load soon-to-expire items right now.', 'warning');
+    const options = { key: 'soon-expire', draggable: true };
+    if (content) {
+      diShowPersistentToast(content, 'warning', options);
+    } else {
+      diShowPersistentToast('Unable to load soon-to-expire items right now.', 'warning', options);
+    }
   } catch (err) {
     diLogError('diMaybeShowAllocationToast failed', err);
   }
 }
 
-function diShowPersistentToast(message, variant = 'success'){
+function diShowPersistentToast(message, variant = 'success', options){
   try {
     const container = diEnsureToastContainer();
     if (!container) return;
+
+    const opts = options || {};
+    const key = opts.key || null;
+    const anchor = opts.anchor || null;
+
+    if (key) {
+      try {
+        const existingToast = container.querySelector(`.di-toast[data-di-key="${key}"]`);
+        if (existingToast && existingToast.parentNode === container) {
+          existingToast.remove();
+        }
+      } catch (_) {}
+    }
+
+    // If an anchor is provided and container hasn't been manually moved yet, position it near the anchor
+    if (anchor && !container.__diUserMoved) {
+      try {
+        container.style.right = '';
+        container.style.bottom = '';
+        container.style.left = Math.max(0, anchor.left) + 'px';
+        container.style.top = Math.max(0, anchor.top) + 'px';
+      } catch(_){ }
+    }
 
     const colorClass = variant === 'danger' ? 'alert-danger' : variant === 'warning' ? 'alert-warning' : 'alert-success';
     const toastEl = document.createElement('div');
@@ -215,6 +243,9 @@ function diShowPersistentToast(message, variant = 'success'){
 
     toastEl.appendChild(bodyEl);
     toastEl.appendChild(closeBtn);
+    if (key) {
+      try { toastEl.dataset.diKey = key; } catch(_){}
+    }
     container.appendChild(toastEl);
   } catch (err) {
     diLogError('diShowPersistentToast failed', err);
@@ -248,6 +279,67 @@ function diHandleToastContainerKeydown(ev){
   }
 }
 
+function diMakeToastContainerDraggable(container){
+  try {
+    if (!container || container.__diDraggable) return;
+    container.__diDraggable = true;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let origLeft = 0;
+    let origTop = 0;
+
+    const onMove = (ev) => {
+      if (!isDragging) return;
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      const nextLeft = Math.max(0, origLeft + dx);
+      const nextTop = Math.max(0, origTop + dy);
+      container.style.left = nextLeft + 'px';
+      container.style.top = nextTop + 'px';
+      container.style.right = '';
+      container.style.bottom = '';
+      container.__diUserMoved = true;
+    };
+
+    const stopDrag = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', stopDrag, true);
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('mouseup', stopDrag, true);
+    };
+
+    const onDown = (ev) => {
+      try {
+        // Ignore clicks on the explicit close button
+        if (ev.target.closest && ev.target.closest('.di-toast-close')) return;
+        // Only start dragging when interacting inside the toast container itself
+        if (!container.contains(ev.target)) return;
+        const rect = container.getBoundingClientRect();
+        startX = ev.clientX;
+        startY = ev.clientY;
+        origLeft = rect.left;
+        origTop = rect.top;
+        container.style.bottom = '';
+        if (!container.style.top) {
+          container.style.top = rect.top + 'px';
+        }
+        isDragging = true;
+        window.addEventListener('pointermove', onMove, true);
+        window.addEventListener('pointerup', stopDrag, true);
+        window.addEventListener('mousemove', onMove, true);
+        window.addEventListener('mouseup', stopDrag, true);
+      } catch (_) {}
+    };
+
+    container.style.cursor = 'move';
+    container.addEventListener('pointerdown', onDown, true);
+    container.addEventListener('mousedown', onDown, true);
+  } catch (_) {}
+}
+
 function diEnsureToastContainer(){
   try {
     const existing = document.getElementById('diToastContainer');
@@ -258,20 +350,20 @@ function diEnsureToastContainer(){
         existing.__diCloseBound = true;
       }
       existing.style.cursor = '';
+      diMakeToastContainerDraggable(existing);
       return existing;
     }
     const body = document.body;
     if (!body) return null;
     const toastContainer = document.createElement('div');
     toastContainer.id = 'diToastContainer';
-    toastContainer.className = 'position-fixed p-3';
+    toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
     toastContainer.style.zIndex = '1100';
-    toastContainer.style.left = '24px';
-    toastContainer.style.bottom = '24px';
     toastContainer.__diCloseBound = true;
     toastContainer.addEventListener('click', diHandleToastContainerClick, true);
     toastContainer.addEventListener('keydown', diHandleToastContainerKeydown, true);
     body.appendChild(toastContainer);
+    diMakeToastContainerDraggable(toastContainer);
     return toastContainer;
   } catch (err) {
     diLogError('diEnsureToastContainer failed', err);
@@ -1046,14 +1138,24 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
         try { attachAllocGlobalControls(); } catch(_){ }
         try { initAllocSelects(); } catch(_){ }
         try { attachAllocateNow(); } catch(_){ }
-        diMaybeShowAllocationToast();
       });
       // If allocation tab is already active (e.g., forced by fallback script), show the toast once shortly after init
-      setTimeout(diMaybeShowAllocationToast, 150);
+      // setTimeout(diMaybeShowAllocationToast, 150);
       // Optional: when returning to Recipients tab, update Selected count
       if (recipientsTab){
         recipientsTab.addEventListener('shown.bs.tab', ()=>{ try { updateSelectedCount(); } catch(_){ } });
       }
+    } catch(_){ }
+  }
+
+  function attachSoonExpireAlert(){
+    try {
+      const btn = document.getElementById('diSoonExpireBtn');
+      if (!btn || btn.__diSoonBound) return;
+      btn.__diSoonBound = true;
+      btn.addEventListener('click', () => {
+        try { diMaybeShowAllocationToast(); } catch(_){ }
+      });
     } catch(_){ }
   }
 
@@ -1180,9 +1282,6 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
     } catch(_){ }
   }
 
-
-
-
   // Fetch allocations for a given period_key and return an array of items
   async function fetchRunAllocationsByPeriod(periodKey){
     try{
@@ -1253,7 +1352,7 @@ function annotateCardsWithWeeksEx(weeksEx){ try { return window.annotateCardsWit
     try { console.log('[DI][simple] init'); } catch(_){ }
     try { if (!window.__WEEK_START) { window.__WEEK_START = 'monday'; console.log('[DI][simple] defaulting __WEEK_START=monday'); } } catch(_){ }
     // One-time UI hooks
-    try { attachSearch(); attachNextButton(); attachAllocTabShown(); } catch(_){ }
+    try { attachSearch(); attachNextButton(); attachAllocTabShown(); attachSoonExpireAlert(); } catch(_){ }
     // 1) Ensure recipients pool exists
     let recs = [];
     try {
@@ -1746,12 +1845,20 @@ function annotateCardsWithWeeksEx(weeksEx){ try { return window.annotateCardsWit
 
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', () => {
-      if (SIMPLE_MODE && typeof window.SchedulingAlgorithmUISimpleInit === 'function') window.SchedulingAlgorithmUISimpleInit();
-      else if (typeof init === 'function') init();
+      if (SIMPLE_MODE && typeof window.SchedulingAlgorithmUISimpleInit === 'function') {
+        window.SchedulingAlgorithmUISimpleInit();
+      } else if (typeof init === 'function') {
+        init();
+      }
+      try { attachAllocTabShown(); attachSoonExpireAlert(); } catch(_){}
     });
   } else {
-    if (SIMPLE_MODE && typeof window.SchedulingAlgorithmUISimpleInit === 'function') window.SchedulingAlgorithmUISimpleInit();
-    else if (typeof init === 'function') init();
+    if (SIMPLE_MODE && typeof window.SchedulingAlgorithmUISimpleInit === 'function') {
+      window.SchedulingAlgorithmUISimpleInit();
+    } else if (typeof init === 'function') {
+      init();
+    }
+    try { attachAllocTabShown(); attachSoonExpireAlert(); } catch(_){}
   }
   // Minimal console exports for debugging in SIMPLE_MODE
   try {

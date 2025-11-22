@@ -21,8 +21,21 @@
   }
 }
 
+body.di-page {
+  overflow-x: hidden;
+}
+
 #distributeItemsTabContent {
   .di-scroll-panel::-webkit-scrollbar {
     width: 0;
   }
+}
+
+/* Distribute Items helpers (moved from inline styles in DistributeItems.html) */
+.di-search-input {
+  width: 200px;
+}
+
+.di-toast-container {
+  z-index: 1080;
 }

@@ -625,7 +625,7 @@
         ? String(meta.organization_name).trim()
         : meta.name || `Recipient ${rid}`;
 
-    // Determine highest-level badge (for display in first column)
+    // Determine highest-level badge (for display in header)
     let badgeHtml = "";
     try {
       const statuses = Array.isArray(items)
@@ -650,8 +650,33 @@
     tb.className = "dr-recipient";
     tb.setAttribute("data-rec", String(rid));
 
+    // Header row (clickable to expand/collapse)
+    const totalItems = Array.isArray(items)
+      ? items.reduce(
+          (sum, alloc) =>
+            sum +
+            (Array.isArray(alloc.items) ? alloc.items.length : 0),
+          0
+        )
+      : 0;
+    const headerTr = document.createElement("tr");
+    headerTr.className = "dr-rec-header";
+    headerTr.dataset.rec = String(rid);
+    headerTr.innerHTML = `
+      <td colspan="6" class="bg-light">
+        <button type="button" class="btn btn-sm btn-link text-decoration-none dr-rec-toggle" data-rec="${rid}">
+          <i class="bi bi-chevron-right me-1 dr-rec-toggle-icon"></i>
+          <span class="fw-semibold">${base}</span>${badgeHtml}
+          <span class="text-muted ms-2">(${totalItems} item${
+            totalItems === 1 ? "" : "s"
+          })</span>
+        </button>
+      </td>`;
+    tb.appendChild(headerTr);
+
     if (!Array.isArray(items) || !items.length) {
       const tr = document.createElement("tr");
+      tr.className = "dr-rec-item";
       tr.innerHTML = `
         <td>${base} ${
         error ? `<span class='badge bg-danger ms-2'>${error}</span>` : ""
@@ -696,6 +721,7 @@
         if (Array.isArray(a.items)) {
           a.items.forEach((it) => {
             const tr = document.createElement("tr");
+            tr.className = "dr-rec-item";
             tr.dataset.allocationId = String(a.allocation_id || "");
             tr.dataset.itemId = String(it.item_id || "");
             tr.dataset.rec = String(rid);
@@ -769,9 +795,64 @@
     table.appendChild(tb);
   });
 
+  // Helper to expand/collapse a recipient tbody
+  function setRecipientCollapsed(tb, collapsed) {
+    try {
+      tb.dataset.collapsed = collapsed ? "1" : "0";
+      const rows = tb.querySelectorAll("tr.dr-rec-item");
+      rows.forEach((tr) => {
+        if (collapsed) tr.classList.add("d-none");
+        else tr.classList.remove("d-none");
+      });
+      const icon = tb.querySelector(".dr-rec-toggle-icon");
+      if (icon) {
+        icon.classList.remove("bi-chevron-right", "bi-chevron-down");
+        icon.classList.add(collapsed ? "bi-chevron-right" : "bi-chevron-down");
+      }
+    } catch (_) {}
+  }
+
+  // Collapse all recipients by default (use the in-memory table so this
+  // works before we append it into the DOM)
+  try {
+    table
+      .querySelectorAll("tbody.dr-recipient")
+      .forEach((tb) => setRecipientCollapsed(tb, true));
+  } catch (_) {}
+
+  // Toggle handler for individual recipients
+  container.addEventListener("click", function (e) {
+    const toggleBtn =
+      e.target &&
+      (e.target.closest && e.target.closest(".dr-rec-toggle"));
+    if (!toggleBtn) return;
+    const tb =
+      toggleBtn.closest("tbody.dr-recipient") ||
+      container.querySelector(
+        `tbody.dr-recipient[data-rec="${
+          toggleBtn.getAttribute("data-rec") || ""
+        }"]`
+      );
+    if (!tb) return;
+    const collapsed = tb.dataset.collapsed !== "0";
+    setRecipientCollapsed(tb, !collapsed);
+  });
+
   unifiedTableWrap.appendChild(table);
   frag.appendChild(unifiedTableWrap);
   container.appendChild(frag);
+
+  // Global collapse/expand controls
+  document.getElementById("drCollapseAll")?.addEventListener("click", () => {
+    table
+      .querySelectorAll("tbody.dr-recipient")
+      .forEach((tb) => setRecipientCollapsed(tb, true));
+  });
+  document.getElementById("drExpandAll")?.addEventListener("click", () => {
+    table
+      .querySelectorAll("tbody.dr-recipient")
+      .forEach((tb) => setRecipientCollapsed(tb, false));
+  });
   try {
     container.querySelectorAll(".dr-name").forEach((el) => {
       el.readOnly = true;
@@ -2025,6 +2106,14 @@
       const rid = parseInt(tb.getAttribute("data-rec") || "0", 10) || 0;
       if (!rid) {
         persistFailures++;
+        continue;
+      }
+      // Skip recipients that have already been marked as notified (e.g. via
+      // the single-recipient Notify button). This prevents duplicate
+      // notifications if an admin clicks an individual Notify and later
+      // clicks Notify All for the same run.
+      const alreadyNotified = tb.querySelector('tr[data-status="notified"]');
+      if (alreadyNotified) {
         continue;
       }
       const parts = [];

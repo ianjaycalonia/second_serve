@@ -98,10 +98,12 @@ function handleUpdateProfile(array $payload) {
     $svc = new User();
     $svc->updateProfile((int)currentUserId(), [
         'name' => $payload['name'] ?? null,
+        'contact_person' => $payload['contact_person'] ?? null,
         'email' => $payload['email'] ?? null,
         'organization_name' => $payload['organization_name'] ?? null,
         'contact_number' => $payload['contact_number'] ?? null,
         'address' => $payload['address'] ?? null,
+        'position_designation' => $payload['position_designation'] ?? null,
     ]);
     sendJson(['success' => true, 'message' => 'Profile updated']);
 }

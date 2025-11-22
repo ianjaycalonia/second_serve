@@ -126,7 +126,8 @@ aside {
   overflow-y: auto;       /* ← make scrollable */
   flex-shrink: 0;         /* ← prevent shrinking */
   scrollbar-width: thin;
-  
+}
+
 aside::-webkit-scrollbar {
   width: 6px;
 }
@@ -166,7 +167,7 @@ aside::-webkit-scrollbar-thumb {
     font-size: 1.4em;
     color: var(--secondary-color);
   }
-}
+
 
 .custom-tooltip {
   --bs-tooltip-bg: var(--secondary-color);
@@ -493,21 +494,19 @@ main {
   }
 
   /* Mobile sidebar backdrop */
-/* Mobile sidebar backdrop */
-.sidebar-backdrop {
-  position: fixed;
-  inset: 0; /* top:0; right:0; bottom:0; left:0 */
-  background-color: rgba(0, 0, 0, 0.4); /* gray overlay */
-  z-index: 1999;
-  display: none; /* hidden by default */
-  transition: opacity 0.3s ease;
-}
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0; /* top:0; right:0; bottom:0; left:0 */
+    background-color: rgba(0, 0, 0, 0.4); /* gray overlay */
+    z-index: 1999;
+    display: none; /* hidden by default */
+    transition: opacity 0.3s ease;
+  }
 
-
-body.sidebar-open .sidebar-backdrop {
-  display: block;
-  opacity: 1;
-}
+  body.sidebar-open .sidebar-backdrop {
+    display: block;
+    opacity: 1;
+  }
 
 }
 aside {
@@ -535,6 +534,17 @@ aside {
 
 #notificationsModal ~ .modal-backdrop {
   z-index: 9998 !important;   
+}
+.dashboard-chart-wrapper {
+  height: 100%;
+}
+
+.recipient-dashboard-chart {
+  height: 300px;
+}
+
+.dashboard-toast-container {
+  z-index: 1100;
 }
 /* Chevron styling */
 .dropdown-chevron {

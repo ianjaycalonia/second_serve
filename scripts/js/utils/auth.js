@@ -17,15 +17,73 @@ function setLoading(button, isLoading) {
     }
 }
 
+// Show Bootstrap toast messages (defaults to success styling)
+function showToast(message, options = {}) {
+    const { title = 'Notification', variant = 'success', delay = 5000 } = options;
+    const allowedVariants = new Set(['primary','secondary','success','danger','warning','info','light','dark']);
+    const variantClass = allowedVariants.has(variant) ? variant : 'primary';
+
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1100';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-bg-${variantClass} border-0 shadow`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${title ? `<div class="fw-semibold">${title}</div>` : ''}
+                <div>${message || ''}</div>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    const toastInstance = bootstrap.Toast.getOrCreateInstance(toast, { delay, autohide: true });
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+    toastInstance.show();
+}
+
 // Toggle registration fields by role (donor vs recipient)
 document.addEventListener('DOMContentLoaded', function(){
     const roleSel = document.getElementById('registerRole');
     const donorWrap = document.getElementById('wrapDonorCategory');
     const recipWrap = document.getElementById('wrapBeneficiaryCategory');
+    const positionField = document.getElementById('positionField');
+    const positionInput = document.getElementById('registerPosition');
+    const toggleHiddenClass = (el, show) => {
+        if (!el) return;
+        if (show) {
+            el.classList.remove('d-none');
+        } else {
+            el.classList.add('d-none');
+        }
+    };
     const updateVis = () => {
         const v = (roleSel?.value||'').toLowerCase();
-        if (donorWrap) donorWrap.style.display = (v === 'donor') ? '' : 'none';
-        if (recipWrap) recipWrap.style.display = (v === 'recipient') ? '' : 'none';
+        toggleHiddenClass(donorWrap, v === 'donor');
+        toggleHiddenClass(recipWrap, v === 'recipient');
+        if (positionField && positionInput) {
+            if (v === 'recipient') {
+                toggleHiddenClass(positionField, true);
+                positionInput.required = true;
+            } else {
+                toggleHiddenClass(positionField, false);
+                positionInput.required = false;
+                positionInput.classList.remove('is-invalid');
+            }
+        }
     };
     roleSel?.addEventListener('change', updateVis);
     updateVis();
@@ -187,9 +245,32 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     attachPasswordToggles();
 
+    // Clear invalid state when user starts typing in any required field
+    try {
+        document.querySelectorAll('input[required], textarea[required], select[required]').forEach(input => {
+            input.addEventListener('input', function () {
+                if (this.value && this.classList.contains('is-invalid')) {
+                    this.classList.remove('is-invalid');
+                }
+            });
+        });
+    } catch (_) { /* ignore */ }
+
     const authModalEl = document.getElementById('authModal');
     if (authModalEl) {
         authModalEl.addEventListener('shown.bs.modal', attachPasswordToggles, { once: false });
+
+        authModalEl.addEventListener('hidden.bs.modal', () => {
+            try {
+                const loginFormEl = document.getElementById('loginForm');
+                if (loginFormEl) loginFormEl.reset();
+                const registerFormEl = document.getElementById('registerForm');
+                if (registerFormEl) registerFormEl.reset();
+            } catch (_) { /* ignore reset errors */ }
+
+            document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+            document.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
+        });
     }
 
     const getRequiredRoleByPath = (p) => {
@@ -390,7 +471,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         showError('loginPassword', 'Incorrect password');
                         title = 'Incorrect password';
                         body = 'The password you entered is incorrect. Please try again.';
-                    } else if (lower.includes('account not approved')) {
+                    } else if (lower.includes('system error occurred')) {
+                        // Generic system error for inactive/blocked accounts
+                        title = 'System Error';
+                        body = 'We were unable to complete your request due to a system error. Please try again later or contact the system administrator.';
+                    } else if (lower.includes('pending approval')) {
+                        // Pending accounts: clearly indicate approval is still required
                         title = 'Pending Approval';
                         body = 'Your account is pending admin approval. Please wait until an administrator approves your registration.';
                     }
@@ -473,6 +559,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 contentType: 'application/json',
                 dataType: 'json',
                 success: function(response) {
+                    const successMsg = response?.message || 'Registration successful!';
+                    showToast(successMsg, { title: 'Registration Successful', variant: 'success' });
+                    const authModalEl = document.getElementById('authModal');
+                    if (authModalEl) {
+                        const modalInstance = bootstrap.Modal.getInstance(authModalEl) || bootstrap.Modal.getOrCreateInstance(authModalEl);
+                        modalInstance.hide();
+                    }
                     const u = response && response.user ? response.user : null;
                     const approved = u && String(u.status||'').toLowerCase() === 'approved';
                     if (approved) {
@@ -480,15 +573,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         const dest = response?.redirect || getDashboardUrl(u.role);
                         if (dest) { window.location.href = dest; return; }
                     }
-                    // Pending (e.g., recipients): inform user and switch to Login
-                    const loginTab = new bootstrap.Tab(document.getElementById('login-tab'));
-                    loginTab.show();
-                    const msg = 'Registration received. Your account is pending admin approval. You will be able to login once approved.';
-                    const alert = document.createElement('div');
-                    alert.className = 'alert alert-info alert-dismissible fade show';
-                    alert.setAttribute('role','alert');
-                    alert.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
-                    document.querySelector('#login-tab-pane')?.prepend(alert);
                 },
                 error: function(xhr) {
                     const error = xhr.responseJSON?.error || 'Registration failed';

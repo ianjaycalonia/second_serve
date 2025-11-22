@@ -6,7 +6,9 @@
   // Cache + state
   const donationCache = { byBatch: new Map(), byId: new Map() };
   let __pollTimer = 0,
-    __lastSig = "";
+    __lastSig = "",
+    __page = 1,
+    __pageSize = 20;
 
   // Helpers
   function getEl(id) {
@@ -190,14 +192,22 @@
               const el = getEl(id);
               if (el && el.options && el.options.length) el.selectedIndex = 0;
             });
+            __page = 1;
             renderTable(applyFilters(window.__adminDonationRaw || []));
           },
           { once: true }
         );
       }
+      updatePagination(0);
       return;
     }
     const groups = groupByBatch(items);
+    const totalGroups = groups.length;
+    const pageSize = __pageSize || 20;
+    const totalPages =
+      totalGroups > 0 ? Math.max(1, Math.ceil(totalGroups / pageSize)) : 1;
+    if (__page < 1) __page = 1;
+    if (__page > totalPages) __page = totalPages;
     donationCache.byBatch.clear();
     donationCache.byId.clear();
     groups.forEach((g) => {
@@ -211,8 +221,12 @@
       }
     });
 
+    const startIdx = (__page - 1) * pageSize;
+    const endIdx = startIdx + pageSize;
+    const pageGroups = totalGroups > 0 ? groups.slice(startIdx, endIdx) : [];
+
     const rows = [];
-    groups.forEach((gr) => {
+    pageGroups.forEach((gr) => {
       const isBatch = !!gr.batch_id && gr.items.length > 1;
       if (isBatch) {
         const first = gr.items[0] || {},
@@ -226,7 +240,10 @@
             gr.items.find(
               (it) => it && (it.receipt_full_url || it.image_full_url)
             ) || first,
-          img = fwi.receipt_full_url || fwi.image_full_url || "";
+          img = fwi.receipt_full_url || fwi.image_full_url || "",
+          hasReceiptImage = gr.items.some(
+            (it) => ((it?.receipt_full_url || it?.image_full_url || "").trim().length) > 0
+          );
         const isFailed = (first.status || "") === "Failed Safety",
           isCancelled = (first.status || "") === "Cancelled",
           fail = (first.fail_reason || "").trim(),
@@ -238,32 +255,38 @@
               decodeHtml(fail || "Failed safety check")
             )}</div>`
           : showReceipt
-          ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da}>View</button></div>`
+          ? (
+              hasReceiptImage
+                ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da}>View</button></div>`
+                : '<div class="small text-muted text-center">Imported by an admin</div>'
+            )
           : isCancelled && cancel
           ? `<div class="small text-muted text-center">${escapeHtml(
               decodeHtml(cancel)
             )}</div>`
           : '<div class="d-flex justify-content-center">—</div>';
-        const actions = [];
+        const actions = [
+          '<button class="btn btn-sm btn-outline-secondary batch-toggle" type="button" title="Toggle batch items" data-bs-toggle="tooltip"><i class="bi bi-eye"></i></button>'
+        ];
         if (first.status === "Pending")
           actions.push(
-            `<button class="btn btn-sm btn-outline-primary action-ack" ${da}><i class="bi bi-hand-thumbs-up"></i></button>`
+            `<button class="btn btn-sm btn-outline-primary action-ack" ${da} title="Acknowledge donation" data-bs-toggle="tooltip"><i class="bi bi-hand-thumbs-up"></i></button>`
           );
         if (first.status === "Acknowledged")
           actions.push(
-            `<button class="btn btn-sm btn-outline-warning action-fs" ${da}><i class="bi bi-clipboard-check"></i></button>`
+            `<button class="btn btn-sm btn-outline-warning action-fs" ${da} title="Perform safety check" data-bs-toggle="tooltip"><i class="bi bi-clipboard-check"></i></button>`
           );
         if (first.status === "Picked Up")
           actions.push(
-            `<button class="btn btn-sm btn-outline-success action-receive" ${da}><i class="bi bi-check2-circle"></i></button>`
+            `<button class="btn btn-sm btn-outline-success action-receive" ${da} title="Mark as received" data-bs-toggle="tooltip"><i class="bi bi-check2-circle"></i></button>`
           );
         actions.push(
-          `<button class="btn btn-sm btn-outline-danger action-delete" ${da}><i class="bi bi-trash"></i></button>`
+          `<button class="btn btn-sm btn-outline-danger action-delete" ${da} title="Delete donation" data-bs-toggle="tooltip"><i class="bi bi-trash"></i></button>`
         );
         rows.push(`
           <tr class="table-active group-row" data-batch-id="${gr.batch_id}">
             <td class="py-2 align-middle">${donor}</td>
-            <td class="py-2"><div class="fw-semibold"><button class="btn btn-sm btn-outline-secondary me-2 batch-toggle" type="button">Show</button>Batch • ${
+            <td class="py-2"><div class="fw-semibold">Batch • ${
               gr.items.length
             } item${gr.items.length > 1 ? "s" : ""}</div></td>
             <td class="py-2 align-middle">—</td>
@@ -303,6 +326,7 @@
           created = fmtDateTime(gr.created_at),
           statusHtml = badge(r.status || ""),
           img = r.receipt_full_url || r.image_full_url || "",
+          hasReceiptImage = (img || "").trim().length > 0,
           batch = r.batch_id ? String(r.batch_id) : "";
         const isFailed = (r.status || "") === "Failed Safety",
           fail = (r.fail_reason || "").trim(),
@@ -317,11 +341,15 @@
                 : ""
             }>${escapeHtml(decodeHtml(fail || "Failed safety check"))}</div>`
           : showReceipt
-          ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" data-id="${
-              r.id ?? ""
-            }" data-batch="${batch}" data-status="${
-              r.status ?? ""
-            }">View</button></div>`
+          ? (
+              hasReceiptImage
+                ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" data-id="${
+                    r.id ?? ""
+                  }" data-batch="${batch}" data-status="${
+                    r.status ?? ""
+                  }" title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
+                : '<div class="small text-muted text-center">Imported by an admin</div>'
+            )
           : isCancelled && cancel
           ? `<div class="small text-muted text-center">${escapeHtml(
               decodeHtml(cancel)
@@ -333,18 +361,18 @@
         const actions = [];
         if (r.status === "Pending")
           actions.push(
-            `<button class="btn btn-sm btn-outline-primary action-ack" ${da}><i class="bi bi-hand-thumbs-up"></i></button>`
+            `<button class="btn btn-sm btn-outline-primary action-ack" ${da} title="Acknowledge donation" data-bs-toggle="tooltip"><i class="bi bi-hand-thumbs-up"></i></button>`
           );
         if (r.status === "Acknowledged")
           actions.push(
-            `<button class="btn btn-sm btn-outline-warning action-fs" ${da}><i class="bi bi-clipboard-check"></i></button>`
+            `<button class="btn btn-sm btn-outline-warning action-fs" ${da} title="Perform safety check" data-bs-toggle="tooltip"><i class="bi bi-clipboard-check"></i></button>`
           );
         if (r.status === "Picked Up")
           actions.push(
-            `<button class="btn btn-sm btn-outline-success action-receive" ${da}><i class="bi bi-check2-circle"></i></button>`
+            `<button class="btn btn-sm btn-outline-success action-receive" ${da} title="Mark as received" data-bs-toggle="tooltip"><i class="bi bi-check2-circle"></i></button>`
           );
         actions.push(
-          `<button class="btn btn-sm btn-outline-danger action-delete" ${da}><i class="bi bi-trash"></i></button>`
+          `<button class="btn btn-sm btn-outline-danger action-delete" ${da} title="Delete donation" data-bs-toggle="tooltip"><i class="bi bi-trash"></i></button>`
         );
         rows.push(
           `<tr><td>${donor}</td><td>${item}</td><td>${qty}</td><td>${created}</td><td>${statusHtml}</td><td>${imgCell}</td><td><div class="d-flex justify-content-center" style="gap:5px;">${actions.join(
@@ -354,6 +382,8 @@
       }
     });
     tbody.innerHTML = rows.join("");
+
+    updatePagination(totalGroups);
 
     // fill missing fail reasons
     try {
@@ -369,6 +399,52 @@
             if (reason) el.textContent = reason;
           } catch (_) {}
         });
+    } catch (_) {}
+  }
+
+  function updatePagination(totalCount) {
+    try {
+      const pager = getEl("donationsPagination");
+      const sizeSelect = getEl("donationsPageSize");
+      if (sizeSelect) {
+        const val = String(__pageSize || 20);
+        if (sizeSelect.value !== val) sizeSelect.value = val;
+      }
+      if (!pager) return;
+      const pageSize = __pageSize || 20;
+      const totalPages =
+        totalCount > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1;
+      const currentPage = totalCount > 0 ? __page : 0;
+
+      pager.innerHTML = "";
+
+      const makeLi = (disabled, page, label, aria, title) => {
+        const li = document.createElement("li");
+        li.className = "page-item" + (disabled ? " disabled" : "");
+        if (disabled || page === null) {
+          li.innerHTML = `<span class="page-link">${label}</span>`;
+        } else {
+          li.innerHTML = `<button class="page-link" type="button" data-page="${page}" aria-label="${aria}" title="${title}">${label}</button>`;
+        }
+        return li;
+      };
+
+      const prevDisabled = currentPage <= 1 || !totalCount;
+      pager.appendChild(
+        makeLi(prevDisabled, currentPage - 1, "«", "Previous", "Previous page")
+      );
+
+      const infoLabel =
+        totalCount > 0
+          ? "Page " + currentPage + " of " + totalPages
+          : "Page 0 of 0";
+      pager.appendChild(makeLi(true, null, infoLabel, "", ""));
+
+      const nextDisabled =
+        !totalCount || currentPage >= totalPages || currentPage === 0;
+      pager.appendChild(
+        makeLi(nextDisabled, currentPage + 1, "»", "Next", "Next page")
+      );
     } catch (_) {}
   }
 
@@ -654,7 +730,10 @@
       );
       if (child && child.classList.contains("d-none"))
         child.classList.remove("d-none");
-      if (btn) btn.textContent = "Hide";
+      if (btn) {
+        const icon = btn.querySelector("i.bi");
+        if (icon) icon.className = "bi bi-eye-slash";
+      }
     });
   }
   function sig(items) {
@@ -708,7 +787,8 @@
         (await Api.getUserPref("ackNextStepsDontShow")) === "1")().then(
         (skip) => {
           if (skip) return;
-          const el = getEl("ackNextStepsModal");
+          const el = getEl("ackNextStepsModal"),
+            msg = getEl("messagesModal");
           if (!el || typeof bootstrap === "undefined" || !bootstrap.Modal)
             return;
           try {
@@ -724,71 +804,24 @@
             close = getEl("ackCloseBtn"),
             chk = getEl("ackDontShowAgain");
           if (chk) chk.checked = false;
-          if (open)
+          if (open) {
             open.onclick = async () => {
-              if (chk && chk.checked)
-                await Api.setUserPref("ackNextStepsDontShow", "1");
               try {
-                const msg = getEl("messagesModal");
-                // Prefer preloading a direct conversation when donorId is available
-                if (donorId) {
-                  try {
-                    // Resolve API base from AdminDonationApi or global window
-                    const API_BASE =
-                      window.AdminDonationApi &&
-                      window.AdminDonationApi.API_BASE_URL
-                        ? window.AdminDonationApi.API_BASE_URL
-                        : window.API_BASE_URL || "/php/api";
-                    const url = `${API_BASE}/communications/messages.php?action=get_or_create_direct`;
-                    const res = await fetch(url, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      credentials: "include",
-                      body: JSON.stringify({ other_user_id: Number(donorId) }),
-                    });
-                    let convId = null;
-                    try {
-                      const j = await res.json();
-                      convId =
-                        j && j.data && j.data.conversation
-                          ? j.data.conversation.id
-                          : null;
-                    } catch (_) {
-                      /* ignore JSON parse issues */
-                    }
-                    // Hint the messages UI to preselect this conversation and show it in Recent immediately
-                    if (convId) {
-                      try {
-                        window.__messagesPreselectConvId = convId;
-                        // Emulate a search selection so the left pane replaces the empty-state
-                        window.__messagesTempRecent = {
-                          id: convId,
-                          title:
-                            donorTitle && String(donorTitle).trim()
-                              ? donorTitle
-                              : "Donor",
-                          other_role: "donor",
-                        };
-                      } catch (_) {
-                        /* ignore */
-                      }
-                    }
-                    if (msg && bootstrap?.Modal)
-                      bootstrap.Modal.getOrCreateInstance(msg).show();
-                  } catch (_e) {
-                    // Fallback: open modal only
-                    if (msg && bootstrap?.Modal)
-                      bootstrap.Modal.getOrCreateInstance(msg).show();
-                  }
-                } else {
-                  if (msg && bootstrap?.Modal)
-                    bootstrap.Modal.getOrCreateInstance(msg).show();
+                if (chk?.checked) {
+                  await Api.setUserPref("ackNextStepsDontShow", "1");
                 }
-              } catch (_) {}
-              try {
+                if (msg && bootstrap?.Modal) {
+                  bootstrap.Modal.getOrCreateInstance(msg).show();
+                }
                 m.hide();
-              } catch (_) {}
+              } catch (_) {
+                // Fallback: open modal only
+                if (msg && bootstrap?.Modal) {
+                  bootstrap.Modal.getOrCreateInstance(msg).show();
+                }
+              }
             };
+          }
           if (close)
             close.onclick = async () => {
               if (chk && chk.checked)
@@ -925,7 +958,12 @@
       );
       if (child) {
         child.classList.toggle("d-none");
-        btn.textContent = child.classList.contains("d-none") ? "Show" : "Hide";
+        const icon = btn.querySelector("i.bi");
+        if (icon) {
+          icon.className = child.classList.contains("d-none")
+            ? "bi bi-eye"
+            : "bi bi-eye-slash";
+        }
       }
     });
   }
@@ -1559,6 +1597,37 @@
         );
     }
   }
+  function bindPagination() {
+    const sizeSelect = getEl("donationsPageSize");
+    if (sizeSelect) {
+      sizeSelect.addEventListener("change", () => {
+        const val = parseInt(sizeSelect.value, 10);
+        if (!Number.isFinite(val) || val <= 0) return;
+        __pageSize = val;
+        __page = 1;
+        renderTable(applyFilters(window.__adminDonationRaw || []));
+      });
+    }
+    const pager = getEl("donationsPagination");
+    if (pager) {
+      pager.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-page]");
+        if (!btn) return;
+        const target = parseInt(btn.getAttribute("data-page"), 10);
+        if (!Number.isFinite(target) || target < 1) return;
+        const items = applyFilters(window.__adminDonationRaw || []);
+        const totalGroups = groupByBatch(items).length;
+        const pageSize = __pageSize || 20;
+        const maxPage =
+          totalGroups > 0
+            ? Math.max(1, Math.ceil(totalGroups / pageSize))
+            : 1;
+        if (target > maxPage) return;
+        __page = target;
+        renderTable(items);
+      });
+    }
+  }
   function bindRestoreAckPrompt() {
     const restore = getEl("restoreAckPromptBtn");
     if (!restore) return;
@@ -1615,6 +1684,7 @@
       bindActions();
       bindReceiveConfirm();
       bindFilters();
+      bindPagination();
       bindRestoreAckPrompt();
       startDonationAutoRefresh();
     } catch (err) {
