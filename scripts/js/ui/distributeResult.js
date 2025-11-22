@@ -246,45 +246,7 @@
         }
       });
       if (!actionsTh) return;
-      // Consider an action visible if any primary action button exists and is actually visible
-      const candidates = container.querySelectorAll(
-        ".dr-notify-one, .dr-del"
-      );
-      let anyActionVisible = false;
-      const isVisible = (el) => {
-        try {
-          if (!el) return false;
-          if (el.classList && el.classList.contains("d-none")) return false;
-          const style = window.getComputedStyle
-            ? window.getComputedStyle(el)
-            : null;
-          if (style) {
-            if (
-              style.display === "none" ||
-              style.visibility === "hidden" ||
-              style.opacity === "0"
-            )
-              return false;
-          }
-          // getClientRects is reliable for layout visibility
-          if (
-            typeof el.getClientRects === "function" &&
-            el.getClientRects().length === 0
-          )
-            return false;
-          return true;
-        } catch (_) {
-          return false;
-        }
-      };
-      for (const c of candidates) {
-        if (isVisible(c)) {
-          anyActionVisible = true;
-          break;
-        }
-      }
-      if (anyActionVisible) actionsTh.classList.remove("d-none");
-      else actionsTh.classList.add("d-none");
+      actionsTh.classList.remove("d-none");
     } catch (_) {}
   }
 
@@ -612,6 +574,7 @@
         <th>Status</th>
         <th>Created</th>
         <th>Item</th>
+        <th>Unit</th>
         <th>Quantity</th>
         <th>Actions</th>
       </tr>
@@ -632,16 +595,15 @@
         ? items.map((a) => String(a.status || "").toLowerCase())
         : [];
       if (statuses.some((s) => s === "completed")) {
-        badgeHtml = " <span class='badge bg-primary ms-2'>Completed</span>";
+        badgeHtml = "<span class='badge bg-primary'>Completed</span>";
       } else if (statuses.some((s) => s === "picked up")) {
-        badgeHtml = " <span class='badge bg-secondary ms-2'>Picked Up</span>";
+        badgeHtml = "<span class='badge bg-secondary'>Picked Up</span>";
       } else if (statuses.some((s) => s === "acknowledged")) {
-        badgeHtml = " <span class='badge bg-success ms-2'>Acknowledged</span>";
+        badgeHtml = "<span class='badge bg-success'>Acknowledged</span>";
       } else if (statuses.some((s) => s === "updated")) {
-        badgeHtml =
-          " <span class='badge bg-warning text-dark ms-2'>Updated</span>";
+        badgeHtml = "<span class='badge bg-warning text-dark'>Updated</span>";
       } else if (statuses.some((s) => s === "cancelled")) {
-        badgeHtml = " <span class='badge bg-danger ms-2'>Cancelled</span>";
+        badgeHtml = "<span class='badge bg-danger'>Cancelled</span>";
       }
     } catch (_) {}
 
@@ -650,7 +612,6 @@
     tb.className = "dr-recipient";
     tb.setAttribute("data-rec", String(rid));
 
-    // Header row (clickable to expand/collapse)
     const totalItems = Array.isArray(items)
       ? items.reduce(
           (sum, alloc) =>
@@ -659,29 +620,96 @@
           0
         )
       : 0;
+
+    let earliestCreated = null;
+    const headerNames = [];
+    let headerTotalQty = 0;
+    if (Array.isArray(items)) {
+      items.forEach((a) => {
+        const created = a.created_at ? new Date(a.created_at) : null;
+        if (created) {
+          if (!earliestCreated || created < earliestCreated) {
+            earliestCreated = created;
+          }
+        }
+        if (Array.isArray(a.items)) {
+          a.items.forEach((it) => {
+            const nm = String(it.item_name || it.name || "").trim();
+            if (nm) headerNames.push(nm);
+            const q = Number(it.quantity || 0) || 0;
+            headerTotalQty += q;
+          });
+        }
+      });
+    }
+
+    let headerCreatedStr = "";
+    if (earliestCreated) {
+      headerCreatedStr = `${String(earliestCreated.getDate()).padStart(
+        2,
+        "0"
+      )}/${String(earliestCreated.getMonth() + 1).padStart(2, "0")}/${
+        earliestCreated.getFullYear()
+      } ${String(earliestCreated.getHours()).padStart(2, "0")}:${String(
+        earliestCreated.getMinutes()
+      ).padStart(2, "0")}`;
+    }
+
+    let headerItemsSummary = "";
+    if (headerNames.length) {
+      const seen = new Set();
+      const uniq = [];
+      headerNames.forEach((n) => {
+        const key = n.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniq.push(n);
+        }
+      });
+      const maxNames = 3;
+      let summary = uniq.slice(0, maxNames).join(", ");
+      if (uniq.length > maxNames) summary += ", ...";
+      const maxChars = 80;
+      if (summary.length > maxChars) {
+        summary = summary.slice(0, maxChars - 3) + "...";
+      }
+      headerItemsSummary = summary;
+    }
+
+    const safeHeaderItemsSummary = headerItemsSummary
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
     const headerTr = document.createElement("tr");
     headerTr.className = "dr-rec-header";
     headerTr.dataset.rec = String(rid);
     headerTr.innerHTML = `
-      <td colspan="6" class="bg-light">
+      <td class="bg-light">
         <button type="button" class="btn btn-sm btn-link text-decoration-none dr-rec-toggle" data-rec="${rid}">
           <i class="bi bi-chevron-right me-1 dr-rec-toggle-icon"></i>
-          <span class="fw-semibold">${base}</span>${badgeHtml}
-          <span class="text-muted ms-2">(${totalItems} item${
-            totalItems === 1 ? "" : "s"
-          })</span>
+          <span class="fw-semibold">${base}</span>
         </button>
-      </td>`;
+      </td>
+      <td class="bg-light">${badgeHtml}</td>
+      <td class="bg-light">${headerCreatedStr}</td>
+      <td class="bg-light">(${totalItems} item${
+        totalItems === 1 ? "" : "s"
+      })</td>
+      <td class="bg-light"></td>
+      <td class="bg-light">${headerTotalQty || ""}</td>
+      <td class="bg-light"></td>`;
     tb.appendChild(headerTr);
 
     if (!Array.isArray(items) || !items.length) {
       const tr = document.createElement("tr");
       tr.className = "dr-rec-item";
       tr.innerHTML = `
-        <td>${base} ${
-        error ? `<span class='badge bg-danger ms-2'>${error}</span>` : ""
-      }</td>
-        <td colspan="5" class="text-muted">No allocations saved for this recipient.</td>`;
+        <td></td>
+        <td colspan="6" class="text-muted">No allocations saved for this recipient.${
+          error ? ` <span class='badge bg-danger ms-2'>${error}</span>` : ""
+        }</td>`;
       tb.appendChild(tr);
     } else {
       // Add one row per item (items nested under allocations)
@@ -768,10 +796,10 @@
               ? 'disabled aria-disabled="true"'
               : '';
 
+            const unitLabel = String(it.unit || it.unit_label || "");
+
             tr.innerHTML = `
-              <td>${base} ${
-              error ? `<span class='badge bg-danger ms-2'>${error}</span>` : ""
-            }</td>
+              <td></td>
               <td>${statusBadge(status)}</td>
               <td>${dt}</td>
               <td>
@@ -779,6 +807,7 @@
                   value="${safeName}" 
                   placeholder="Item name" ${nameAttrs}>
               </td>
+              <td>${unitLabel}</td>
               <td>
                 <input type="number" class="form-control form-control-sm dr-qty" 
                   value="${it.quantity}" min="0" step="1" inputmode="numeric" pattern="\\d*" required ${quantityAttrs}>
@@ -1030,32 +1059,6 @@
       const arr = Array.isArray(j?.data?.items) ? j.data.items : [];
       return arr.map((u) => Number(u.user_id || u.id) || 0).filter((n) => n > 0);
     } catch (_) { return []; }
-  }
-  async function fetchGroupedRecord(name, category) {
-    try {
-      const params = new URLSearchParams();
-      params.set('group', 'merge');
-      params.set('limit', '50');
-      params.set('q', name);
-      if (category) params.set('category', category);
-      params.set('t', String(Date.now()));
-      const r = await fetch(`${API_BASE_URL}/inventory/index.php/list?${params.toString()}`, { credentials: 'include', headers: { Accept: 'application/json' } });
-      const j = await r.json().catch(() => null);
-      const rows = Array.isArray(j?.data?.items) ? j.data.items : [];
-      return rows.find((x) => String(x.item_name || '') === String(name || '') && String(x.category || '') === String(category || '')) || null;
-    } catch (_) { return null; }
-  }
-  async function anyWeightKnownFor(name) {
-    // Check report-in within this year for any non-null total weight for the product name
-    try {
-      const now = new Date();
-      const start = `${now.getFullYear()}-01-01`;
-      const end = `${now.getFullYear()}-12-31`;
-      const r = await fetch(`${API_BASE_URL}/inventory/index.php/report-in?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&t=${Date.now()}`, { credentials: 'include', headers: { Accept: 'application/json' } });
-      const j = await r.json().catch(() => null);
-      const rows = Array.isArray(j?.data?.rows) ? j.data.rows : [];
-      return rows.some((row) => String(row['PRODUCT NAME'] || '') === String(name || '') && row['TOTAL WEIGHT(KG)'] !== null);
-    } catch (_) { return false; }
   }
 
   async function fetchMissingMetadataIndex(){

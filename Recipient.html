@@ -863,36 +863,6 @@
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
-        table.stacked-table tbody tr td.d-lg-table-cell {
-          display: flex !important;
-        }
-        table.stacked-table tbody tr td::before {
-          content: attr(data-label);
-          font-weight: 600;
-          margin-right: 0;
-          color: #6c757d;
-          white-space: nowrap; /* prevent label from breaking into multiple lines */
-        }
-        /* Keep actions link on a new line if too long */
-        table.stacked-table tbody tr td[data-label="Actions"] {
-          flex-direction: column;
-          align-items: flex-start;
-          gap: 0.25rem;
-        }
-        table.stacked-table tbody tr td[data-label="Actions"] a {
-          word-break: break-word;
-        }
-      }
-
-      /* Better wrapping for table cells on all sizes */
-      table.stacked-table td,
-      table.stacked-table th {
-        word-wrap: anywhere;
-      }
-      .table-responsive {
-        overflow-x: auto;
-      }
-    </style>
 
     <!-- Import Result Modal -->
     <div

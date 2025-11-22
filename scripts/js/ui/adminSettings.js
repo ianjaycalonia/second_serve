@@ -203,6 +203,55 @@
     });
   }
 
+  function bindThemeToggle(){
+    const el = byId('cfgThemeDarkToggle');
+    if (!el) return;
+    try {
+      let theme = 'light';
+      if (window.ThemeManager && typeof window.ThemeManager.getCurrentTheme === 'function') {
+        const cur = window.ThemeManager.getCurrentTheme();
+        if (cur === 'dark' || cur === 'light') theme = cur;
+      }
+      el.checked = theme === 'dark';
+    } catch (_) {}
+
+    el.addEventListener('change', async function(){
+      const desired = el.checked ? 'dark' : 'light';
+      const prevChecked = !el.checked;
+      el.disabled = true;
+      try {
+        if (window.ThemeManager && typeof window.ThemeManager.setThemePref === 'function') {
+          await window.ThemeManager.setThemePref(desired);
+        } else {
+          const base =
+            typeof window.API_BASE_URL === 'string' && window.API_BASE_URL
+              ? window.API_BASE_URL
+              : '/php/api';
+          await fetchJson(`${base}/users/preferences.php?action=update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: 'theme', value: desired })
+          });
+          try {
+            document.documentElement.setAttribute('data-theme', desired === 'dark' ? 'dark' : 'light');
+          } catch (_) {}
+        }
+        toast(
+          desired === 'dark'
+            ? 'Dark theme applied for your admin pages.'
+            : 'Light theme applied for your admin pages.',
+          'success'
+        );
+      } catch (err){
+        console.error('[Settings] failed to toggle theme', err, err?.body);
+        el.checked = prevChecked;
+        toast('Unable to update theme preference. Please try again.', 'danger');
+      } finally {
+        el.disabled = false;
+      }
+    });
+  }
+
   async function saveSettings(){
     const saveBtn = byId('configSaveBtn');
     const discardBtn = byId('configDiscardBtn');
@@ -247,6 +296,7 @@
     discardBtn.addEventListener('click', function(){ restoreOriginal(); });
 
     bindAckNextStepsSwitch();
+    bindThemeToggle();
 
     const pctInput = byId('cfgDistributablePercent');
     if (pctInput){

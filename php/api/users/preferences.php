@@ -45,7 +45,7 @@ try {
             $userId = (int)(currentUserId() ?? 0);
             if ($userId <= 0) upref_send(false, 'unauthorized', 401);
             // allowlist of prefs we store server-side
-            $allowed = ['ackNextStepsDontShow'];
+            $allowed = ['ackNextStepsDontShow', 'theme'];
             if (!in_array($key, $allowed, true)) upref_send(false, 'unsupported key', 400);
             $db = Database::getInstance();
             if ($key === 'ackNextStepsDontShow') {

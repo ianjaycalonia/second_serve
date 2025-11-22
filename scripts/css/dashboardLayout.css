@@ -108,6 +108,38 @@ nav {
   }
 }
 
+/* Themed tables (override Bootstrap defaults) */
+.table {
+  background-color: var(--card-background);
+  color: var(--body-text-color);
+}
+
+.table thead th,
+.table thead td {
+  background-color: var(--table-header-background) !important;
+  color: var(--header-text-color) !important;
+}
+
+.table thead.table-light th,
+.table thead.table-light td,
+.table.table-light > thead > tr > th,
+.table.table-light > thead > tr > td {
+  background-color: var(--table-header-background) !important;
+  color: var(--header-text-color) !important;
+}
+
+.table.table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: var(--table-row-striped) !important;
+}
+
+.table.table-hover > tbody > tr:hover > * {
+  background-color: var(--table-row-hover) !important;
+}
+
+.table.table-bordered > :not(caption) > * > * {
+  border-color: var(--card-border-color) !important;
+}
+
 aside {
   top: 60px;
   position: sticky;
@@ -217,7 +249,9 @@ main {
   /* End of Breadcrumbs 123*/
 
   .card {
-    border: none;
+    border: 1px solid var(--card-border-color);
+    background-color: var(--card-background);
+    color: var(--body-text-color);
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 
     .card-title {

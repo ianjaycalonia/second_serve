@@ -981,7 +981,7 @@ if (typeof window.showToast !== "function") {
           <td class="d-none d-md-table-cell" data-label="Contact#">${escapeHtml(
             contactNo || "—"
           )}</td>
-          <td class="d-none d-lg-table-cell text-break" data-label="Email Address">${escapeHtml(
+          <td class="d-none d-lg-table-cell email-cell text-nowrap" data-label="Email Address">${escapeHtml(
             email || "—"
           )}</td>
           <td data-label="Status">${status}</td>

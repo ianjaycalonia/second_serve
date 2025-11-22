@@ -9,6 +9,27 @@
   --header-text-color: #2c3e50;
   --hover-color: #f0f0f0;
   --highlight-color: #ffffff;
+  --card-background: #ffffff;
+  --card-border-color: rgba(0, 0, 0, 0.05);
+  --table-header-background: #f8f9fa;
+  --table-row-striped: #f8f9fa;
+  --table-row-hover: #f1f3f5;
+}
+
+:root[data-theme="dark"] {
+  --primary-color: #4cc9f0;
+  --secondary-color: #ff6b6b;
+  --primary-background: #101318;
+  --secondary-background: #181c22;
+  --body-text-color: #e5ecf5;
+  --header-text-color: #ffffff;
+  --hover-color: #232734;
+  --highlight-color: #ffffff;
+   --card-background: #1f2430;
+   --card-border-color: rgba(255, 255, 255, 0.08);
+   --table-header-background: #252b36;
+   --table-row-striped: #181c22;
+   --table-row-hover: #272d3a;
 }
 
 body {

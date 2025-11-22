@@ -14,6 +14,79 @@ document.addEventListener("DOMContentLoaded", () => {
   const backdrop = document.querySelector(".sidebar-backdrop");
   const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
 
+  const THEME_STORAGE_KEY = "ss_theme";
+  const API_BASE_URL =
+    typeof window !== "undefined" &&
+    typeof window.API_BASE_URL === "string" &&
+    window.API_BASE_URL
+      ? window.API_BASE_URL
+      : "/php/api";
+
+  let currentTheme = "light";
+
+  function applyTheme(theme) {
+    const t = theme === "dark" ? "dark" : "light";
+    currentTheme = t;
+    try {
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (_) {}
+    try {
+      sessionStorage.setItem(THEME_STORAGE_KEY, t);
+    } catch (_) {}
+  }
+
+  async function loadThemeFromServer() {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/users/preferences.php?action=get&key=${encodeURIComponent(
+          "theme"
+        )}`,
+        { credentials: "include" }
+      );
+      const j = await res.json().catch(() => null);
+      const raw =
+        j &&
+        j.success &&
+        j.data &&
+        Object.prototype.hasOwnProperty.call(j.data, "value")
+          ? String(j.data.value || "").toLowerCase()
+          : "";
+      if (raw === "dark" || raw === "light") return raw;
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function saveThemeToServer(theme) {
+    const t = theme === "dark" ? "dark" : "light";
+    try {
+      await fetch(`${API_BASE_URL}/users/preferences.php?action=update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ key: "theme", value: t }),
+      });
+    } catch (_) {}
+  }
+
+  async function ensureThemeInitialized() {
+    let theme = null;
+    try {
+      theme = sessionStorage.getItem(THEME_STORAGE_KEY);
+    } catch (_) {}
+    if (theme !== "dark" && theme !== "light") {
+      theme = await loadThemeFromServer();
+    }
+    if (theme !== "dark" && theme !== "light") {
+      theme = "light";
+    }
+    applyTheme(theme);
+  }
+
   // --- MOBILE & DESKTOP FIX FOR SIDEBAR ---
   if (sidebar) {
     // Mobile fix on page load
@@ -384,4 +457,22 @@ try {
   // Initial tooltip state
   if (sidebar.classList.contains("collapsed")) showTooltips();
   else hideTooltips();
+
+  try {
+    window.ThemeManager = {
+      applyTheme(theme) {
+        applyTheme(theme);
+        saveThemeToServer(theme);
+      },
+      async setThemePref(theme) {
+        applyTheme(theme);
+        await saveThemeToServer(theme);
+      },
+      getCurrentTheme() {
+        return currentTheme;
+      },
+    };
+  } catch (_) {}
+
+  ensureThemeInitialized();
 });
