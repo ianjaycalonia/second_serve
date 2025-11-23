@@ -507,10 +507,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
         addBtn.addEventListener('click', async () => {
           const org = document.getElementById('addDonorOrg')?.value.trim() || '';
-          const name = document.getElementById('addDonorName')?.value.trim() || '';
+          const first = document.getElementById('addDonorFirstName')?.value.trim() || '';
+          const middle = document.getElementById('addDonorMiddleInitial')?.value.trim() || '';
+          const last = document.getElementById('addDonorLastName')?.value.trim() || '';
+          const suffix = document.getElementById('addDonorSuffix')?.value.trim() || '';
+          const fullNameInput = document.getElementById('addDonorName');
+          const composeFullName = () => {
+            const parts = [];
+            if (first) parts.push(first);
+            if (middle) {
+              const normalized = middle.replace(/\.+$/g, '');
+              if (normalized) parts.push(`${normalized}.`);
+            }
+            if (last) parts.push(last);
+            if (suffix) parts.push(suffix);
+            return parts.join(' ').replace(/\s+/g, ' ').trim();
+          };
+          const composedName = composeFullName();
+          if (fullNameInput && composedName) {
+            fullNameInput.value = composedName;
+          }
+          const name = composedName || fullNameInput?.value.trim() || '';
           const email = document.getElementById('addDonorEmail')?.value.trim() || '';
           const contact_number = document.getElementById('addDonorPhone')?.value.trim() || '';
-          const address = document.getElementById('addDonorAddress')?.value.trim() || '';
+          const brgy = document.getElementById('addDonorBarangay')?.value.trim() || '';
+          const city = document.getElementById('addDonorCity')?.value.trim() || '';
+          const addrInput = document.getElementById('addDonorAddress');
+          const composedAddress = [brgy, city].filter(Boolean).join(', ');
+          if (addrInput && composedAddress) {
+            addrInput.value = composedAddress;
+          }
+          const address = composedAddress || addrInput?.value.trim() || '';
           const donor_category_id = document.getElementById('addDonorCategory')?.value || '';
           const fb = document.getElementById('addDonorFeedback');
           if (fb) fb.textContent = '';

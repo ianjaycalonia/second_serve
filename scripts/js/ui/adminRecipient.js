@@ -1725,10 +1725,38 @@ if (typeof window.showToast !== "function") {
 
     addBtn.addEventListener('click', async () => {
       const org = document.getElementById('addRecOrg')?.value.trim() || '';
-      const name = document.getElementById('addRecName')?.value.trim() || '';
+      const first = document.getElementById('addRecFirstName')?.value.trim() || '';
+      const middle = document.getElementById('addRecMiddleInitial')?.value.trim() || '';
+      const last = document.getElementById('addRecLastName')?.value.trim() || '';
+      const suffix = document.getElementById('addRecSuffix')?.value.trim() || '';
+      const position = document.getElementById('addRecPosition')?.value.trim() || '';
+      const nameInput = document.getElementById('addRecName');
+      const composeFullName = () => {
+        const parts = [];
+        if (first) parts.push(first);
+        if (middle) {
+          const normalized = middle.replace(/\.+$/g, '');
+          if (normalized) parts.push(`${normalized}.`);
+        }
+        if (last) parts.push(last);
+        if (suffix) parts.push(suffix);
+        return parts.join(' ').replace(/\s+/g, ' ').trim();
+      };
+      const composedName = composeFullName();
+      if (nameInput && composedName) {
+        nameInput.value = composedName;
+      }
+      const name = composedName || nameInput?.value.trim() || '';
       const email = document.getElementById('addRecEmail')?.value.trim() || '';
       const contact_number = document.getElementById('addRecPhone')?.value.trim() || '';
-      const address = document.getElementById('addRecAddress')?.value.trim() || '';
+      const brgy = document.getElementById('addRecBarangay')?.value.trim() || '';
+      const city = document.getElementById('addRecCity')?.value.trim() || '';
+      const addrInput = document.getElementById('addRecAddress');
+      const composedAddress = [brgy, city].filter(Boolean).join(', ');
+      if (addrInput && composedAddress) {
+        addrInput.value = composedAddress;
+      }
+      const address = composedAddress || addrInput?.value.trim() || '';
       const total_residents = document.getElementById('addRecPopulation')?.value || '';
       const age_group = document.getElementById('addRecAgeGroup')?.value.trim() || '';
       const male_count = document.getElementById('addRecMale')?.value || '';
@@ -1749,9 +1777,11 @@ if (typeof window.showToast !== "function") {
           body: JSON.stringify({
             organization_name: org || null,
             name: name || null,
+            contact_person: name || null,
             email: email || null,
             contact_number: contact_number || null,
             address: address || null,
+            position_designation: position || null,
             total_residents: total_residents ? Number(total_residents) : null,
             age_group: age_group || null,
             male_count: male_count ? Number(male_count) : null,

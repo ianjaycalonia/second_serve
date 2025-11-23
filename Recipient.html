@@ -625,85 +625,147 @@
             ></button>
           </div>
           <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Organization Name</label>
-              <input
-                type="text"
-                id="addRecOrg"
-                class="form-control"
-                placeholder="e.g., Hope Center"
-              />
+            <div class="border rounded-3 p-3 mb-3">
+              <h6 class="mb-3">Organization details</h6>
+              <div class="mb-3">
+                <label class="form-label">Organization Name</label>
+                <input
+                  type="text"
+                  id="addRecOrg"
+                  class="form-control"
+                  placeholder="e.g., Hope Center"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Beneficiary Category</label>
+                <select
+                  id="addRecCategory"
+                  class="form-select"
+                  data-placeholder="Select a category"
+                ></select>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="addRecBarangay">Barangay</label>
+                  <input
+                    type="text"
+                    id="addRecBarangay"
+                    class="form-control"
+                    placeholder="Barangay"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="addRecCity">City / Municipality</label>
+                  <input
+                    type="text"
+                    id="addRecCity"
+                    class="form-control"
+                    placeholder="City or Municipality"
+                  />
+                </div>
+              </div>
+              <div class="mb-3 d-none">
+                <label class="form-label" for="addRecAddress">Full Address</label>
+                <input type="text" id="addRecAddress" class="form-control" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Population Served</label>
+                <input
+                  type="number"
+                  min="0"
+                  id="addRecPopulation"
+                  class="form-control"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Age Group</label>
+                <input
+                  type="text"
+                  id="addRecAgeGroup"
+                  class="form-control"
+                  placeholder="e.g., 0-3, 4-7, 60+"
+                />
+              </div>
+              <div class="row g-2">
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Male Count</label>
+                  <input
+                    type="number"
+                    min="0"
+                    id="addRecMale"
+                    class="form-control"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Female Count</label>
+                  <input
+                    type="number"
+                    min="0"
+                    id="addRecFemale"
+                    class="form-control"
+                  />
+                </div>
+              </div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Beneficiary Category</label>
-              <select
-                id="addRecCategory"
-                class="form-select"
-                data-placeholder="Select a category"
-              ></select>
+
+            <div class="border rounded-3 p-3 mb-3">
+              <h6 class="mb-3">Representative details</h6>
+              <div class="d-none">
+                <label class="form-label">Contact Person</label>
+                <input
+                  type="text"
+                  id="addRecName"
+                  class="form-control"
+                  placeholder="e.g., Maria Santos"
+                />
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-12 col-md-4">
+                  <label class="form-label" for="addRecFirstName">First Name</label>
+                  <input type="text" id="addRecFirstName" class="form-control" />
+                </div>
+                <div class="col-4 col-md-2">
+                  <label class="form-label" for="addRecMiddleInitial">M.I.</label>
+                  <input
+                    type="text"
+                    id="addRecMiddleInitial"
+                    class="form-control"
+                    maxlength="2"
+                  />
+                </div>
+                <div class="col-8 col-md-4">
+                  <label class="form-label" for="addRecLastName">Last Name</label>
+                  <input type="text" id="addRecLastName" class="form-control" />
+                </div>
+                <div class="col-4 col-md-2">
+                  <label class="form-label" for="addRecSuffix">Suffix</label>
+                  <input type="text" id="addRecSuffix" class="form-control" />
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="addRecPosition">Position / Designation</label>
+                <input
+                  type="text"
+                  id="addRecPosition"
+                  class="form-control"
+                  placeholder="e.g., Program Coordinator"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Contact Number</label>
+                <input type="text" id="addRecPhone" class="form-control" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input
+                  type="email"
+                  id="addRecEmail"
+                  class="form-control"
+                  placeholder="name@org.org"
+                />
+              </div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Contact Person</label>
-              <input
-                type="text"
-                id="addRecName"
-                class="form-control"
-                placeholder="e.g., Maria Santos"
-              />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Email</label>
-              <input
-                type="email"
-                id="addRecEmail"
-                class="form-control"
-                placeholder="name@org.org"
-              />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Contact Number</label>
-              <input type="text" id="addRecPhone" class="form-control" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Address</label>
-              <input type="text" id="addRecAddress" class="form-control" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Total Residents (Population)</label>
-              <input
-                type="number"
-                min="0"
-                id="addRecPopulation"
-                class="form-control"
-              />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Age Group</label>
-              <input
-                type="text"
-                id="addRecAgeGroup"
-                class="form-control"
-                placeholder="e.g., 0-3, 4-7, 60+"
-              />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Male Count</label>
-              <input
-                type="number"
-                min="0"
-                id="addRecMale"
-                class="form-control"
-              />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Female Count</label>
-              <input
-                type="number"
-                min="0"
-                id="addRecFemale"
-                class="form-control"
-              />
-            </div>
+
             <div id="addRecFeedback" class="small text-danger"></div>
           </div>
           <div class="modal-footer">

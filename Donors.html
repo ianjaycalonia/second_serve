@@ -619,48 +619,99 @@
             ></button>
           </div>
           <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Organization Name</label>
-              <input
-                type="text"
-                id="addDonorOrg"
-                class="form-control"
-                placeholder="e.g., Acme Foods"
-              />
+            <div class="border rounded-3 p-3 mb-3">
+              <h6 class="mb-3">Organization details</h6>
+              <div class="mb-3">
+                <label class="form-label">Organization Name</label>
+                <input
+                  type="text"
+                  id="addDonorOrg"
+                  class="form-control"
+                  placeholder="e.g., Acme Foods"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Donor Category</label>
+                <select
+                  id="addDonorCategory"
+                  class="form-select w-100"
+                ></select>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="addDonorBarangay">Barangay</label>
+                  <input
+                    type="text"
+                    id="addDonorBarangay"
+                    class="form-control"
+                    placeholder="Barangay"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="addDonorCity">City / Municipality</label>
+                  <input
+                    type="text"
+                    id="addDonorCity"
+                    class="form-control"
+                    placeholder="City or Municipality"
+                  />
+                </div>
+              </div>
+              <div class="mb-3 d-none">
+                <label class="form-label" for="addDonorAddress">Full Address</label>
+                <input type="text" id="addDonorAddress" class="form-control" />
+              </div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Contact Person</label>
-              <input
-                type="text"
-                id="addDonorName"
-                class="form-control"
-                placeholder="e.g., Juan Dela Cruz"
-              />
+
+            <div class="border rounded-3 p-3 mb-3">
+              <h6 class="mb-3">Representative details</h6>
+              <div class="d-none">
+                <label class="form-label">Contact Person</label>
+                <input
+                  type="text"
+                  id="addDonorName"
+                  class="form-control"
+                  placeholder="e.g., Juan Dela Cruz"
+                />
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-12 col-md-4">
+                  <label class="form-label" for="addDonorFirstName">First Name</label>
+                  <input type="text" id="addDonorFirstName" class="form-control" />
+                </div>
+                <div class="col-4 col-md-2">
+                  <label class="form-label" for="addDonorMiddleInitial">M.I.</label>
+                  <input
+                    type="text"
+                    id="addDonorMiddleInitial"
+                    class="form-control"
+                    maxlength="2"
+                  />
+                </div>
+                <div class="col-8 col-md-4">
+                  <label class="form-label" for="addDonorLastName">Last Name</label>
+                  <input type="text" id="addDonorLastName" class="form-control" />
+                </div>
+                <div class="col-4 col-md-2">
+                  <label class="form-label" for="addDonorSuffix">Suffix</label>
+                  <input type="text" id="addDonorSuffix" class="form-control" />
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Contact Number</label>
+                <input type="text" id="addDonorPhone" class="form-control" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input
+                  type="email"
+                  id="addDonorEmail"
+                  class="form-control"
+                  placeholder="name@company.com"
+                />
+              </div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Email</label>
-              <input
-                type="email"
-                id="addDonorEmail"
-                class="form-control"
-                placeholder="name@company.com"
-              />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Contact Number</label>
-              <input type="text" id="addDonorPhone" class="form-control" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Address</label>
-              <input type="text" id="addDonorAddress" class="form-control" />
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Donor Category</label>
-              <select
-                id="addDonorCategory"
-                class="form-select w-100"
-              ></select>
-            </div>
+
             <div id="addDonorFeedback" class="small text-danger"></div>
           </div>
           <div class="modal-footer">
