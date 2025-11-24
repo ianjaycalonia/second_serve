@@ -857,10 +857,12 @@
       pool.innerHTML = "";
       // Exclude Foodbank (On-site) from the pool permanently
       const filtered = items.filter((u) => {
-        const org = String(u.organization_name || "")
+        const org = String(u.organization_name || u.name || "")
           .trim()
           .toLowerCase();
-        return org !== "foodbank (on-site)";
+        const tags = String(u.tags || "").toLowerCase();
+        const isHidden = org === "foodbank (on-site)" || /(^|[^a-z])hidden([^a-z]|$)/.test(tags);
+        return !isHidden;
       });
       // Render cards
       filtered.forEach((u) => {

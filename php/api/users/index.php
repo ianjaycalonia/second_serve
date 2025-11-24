@@ -38,6 +38,10 @@ try {
             requireAuth();
             handleGetProfile();
             break;
+        case 'adminGetProfile':
+            requireRole(['admin']);
+            handleAdminGetProfile($payload);
+            break;
         case 'updateProfile':
             requireAuth();
             handleUpdateProfile($payload);
@@ -91,6 +95,15 @@ try {
 function handleGetProfile() {
     $svc = new User();
     $user = $svc->getProfile((int)currentUserId());
+    sendJson(['success' => true, 'data' => ['user' => $user]]);
+}
+
+function handleAdminGetProfile(array $payload) {
+    if (empty($payload['user_id'])) {
+        sendJson(['success' => false, 'error' => 'user_id is required'], 400);
+    }
+    $svc = new User();
+    $user = $svc->getProfile((int)$payload['user_id']);
     sendJson(['success' => true, 'data' => ['user' => $user]]);
 }
 

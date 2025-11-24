@@ -496,7 +496,14 @@
     const res = await fetch(url, { headers:{'Accept':'application/json'}, credentials:'include' });
     if (!res.ok) return [];
     const j = await res.json().catch(()=>null);
-    return Array.isArray(j?.data?.items) ? j.data.items : [];
+    const arr = Array.isArray(j?.data?.items) ? j.data.items : [];
+    const filtered = arr.filter((u) => {
+      const org = String(u.organization_name || u.name || '').trim().toLowerCase();
+      const tags = String(u.tags || '').toLowerCase();
+      const isHidden = org === 'foodbank (on-site)' || /(^|[^a-z])hidden([^a-z]|$)/.test(tags);
+      return !isHidden;
+    });
+    return filtered;
   }
   function renderRecipientPools(items, selectedIds = []){
     const pool = qs('#diPool'); const selected = qs('#diSelected');
@@ -523,7 +530,8 @@
     const pool = qs('#diPool'); if (!pool) return null;
     const all = Array.isArray(window.__diAllRecipients) ? window.__diAllRecipients : [];
     const u = all.find(r => (parseInt(r.user_id||r.id,10)||0) === id);
-    const label = u ? ((u.organization_name && u.organization_name.trim()) ? u.organization_name : (u.name || `Recipient ${id}`)) : `Recipient ${id}`;
+    if (!u) return null;
+    const label = (u.organization_name && u.organization_name.trim()) ? u.organization_name : (u.name || `Recipient ${id}`);
     card = document.createElement('div'); card.className='di-card p-2 border rounded bg-light cursor-pointer'; card.draggable=true; card.dataset.id=String(id);
     card.innerHTML = `<div class="d-flex justify-content-between align-items-center gap-2"><span class="di-card-label text-truncate">${label}</span><span class="di-week-badges d-flex gap-1"></span></div>`;
     pool.appendChild(card);

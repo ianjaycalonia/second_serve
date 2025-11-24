@@ -68,7 +68,18 @@ document.addEventListener('DOMContentLoaded', function(){
     const recipAddrPartsWrap = document.getElementById('wrapRecipientAddressParts');
     const populationWrap = document.getElementById('wrapPopulationServed');
     const beneficiarySelect = document.getElementById('registerBeneficiaryCategory');
+    const barangayInput = document.getElementById('registerBarangay');
+    const citySelect = document.getElementById('registerCity');
+    const addressInput = document.getElementById('registerAddress');
+    const contactInput = document.getElementById('registerContact');
     const detailsWrapper = document.getElementById('registerDetailsWrapper');
+    const orgStep = document.getElementById('registerOrgStep');
+    const repStep = document.getElementById('registerRepStep');
+    const stepsTrack = document.getElementById('registerStepsTrack');
+    const nextBtn = document.getElementById('registerNextBtn');
+    const backBtn = document.getElementById('registerBackBtn');
+    const tracker = document.getElementById('registerStepTracker');
+    const trackerTitle = document.getElementById('registerStepTitle');
 
     const toggleHiddenClass = (el, show) => {
         if (!el) return;
@@ -78,13 +89,75 @@ document.addEventListener('DOMContentLoaded', function(){
             el.classList.add('d-none');
         }
     };
+    const setStep = (step) => {
+        // Apply horizontal slide animation using the two step cards
+        if (orgStep && repStep) {
+            if (step === 1) {
+                orgStep.style.transform = 'translateX(0%)';
+                repStep.style.transform = 'translateX(100%)';
+                orgStep.style.pointerEvents = 'auto';
+                repStep.style.pointerEvents = 'none';
+                orgStep.style.zIndex = '2';
+                repStep.style.zIndex = '1';
+            } else {
+                orgStep.style.transform = 'translateX(-100%)';
+                repStep.style.transform = 'translateX(0%)';
+                orgStep.style.pointerEvents = 'none';
+                repStep.style.pointerEvents = 'auto';
+                orgStep.style.zIndex = '1';
+                repStep.style.zIndex = '2';
+            }
+
+            // Ensure the wrapper stays tall enough for the tallest step and center cards vertically
+            if (detailsWrapper) {
+                try {
+                    const h1 = orgStep.scrollHeight || 0;
+                    const h2 = repStep.scrollHeight || 0;
+                    const maxH = Math.max(h1, h2);
+                    if (maxH > 0) {
+                        detailsWrapper.style.minHeight = maxH + 'px';
+                        const offset1 = Math.max((maxH - h1) / 2, 0);
+                        const offset2 = Math.max((maxH - h2) / 2, 0);
+                        orgStep.style.top = offset1 + 'px';
+                        repStep.style.top = offset2 + 'px';
+                    }
+                } catch (_) { /* non-fatal */ }
+            }
+        }
+
+        // Keep wrapper state in sync for potential CSS hooks
+        if (detailsWrapper) {
+            detailsWrapper.dataset.step = String(step);
+            if (step === 2) {
+                detailsWrapper.classList.add('step-2');
+            } else {
+                detailsWrapper.classList.remove('step-2');
+            }
+        }
+
+        // Always keep tracker + buttons in sync with the current step
+        if (!tracker || !trackerTitle || !nextBtn || !backBtn) return;
+        if (step === 1) {
+            tracker.querySelector('.fw-semibold').textContent = 'Step 1 of 2';
+            trackerTitle.textContent = 'Organization Details';
+            nextBtn.classList.remove('d-none');
+            backBtn.classList.add('d-none');
+        } else {
+            tracker.querySelector('.fw-semibold').textContent = 'Step 2 of 2';
+            trackerTitle.textContent = 'Representative Details';
+            nextBtn.classList.add('d-none');
+            backBtn.classList.remove('d-none');
+        }
+    };
+
     const updateVis = () => {
         const v = (roleSel?.value||'').toLowerCase();
         const isDonor = v === 'donor';
         const isRecipient = v === 'recipient';
         const hasRole = isDonor || isRecipient;
 
-        toggleHiddenClass(detailsWrapper, hasRole);
+        toggleHiddenClass(detailsWrapper, !!v);
+        if (v) setStep(1);
 
         toggleHiddenClass(donorWrap, isDonor);
         toggleHiddenClass(recipWrap, isRecipient);
@@ -100,10 +173,11 @@ document.addEventListener('DOMContentLoaded', function(){
             }
         }
 
-        toggleHiddenClass(fullNameWrap, !isRecipient);
-        toggleHiddenClass(recipNameWrap, isRecipient);
-        toggleHiddenClass(addrTextareaWrap, !isRecipient);
-        toggleHiddenClass(recipAddrPartsWrap, isRecipient);
+        // Always use split name and split address for both roles
+        toggleHiddenClass(fullNameWrap, false);
+        toggleHiddenClass(recipNameWrap, true);
+        toggleHiddenClass(addrTextareaWrap, false);
+        toggleHiddenClass(recipAddrPartsWrap, true);
         toggleHiddenClass(populationWrap, isRecipient);
 
         if (beneficiarySelect) {
@@ -112,9 +186,138 @@ document.addEventListener('DOMContentLoaded', function(){
                 beneficiarySelect.classList.remove('is-invalid');
             }
         }
+
+        // Require barangay/city when a role is chosen; keep hidden textarea non-required
+        if (barangayInput) barangayInput.required = !!v;
+        if (citySelect) citySelect.required = !!v;
+        if (addressInput) addressInput.required = false;
+
+        updateNextVisibility();
     };
     roleSel?.addEventListener('change', updateVis);
     updateVis();
+
+    // Hide Next by default; reveal only when Step 1 is valid
+    function updateNextVisibility() {
+        if (!nextBtn) return;
+        const v = (roleSel?.value||'').toLowerCase();
+        const isRecipient = v === 'recipient';
+        const f1 = document.getElementById('registerOrganization');
+        const f2 = barangayInput;
+        const f3 = citySelect;
+        const fields = [f1, f2, f3].filter(Boolean);
+        if (isRecipient) fields.push(beneficiarySelect);
+
+        // Compose hidden address value from parts on each check
+        const brgy = (barangayInput?.value||'').trim();
+        const city = (citySelect?.value||'').trim();
+        if (addressInput) addressInput.value = [brgy, city].filter(Boolean).join(', ');
+
+        // Extra guard: organization must start with a letter or number
+        const orgVal = (f1?.value || '').trim();
+        const orgStartOK = /^[A-Za-z0-9]/.test(orgVal);
+        if (f1 && orgVal) {
+            if (!orgStartOK) {
+                f1.classList.add('is-invalid');
+                showFieldTooltip('registerOrganization', 'Organization name must start with a letter or number');
+            } else if (f1.checkValidity()) {
+                f1.classList.remove('is-invalid');
+                hideFieldTooltip('registerOrganization');
+            }
+        }
+
+        const ready = orgStartOK && fields.every(el => el && el.value && el.checkValidity());
+        if (ready) nextBtn.classList.remove('d-none'); else nextBtn.classList.add('d-none');
+    }
+
+    if (nextBtn) nextBtn.classList.add('d-none');
+    const orgInputEl = document.getElementById('registerOrganization');
+    orgInputEl?.addEventListener('input', () => {
+        updateNextVisibility();
+        const v = (orgInputEl.value || '').trim();
+        if (v && !/^[A-Za-z0-9]/.test(v)) {
+            orgInputEl.classList.add('is-invalid');
+            showFieldTooltip('registerOrganization', 'Organization name must start with a letter or number');
+        }
+    });
+    orgInputEl?.addEventListener('blur', () => {
+        const v = (orgInputEl.value || '').trim();
+        if (!v) return; // don't nag on empty before interaction
+        if (!/^[A-Za-z0-9]/.test(v) || !orgInputEl.checkValidity()) {
+            orgInputEl.classList.add('is-invalid');
+            const msg = !/^[A-Za-z0-9]/.test(v) ? 'Organization name must start with a letter or number' : (orgInputEl.validationMessage || 'Please correct this field');
+            showFieldTooltip('registerOrganization', msg);
+        } else {
+            orgInputEl.classList.remove('is-invalid');
+            hideFieldTooltip('registerOrganization');
+        }
+    });
+    barangayInput?.addEventListener('input', updateNextVisibility);
+    citySelect?.addEventListener('change', updateNextVisibility);
+    beneficiarySelect?.addEventListener('change', updateNextVisibility);
+    contactInput?.addEventListener('input', () => {
+        if (!contactInput) return;
+        const digits = (contactInput.value || '').replace(/\D/g, '').slice(0, 11);
+        contactInput.value = digits;
+        if (digits.length === 11) {
+            contactInput.classList.remove('is-invalid');
+            hideFieldTooltip('registerContact');
+        }
+    });
+    contactInput?.addEventListener('blur', () => {
+        if (!contactInput) return;
+        const digits = (contactInput.value || '').trim();
+        if (!digits) return;
+        if (!/^\d{11}$/.test(digits)) {
+            contactInput.classList.add('is-invalid');
+            showFieldTooltip('registerContact', 'Contact number must be exactly 11 digits');
+        } else {
+            contactInput.classList.remove('is-invalid');
+            hideFieldTooltip('registerContact');
+        }
+    });
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            const requiredFields = [];
+            const addField = (id) => {
+                const el = document.getElementById(id);
+                if (el) requiredFields.push(el);
+            };
+            addField('registerOrganization');
+            addField('registerBarangay');
+            addField('registerCity');
+            if ((roleSel?.value || '').toLowerCase() === 'recipient') {
+                addField('registerBeneficiaryCategory');
+            }
+            let ok = true;
+            requiredFields.forEach((el) => {
+                if (!el.checkValidity()) {
+                    el.reportValidity();
+                    el.classList.add('is-invalid');
+                    ok = false;
+                } else {
+                    el.classList.remove('is-invalid');
+                }
+            });
+            // Explicit org name leading character rule
+            const orgEl = document.getElementById('registerOrganization');
+            const orgVal = (orgEl?.value||'').trim();
+            if (ok && !/^[A-Za-z0-9]/.test(orgVal)) {
+                showError('registerOrganization', 'Organization name must start with a letter or number');
+                ok = false;
+            }
+            if (!ok) return;
+            // Ensure hidden address is composed before proceeding
+            const brgyVal = (barangayInput?.value||'').trim();
+            const cityVal = (citySelect?.value||'').trim();
+            if (addressInput) addressInput.value = [brgyVal, cityVal].filter(Boolean).join(', ');
+            setStep(2);
+        });
+    }
+    if (backBtn) {
+        backBtn.addEventListener('click', () => setStep(1));
+    }
 });
 
 function setupCapsLockDetection(inputId, hintId) {
@@ -145,18 +348,68 @@ function setupCapsLockDetection(inputId, hintId) {
     input.addEventListener('blur', () => set(false));
 }
 
+// Show a small Bootstrap tooltip on a field
+function showFieldTooltip(elementId, message) {
+    const msg = String(message || '').trim();
+    if (!msg) return;
+    // Suppress default browser text the user finds noisy
+    if (msg.toLowerCase() === 'please select an item in the list.') return;
+    try {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        el.setAttribute('data-bs-toggle', 'tooltip');
+        el.setAttribute('data-bs-placement', 'top');
+        // Use Bootstrap 5.3 dynamic content API when available
+        let t = bootstrap.Tooltip.getInstance(el);
+        if (!t) {
+            t = new bootstrap.Tooltip(el, {
+                trigger: 'manual',
+                customClass: 'is-invalid-tooltip',
+                placement: 'top',
+                title: msg
+            });
+        } else if (typeof t.setContent === 'function') {
+            t.setContent({ '.tooltip-inner': msg });
+        } else {
+            // Fallback: dispose and recreate with new title
+            t.dispose();
+            t = new bootstrap.Tooltip(el, {
+                trigger: 'manual',
+                customClass: 'is-invalid-tooltip',
+                placement: 'top',
+                title: msg
+            });
+        }
+        t.show();
+    } catch (_) { /* ignore tooltip errors */ }
+}
+
+function hideFieldTooltip(elementId) {
+    try {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        const t = bootstrap.Tooltip.getInstance(el);
+        if (t) t.hide();
+    } catch (_) { /* ignore */ }
+}
+
 // Show error message in form
 function showError(elementId, message) {
     let errorElement = document.getElementById(`${elementId}Error`);
     if (!errorElement) {
         const input = document.getElementById(elementId);
-        errorElement = document.createElement('div');
-        errorElement.id = `${elementId}Error`;
-        errorElement.className = 'invalid-feedback d-block';
-        input.parentNode.insertBefore(errorElement, input.nextSibling);
+        if (input) {
+            errorElement = document.createElement('div');
+            errorElement.id = `${elementId}Error`;
+            errorElement.className = 'invalid-feedback';
+            input.parentNode.insertBefore(errorElement, input.nextSibling);
+        }
     }
-    errorElement.textContent = message;
-    document.getElementById(elementId).classList.add('is-invalid');
+    if (errorElement) errorElement.textContent = message || '';
+    const field = document.getElementById(elementId);
+    field?.classList.add('is-invalid');
+    // Also show a small tooltip on the field
+    showFieldTooltip(elementId, message || 'Please correct this field');
 }
 
 // Clear error message
@@ -166,6 +419,7 @@ function clearError(elementId) {
         errorElement.remove();
     }
     document.getElementById(elementId)?.classList.remove('is-invalid');
+    hideFieldTooltip(elementId);
 }
 
 // Handle API response
@@ -273,12 +527,62 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     attachPasswordToggles();
 
-    // Clear invalid state when user starts typing in any required field
+    // Live password match validation with tooltip
+    try {
+        const passEl = document.getElementById('registerPassword');
+        const confirmEl = document.getElementById('registerConfirmPassword');
+        const checkPw = () => {
+            if (!passEl || !confirmEl) return;
+            const p = passEl.value || '';
+            const c = confirmEl.value || '';
+            if (c && p !== c) {
+                confirmEl.classList.add('is-invalid');
+                showFieldTooltip('registerConfirmPassword', 'Passwords do not match');
+            } else if (c) {
+                confirmEl.classList.remove('is-invalid');
+                hideFieldTooltip('registerConfirmPassword');
+            }
+        };
+        passEl?.addEventListener('input', checkPw);
+        confirmEl?.addEventListener('input', checkPw);
+        confirmEl?.addEventListener('blur', checkPw);
+    } catch (_) { /* ignore */ }
+
+    // Clear invalid state + hide tooltip as user corrects inputs
     try {
         document.querySelectorAll('input[required], textarea[required], select[required]').forEach(input => {
             input.addEventListener('input', function () {
-                if (this.value && this.classList.contains('is-invalid')) {
+                const id = this.getAttribute('id');
+                if (this.value) {
+                    if (this.checkValidity()) {
+                        this.classList.remove('is-invalid');
+                        if (id) hideFieldTooltip(id);
+                    } else {
+                        // live feedback when typed value is invalid (pattern/length)
+                        this.classList.add('is-invalid');
+                        const msg = this.validationMessage || 'Please correct this field';
+                        if (id) showFieldTooltip(id, msg);
+                    }
+                }
+            });
+            input.addEventListener('change', function () {
+                const id = this.getAttribute('id');
+                if (this.checkValidity()) {
                     this.classList.remove('is-invalid');
+                    if (id) hideFieldTooltip(id);
+                } else {
+                    this.classList.add('is-invalid');
+                    const msg = this.validationMessage || 'Please select a value';
+                    if (id) showFieldTooltip(id, msg);
+                }
+            });
+            input.addEventListener('blur', function () {
+                const id = this.getAttribute('id');
+                if (!this.value) return; // don't nag until user interacts
+                if (!this.checkValidity()) {
+                    this.classList.add('is-invalid');
+                    const msg = this.validationMessage || 'Please correct this field';
+                    if (id) showFieldTooltip(id, msg);
                 }
             });
         });
@@ -517,7 +821,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         title = 'Pending Approval';
                         body = 'Your account is pending admin approval. Please wait until an administrator approves your registration.';
                     }
-                    showBootstrapError(body, title);
+                    showToast(body, { title, variant: 'danger', delay: 6000 });
                 },
                 complete: function() {
                     setLoading(submitBtn, false);
@@ -537,38 +841,45 @@ document.addEventListener('DOMContentLoaded', function() {
             const password = document.getElementById('registerPassword').value;
             const confirmPassword = document.getElementById('registerConfirmPassword').value;
             const submitBtn = this.querySelector('button[type="submit"]');
+            const contactNumber = document.getElementById('registerContact').value.trim();
+            const orgName = document.getElementById('registerOrganization').value.trim();
+            const address = document.getElementById('registerAddress').value.trim();
 
-            // For recipients, compose full name and address from split fields
-            if (role === 'recipient') {
-                const first = (document.getElementById('registerFirstName')?.value || '').trim();
-                const middle = (document.getElementById('registerMiddleInitial')?.value || '').trim();
-                const last = (document.getElementById('registerLastName')?.value || '').trim();
-                const suffix = (document.getElementById('registerSuffix')?.value || '').trim();
-                if (first || middle || last || suffix) {
-                    const parts = [];
-                    if (first) parts.push(first);
-                    if (middle) parts.push(middle.replace(/\.+$/g, '') + '.');
-                    if (last) parts.push(last);
-                    if (suffix) parts.push(suffix);
-                    name = parts.join(' ').replace(/\s+/g, ' ').trim();
-                    const nameInput = document.getElementById('registerName');
-                    if (nameInput) nameInput.value = name;
-                }
+            // Compose full name from split fields (applies to all roles)
+            const first = (document.getElementById('registerFirstName')?.value || '').trim();
+            const middle = (document.getElementById('registerMiddleInitial')?.value || '').trim();
+            const last = (document.getElementById('registerLastName')?.value || '').trim();
+            const suffix = (document.getElementById('registerSuffix')?.value || '').trim();
+            if (first || middle || last || suffix) {
+                const parts = [];
+                if (first) parts.push(first);
+                if (middle) parts.push(middle.replace(/\.+$/g, '') + '.');
+                if (last) parts.push(last);
+                if (suffix) parts.push(suffix);
+                name = parts.join(' ').replace(/\s+/g, ' ').trim();
+                const nameInput = document.getElementById('registerName');
+                if (nameInput) nameInput.value = name;
+            }
 
+            // Always compose address from Barangay + City/Municipality
+            {
                 const brgy = (document.getElementById('registerBarangay')?.value || '').trim();
                 const city = (document.getElementById('registerCity')?.value || '').trim();
                 const addrInput = document.getElementById('registerAddress');
-                if (addrInput && (brgy || city)) {
+                if (addrInput) {
                     addrInput.value = [brgy, city].filter(Boolean).join(', ');
                 }
             }
             
             // Clear previous errors
-            ['registerName', 'registerEmail', 'registerPassword', 'registerConfirmPassword', 'registerRole'].forEach(clearError);
+            ['registerName','registerFirstName','registerLastName','registerEmail','registerPassword','registerConfirmPassword','registerRole','registerOrganization','registerAddress','registerContact'].forEach(clearError);
             
             // Validation
             if (!name) {
-                showError('registerName', 'Name is required');
+                const f = (document.getElementById('registerFirstName')?.value || '').trim();
+                const l = (document.getElementById('registerLastName')?.value || '').trim();
+                if (!f) showError('registerFirstName', 'First name is required');
+                if (!l) showError('registerLastName', 'Last name is required');
                 return;
             }
             if (!email) {
@@ -593,6 +904,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             if (!role) {
                 showError('registerRole', 'Please select a role');
+                return;
+            }
+            // 11-digit contact number
+            if (!/^\d{11}$/.test(contactNumber)) {
+                showError('registerContact', 'Contact number must be 11 digits');
                 return;
             }
             
@@ -621,9 +937,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     password,
                     confirmPassword,
                     role,
-                    organization_name: document.getElementById('registerOrganization').value.trim() || undefined,
-                    contact_number: document.getElementById('registerContact').value.trim() || undefined,
-                    address: document.getElementById('registerAddress').value.trim() || undefined,
+                    organization_name: orgName,
+                    contact_number: contactNumber,
+                    address,
                     donor_category_id: donorCategoryId,
                     beneficiary_category_id: beneficiaryCategoryId,
                     total_residents: totalResidents

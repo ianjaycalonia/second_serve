@@ -81,7 +81,6 @@ try {
                 $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : (int)(currentUserId() ?? 0);
                 if ($userId <= 0) sendJson(['success'=>false,'error'=>'user_id is required'], 400);
 
-                // Distinct other users who have any messages with this user
                 $sql = "SELECT other_id FROM (
                           SELECT receiver_id AS other_id FROM messages WHERE sender_id = ?
                           UNION
@@ -90,13 +89,25 @@ try {
                 $rows = db()->query($sql, [$userId, $userId])->fetchAll();
                 $others = array_map(fn($r)=>(int)$r['other_id'], $rows);
 
-                // For non-admin, make sure at least one admin appears (food bank chat)
                 $role = (string)(currentUserRole() ?? '');
+                $adminRows = db()->query("SELECT user_id FROM users WHERE role='admin' ORDER BY user_id ASC")->fetchAll();
+                $adminIds = array_map(fn($r)=>(int)$r['user_id'], $adminRows);
                 if ($role !== 'admin') {
-                    $admin = db()->query("SELECT user_id FROM users WHERE role='admin' ORDER BY user_id ASC LIMIT 1")->fetch();
-                    if ($admin) {
-                        $aid = (int)$admin['user_id'];
-                        if (!in_array($aid, $others, true)) $others[] = $aid;
+                    $aid = $adminIds ? $adminIds[0] : 0;
+                    if ($aid > 0 && !in_array($aid, $others, true)) $others[] = $aid;
+                    if ($aid > 0) {
+                        $others = array_values(array_unique(array_map('intval', $others)));
+                        $filtered = [];
+                        $added = false;
+                        foreach ($others as $oid) {
+                            if (in_array($oid, $adminIds, true)) {
+                                if (!$added) { $filtered[] = $aid; $added = true; }
+                            } else {
+                                $filtered[] = $oid;
+                            }
+                        }
+                        if (!$added) { $filtered[] = $aid; }
+                        $others = array_values(array_unique($filtered));
                     }
                 }
 
@@ -104,36 +115,63 @@ try {
                 $items = [];
                 foreach ($others as $oid) {
                     $disp = getUserDisplay($oid);
-                    // Last message preview
-                    $last = db()->query(
-                        'SELECT id, sender_id, content, created_at FROM messages
-                         WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)
-                         ORDER BY id DESC LIMIT 1',
-                         [$userId,$oid,$oid,$userId]
-                    )->fetch();
-                    $lastMsg = $last ? json_encode([
-                        'id'=>(int)$last['id'],
-                        'sender_id'=>(int)$last['sender_id'],
-                        'body'=>$last['content'],
-                        'created_at'=>$last['created_at']
-                    ]) : null;
-
-                    // Unread count: messages sent by other -> me that have not been marked read
-                    // Requires messages.receiver_read_at (DATETIME NULL) migration
-                    $row = db()->query(
-                        'SELECT COUNT(*) AS c FROM messages WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
-                        [$oid, $userId]
-                    )->fetch();
-                    $unread = (int)($row ? $row['c'] : 0);
-                    $items[] = [
-                        // Synthetic conversation id: use other user id (interpreted by frontend code as conversation_id)
-                        'id' => $oid,
-                        'title' => $disp['display'],
-                        'display_title' => $disp['display'],
-                        'other_role' => $disp['role'],
-                        'last_message' => $lastMsg,
-                        'unread_count' => $unread,
-                    ];
+                    $isUnifiedAdmin = ($role !== 'admin') && $adminIds && in_array($oid, [$adminIds[0]], true);
+                    if ($isUnifiedAdmin) {
+                        $ph = implode(',', array_fill(0, count($adminIds), '?'));
+                        $paramsLast = array_merge($adminIds, [$userId], [$userId], $adminIds);
+                        $last = db()->query(
+                            'SELECT id, sender_id, content, created_at FROM messages
+                             WHERE (sender_id IN ('.$ph.') AND receiver_id=?) OR (sender_id=? AND receiver_id IN ('.$ph.'))
+                             ORDER BY id DESC LIMIT 1',
+                             $paramsLast
+                        )->fetch();
+                        $lastMsg = $last ? json_encode([
+                            'id'=>(int)$last['id'],
+                            'sender_id'=>(int)$last['sender_id'],
+                            'body'=>$last['content'],
+                            'created_at'=>$last['created_at']
+                        ]) : null;
+                        $paramsUnread = array_merge($adminIds, [$userId]);
+                        $row = db()->query(
+                            'SELECT COUNT(*) AS c FROM messages WHERE sender_id IN ('.$ph.') AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
+                            $paramsUnread
+                        )->fetch();
+                        $unread = (int)($row ? $row['c'] : 0);
+                        $items[] = [
+                            'id' => $oid,
+                            'title' => $disp['display'],
+                            'display_title' => $disp['display'],
+                            'other_role' => 'admin',
+                            'last_message' => $lastMsg,
+                            'unread_count' => $unread,
+                        ];
+                    } else {
+                        $last = db()->query(
+                            'SELECT id, sender_id, content, created_at FROM messages
+                             WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)
+                             ORDER BY id DESC LIMIT 1',
+                             [$userId,$oid,$oid,$userId]
+                        )->fetch();
+                        $lastMsg = $last ? json_encode([
+                            'id'=>(int)$last['id'],
+                            'sender_id'=>(int)$last['sender_id'],
+                            'body'=>$last['content'],
+                            'created_at'=>$last['created_at']
+                        ]) : null;
+                        $row = db()->query(
+                            'SELECT COUNT(*) AS c FROM messages WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
+                            [$oid, $userId]
+                        )->fetch();
+                        $unread = (int)($row ? $row['c'] : 0);
+                        $items[] = [
+                            'id' => $oid,
+                            'title' => $disp['display'],
+                            'display_title' => $disp['display'],
+                            'other_role' => $disp['role'],
+                            'last_message' => $lastMsg,
+                            'unread_count' => $unread,
+                        ];
+                    }
                 }
                 // Sort by latest activity desc
                 usort($items, function($a,$b){
@@ -151,14 +189,78 @@ try {
                 $me = (int)(currentUserId() ?? 0);
                 $limit = isset($_GET['limit']) ? max(1,(int)$_GET['limit']) : 100;
                 $afterId = isset($_GET['after_id']) ? (int)$_GET['after_id'] : 0;
-                $sql = 'SELECT id, sender_id, content AS body, created_at
-                        FROM messages
-                        WHERE ((sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?))
-                          AND (? = 0 OR id > ?)
-                        ORDER BY id ASC
-                        LIMIT ?';
-                $rows = db()->query($sql, [$me,$otherId,$otherId,$me,$afterId,$afterId,$limit])->fetchAll();
-                // Normalize ints
+                $role = (string)(currentUserRole() ?? '');
+                $isAdminOther = (function($oid){ $r = db()->query('SELECT role FROM users WHERE user_id=? LIMIT 1', [$oid])->fetch(); return strtolower((string)($r['role'] ?? '')) === 'admin'; })($otherId);
+                if ($role !== 'admin' && $isAdminOther) {
+                    $adminRows = db()->query("SELECT user_id FROM users WHERE role='admin' ORDER BY user_id ASC")->fetchAll();
+                    $adminIds = array_map(fn($r)=>(int)$r['user_id'], $adminRows);
+                    if (!$adminIds) { $adminIds = [$otherId]; }
+                    $ph = implode(',', array_fill(0, count($adminIds), '?'));
+                    $sql = '(
+                              SELECT m.id, m.sender_id, u.name AS sender_name, m.content AS body, m.created_at
+                              FROM messages m
+                              JOIN users u ON u.user_id = m.sender_id
+                              WHERE m.sender_id IN ('.$ph.') AND m.receiver_id = ?
+                                AND (? = 0 OR m.id > ?)
+                           )
+                           UNION ALL
+                           (
+                              SELECT MIN(m.id) AS id, m.sender_id, u.name AS sender_name, m.content AS body, MIN(m.created_at) AS created_at
+                              FROM messages m
+                              JOIN users u ON u.user_id = m.sender_id
+                              WHERE m.sender_id = ? AND m.receiver_id IN ('.$ph.')
+                              GROUP BY m.sender_id, m.content, DATE_FORMAT(m.created_at, "%Y-%m-%d %H:%i:%s")
+                              HAVING (? = 0 OR MIN(m.id) > ?)
+                           )
+                           ORDER BY created_at ASC, id ASC
+                           LIMIT ?';
+                    $params = array_merge(
+                        $adminIds, [ $me, $afterId, $afterId ],
+                        [ $me ], $adminIds, [ $afterId, $afterId, $limit ]
+                    );
+                    $rows = db()->query($sql, $params)->fetchAll();
+                } else {
+                    if (strtolower($role) === 'admin' && !$isAdminOther) {
+                        $adminRows = db()->query("SELECT user_id FROM users WHERE role='admin' ORDER BY user_id ASC")->fetchAll();
+                        $adminIds = array_map(fn($r)=>(int)$r['user_id'], $adminRows);
+                        if (!$adminIds) { $adminIds = [$me]; }
+                        $ph = implode(',', array_fill(0, count($adminIds), '?'));
+                        $sql = '(
+                                  SELECT MIN(m.id) AS id, m.sender_id, u.name AS sender_name, m.content AS body, MIN(m.created_at) AS created_at
+                                  FROM messages m
+                                  JOIN users u ON u.user_id = m.sender_id
+                                  WHERE m.sender_id = ? AND m.receiver_id IN ('.$ph.')
+                                  GROUP BY m.sender_id, m.content, DATE_FORMAT(m.created_at, "%Y-%m-%d %H:%i:%s")
+                                  HAVING (? = 0 OR MIN(m.id) > ?)
+                               )
+                               UNION ALL
+                               (
+                                  SELECT m.id, m.sender_id, u.name AS sender_name, m.content AS body, m.created_at
+                                  FROM messages m
+                                  JOIN users u ON u.user_id = m.sender_id
+                                  WHERE m.sender_id IN ('.$ph.') AND m.receiver_id = ?
+                                    AND (? = 0 OR m.id > ?)
+                               )
+                               ORDER BY created_at ASC, id ASC
+                               LIMIT ?';
+                        $params = array_merge(
+                            [ $otherId ], $adminIds, [ $afterId, $afterId ],
+                            $adminIds, [ $otherId, $afterId, $afterId, $limit ]
+                        );
+                        $rows = db()->query($sql, $params)->fetchAll();
+                    } else {
+                        $rows = db()->query(
+                            'SELECT m.id, m.sender_id, u.name AS sender_name, m.content AS body, m.created_at
+                             FROM messages m
+                             JOIN users u ON u.user_id = m.sender_id
+                             WHERE ((m.sender_id=? AND m.receiver_id=?) OR (m.sender_id=? AND m.receiver_id=?))
+                               AND (? = 0 OR m.id > ?)
+                             ORDER BY m.id ASC
+                             LIMIT ?',
+                            [$me,$otherId,$otherId,$me,$afterId,$afterId,$limit]
+                        )->fetchAll();
+                    }
+                }
                 $rows = array_map(function($r){ $r['id']=(int)$r['id']; $r['sender_id']=(int)$r['sender_id']; return $r; }, $rows);
                 sendJson(['success'=>true,'data'=>['items'=>$rows]]);
             }
@@ -190,7 +292,7 @@ try {
             if ($action === 'send_message') {
                 requireAuth();
                 $me = (int)(currentUserId() ?? 0);
-                $otherId = (int)($payload['conversation_id'] ?? 0); // interpret as other user id
+                $otherId = (int)($payload['conversation_id'] ?? 0);
                 $body = trim((string)($payload['body'] ?? ''));
                 if ($otherId <= 0 || $body === '') sendJson(['success'=>false,'error'=>'conversation_id and body are required'], 400);
                 db()->query('INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)', [$me, $otherId, $body]);
@@ -198,6 +300,20 @@ try {
                 $row = db()->query('SELECT id, sender_id, content AS body, created_at FROM messages WHERE id=?', [$id])->fetch();
                 $row['id'] = (int)$row['id'];
                 $row['sender_id'] = (int)$row['sender_id'];
+                $role = (string)(currentUserRole() ?? '');
+                if (in_array(strtolower($role), ['donor','recipient'], true)) {
+                    $r = db()->query('SELECT role FROM users WHERE user_id = ? LIMIT 1', [$otherId])->fetch();
+                    $otherRole = strtolower((string)($r['role'] ?? ''));
+                    if ($otherRole === 'admin') {
+                        $admins = db()->query("SELECT user_id FROM users WHERE role='admin' AND status='approved'")->fetchAll();
+                        foreach ($admins as $a) {
+                            $aid = (int)$a['user_id'];
+                            if ($aid > 0 && $aid !== $otherId) {
+                                db()->query('INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)', [$me, $aid, $body]);
+                            }
+                        }
+                    }
+                }
                 sendJson(['success'=>true,'data'=>['message'=>$row]], 201);
             }
 
@@ -209,22 +325,34 @@ try {
                 $me = (int)(currentUserId() ?? 0);
                 $otherId = isset($_GET['conversation_id']) ? (int)$_GET['conversation_id'] : 0;
                 if ($otherId <= 0) sendJson(['success'=>false,'error'=>'conversation_id is required'], 400);
-                // Mark all inbound messages from other -> me as read (idempotent)
-                db()->query(
-                    'UPDATE messages SET receiver_read_at = NOW() WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
-                    [$otherId, $me]
-                );
-                // Calculate remaining unread and latest id for convenience
-                $rowMax = db()->query(
-                    'SELECT MAX(id) AS max_id FROM messages WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)',
-                    [$me, $otherId, $otherId, $me]
-                )->fetch();
-                $maxId = (int)($rowMax && $rowMax['max_id'] ? $rowMax['max_id'] : 0);
-                $rowUnread = db()->query(
-                    'SELECT COUNT(*) AS c FROM messages WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
-                    [$otherId, $me]
-                )->fetch();
-                $remaining = (int)($rowUnread ? $rowUnread['c'] : 0);
+                $role = (string)(currentUserRole() ?? '');
+                $isAdminOther = (function($oid){ $r = db()->query('SELECT role FROM users WHERE user_id=? LIMIT 1', [$oid])->fetch(); return strtolower((string)($r['role'] ?? '')) === 'admin'; })($otherId);
+                if ($role !== 'admin' && $isAdminOther) {
+                    $adminRows = db()->query("SELECT user_id FROM users WHERE role='admin' ORDER BY user_id ASC")->fetchAll();
+                    $adminIds = array_map(fn($r)=>(int)$r['user_id'], $adminRows);
+                    if (!$adminIds) { $adminIds = [$otherId]; }
+                    $ph = implode(',', array_fill(0, count($adminIds), '?'));
+                    db()->query('UPDATE messages SET receiver_read_at = NOW() WHERE sender_id IN ('.$ph.') AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")', array_merge($adminIds, [$me]));
+                    $rowMax = db()->query('SELECT MAX(id) AS max_id FROM messages WHERE ((sender_id IN ('.$ph.') AND receiver_id=?) OR (sender_id=? AND receiver_id IN ('.$ph.')))', array_merge($adminIds, [$me], [$me], $adminIds))->fetch();
+                    $maxId = (int)($rowMax && $rowMax['max_id'] ? $rowMax['max_id'] : 0);
+                    $rowUnread = db()->query('SELECT COUNT(*) AS c FROM messages WHERE sender_id IN ('.$ph.') AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")', array_merge($adminIds, [$me]))->fetch();
+                    $remaining = (int)($rowUnread ? $rowUnread['c'] : 0);
+                } else {
+                    db()->query(
+                        'UPDATE messages SET receiver_read_at = NOW() WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
+                        [$otherId, $me]
+                    );
+                    $rowMax = db()->query(
+                        'SELECT MAX(id) AS max_id FROM messages WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)',
+                        [$me, $otherId, $otherId, $me]
+                    )->fetch();
+                    $maxId = (int)($rowMax && $rowMax['max_id'] ? $rowMax['max_id'] : 0);
+                    $rowUnread = db()->query(
+                        'SELECT COUNT(*) AS c FROM messages WHERE sender_id=? AND receiver_id=? AND (receiver_read_at IS NULL OR receiver_read_at = "0000-00-00 00:00:00")',
+                        [$otherId, $me]
+                    )->fetch();
+                    $remaining = (int)($rowUnread ? $rowUnread['c'] : 0);
+                }
                 sendJson(['success'=>true,'message'=>'ok','data'=>['last_read_id'=>$maxId,'remaining_unread'=>$remaining]]);
             }
             sendJson(['success'=>false,'error'=>'Invalid action'], 400);

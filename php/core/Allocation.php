@@ -11,6 +11,37 @@ class Allocation
         $this->db = Database::getInstance();
     }
 
+    /**
+     * Automatically mark allocations as Completed when they have been in
+     * "Picked Up" status for more than the given number of hours.
+     *
+     * This is used to auto-complete pickups when the recipient does not
+     * explicitly press the Complete button within the grace period.
+     *
+     * @param int $hours Grace period in hours (clamped between 1 and 168).
+     * @return int Number of rows affected.
+     */
+    public function autoCompleteStalePickups(int $hours = 24): int
+    {
+        $hours = max(1, min(168, (int)$hours));
+
+        // Build cutoff using a literal interval value to avoid SQL dialect issues
+        $cutoffExpr = 'DATE_SUB(NOW(), INTERVAL ' . $hours . ' HOUR)';
+
+        $this->db->query(
+            'UPDATE allocations
+             SET status = "Completed",
+                 delivered_at = COALESCE(delivered_at, NOW()),
+                 updated_at = NOW()
+             WHERE status = "Picked Up"
+               AND picked_up_at IS NOT NULL
+               AND picked_up_at <= ' . $cutoffExpr,
+            []
+        );
+
+        return $this->db->rowCount();
+    }
+
     private function normalizeTags($tags): array
     {
         $arr = [];
@@ -515,7 +546,8 @@ class Allocation
                     ai.quantity,
                     di.product_name,
                     CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category,
-                    COALESCE(u.label, u.code) AS unit
+                    COALESCE(u.label, u.code) AS unit,
+                    di.expiry_date
                 FROM allocation_items ai
                 LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
                 LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
@@ -544,6 +576,7 @@ class Allocation
                         'category' => $it['product_category'] ?? null,
                         'quantity' => (int)$it['quantity'],
                         'unit' => $it['unit'] ?? null,
+                        'expiry_date' => $it['expiry_date'] ?? null,
                     ];
                 }, $items ?: [])
             ];

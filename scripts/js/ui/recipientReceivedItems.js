@@ -423,9 +423,9 @@
             const status = String(a.status || "Allocated");
 
             const createdAt = a.created_at ? fmtDate(a.created_at) : "";
-            const pickupAt = a.scheduled_pickup_at
-              ? fmtDate(a.scheduled_pickup_at)
-              : "";
+            const pickupRaw =
+              a.scheduled_pickup_at || a.picked_up_at || a.delivered_at || "";
+            const pickupAt = pickupRaw ? fmtDate(pickupRaw) : "";
             const itemsList = Array.isArray(a.items) ? a.items : [];
             const itemsCount = itemsList.length;
             const previewText = itemsCount
@@ -450,44 +450,6 @@
                 <span>${previewText}</span>
               </div>`
               : '<div class="items-preview small text-muted">No items listed.</div>';
-            const itemsInlineHtml = itemsCount
-              ? `<div class="items-inline d-none mt-2">
-                <div class="card border-0 shadow-sm">
-                  <div class="card-body p-2">
-                    <ul class="list-group list-group-flush">
-                      ${itemsList
-                        .map((it) => {
-                          const unitLabel = (
-                            it.unit ||
-                            it.unit_label ||
-                            ""
-                          ).trim();
-                          const qtyUnit = `${it.quantity ?? ""}${
-                            unitLabel ? ` ${unitLabel}` : ""
-                          }`.trim();
-                          const qty = escapeHtml(
-                            qtyUnit || `${it.quantity ?? ""}`
-                          );
-                          const name = escapeHtml(it.item_name || "");
-                          const expiry = it.expiry_date
-                            ? `<small class="text-muted ms-2">(exp: ${escapeHtml(
-                                it.expiry_date
-                              )})</small>`
-                            : "";
-                          return `
-                            <li class="list-group-item border-0 px-2 py-1 d-flex justify-content-between align-items-center">
-                              <div>
-                                <span class="fw-semibold text-dark">${qty}</span>
-                                <span class="ms-1">${name}${expiry}</span>
-                              </div>
-                            </li>`;
-                        })
-                        .join("")}
-                    </ul>
-                  </div>
-                </div>
-              </div>`
-              : '<div class="items-inline d-none"><div class="alert alert-light border mb-0">No items listed.</div></div>';
             const actions = [
               `<button type="button" class="btn btn-sm btn-outline-secondary alloc-toggle" data-bs-toggle="tooltip" data-bs-placement="top" title="Show items" aria-label="Show items">
               <i class="bi bi-eye"></i>
@@ -537,12 +499,30 @@
               );
             }
             const actionsHtml = actions.join("\n");
+            const detailRows = itemsList
+              .map((it) => {
+                const unitLabel = (it.unit || it.unit_label || "").trim();
+                const name = escapeHtml(it.item_name || "");
+                const qty = it.quantity ?? "";
+                const unitText = unitLabel ? escapeHtml(unitLabel) : "";
+                const expiry = it.expiry_date
+                  ? escapeHtml(it.expiry_date)
+                  : "";
+                return `
+                    <tr>
+                      <td>${name}</td>
+                      <td>${qty}</td>
+                      <td>${unitText}</td>
+                      <td>${expiry}</td>
+                    </tr>`;
+              })
+              .join("");
+
             return `
           <tr data-aid="${id}" data-run-id="${runId}">
             <td class="align-middle">${createdAt}</td>
             <td class="align-middle">
               ${previewHtml}
-              ${itemsInlineHtml}
             </td>
             <td class="align-middle">
               <span class="badge ${statusBadgeClass(status)}">${escapeHtml(
@@ -554,6 +534,24 @@
               <div class="d-flex justify-content-start align-items-center gap-2">
                 ${actionsHtml}
               </div>
+            </td>
+          </tr>
+          <tr class="child-container d-none" data-aid="${id}">
+            <td colspan="5" class="p-0">
+              <table class="table table-sm mb-0">
+                <thead>
+                  <tr class="table-light">
+                    <th>Item</th>
+                    <th>Quantity</th>
+                    <th>Unit</th>
+                    <th>Expiry</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${detailRows ||
+                    '<tr><td colspan="4" class="text-center text-muted">No items listed.</td></tr>'}
+                </tbody>
+              </table>
             </td>
           </tr>`;
           })
@@ -683,7 +681,6 @@
       const aid = Number(tr.getAttribute("data-aid"));
       const toggleBtn = tr.querySelector(".alloc-toggle");
       const icon = toggleBtn?.querySelector("i");
-      const itemsDiv = tr.querySelector(".items-inline");
       const statusBadge = tr.querySelector(".badge");
       const ackBtn = tr.querySelector(".btn-ack");
       const completeBtn = tr.querySelector(".btn-complete");
@@ -699,12 +696,15 @@
         });
       } catch (_) {}
 
-      // Toggle inline items
-      if (toggleBtn && icon && itemsDiv) {
-        const preview = tr.querySelector(".items-preview");
+      // Toggle nested child row with detail table
+      if (toggleBtn && icon) {
+        const child = tbody.querySelector(
+          `tr.child-container[data-aid="${aid}"]`
+        );
         const setState = (show) => {
-          itemsDiv.classList.toggle("d-none", !show);
-          if (preview) preview.classList.toggle("d-none", show);
+          if (child) {
+            child.classList.toggle("d-none", !show);
+          }
           icon.className = show ? "bi bi-eye-slash" : "bi bi-eye";
           const title = show ? "Hide items" : "Show items";
           toggleBtn.setAttribute("aria-expanded", show ? "true" : "false");
@@ -722,7 +722,7 @@
           } catch (_) {}
         };
         toggleBtn.addEventListener("click", () => {
-          const isShown = !itemsDiv.classList.contains("d-none");
+          const isShown = child && !child.classList.contains("d-none");
           setState(!isShown);
         });
       }

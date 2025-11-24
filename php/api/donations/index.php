@@ -386,9 +386,13 @@ try {
         } else {
             sendJson(['success' => false, 'error' => 'Forbidden'], 403);
         }
-        // Attach absolute image URL and always attach the latest food safety receipt URL (receipt_full_url)
+        // Attach absolute image URL, derived source, and latest food safety metadata
         $db = Database::getInstance();
         foreach ($items as &$it) {
+            // Derived source: web_submission (no admin_in_charge yet) vs imported (admin-driven)
+            $adminInCharge = isset($it['admin_in_charge']) ? (int)$it['admin_in_charge'] : 0;
+            $it['source'] = $adminInCharge > 0 ? 'imported' : 'web_submission';
+
             // Latest food safety receipt (by batch or donation)
             $receiptFull = '';
             if (!empty($it['batch_id'])) {

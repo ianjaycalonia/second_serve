@@ -299,7 +299,21 @@
           const timeDiv = document.createElement('div');
           timeDiv.className = 'text-muted small mt-1';
           timeDiv.style.fontSize = '0.7rem';
-          timeDiv.textContent = isSameDay ? timeStr : `${timeStr}`;
+          let lbl = isSameDay ? timeStr : `${timeStr}`;
+          try {
+            const role = (window.CURRENT_USER_ROLE||'').toLowerCase();
+            if (!isMine && m && m.sender_name) {
+              if (role !== 'admin') {
+                lbl = `${lbl} · ${String(m.sender_name)}`;
+              } else {
+                const otherId = Number(activeId);
+                if (Number(m.sender_id) !== otherId) {
+                  lbl = `${lbl} · ${String(m.sender_name)}`;
+                }
+              }
+            }
+          } catch(_) { /* ignore */ }
+          timeDiv.textContent = lbl;
 
           bubbleWrap.appendChild(bubble);
           outer.appendChild(bubbleWrap);
@@ -315,7 +329,7 @@
       
       async function loadConversations(){ const res = await apiGet({ action:'list_conversations' }); if (res.success){ convs = res.data.items||[]; renderConversations(); } if (window.__refreshMessagesBadge) try{ window.__refreshMessagesBadge(); }catch(_){ } }
       async function selectConversation(id){ activeId=id; messages=[]; messageIds=new Set(); lastId=null; await markRead(); await loadMessages(true); renderConversations(); setComposerEnabled(true); focusSingleChannel(); }
-      async function loadMessages(reset){ if (!activeId || loadingMessages) return; loadingMessages=true; try{ const doReset = (typeof reset==='boolean') ? reset : (messages.length===0); const res = await apiGet({ action:'list_messages', conversation_id: activeId, limit: 100, after_id: doReset? '' : (lastId||'') }); if (!res.success) return; const items = Array.isArray(res.data?.items) ? res.data.items : []; if (doReset){ messages=[]; messageIds=new Set(); lastId=null; } for (const m of items){ const mid=Number(m.id); if (!messageIds.has(mid)){ messageIds.add(mid); messages.push(m); if (!lastId || mid>Number(lastId)) lastId=mid; } } messages.sort((a,b)=> Number(a.id)-Number(b.id)); renderMessages(); } finally { loadingMessages=false; } }
+      async function loadMessages(reset){ if (!activeId || loadingMessages) return; loadingMessages=true; try{ const doReset = (typeof reset==='boolean') ? reset : (messages.length===0); const res = await apiGet({ action:'list_messages', conversation_id: activeId, limit: 100, after_id: doReset? '' : (lastId||'') }); if (!res.success) return; const items = Array.isArray(res.data?.items) ? res.data.items : []; if (doReset){ messages=[]; messageIds=new Set(); lastId=null; } for (const m of items){ const mid=Number(m.id); if (!messageIds.has(mid)){ messageIds.add(mid); messages.push(m); if (!lastId || mid>Number(lastId)) lastId=mid; } } try{ const role=(window.CURRENT_USER_ROLE||'').toLowerCase(); const conv=(convs||[]).find(c=> Number(c.id)===Number(activeId)); const isUnifiedAdmin = (role!=='admin') && conv && String((conv.other_role||'').toLowerCase())==='admin'; if (isUnifiedAdmin){ const seen=new Set(); const meId=Number(window.CURRENT_USER_ID||0); const dedup=[]; for (const m of messages){ const isMine = Number(m.sender_id)===meId; if (isMine){ const t=(m.created_at||'').slice(0,19); const key=`me|${t}|${m.body||''}`; if (seen.has(key)) { continue; } seen.add(key); } dedup.push(m); } messages=dedup; } }catch(_){} messages.sort((a,b)=> Number(a.id)-Number(b.id)); renderMessages(); } finally { loadingMessages=false; } }
       async function markRead(){ if (!activeId) return; await apiPatch('mark_read', { conversation_id: activeId }); await loadConversations(); }
       async function send(){ if (!activeId) return; const input=qsM('#mm-input'); const text=(input.value||'').trim(); if (!text) return; const res = await apiPost('send_message', { conversation_id: activeId, body: text }); if (res.success){ input.value=''; await loadMessages(); await loadConversations(); } }
 

@@ -601,7 +601,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/users/index.php?action=getProfile`, {
+      const res = await fetch(`${API_BASE_URL}/users/index.php?action=adminGetProfile`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", Accept: "application/json" },

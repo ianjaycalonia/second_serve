@@ -159,6 +159,10 @@ class Donation
         $where[] = 'd.deleted_at IS NULL';
         if (!empty($filters['status'])) { $where[] = 'd.status = ?'; $params[] = $filters['status']; }
         if (!empty($filters['donor_id'])) { $where[] = 'd.donor_id = ?'; $params[] = (int)$filters['donor_id']; }
+        // By default, hide repack-generated donations (internal stock production), which are tagged on items
+        if (empty($filters['include_repack'])) {
+            $where[] = "(di.tags IS NULL OR di.tags <> 'Repack Kit')";
+        }
 
         $groupMode = isset($filters['group']) && $filters['group'] === 'batch';
         if ($groupMode) {
@@ -195,6 +199,9 @@ class Donation
                             di.product_name AS name,
                             CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type,
                             di.quantity,
+                            di.unit_id,
+                            COALESCE(un.label, un.code) AS unit_label,
+                            di.unit AS unit,
                             di.expiry_date,
                             d.status,
                             d.created_at,
@@ -204,7 +211,8 @@ class Donation
                         LEFT JOIN users u ON u.user_id = d.donor_id
                         LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
                         INNER JOIN donation_items di ON di.donation_id = d.donation_id
-                        LEFT JOIN categories c ON c.category_id = di.category_id" . $whereSqlSingles . "";
+                        LEFT JOIN categories c ON c.category_id = di.category_id
+                        LEFT JOIN units un ON un.unit_id = di.unit_id" . $whereSqlSingles . "";
 
             $sql = "SELECT * FROM (" . $sqlGrouped . ") g
                     UNION ALL
@@ -214,14 +222,16 @@ class Donation
             return $this->db->query($sql, $params)->fetchAll();
         } else {
             $sql = "SELECT d.donation_id AS id, d.donor_id, u.name AS donor_name, COALESCE(dp.organization_name, d.donor_name, u.name) AS donor_org,
-                           CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type, di.product_name AS name, di.quantity, di.expiry_date, d.status, d.created_at,
+                           CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type, di.product_name AS name, di.quantity, di.unit_id, COALESCE(un.label, un.code) AS unit_label, di.expiry_date, d.status, d.created_at,
                            d.batch_id AS batch_id,
+                           d.admin_in_charge AS admin_in_charge,
                            0 AS is_group
                     FROM donations d
                     LEFT JOIN users u ON u.user_id = d.donor_id
                     LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
                     INNER JOIN donation_items di ON di.donation_id = d.donation_id
-                    LEFT JOIN categories c ON c.category_id = di.category_id";
+                    LEFT JOIN categories c ON c.category_id = di.category_id
+                    LEFT JOIN units un ON un.unit_id = di.unit_id";
             if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
             $sql .= ' ORDER BY d.created_at DESC LIMIT 500';
             return $this->db->query($sql, $params)->fetchAll();
@@ -270,6 +280,8 @@ class Donation
                        di.product_name AS name,
                        CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type,
                        di.quantity,
+                       di.unit_id,
+                       COALESCE(un.label, un.code) AS unit_label,
                        di.expiry_date,
                        d.status,
                        d.created_at
@@ -278,6 +290,7 @@ class Donation
                 LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
                 INNER JOIN donation_items di ON di.donation_id = d.donation_id
                 LEFT JOIN categories c ON c.category_id = di.category_id
+                LEFT JOIN units un ON un.unit_id = di.unit_id
                 WHERE d.deleted_at IS NULL AND d.batch_id = ?
                 ORDER BY d.created_at ASC";
         return $this->db->query($sql, [$batchId])->fetchAll();

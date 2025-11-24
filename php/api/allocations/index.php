@@ -484,6 +484,7 @@ try {
                                 'category'  => $it['product_category'] ?? null,
                                 'quantity'  => (int)$it['quantity'],
                                 'unit'      => $it['unit'] ?? null,
+                                'expiry_date' => $it['expiry_date'] ?? null,
                             ];
                         }, $items)
                     ];
@@ -518,6 +519,12 @@ try {
             $runId = isset($_GET['run_id']) ? (int)$_GET['run_id'] : 0;
             if ($runId <= 0) { sendJson(['success'=>false,'error'=>'run_id is required'], 400); }
             try {
+                // Auto-complete any stale pickups (Picked Up > 24h) before listing
+                try {
+                    $svcAuto = new Allocation();
+                    $svcAuto->autoCompleteStalePickups(24);
+                } catch (Exception $e) { /* best-effort; ignore auto-complete errors */ }
+
                 $db = Database::getInstance();
                 // Load allocations for the run
                 $rows = $db->query(
@@ -541,7 +548,8 @@ try {
                     $items = $db->query('SELECT ai.id, ai.inventory_id, ai.quantity,
                                                  di.product_name,
                                                  CONCAT(c.primary_name, COALESCE(CONCAT(" - ", c.secondary_name), "")) AS product_category,
-                                                 COALESCE(u.label, u.code) AS unit
+                                                 COALESCE(u.label, u.code) AS unit,
+                                                 di.expiry_date
                                           FROM allocation_items ai
                                           LEFT JOIN inventory inv ON ai.inventory_id = inv.inventory_id
                                           LEFT JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
@@ -599,6 +607,11 @@ try {
                 } catch (Exception $e) { /* ignore; fallback handled below */ }
             }
             $svc = new Allocation();
+            // Auto-complete any stale pickups (Picked Up > 24h) before listing
+            try {
+                $svc->autoCompleteStalePickups(24);
+            } catch (Exception $e) { /* best-effort; ignore auto-complete errors */ }
+
             $list = $svc->listByRecipient($recipientId, $runId);
             if ($forcedLatestRunId !== null && empty($list)) {
                 $list = $svc->listByRecipient($recipientId, null);

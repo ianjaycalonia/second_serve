@@ -334,7 +334,18 @@
                     </select>
                   </div>
                   <div id="registerDetailsWrapper" class="d-none">
-                    <div class="border rounded-3 p-3 mb-3">
+                    <div
+                      class="d-flex justify-content-between align-items-center small text-muted mb-2"
+                      id="registerStepTracker"
+                    >
+                      <span class="fw-semibold">Step 1 of 2</span>
+                      <span id="registerStepTitle">Organization Details</span>
+                    </div>
+
+                    <div
+                      class="border rounded-3 p-3 mb-3"
+                      id="registerOrgStep"
+                    >
                       <h6 class="mb-2">Organization details</h6>
                       <div class="mb-3">
                         <label for="registerOrganization" class="form-label"
@@ -346,6 +357,9 @@
                           class="form-control"
                           id="registerOrganization"
                           placeholder="e.g., ABC Corp / Community Org"
+                          minlength="3"
+                          maxlength="150"
+                          pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
                           required
                         />
                         <div class="invalid-feedback">
@@ -399,18 +413,75 @@
                             class="form-control"
                             id="registerBarangay"
                             placeholder="Barangay"
+                            minlength="2"
+                            maxlength="150"
+                            pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
                           />
                         </div>
                         <div class="col-12 col-md-6">
                           <label for="registerCity" class="form-label"
                             >City / Municipality</label
                           >
-                          <input
-                            type="text"
-                            class="form-control"
+                          <select
+                            class="form-select"
                             id="registerCity"
-                            placeholder="City or Municipality"
-                          />
+                            required
+                          >
+                            <option value="">Select City / Municipality</option>
+                            <option value="Alcantara">Alcantara</option>
+                            <option value="Alcoy">Alcoy</option>
+                            <option value="Alegria">Alegria</option>
+                            <option value="Aloguinsan">Aloguinsan</option>
+                            <option value="Argao">Argao</option>
+                            <option value="Asturias">Asturias</option>
+                            <option value="Badian">Badian</option>
+                            <option value="Balamban">Balamban</option>
+                            <option value="Bantayan">Bantayan</option>
+                            <option value="Barili">Barili</option>
+                            <option value="Bogo">Bogo</option>
+                            <option value="Boljoon">Boljoon</option>
+                            <option value="Borbon">Borbon</option>
+                            <option value="Carcar">Carcar</option>
+                            <option value="Carmen">Carmen</option>
+                            <option value="Catmon">Catmon</option>
+                            <option value="Cebu City">Cebu City</option>
+                            <option value="Compostela">Compostela</option>
+                            <option value="Consolacion">Consolacion</option>
+                            <option value="Cordova">Cordova</option>
+                            <option value="Daanbantayan">Daanbantayan</option>
+                            <option value="Dalaguete">Dalaguete</option>
+                            <option value="Danao">Danao</option>
+                            <option value="Dumanjug">Dumanjug</option>
+                            <option value="Ginatilan">Ginatilan</option>
+                            <option value="Lapu-Lapu City">Lapu-Lapu City</option>
+                            <option value="Liloan">Liloan</option>
+                            <option value="Madridejos">Madridejos</option>
+                            <option value="Malabuyoc">Malabuyoc</option>
+                            <option value="Mandaue City">Mandaue City</option>
+                            <option value="Medellin">Medellin</option>
+                            <option value="Minglanilla">Minglanilla</option>
+                            <option value="Moalboal">Moalboal</option>
+                            <option value="Naga">Naga</option>
+                            <option value="Oslob">Oslob</option>
+                            <option value="Pilar">Pilar</option>
+                            <option value="Pinamungajan">Pinamungajan</option>
+                            <option value="Poro">Poro</option>
+                            <option value="Ronda">Ronda</option>
+                            <option value="Samboan">Samboan</option>
+                            <option value="San Fernando">San Fernando</option>
+                            <option value="San Francisco">San Francisco</option>
+                            <option value="San Remigio">San Remigio</option>
+                            <option value="Santa Fe">Santa Fe</option>
+                            <option value="Santander">Santander</option>
+                            <option value="Sibonga">Sibonga</option>
+                            <option value="Sogod">Sogod</option>
+                            <option value="Tabogon">Tabogon</option>
+                            <option value="Tabuelan">Tabuelan</option>
+                            <option value="Talisay">Talisay</option>
+                            <option value="Toledo">Toledo</option>
+                            <option value="Tuburan">Tuburan</option>
+                            <option value="Tudela">Tudela</option>
+                          </select>
                         </div>
                       </div>
                       <div class="mb-3" id="wrapAddressTextarea">
@@ -422,15 +493,29 @@
                           id="registerAddress"
                           rows="2"
                           placeholder="Street, City, Province"
+                          minlength="10"
+                          maxlength="300"
                           required
                         ></textarea>
                         <div class="invalid-feedback">
                           Please provide your complete address
                         </div>
                       </div>
+                      <div class="d-flex justify-content-end">
+                        <button
+                          type="button"
+                          class="btn btn-primary"
+                          id="registerNextBtn"
+                        >
+                          Next
+                        </button>
+                      </div>
                     </div>
 
-                    <div class="border rounded-3 p-3 mb-3">
+                    <div
+                      class="border rounded-3 p-3 mb-3"
+                      id="registerRepStep"
+                    >
                       <h6 class="mb-2">Representative details</h6>
                       <div class="mb-3" id="wrapFullName">
                         <label for="registerName" class="form-label"
@@ -440,6 +525,9 @@
                           type="text"
                           class="form-control"
                           id="registerName"
+                          minlength="2"
+                          maxlength="150"
+                          pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
                           required
                         />
                         <div class="invalid-feedback">
@@ -458,6 +546,10 @@
                               class="form-control"
                               id="registerFirstName"
                               placeholder="First name"
+                              minlength="2"
+                              maxlength="80"
+                              pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
+                              required
                             />
                           </div>
                           <div class="col-4 col-md-2">
@@ -475,6 +567,10 @@
                               class="form-control"
                               id="registerLastName"
                               placeholder="Last name"
+                              minlength="2"
+                              maxlength="80"
+                              pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
+                              required
                             />
                           </div>
                           <div class="col-4 col-md-2">
@@ -511,9 +607,12 @@
                           type="tel"
                           class="form-control"
                           id="registerContact"
-                          placeholder="e.g., 0917 123 4567"
+                          placeholder="e.g., 09171234567"
                           required
-                          pattern="[0-9+\s-]+"
+                          pattern="[0-9]{11}"
+                          inputmode="numeric"
+                          minlength="11"
+                          maxlength="11"
                         />
                         <div class="invalid-feedback">
                           Please provide a valid contact number
@@ -586,12 +685,20 @@
                           Caps Lock is on
                         </div>
                       </div>
-                    </div>
-
-                    <div class="d-grid gap-2">
-                      <button type="submit" class="btn btn-success">
-                        Create Account
-                      </button>
+                      <div
+                        class="d-flex flex-column flex-md-row gap-2 justify-content-between"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary"
+                          id="registerBackBtn"
+                        >
+                          Back
+                        </button>
+                        <button type="submit" class="btn btn-success flex-grow-1">
+                          Create Account
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </form>

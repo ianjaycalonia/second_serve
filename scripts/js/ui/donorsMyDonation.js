@@ -462,6 +462,24 @@
     );
   }
 
+  function summarizeBatchItems(items, limit = 2) {
+    if (!Array.isArray(items) || !items.length) return "No items listed";
+    const slice = items.slice(0, limit);
+    const parts = slice.map((it) => {
+      const name = escapeHtml(it.name || "Unnamed item");
+      const qtyVal = Number(it.quantity);
+      const hasQty = Number.isFinite(qtyVal) && qtyVal > 0;
+      const unitLabel = (it.unit_label || it.unit || "").trim();
+      const unitText = unitLabel ? ` ${escapeHtml(unitLabel)}` : "";
+      const qty = hasQty ? ` x ${escapeHtml(String(qtyVal))}${unitText}` : "";
+      return `${name}${qty}`;
+    });
+    let summary = parts.join(", ");
+    const remaining = items.length - slice.length;
+    if (remaining > 0) summary += `, +${remaining} more`;
+    return summary;
+  }
+
   function render(groups) {
     const tbody = document.querySelector(".table tbody");
     if (!tbody) return;
@@ -478,14 +496,18 @@
         const count = group.items.length;
         const first = group.items[0] || {};
         const title = `Batch • ${count} item${count > 1 ? "s" : ""}`;
+        const summary = summarizeBatchItems(group.items);
         const anyPending = group.items.some(
           (it) => String(it.status || "").toLowerCase() === "pending"
         );
         html += `
           <tr class="group-row" data-batch-id="${group.batch_id}">
-            <td>${escapeHtml(first.type || "")}</td>
             <td>
-              <div class="fw-semibold"><button class="btn btn-sm btn-outline-secondary me-2 batch-toggle" type="button" aria-label="Toggle" data-bs-toggle="tooltip" title="Expand to view items">Show</button>${title}</div>
+              <div class="items-preview d-flex flex-wrap align-items-center gap-2 small text-muted">
+                <span class="badge bg-secondary-subtle text-secondary fw-semibold">${count}</span>
+                <span>${summary}</span>
+              </div>
+              <div class="text-muted small">${escapeHtml(first.type || "")}</div>
             </td>
             <td class="status-col">${badge(first.status || "Pending")}</td>
             <td>${
@@ -496,23 +518,26 @@
                 : fmtDateTime(group.created_at)
             }</td>
             <td>
-              <div class="d-flex align-items-center justify-content-center gap-2">
+              <div class="d-flex align-items-center justify-content-start gap-2">
+                <button class="btn btn-sm btn-outline-secondary batch-toggle" type="button" aria-label="Show items" data-bs-toggle="tooltip" title="Show items">
+                  <i class="bi bi-eye"></i>
+                </button>
                 ${
                   anyPending
                     ? `
-                  <button class="btn btn-sm btn-outline-primary edit-batch" data-batch-id="${
-                    group.batch_id
-                  }" data-category="${escapeHtml(
-                        first.type || ""
-                      )}" data-bs-toggle="tooltip" title="Edit Batch" aria-label="Edit Batch">
-                    <i class="bi bi-pencil-square"></i>
-                  </button>
-                  <button class="btn btn-sm btn-outline-danger cancel-batch" data-batch-id="${
-                    group.batch_id
-                  }" data-bs-toggle="tooltip" title="Cancel Batch" aria-label="Cancel Batch">
-                    <i class="bi bi-x-octagon"></i>
-                  </button>
-                `
+                <button class="btn btn-sm btn-outline-primary edit-batch" data-batch-id="${
+                  group.batch_id
+                }" data-category="${escapeHtml(
+                      first.type || ""
+                    )}" data-bs-toggle="tooltip" title="Edit Batch" aria-label="Edit Batch">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger cancel-batch" data-batch-id="${
+                  group.batch_id
+                }" data-bs-toggle="tooltip" title="Cancel Batch" aria-label="Cancel Batch">
+                  <i class="bi bi-x-octagon"></i>
+                </button>
+              `
                     : ""
                 }
               </div>
@@ -525,6 +550,7 @@
                   <tr class="table-light">
                     <th>Item</th>
                     <th>Quantity</th>
+                    <th>Unit</th>
                     <th>Expiry</th>
                     <th>Status</th>
                     <th>Reason</th>
@@ -539,6 +565,7 @@
                     <tr>
                       <td>${escapeHtml(r.name || "")}</td>
                       <td>${r.quantity ?? ""}</td>
+                      <td>${escapeHtml(r.unit_label || r.unit || "")}</td>
                       <td>${escapeHtml(r.expiry_date || "")}</td>
                       <td class="text-center status-col">${badge(r.status)}</td>
                       <td>${
@@ -564,8 +591,10 @@
         const isPending = String(r.status || "").toLowerCase() === "pending";
         html += `
           <tr>
-            <td>${escapeHtml(r.type || "")}</td>
-            <td>${escapeHtml(r.name || "")}</td>
+            <td>
+              <div class="fw-semibold">${escapeHtml(r.name || "")}</div>
+              <div class="text-muted small">${escapeHtml(r.type || "")}</div>
+            </td>
             <td class="text-center status-col">${badge(r.status)}</td>
             <td>${
               ["pending", "cancelled"].includes(
@@ -662,15 +691,14 @@
         if (!child) return;
         const showing = !child.classList.contains("d-none");
         child.classList.toggle("d-none", showing);
-        // Update button label
         const isNowHidden = child.classList.contains("d-none");
-        batchBtn.textContent = isNowHidden ? "Show" : "Hide";
-        // Update tooltip to reflect action
-        const newTitle = isNowHidden
-          ? "Expand to view items"
-          : "Collapse items";
+        // Update tooltip/aria
+        const newTitle = isNowHidden ? "Show items" : "Hide items";
         batchBtn.setAttribute("title", newTitle);
-        batchBtn.setAttribute("aria-label", isNowHidden ? "Show" : "Hide");
+        batchBtn.setAttribute(
+          "aria-label",
+          isNowHidden ? "Show items" : "Hide items"
+        );
         // Refresh Bootstrap tooltip content
         try {
           const tip = bootstrap.Tooltip.getInstance(batchBtn);

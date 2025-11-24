@@ -162,9 +162,69 @@
       if (!g.created_at || (r.created_at && r.created_at > g.created_at))
         g.created_at = r.created_at;
     }
-    return [...m.values()].sort((a, b) =>
-      (b.created_at || "").localeCompare(a.created_at || "")
-    );
+    return [...m.values()];
+  }
+
+  // Sort helpers (driven by Sort dropdown Apply button)
+  function readSort() {
+    const date = (getEl("sortDate")?.value || "").trim();
+    const itemName = (getEl("sortItemName")?.value || "").trim();
+    const quantity = (getEl("sortQuantity")?.value || "").trim();
+    const organization = (getEl("sortOrganization")?.value || "").trim();
+    return { date, itemName, quantity, organization };
+  }
+  function sortGroups(groups) {
+    const s = readSort();
+    const out = Array.isArray(groups) ? groups.slice() : [];
+    if (!out.length) return out;
+
+    function safeStr(v) {
+      return (v == null ? "" : String(v)).toLowerCase();
+    }
+    function groupOrg(g) {
+      const first = (g && g.items && g.items[0]) || {};
+      return first.donor_org || first.organization_name || "";
+    }
+    function groupItemName(g) {
+      const first = (g && g.items && g.items[0]) || {};
+      return first.name || "";
+    }
+    function groupQty(g) {
+      try {
+        return (Array.isArray(g.items) ? g.items : []).reduce(
+          (sum, it) => sum + (Number(it.quantity) || 0),
+          0
+        );
+      } catch (_) {
+        return 0;
+      }
+    }
+
+    if (s.date) {
+      const dir = s.date === "asc" ? 1 : -1;
+      out.sort((a, b) =>
+        dir * (safeStr(a.created_at).localeCompare(safeStr(b.created_at)))
+      );
+    } else if (s.organization) {
+      const dir = s.organization === "asc" ? 1 : -1;
+      out.sort((a, b) =>
+        dir * safeStr(groupOrg(a)).localeCompare(safeStr(groupOrg(b)))
+      );
+    } else if (s.itemName) {
+      const dir = s.itemName === "asc" ? 1 : -1;
+      out.sort((a, b) =>
+        dir * safeStr(groupItemName(a)).localeCompare(safeStr(groupItemName(b)))
+      );
+    } else if (s.quantity) {
+      const dir = s.quantity === "asc" ? 1 : -1;
+      out.sort((a, b) => dir * (groupQty(a) - groupQty(b)));
+    } else {
+      // Default: latest created first
+      out.sort((a, b) =>
+        safeStr(b.created_at).localeCompare(safeStr(a.created_at))
+      );
+    }
+    return out;
   }
 
   // Rendering
@@ -173,35 +233,12 @@
     if (!tbody) return;
     if (!items.length) {
       tbody.innerHTML =
-        '<tr><td colspan="7" class="text-center py-4">No donations match the current filters. <button id="resetFiltersBtn" class="btn btn-sm btn-outline-secondary ms-2">Reset filters</button></td></tr>';
-      const btn = getEl("resetFiltersBtn");
-      if (btn) {
-        btn.addEventListener(
-          "click",
-          () => {
-            [
-              "donationsDonorSelectDesktop",
-              "donationsDonorSelectMobile",
-              "donationsStatusSelectDesktop",
-              "donationsStatusSelectMobile",
-              "donationsCategorySelectDesktop",
-              "donationsCategorySelectMobile",
-              "donationsDateSelectDesktop",
-              "donationsDateSelectMobile",
-            ].forEach((id) => {
-              const el = getEl(id);
-              if (el && el.options && el.options.length) el.selectedIndex = 0;
-            });
-            __page = 1;
-            renderTable(applyFilters(window.__adminDonationRaw || []));
-          },
-          { once: true }
-        );
-      }
+        '<tr><td colspan="7" class="text-center py-4">No donations match the current filters.</td></tr>';
       updatePagination(0);
       return;
     }
-    const groups = groupByBatch(items);
+    const baseGroups = groupByBatch(items);
+    const groups = sortGroups(baseGroups);
     const totalGroups = groups.length;
     const pageSize = __pageSize || 20;
     const totalPages =
@@ -451,11 +488,13 @@
   // Filters
   function readFilters() {
     const donor = (
+      getEl("filterOrgSelect")?.value ||
       getEl("donationsDonorSelectDesktop")?.value ||
       getEl("donationsDonorSelectMobile")?.value ||
       ""
     ).trim();
     const status = (
+      getEl("filterStatusSelect")?.value ||
       getEl("donationsStatusSelectDesktop")?.value ||
       getEl("donationsStatusSelectMobile")?.value ||
       ""
@@ -471,14 +510,12 @@
       ""
     ).trim();
     const search = (getEl("donationSearch")?.value || "").trim();
-    const receipt = (
-      getEl("donationsReceiptSelectMobile")?.value ||
-      getEl("donationsReceiptSelectDesktop")?.value ||
-      ""
-    ).trim();
+    const source = (getEl("filterSourceSelect")?.value || "").trim();
+    const hasBatch = !!getEl("checkIsBatch")?.checked;
+    const hasReceipt = !!getEl("checkHasReceipt")?.checked;
     const from = (getEl("fromDate")?.value || "").trim();
     const to = (getEl("toDate")?.value || "").trim();
-    return { donor, status, category, date, search, from, to, receipt };
+    return { donor, status, category, date, search, from, to, source, hasBatch, hasReceipt };
   }
   function applyFilters(items) {
     const f = readFilters();
@@ -570,20 +607,22 @@
         return true;
       });
     }
-    // Receipt filter: With Receipt / Without Receipt
-    if (f.receipt && f.receipt.toLowerCase() !== "all") {
-      if (f.receipt.toLowerCase().includes("with")) {
-        out = out.filter(
-          (r) =>
-            (r.receipt_full_url || r.image_full_url || "").toString().trim() !==
-            ""
-        );
-      } else if (f.receipt.toLowerCase().includes("without")) {
-        out = out.filter(
-          (r) =>
-            !(r.receipt_full_url || r.image_full_url || "").toString().trim()
-        );
-      }
+    // Properties: batch-only and has receipt
+    if (f.hasBatch) {
+      out = out.filter((r) => !!r.batch_id);
+    }
+    if (f.hasReceipt) {
+      out = out.filter(
+        (r) =>
+          (r.receipt_full_url || r.image_full_url || "").toString().trim() !==
+          ""
+      );
+    }
+    if (f.source) {
+      const src = String(f.source).toLowerCase();
+      out = out.filter(
+        (r) => String(r.source || "").toLowerCase() === src
+      );
     }
     return out;
   }
@@ -703,6 +742,36 @@
       );
     }
   }
+  function populateOrgFilter(items) {
+    try {
+      const sel = getEl("filterOrgSelect");
+      if (!sel) return;
+      const labels = [
+        ...new Set(
+          (Array.isArray(items) ? items : [])
+            .map((r) => (r.donor_org || r.organization_name || "").trim())
+            .filter(Boolean)
+        ),
+      ].sort((a, b) => a.localeCompare(b));
+      const prev = sel.value || "";
+      const frag = document.createDocumentFragment();
+      const optAll = document.createElement("option");
+      optAll.value = "";
+      optAll.textContent = "All";
+      frag.appendChild(optAll);
+      labels.forEach((l) => {
+        const o = document.createElement("option");
+        o.value = l;
+        o.textContent = l;
+        frag.appendChild(o);
+      });
+      sel.innerHTML = "";
+      sel.appendChild(frag);
+      sel.value = [...sel.options].some((o) => o.value === prev) ? prev : "";
+    } catch (e) {
+      console.warn("populateOrgFilter failed:", e);
+    }
+  }
 
   // Auto refresh
   function anyModalOpen() {
@@ -759,6 +828,9 @@
       window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
       try {
         await populateCategorySelects(window.__adminDonationRaw);
+      } catch (_) {}
+      try {
+        populateOrgFilter(window.__adminDonationRaw);
       } catch (_) {}
       const filtered = applyFilters(window.__adminDonationRaw);
       const s = sig(filtered);
@@ -1494,107 +1566,119 @@
     });
   }
   function bindFilters() {
-    [
-      "donationsDonorSelectDesktop",
-      "donationsDonorSelectMobile",
-      "donationsStatusSelectDesktop",
-      "donationsStatusSelectMobile",
-      "donationsCategorySelectDesktop",
-      "donationsCategorySelectMobile",
-      "donationsDateSelectDesktop",
-      "donationsDateSelectMobile",
-    ].forEach((id) => {
-      const el = getEl(id);
-      if (el)
-        el.addEventListener("change", () =>
-          renderTable(applyFilters(window.__adminDonationRaw || []))
-        );
-    });
-    // Search input (debounced)
+    // Search input (debounced, live)
     const searchEl = getEl("donationSearch");
     if (searchEl) {
-      const handler = debounce(
-        () => renderTable(applyFilters(window.__adminDonationRaw || [])),
-        200
-      );
+      const handler = debounce(() => {
+        __page = 1;
+        renderTable(applyFilters(window.__adminDonationRaw || []));
+      }, 200);
       searchEl.addEventListener("input", handler);
+    }
 
-      // Quick range buttons (Today / This Week / This Month)
-      const quickWrap = getEl("quickRangeBtns");
-      if (quickWrap) {
-        quickWrap.addEventListener("click", function (e) {
-          const btn = e.target.closest && e.target.closest("[data-range]");
-          if (!btn) return;
-          const range = btn.getAttribute("data-range");
-          const now = new Date();
-          let from = null,
-            to = null;
-          if (range === "today") {
-            from = to = now;
-          } else if (range === "week") {
-            to = now;
-            from = new Date(now);
-            from.setDate(now.getDate() - 6);
-          } else if (range === "month") {
-            to = now;
-            from = new Date(now.getFullYear(), now.getMonth(), 1);
-          }
-          try {
-            const fd = getEl("fromDate");
-            const td = getEl("toDate");
-            if (fd) fd.value = from ? toISODate(from) : "";
-            if (td) td.value = to ? toISODate(to) : "";
-            // visual active state: make this button primary and others outline
-            Array.from(quickWrap.querySelectorAll("[data-range]")).forEach(
-              (b) => {
-                if (b === btn) {
-                  b.classList.remove("btn-outline-secondary");
-                  b.classList.add("btn-primary");
-                } else {
-                  b.classList.remove("btn-primary");
-                  b.classList.add("btn-outline-secondary");
-                }
+    // Quick range buttons (Today / This Week / This Month)
+    const quickWrap = getEl("quickRangeBtns");
+    if (quickWrap) {
+      quickWrap.addEventListener("click", function (e) {
+        const btn = e.target.closest && e.target.closest("[data-range]");
+        if (!btn) return;
+        const range = btn.getAttribute("data-range");
+        const now = new Date();
+        let from = null,
+          to = null;
+        if (range === "today") {
+          from = to = now;
+        } else if (range === "week") {
+          to = now;
+          from = new Date(now);
+          from.setDate(now.getDate() - 6);
+        } else if (range === "month") {
+          to = now;
+          from = new Date(now.getFullYear(), now.getMonth(), 1);
+        }
+        try {
+          const fd = getEl("fromDate");
+          const td = getEl("toDate");
+          if (fd) fd.value = from ? toISODate(from) : "";
+          if (td) td.value = to ? toISODate(to) : "";
+          // visual active state: make this button primary and others outline
+          Array.from(quickWrap.querySelectorAll("[data-range]")).forEach(
+            (b) => {
+              if (b === btn) {
+                b.classList.remove("btn-outline-secondary");
+                b.classList.add("btn-primary");
+              } else {
+                b.classList.remove("btn-primary");
+                b.classList.add("btn-outline-secondary");
               }
-            );
-            renderTable(applyFilters(window.__adminDonationRaw || []));
-          } catch (_) {}
-        });
-      }
-      // from/to change listeners
-      const fdEl = getEl("fromDate");
-      const tdEl = getEl("toDate");
-      if (fdEl)
-        fdEl.addEventListener("change", () => {
-          // clear quick range active state when manually changing dates
-          const quick = getEl("quickRangeBtns");
-          if (quick)
-            Array.from(quick.querySelectorAll("[data-range]")).forEach((b) => {
-              b.classList.remove("btn-primary");
-              b.classList.add("btn-outline-secondary");
-            });
-          renderTable(applyFilters(window.__adminDonationRaw || []));
-        });
-      if (tdEl)
-        tdEl.addEventListener("change", () => {
-          const quick = getEl("quickRangeBtns");
-          if (quick)
-            Array.from(quick.querySelectorAll("[data-range]")).forEach((b) => {
-              b.classList.remove("btn-primary");
-              b.classList.add("btn-outline-secondary");
-            });
-          renderTable(applyFilters(window.__adminDonationRaw || []));
-        });
-      // receipt select(s)
-      const recMobile = getEl("donationsReceiptSelectMobile");
-      const recDesktop = getEl("donationsReceiptSelectDesktop");
-      if (recMobile)
-        recMobile.addEventListener("change", () =>
-          renderTable(applyFilters(window.__adminDonationRaw || []))
+            }
+          );
+        } catch (_) {}
+      });
+    }
+
+    // from/to change listeners: just clear quick-range visual state
+    const fdEl = getEl("fromDate");
+    const tdEl = getEl("toDate");
+    function clearQuickRangeState() {
+      const quick = getEl("quickRangeBtns");
+      if (!quick) return;
+      Array.from(quick.querySelectorAll("[data-range]")).forEach((b) => {
+        b.classList.remove("btn-primary");
+        b.classList.add("btn-outline-secondary");
+      });
+    }
+    if (fdEl)
+      fdEl.addEventListener("change", () => {
+        clearQuickRangeState();
+      });
+    if (tdEl)
+      tdEl.addEventListener("change", () => {
+        clearQuickRangeState();
+      });
+
+    // Filter Apply / Reset buttons
+    const filterApplyBtn = getEl("donationFilterApplyBtn");
+    const filterResetBtn = getEl("donationFilterResetBtn");
+    if (filterApplyBtn) {
+      filterApplyBtn.addEventListener("click", () => {
+        __page = 1;
+        renderTable(applyFilters(window.__adminDonationRaw || []));
+      });
+    }
+    if (filterResetBtn) {
+      filterResetBtn.addEventListener("click", () => {
+        try {
+          const form = document.getElementById("filterForm");
+          if (form && typeof form.reset === "function") form.reset();
+        } catch (_) {}
+        clearQuickRangeState();
+        __page = 1;
+        renderTable(applyFilters(window.__adminDonationRaw || []));
+      });
+    }
+  }
+
+  function bindSortControls() {
+    const sortApplyBtn = getEl("donationSortApplyBtn");
+    const sortResetBtn = getEl("donationSortResetBtn");
+    if (sortApplyBtn) {
+      sortApplyBtn.addEventListener("click", () => {
+        __page = 1;
+        renderTable(applyFilters(window.__adminDonationRaw || []));
+      });
+    }
+    if (sortResetBtn) {
+      sortResetBtn.addEventListener("click", () => {
+        ["sortDate", "sortItemName", "sortQuantity", "sortOrganization"].forEach(
+          (id) => {
+            const el = getEl(id);
+            if (el) el.value = "";
+          }
         );
-      if (recDesktop)
-        recDesktop.addEventListener("change", () =>
-          renderTable(applyFilters(window.__adminDonationRaw || []))
-        );
+        __page = 1;
+        renderTable(applyFilters(window.__adminDonationRaw || []));
+      });
     }
   }
   function bindPagination() {
@@ -1616,7 +1700,7 @@
         const target = parseInt(btn.getAttribute("data-page"), 10);
         if (!Number.isFinite(target) || target < 1) return;
         const items = applyFilters(window.__adminDonationRaw || []);
-        const totalGroups = groupByBatch(items).length;
+        const totalGroups = sortGroups(groupByBatch(items)).length;
         const pageSize = __pageSize || 20;
         const maxPage =
           totalGroups > 0
@@ -1676,6 +1760,7 @@
       } catch (_) {}
       await populateDonorSelects(window.__adminDonationRaw);
       await populateCategorySelects(window.__adminDonationRaw);
+      populateOrgFilter(window.__adminDonationRaw);
       renderTable(applyFilters(window.__adminDonationRaw));
       bindImageViewer();
       bindGroupToggle();
@@ -1684,6 +1769,7 @@
       bindActions();
       bindReceiveConfirm();
       bindFilters();
+      bindSortControls();
       bindPagination();
       bindRestoreAckPrompt();
       startDonationAutoRefresh();
@@ -1711,6 +1797,7 @@
     applyFilters,
     populateCategorySelects,
     populateDonorSelects,
+    populateOrgFilter,
     showAckNextStepsModal,
     init,
   };

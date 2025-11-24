@@ -138,8 +138,30 @@
     });
   } catch (_) {}
 
+  function isHiddenRecipientId(rid) {
+    try {
+      const u = recMeta.get(Number(rid)) || {};
+      const org = String(u.organization_name || u.name || "").trim().toLowerCase();
+      const tags = String(u.tags || "").toLowerCase();
+      if (org === "foodbank (on-site)") return true;
+      return /(^|[^a-z])hidden([^a-z]|$)/.test(tags);
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Load allocations
   const byRec = [];
+  function shouldHideRecipient(items) {
+    if (!Array.isArray(items) || !items.length) return false;
+    try {
+      return items.every(
+        (alloc) => String(alloc.status || '').toLowerCase() === 'cancelled'
+      );
+    } catch (_) {
+      return false;
+    }
+  }
   const effectiveRunId = runId || window.__DR_RESOLVED_RUN_ID__ || 0;
   if (DEBUG) console.log("[DR] effectiveRunId", effectiveRunId);
   if (effectiveRunId) {
@@ -164,7 +186,11 @@
         if (!map.has(rid)) map.set(rid, []);
         map.get(rid).push(a);
       });
-      map.forEach((items, rid) => byRec.push({ rid, items }));
+      map.forEach((items, rid) => {
+        if (isHiddenRecipientId(rid)) return;
+        if (shouldHideRecipient(items)) return;
+        byRec.push({ rid, items });
+      });
       // Summary
       const recCount = byRec.length;
       const itemCount = byRec.reduce(
@@ -188,6 +214,9 @@
   } else {
     // Fallback: explicit recipient_ids
     for (const rid of recipientIds) {
+      if (isHiddenRecipientId(rid)) {
+        continue;
+      }
       try {
         const perUrl = `${API_BASE_URL}/allocations/index.php?action=list_by_recipient&recipient_id=${encodeURIComponent(
           rid
@@ -202,6 +231,9 @@
         if (!res.ok || !j?.success)
           throw new Error(j?.error || `HTTP ${res.status}`);
         const items = Array.isArray(j?.data?.items) ? j.data.items : [];
+        if (shouldHideRecipient(items)) {
+          return;
+        }
         byRec.push({ rid, items });
       } catch (e) {
         byRec.push({ rid, items: [], error: e?.message || "Failed" });

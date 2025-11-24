@@ -132,6 +132,17 @@
     }
   }
 
+  function isHiddenRecipientId(rid){
+    try {
+      if (!(recipientMeta instanceof Map) || recipientMeta.size === 0) return false;
+      const m = recipientMeta.get(Number(rid)) || {};
+      const org = String(m.organization_name || m.display_name || m.full_name || m.name || '').trim().toLowerCase();
+      const tags = String(m.tags || '').toLowerCase();
+      if (org === 'foodbank (on-site)') return true;
+      return /(^|[^a-z])hidden([^a-z]|$)/.test(tags);
+    } catch(_) { return false; }
+  }
+
   async function resolveLatestRunId(){
     try {
       if (!runs.length){
@@ -275,7 +286,7 @@
     allocations.forEach(row => {
       const status = String(row.status || '').toLowerCase();
       const canPickup = status === 'acknowledged';
-      const pickupActionVisible = !(status === 'picked up' || status === 'completed');
+      const pickupActionVisible = !(status === 'picked up' || status === 'completed' || status === 'cancelled');
       const showProofButtons = status === 'picked up' || status === 'completed';
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -432,7 +443,9 @@
       }
       const rows = Array.isArray(j?.data?.items) ? j.data.items : [];
       if (DEBUG) console.debug('Raw API response rows:', rows);
-      rawAllocations = rows.map(row => enrichAllocation(row, runId));
+      rawAllocations = rows
+        .map(row => enrichAllocation(row, runId))
+        .filter(r => !isHiddenRecipientId(r.recipient_id));
       if (DEBUG) console.debug('Enriched allocations:', rawAllocations);
       allocations = applyFilters(rawAllocations);
       if (DEBUG) console.debug('Filtered allocations:', allocations);

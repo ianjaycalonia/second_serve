@@ -110,10 +110,11 @@
     // Destination for anchor: adjust per notification type
     let anchorHref = null;
     if (shouldLinkToAllocation) {
+      const isCancellation = (t === 'allocation_cancelled');
       if (role === 'recipient') {
         anchorHref = 'ReceivedItems.html';
       } else {
-        anchorHref = 'DistributionPickup.html';
+        anchorHref = isCancellation ? 'DistributeItems.html' : 'DistributionPickup.html';
       }
     } else if (t === 'schedule_event_created' || (n.reference_type && n.reference_type.toLowerCase() === 'schedule_event')) {
       anchorHref = 'Schedule.html';
@@ -222,7 +223,9 @@
           } else if (!dest && nType === 'data_missing') {
             if (role === 'admin') dest = 'taxonomy.html#assignment';
           } else if (!dest && nType.startsWith('allocation_')) {
-            dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributionPickup.html';
+            const isCancellation = nType === 'allocation_cancelled';
+            if (role === 'recipient') dest = 'ReceivedItems.html';
+            else dest = isCancellation ? 'DistributeItems.html' : 'DistributionPickup.html';
           } else if (!dest && nType === 'schedule_event_created') {
             dest = 'Schedule.html';
           } else if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) {
@@ -231,7 +234,10 @@
           }
           // Fallbacks by reference_type if not set above
           if (!dest && refType === 'schedule_event') dest = 'Schedule.html';
-          if (!dest && refType === 'allocation') dest = role === 'recipient' ? 'ReceivedItems.html' : 'DistributionPickup.html';
+          if (!dest && refType === 'allocation') {
+            if (role === 'recipient') dest = 'ReceivedItems.html';
+            else dest = (nType === 'allocation_cancelled') ? 'DistributeItems.html' : 'DistributionPickup.html';
+          }
           if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
           if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
           if (!dest && refType === 'user' && role === 'admin') {

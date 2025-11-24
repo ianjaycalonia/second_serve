@@ -46,26 +46,6 @@
         </div>
         <div class="nav-icons">
           <a
-            class="nav-link position-relative"
-            href="#"
-            data-bs-toggle="modal"
-            data-bs-target="#notificationsModal"
-            aria-label="Open notifications"
-          >
-            <img
-              class="bell-icon"
-              src="images/bell.gif"
-              alt="Bell"
-              width="40"
-              height="40"
-            />
-
-            <span
-              id="notificationsBadge"
-              class="position-absolute badge-message rounded-pill bg-danger"
-            ></span>
-          </a>
-          <a
             class="nav-link"
             href="#"
             data-bs-toggle="modal"
@@ -348,13 +328,34 @@
 
       <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
         <h5 class="mb-0">Distribution Result</h5>
-        <div class="d-flex gap-2">
-          <button class="btn btn-sm btn-primary" id="saveChangesBtn">
-            <i class="bi bi-save"></i> Save Changes
-          </button>
-          <button class="btn btn-sm btn-warning" id="notifyRunBtn">
-            <i class="bi bi-megaphone"></i> Notify All
-          </button>
+        <div class="d-flex align-items-center gap-3">
+          <a
+            class="nav-link position-relative p-0"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="36"
+              height="36"
+            />
+            <span
+              id="notificationsBadge"
+              class="position-absolute badge-message rounded-pill bg-danger"
+            ></span>
+          </a>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-primary" id="saveChangesBtn">
+              <i class="bi bi-save"></i> Save Changes
+            </button>
+            <button class="btn btn-sm btn-warning" id="notifyRunBtn">
+              <i class="bi bi-megaphone"></i> Notify All
+            </button>
+          </div>
         </div>
       </div>
 

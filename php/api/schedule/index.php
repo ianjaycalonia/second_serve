@@ -371,7 +371,7 @@ try {
         }
 
         // Notify recipients about this new schedule event
-        if ($eventType === 'recipient'){
+        if ($eventType === 'recipient' && strtolower((string)$role) !== 'recipient'){
             $notifyIds = $recipientIds;
             if (!$notifyIds && $primaryRecipientId){
                 $notifyIds = [$primaryRecipientId];
@@ -404,26 +404,78 @@ try {
                 }
             }
         }
-
-        // Notify donor if event targets a donor
+        
         if ($donorId){
+            $actorIsDonor = (strtolower((string)$role) === 'donor' && (int)$donorId === $currentId);
+            if (!$actorIsDonor) {
+                try {
+                    $notifSvc = isset($notifSvc) && $notifSvc instanceof Notification ? $notifSvc : new Notification();
+                    $message = sprintf(
+                        '%s scheduled for %s%s.',
+                        $title ?: 'Donor pickup',
+                        $formattedStart,
+                        $location ? ' at '.$location : ''
+                    );
+                    $notifSvc->create([
+                        'user_id' => $donorId,
+                        'type' => 'schedule_event_created',
+                        'reference_type' => 'schedule_event',
+                        'reference_id' => $id,
+                        'message' => $message
+                    ]);
+                } catch (Exception $e) {
+                    error_log('Failed to create donor schedule notification: '.$e->getMessage());
+                }
+            }
+        }
+
+        // Notify all approved admins when a donor or recipient creates a schedule
+        if (in_array(strtolower((string)$role), ['donor','recipient'], true)) {
             try {
-                $notifSvc = isset($notifSvc) && $notifSvc instanceof Notification ? $notifSvc : new Notification();
-                $message = sprintf(
-                    '%s scheduled for %s%s.',
-                    $title ?: 'Donor pickup',
-                    $formattedStart,
-                    $location ? ' at '.$location : ''
-                );
-                $notifSvc->create([
-                    'user_id' => $donorId,
-                    'type' => 'schedule_event_created',
-                    'reference_type' => 'schedule_event',
-                    'reference_id' => $id,
-                    'message' => $message
-                ]);
+                $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll();
             } catch (Exception $e) {
-                error_log('Failed to create donor schedule notification: '.$e->getMessage());
+                $admins = [];
+            }
+            if ($admins) {
+                // Identify actor display
+                $actorDisplay = '';
+                try {
+                    $u = $db->query(
+                        "SELECT u.name, COALESCE(dp.organization_name, rp.organization_name, ap.organization_name) AS org
+                         FROM users u
+                         LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                         LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
+                         LEFT JOIN admin_profiles ap ON ap.user_id = u.user_id
+                         WHERE u.user_id = ?",
+                        [ $currentId ]
+                    )->fetch();
+                    if ($u) {
+                        if (!empty($u['org'])) { $actorDisplay = $u['org']; }
+                        elseif (!empty($u['name'])) { $actorDisplay = $u['name']; }
+                    }
+                } catch (Exception $e) {
+                    // ignore actor lookup failure
+                }
+                $who = $actorDisplay !== '' ? $actorDisplay : ucfirst(strtolower((string)$role));
+                $adminMsg = sprintf('%s created a schedule for %s%s.', $who, $formattedStart, $location ? ' at '.$location : '');
+                try {
+                    $notifSvc = isset($notifSvc) && $notifSvc instanceof Notification ? $notifSvc : new Notification();
+                    foreach ($admins as $admin) {
+                        try {
+                            $notifSvc->create([
+                                'user_id' => (int)$admin['user_id'],
+                                'type' => 'schedule_event_created',
+                                'reference_type' => 'schedule_event',
+                                'reference_id' => $id,
+                                'message' => $adminMsg
+                            ]);
+                        } catch (Exception $e) {
+                            error_log('Failed to create admin schedule notification: '.$e->getMessage());
+                        }
+                    }
+                } catch (Exception $e) {
+                    error_log('Notification service unavailable for admin alerts: '.$e->getMessage());
+                }
             }
         }
 
