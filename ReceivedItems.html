@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Received Items</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <link rel="stylesheet" href="scripts/css/receivedItems.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body class="sidebar-collapsed">
+    <nav>
+      <div class="nav-items">
+        <div class="toggle">
+          <button id="sidebarToggle" class="btn">
+            <i class="bi bi-list fs-4"></i>
+          </button>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
+          <div class="brand d-none d-md-block">
+            Second Serve by <span>Simply</span><span>Share</span>
+          </div>
+        </div>
+        <div class="nav-icons">
+          <a
+            class="nav-link position-relative"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
+
+            <span
+              id="notificationsBadge"
+              class="position-absolute badge-message rounded-pill bg-danger"
+            ></span>
+          </a>
+          <a
+            class="nav-link"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span id="messagesBadge" class="badge bg-danger d-none">0</span>
+          </a>
+
+          <div class="dropdown">
+            <a
+              class="nav-link d-flex align-items-center dashboard-icon"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <img
+                src="images/profile.png"
+                alt="Dashboard Icon"
+                width="25"
+                height="25"
+              />
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li>
+                <a class="dropdown-item" href="recipientProfile.html">
+                  <i class="bi bi-person me-2"></i>Profile
+                </a>
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#">
+                  <i class="bi bi-box-arrow-right me-2"></i>Logout
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="sidebar-backdrop"></div>
+
+    <aside class="sidebar collapsed"></aside>
+
+    <!-- Main Content -->
+    <main>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="recipientDashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">
+            Received Items
+          </li>
+        </ol>
+      </div>
+
+      <!-- Donation Log Table Only (KPIs removed as requested) -->
+      <div class="card card-accent p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6>Received Items Log</h6>
+
+          <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center search-box">
+              <input
+                type="text"
+                id="donationSearch"
+                class="form-control form-control-sm"
+                placeholder="Search..."
+                aria-label="Search"
+              />
+            </div>
+            <div class="dropdown">
+              <button
+                class="dropdown-toggle"
+                type="button"
+                id="filtersDropdownBtn"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="false"
+                aria-expanded="false"
+              >
+                <i class="bi bi-funnel-fill fs-5"></i>
+              </button>
+              <div class="dropdown-menu">
+                <form id="filterForm" class="px-3 py-2">
+                  <h5>Filter by</h5>
+
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label class="form-label mb-1">Allocation Date</label>
+                      <div class="row g-3 date-range-inputs">
+                        <div class="col-6">
+                          <label for="fromDate" class="form-label">From</label>
+
+                          <input
+                            type="date"
+                            id="fromDate"
+                            class="form-control form-control-sm"
+                          />
+                        </div>
+
+                        <div class="col-6">
+                          <label for="toDate" class="form-label">To</label>
+
+                          <input
+                            type="date"
+                            id="toDate"
+                            class="form-control form-control-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        class="d-flex justify-content-between align-items-center mt-3"
+                        id="quickRangeBtns"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm flex-fill me-1"
+                          data-range="today"
+                        >
+                          Today
+                        </button>
+
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm flex-fill mx-1"
+                          data-range="week"
+                        >
+                          This Week
+                        </button>
+
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm flex-fill ms-1"
+                          data-range="month"
+                        >
+                          This Month
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="col-12">
+                      <label class="form-label mb-1" for="filterStatusSelect"
+                        >Status</label
+                      >
+                      <select
+                        id="filterStatusSelect"
+                        class="form-select form-select-sm"
+                      >
+                        <option value="" selected>All</option>
+                        <option value="pending">Pending</option>
+                        <option value="picked_up">
+                          Picked Up (Needs Confirmation)
+                        </option>
+                        <option value="completed">Completed / Verified</option>
+                      </select>
+                    </div>
+
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="filterPickupSelect"
+                        >Pickup Date</label
+                      >
+                      <select
+                        id="filterPickupSelect"
+                        class="form-select form-select-sm"
+                      >
+                        <option value="" selected>All</option>
+                        <option value="has_date">Has Date</option>
+                        <option value="no_date">No Date</option>
+                      </select>
+                    </div>
+
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="filterPackageSelect"
+                        >Package Type</label
+                      >
+                      <select
+                        id="filterPackageSelect"
+                        class="form-select form-select-sm"
+                      >
+                        <option value="" selected>All</option>
+                        <option value="single">Single Item</option>
+                        <option value="bundled">Bundled (Badge > 1)</option>
+                      </select>
+                    </div>
+                  </div>
+                </form>
+
+                <div class="dropdown-divider"></div>
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
+                >
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    Reset
+                  </button>
+                  <button type="button" class="btn btn-sm btn-primary">
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="dropdown">
+              <button
+                class="dropdown-toggle"
+                type="button"
+                id="sortsDropdownBtn"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="false"
+                aria-expanded="false"
+              >
+                <i class="bi bi-arrow-down-up fs-5"></i>
+              </button>
+              <div class="dropdown-menu">
+                <form id="sortForm" class="px-3 py-2">
+                  <h5>Sort by</h5>
+
+                  <div class="mb-3">
+                    <label class="form-label mb-1" for="sortAllocationDate"
+                      >Allocation Date</label
+                    >
+                    <select
+                      id="sortAllocationDate"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected value="">Default</option>
+                      <option value="desc">Newest First</option>
+                      <option value="asc">Oldest First</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label mb-1" for="sortPackageSize"
+                      >Package Size</label
+                    >
+                    <select
+                      id="sortPackageSize"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected value="">Default</option>
+                      <option value="desc">Largest Bundles First</option>
+                      <option value="asc">Smallest Bundles First</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-0">
+                    <label class="form-label mb-1" for="sortStatus"
+                      >Status</label
+                    >
+                    <select id="sortStatus" class="form-select form-select-sm">
+                      <option selected value="">Default</option>
+                      <option value="asc">Action Required First</option>
+                      <option value="desc">Completed First</option>
+                    </select>
+                  </div>
+                </form>
+
+                <div class="dropdown-divider"></div>
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
+                >
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    Reset
+                  </button>
+                  <button type="button" class="btn btn-sm btn-primary">
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table
+            class="table table-bordered table-sm table-striped align-middle"
+          >
+            <thead class="table-light">
+              <tr>
+                <th>Allocation Date</th>
+                <th>Items Donated</th>
+                <th>Status</th>
+                <th>Pickup Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- Notifications Modal -->
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div id="notificationsList"></div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cancel Allocation Modal -->
+    <div
+      class="modal fade"
+      id="cancelAllocationModal"
+      tabindex="-1"
+      aria-labelledby="cancelAllocationModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="cancelAllocationModalLabel">
+              Cancel Allocation
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <label for="cancelAllocationReason" class="form-label"
+              >Please provide a reason for cancellation</label
+            >
+            <textarea
+              id="cancelAllocationReason"
+              class="form-control"
+              rows="4"
+              placeholder="Type your reason here..."
+            ></textarea>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger"
+              id="confirmCancelAllocationBtn"
+            >
+              Confirm Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Completion Confirm Modal -->
+    <div
+      class="modal fade"
+      id="completeConfirmModal"
+      tabindex="-1"
+      aria-labelledby="completeConfirmModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="completeConfirmModalLabel">
+              Complete Allocation
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            Are you sure you have received the items and want to mark this
+            allocation as completed?
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="confirmCompleteBtn"
+            >
+              Yes, Complete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acknowledge Guidance Modal -->
+    <div
+      class="modal fade"
+      id="acknowledgeChoiceModal"
+      tabindex="-1"
+      aria-labelledby="acknowledgeChoiceModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="acknowledgeChoiceModalLabel">
+              Allocation acknowledged
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-3">Great! How would you like to proceed next?</p>
+            <div class="d-grid gap-2">
+              <button
+                type="button"
+                class="btn btn-primary"
+                id="ackChoiceChatBtn"
+              >
+                Chat the foodbank
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-secondary"
+                id="ackChoiceScheduleBtn"
+              >
+                Go to scheduling
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Messages Modal -->
+    <div
+      class="modal fade"
+      id="messagesModal"
+      tabindex="-1"
+      aria-labelledby="messagesModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="messagesModalLabel">Messages</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Donation Modal -->
+    <div
+      class="modal fade"
+      id="editDonationModal"
+      tabindex="-1"
+      aria-labelledby="editDonationModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="editDonationModalLabel">
+              Edit Donation
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="editDonationForm">
+              <input type="hidden" id="editDonationId" />
+              <div class="mb-3">
+                <label class="form-label">Category</label>
+                <select class="form-select" id="editType">
+                  <option value="Rice">Rice</option>
+                  <option value="Canned Goods">Canned Goods</option>
+                  <option value="Frozen Meat">Frozen Meat</option>
+                  <option value="Bread &amp; Pastries">
+                    Bread &amp; Pastries
+                  </option>
+                  <option value="Beverages">Beverages</option>
+                  <option value="Snacks">Snacks</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Name</label>
+                <select
+                  class="form-select"
+                  id="editNameSelect"
+                  data-placeholder="Search or type new"
+                  required
+                ></select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Quantity</label>
+                <input
+                  type="number"
+                  min="1"
+                  class="form-control"
+                  id="editQuantity"
+                  required
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Expiry Date</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  id="editExpiry"
+                  required
+                />
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="saveEditDonationBtn"
+            >
+              Save changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cancel Donation Modal -->
+    <div
+      class="modal fade"
+      id="cancelDonationModal"
+      tabindex="-1"
+      aria-labelledby="cancelDonationModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="cancelDonationModalLabel">
+              Cancel Donation
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="cancelDonationId" />
+            <input type="hidden" id="cancelBatchId" />
+            <div class="mb-3">
+              <label class="form-label">Reason for cancellation</label>
+              <textarea
+                id="cancelDonationReason"
+                class="form-control"
+                rows="4"
+                placeholder="Please provide a reason"
+                required
+              ></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger"
+              id="confirmCancelDonationBtn"
+            >
+              Confirm Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success Confirmation Modal -->
+    <div
+      class="modal fade"
+      id="successModal"
+      tabindex="-1"
+      aria-labelledby="successModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="successModalLabel">Success</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div id="successModalMessage">Action completed successfully.</div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-primary"
+              data-bs-dismiss="modal"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Batch Modal -->
+    <div
+      class="modal fade"
+      id="editBatchModal"
+      tabindex="-1"
+      aria-labelledby="editBatchModalLabel"
+      aria-hidden="true"
+    >
+      <div
+        class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"
+      >
+        <div class="modal-content rounded-3 shadow">
+          <div class="modal-header border-0 pb-0">
+            <div>
+              <h5 class="modal-title" id="editBatchModalLabel">Edit Batch</h5>
+              <div class="text-muted small">
+                Update the category and items in this batch. Expiry date is
+                required for all.
+              </div>
+            </div>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body pt-3">
+            <input type="hidden" id="editBatchId" />
+            <div class="row g-3 mb-3">
+              <div class="col-12 col-md-6">
+                <label for="editBatchCategory" class="form-label"
+                  >Category</label
+                >
+                <select id="editBatchCategory" class="form-select" required>
+                  <option value="Rice">Rice</option>
+                  <option value="Canned Goods">Canned Goods</option>
+                  <option value="Frozen Meat">Frozen Meat</option>
+                  <option value="Bread &amp; Pastries">
+                    Bread &amp; Pastries
+                  </option>
+                  <option value="Beverages">Beverages</option>
+                  <option value="Snacks">Snacks</option>
+                </select>
+              </div>
+            </div>
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label mb-0">Batch Items</label>
+              <button
+                type="button"
+                id="addBatchItemBtn"
+                class="btn btn-sm btn-outline-primary"
+              >
+                <i class="bi bi-plus-circle me-1"></i> Add Item
+              </button>
+            </div>
+            <div class="text-muted small mb-2">
+              Edit each item's name, quantity, and expiry date. Use the search
+              box for names.
+            </div>
+            <div
+              id="batchItemsContainer"
+              class="d-flex flex-column gap-3"
+            ></div>
+          </div>
+          <div class="modal-footer border-0 pt-0">
+            <div class="me-auto text-muted small">
+              Changes apply to the entire batch.
+            </div>
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              id="submitBatchEditBtn"
+              class="btn btn-warning"
+            >
+              Save Batch
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <!-- Shared config and API modules -->
+    <script src="scripts/js/config/constants.js?v=20250925"></script>
+    <script src="scripts/js/api/http.js?v=20250925"></script>
+    <script src="scripts/js/api/communications.js?v=20250925"></script>
+    <script src="scripts/js/api/allocations.js?v=20250925"></script>
+    <!-- Custom scripts -->
+    <script src="scripts/js/utils/auth.js"></script>
+    <script src="scripts/js/ui/messages.js"></script>
+    <script src="scripts/js/ui/notifications.js"></script>
+    <script src="scripts/js/ui/recipientReceivedItems.js"></script>
+    <script src="scripts/js/ui/sidebar.js"></script>
+    <script src="scripts/js/ui/dropdownFilters.js"></script>
+    <script src="scripts/js/ui/animatedMessage.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
+
+    <!-- Toast for feedback messages -->
+    <div
+      aria-live="polite"
+      aria-atomic="true"
+      class="position-relative received-toast-wrapper"
+    >
+      <div
+        class="toast-container position-fixed top-0 end-0 p-3 received-toast-container"
+      >
+        <div
+          id="feedbackToast"
+          class="toast text-bg-success"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          data-bs-delay="6000"
+        >
+          <div class="toast-body">Action completed.</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

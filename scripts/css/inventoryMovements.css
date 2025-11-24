@@ -1,0 +1,16 @@
+@import url(tableLayout.css);
+
+/* Inventory Movements filter widths (moved from inline styles in InventoryMovements.html) */
+.mv-filter-select {
+  width: 140px;
+}
+
+.mv-filter-direction,
+.mv-filter-mode {
+  width: 160px;
+}
+
+/* Page size control wrapper */
+.mv-page-size-wrap {
+  min-width: 120px;
+}

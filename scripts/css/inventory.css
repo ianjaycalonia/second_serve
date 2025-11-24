@@ -1,0 +1,211 @@
+@import url(globals.css);
+@import url(tableLayout.css);
+@import url(dropdownOptions.css);
+
+.import-inventory-btn {
+  border: none;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background-color: var(--secondary-color);
+    filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.5));
+    transform: scale(1) translateY(-2px);
+    cursor: pointer;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Repack Run Modal Enhancements                                              */
+/* -------------------------------------------------------------------------- */
+
+.repack-run-controls .card-body {
+  background: linear-gradient(
+    135deg,
+    rgba(64, 123, 255, 0.06),
+    rgba(255, 255, 255, 0.9)
+  );
+  border-radius: 0.85rem;
+}
+
+.repack-run-subhead {
+  max-width: 420px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.repack-field-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--secondary-color, #42526e);
+}
+
+.repack-run-quantity-hint {
+  position: absolute;
+  bottom: -1.5rem;
+  right: 0;
+  font-size: 0.72rem;
+}
+
+.repack-run-note {
+  resize: vertical;
+  min-height: 38px;
+  max-height: 96px;
+}
+
+.repack-summary-card .card-body {
+  border-radius: 0.85rem;
+  background-color: #fff;
+}
+
+.repack-summary-card dl {
+  row-gap: 0.35rem;
+}
+
+.repack-summary-card dt {
+  color: var(--secondary-color, #5c5f6a);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+.repack-summary-card dd {
+  font-weight: 600;
+  color: var(--primary-color, #0d6efd);
+}
+
+.repack-components-table-wrap {
+  max-height: 340px;
+  overflow-y: auto;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(13, 110, 253, 0.08);
+}
+
+.repack-components-table-wrap table {
+  margin-bottom: 0;
+}
+
+.repack-components-table-wrap tbody tr:hover {
+  background-color: rgba(13, 110, 253, 0.05);
+}
+
+.bg-soft-primary {
+  background-color: rgba(13, 110, 253, 0.12) !important;
+  color: var(--primary-color, #0d6efd) !important;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.75rem;
+}
+
+@media (max-width: 576px) {
+  .repack-run-quantity-hint {
+    position: static;
+    display: block;
+    margin-top: 0.35rem;
+  }
+
+  .repack-run-controls .card-body {
+    padding: 1.25rem 1rem;
+  }
+}
+
+/* Inventory layout helpers (moved from inline styles) */
+.inventory-toast-container {
+  z-index: 12000 !important;
+}
+
+.inventory-toast-container .toast {
+  z-index: 12001 !important;
+}
+
+.inventory-page-control {
+  min-width: 120px;
+}
+
+.inventory-import-preview {
+  max-height: 300px;
+}
+
+.repack-template-list {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.repack-lot-table-wrapper {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.repack-ops-table-wrapper {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+/* OCR status + preview (hidden by default; JS will show/hide) */
+#ocrStatus,
+#ocrPreview {
+  display: none;
+}
+
+.ocr-preview-table th.ocr-col-item {
+  width: 70%;
+}
+
+.ocr-preview-table th.ocr-col-qty {
+  width: 20%;
+}
+
+.ocr-preview-table th.ocr-col-actions {
+  width: 10%;
+}
+
+/* Lot details modal column widths */
+.lot-col-id {
+  width: 12%;
+}
+
+.lot-col-qty {
+  width: 14%;
+}
+
+.lot-col-unit {
+  width: 12%;
+}
+
+.lot-col-added {
+  width: 22%;
+}
+
+.lot-col-expiry {
+  width: 20%;
+}
+
+.lot-col-status {
+  width: 20%;
+}
+
+#donationTabs {
+  .nav-link {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--header-text-color);
+    border: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+
+    &:hover {
+      color: var(--primary-color);
+      border-bottom: 2px solid var(--primary-color);
+      cursor: pointer;
+    }
+
+    &.active {
+      color: var(--primary-color);
+      background-color: transparent;
+      border-bottom: 2px solid var(--primary-color);
+    }
+  }
+}

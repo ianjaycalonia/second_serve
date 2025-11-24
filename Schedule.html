@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Schedule</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
+    />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="scripts/css/schedule.css" />
+  </head>
+  <body class="sidebar-collapsed">
+    <nav>
+      <div class="nav-items">
+        <div class="toggle">
+          <button id="sidebarToggle" class="btn">
+            <i class="bi bi-list fs-4"></i>
+          </button>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
+          <div class="brand d-none d-md-block">
+            Second Serve by <span>Simply</span><span>Share</span>
+          </div>
+        </div>
+        <div class="nav-icons">
+          <a
+            class="nav-link position-relative"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
+
+            <span
+              id="notificationsBadge"
+              class="position-absolute badge-message rounded-pill bg-danger"
+            ></span>
+          </a>
+          <a
+            class="nav-link"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span
+              id="messagesBadge"
+              class="badge bg-danger d-none"
+              >0</span
+            >
+          </a>
+
+          <div class="dropdown">
+            <a
+              class="nav-link d-flex align-items-center dashboard-icon"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <img
+                src="images/profile.png"
+                alt="Dashboard Icon"
+                width="25"
+                height="25"
+              />
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" id="accountMenu">
+              <li>
+                <a class="dropdown-item" href="adminProfile.html">
+                  <i class="bi bi-person me-2"></i>Profile
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="adminSettings.html">
+                  <i class="bi bi-gear me-2"></i>Settings
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="taxonomy.html">
+                  <i class="bi bi-tags me-2"></i>Categories
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="InventoryMovements.html">
+                  <i class="bi bi-arrow-left-right me-2"></i>Movements
+                </a>
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#">
+                  <i class="bi bi-box-arrow-right me-2"></i>Logout
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar collapsed" data-role-pending="1">
+      <a
+        href="AdminDashboard.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Dashboard"
+      >
+        <img
+          src="images/home.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+
+        <span class="sidebar-text">Dashboard</span>
+      </a>
+      <a
+        href="Donation.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donations"
+      >
+        <img
+          src="images/values.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donation</span>
+      </a>
+
+      <a
+        href="DistributionPickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
+      </a>
+
+      <div class="nav-item position-relative">
+        <a
+          href="#distributionMenu"
+          class="nav-link active d-flex align-items-center sidebar-tooltip dashboard-link"
+          data-bs-toggle="collapse"
+          aria-expanded="false"
+          aria-controls="distributionMenu"
+          data-bs-placement="right"
+          data-bs-custom-class="custom-tooltip"
+          data-bs-title="Distribution"
+        >
+          <span class="d-flex align-items-center">
+            <img
+              src="images/diagram.gif"
+              alt="Dashboard Icon"
+              class="dashboard-icon"
+              width="35"
+              height="35"
+            />
+            <span class="sidebar-text">Distribution</span>
+          </span>
+        </a>
+        <div class="collapse" id="distributionMenu">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
+            <li class="nav-item">
+              <a class="nav-link" href="RecipientsList.html">
+                <img
+                  src="images/checklist.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Recipients List
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="DistributeItems.html">
+                <img
+                  src="images/diagram.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Allocation
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="DistributeResult.html">
+                <img
+                  src="images/business (1).gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Result
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <a
+        href="Donors.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Donors"
+      >
+        <img
+          src="images/employee.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donors</span>
+      </a>
+      <a
+        href="Recipient.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Recipients"
+      >
+        <img
+          src="images/leader.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Recipients</span>
+      </a>
+      <a
+        href="ReportAndAnalytics.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Reports & Analytics"
+      >
+        <img
+          src="images/business.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Reports & Analytics</span>
+      </a>
+      <a
+        href="Inventory.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Inventory"
+      >
+        <img
+          src="images/available.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Inventory</span>
+      </a>
+      <a
+        href="Schedule.html"
+        class="nav-link active d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
+      </a>
+    </aside>
+    <main>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="AdminDashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">Schedule</li>
+        </ol>
+      </div>
+
+      <div
+        class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3"
+      >
+        <h5 class="mb-0">Schedule Log</h5>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-primary" id="newEventBtn">
+            <i class="bi bi-plus-lg"></i> New Event
+          </button>
+          <button
+            class="btn btn-sm btn-outline-secondary"
+            id="editEventBtn"
+            disabled
+          >
+            <i class="bi bi-pencil-square"></i> Edit Selected
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" id="refreshCalBtn">
+            <i class="bi bi-arrow-clockwise"></i>
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div id="calFeedback" class="small mb-2"></div>
+      <div class="schedule-layout" id="scheduleLayout" data-calendar-min="520">
+        <div class="calendar-pane">
+          <div class="card card-accent p-3 h-100">
+            <div id="calendar"></div>
+          </div>
+        </div>
+        <div
+          class="schedule-resizer"
+          id="scheduleResizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize calendar and event list"
+        ></div>
+        <div class="selected-pane" data-min-width="240" data-max-width="520">
+          <div class="card w-100" id="selectedDayCard">
+            <div class="card-header">
+              <small class="text-muted d-block">Selected date</small>
+              <div id="selectedDayDate" class="fw-semibold">Select a date</div>
+            </div>
+            <div class="card-body flex-grow-1 p-0">
+              <ul class="list-group list-group-flush" id="selectedDayList">
+                <li class="list-group-item text-center text-muted py-3">
+                  Click any date on the calendar to view events.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Calendar Alert Modal -->
+    <div
+      class="modal fade"
+      id="calAlertModal"
+      tabindex="-1"
+      aria-labelledby="calAlertModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="calAlertModalLabel">Notice</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body" id="calAlertBody">Done.</div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event View Modal -->
+    <div
+      class="modal fade"
+      id="eventViewModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Event Details</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body" id="eventViewBody">
+            <div class="mb-3">
+              <h5 id="viewEventTitle" class="mb-1">&nbsp;</h5>
+              <span class="badge bg-secondary" id="viewEventType">&nbsp;</span>
+              <span
+                class="badge bg-light text-dark"
+                id="viewEventStatus"
+              ></span>
+            </div>
+            <dl class="row small mb-0">
+              <dt
+                class="col-4 text-muted"
+                data-view-row="start"
+                data-view-label="start"
+                data-default-label="Start"
+              >
+                Start
+              </dt>
+              <dd class="col-8" id="viewEventStart" data-view-row="start">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="end"
+                data-view-label="end"
+                data-default-label="End"
+              >
+                End
+              </dt>
+              <dd class="col-8" id="viewEventEnd" data-view-row="end">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="recipients"
+                data-view-label="recipients"
+                data-default-label="Recipients"
+              >
+                Recipients
+              </dt>
+              <dd
+                class="col-8"
+                id="viewEventRecipients"
+                data-view-row="recipients"
+              >
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="donor"
+                data-view-label="donor"
+                data-default-label="Donor"
+              >
+                Donor
+              </dt>
+              <dd class="col-8" id="viewEventDonor" data-view-row="donor">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="location"
+                data-view-label="location"
+                data-default-label="Location"
+              >
+                Location
+              </dt>
+              <dd class="col-8" id="viewEventLocation" data-view-row="location">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="notes"
+                data-view-label="notes"
+                data-default-label="Notes"
+              >
+                Notes
+              </dt>
+              <dd class="col-8" id="viewEventNotes" data-view-row="notes">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="created"
+                data-view-label="created"
+                data-default-label="Created By"
+              >
+                Created By
+              </dt>
+              <dd class="col-8" id="viewEventCreatedBy" data-view-row="created">
+                &nbsp;
+              </dd>
+              <dt
+                class="col-4 text-muted"
+                data-view-row="updated"
+                data-view-label="updated"
+                data-default-label="Updated"
+              >
+                Updated
+              </dt>
+              <dd class="col-8" id="viewEventUpdated" data-view-row="updated">
+                &nbsp;
+              </dd>
+            </dl>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Modal -->
+    <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Schedule Event</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="eventForm">
+              <input type="hidden" id="evId" />
+              <div class="mb-2">
+                <label class="form-label mb-1">Event Type</label>
+                <select id="evType" class="form-select form-select-sm">
+                  <option value="admin">Admin event</option>
+                  <option value="donor">Donor Pickup</option>
+                  <option value="recipient">
+                    Recipient availability / pickup
+                  </option>
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label mb-1">Title</label>
+                <input
+                  type="text"
+                  id="evTitle"
+                  class="form-control form-control-sm"
+                  required
+                />
+              </div>
+              <div class="row g-2" id="wrapDateTimeDefault">
+                <div class="col-6 col-lg-4">
+                  <label class="form-label mb-1">Date</label>
+                  <input
+                    type="date"
+                    id="evDate"
+                    class="form-control form-control-sm"
+                    required
+                  />
+                </div>
+                <div class="col-6 col-lg-4">
+                  <label class="form-label mb-1">Start Time</label>
+                  <input
+                    type="time"
+                    id="evStartTime"
+                    class="form-control form-control-sm"
+                    required
+                  />
+                </div>
+                <div class="col-6 col-lg-4">
+                  <label class="form-label mb-1">End Time</label>
+                  <input
+                    type="time"
+                    id="evEndTime"
+                    class="form-control form-control-sm"
+                  />
+                </div>
+              </div>
+              <div class="row g-2 mt-2 align-items-end">
+                <div class="col-6 d-none" id="wrapRecipient">
+                  <label class="form-label mb-1">Recipient</label>
+                  <div class="d-flex gap-2">
+                    <select
+                      id="evRecipientSelect"
+                      class="form-select form-select-sm flex-grow-1 w-100"
+                    ></select>
+                    <button
+                      type="button"
+                      class="btn btn-outline-primary btn-sm"
+                      id="addRecipientBtn"
+                      title="Add recipient to list"
+                    >
+                      <i class="bi bi-plus-lg"></i>
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    id="evRecipient"
+                    class="form-control form-control-sm d-none"
+                    placeholder="optional"
+                  />
+                  <div class="mt-2 small" id="evRecipientTags"></div>
+                </div>
+                <div class="col-6" id="wrapDonor">
+                  <label class="form-label mb-1">Donor</label>
+                  <select
+                    id="evDonorSelect"
+                    class="form-select form-select-sm w-100"
+                  ></select>
+                  <div
+                    class="mt-2 small d-none"
+                    id="evDonorDisplay"
+                  ></div>
+                  <input
+                    type="number"
+                    id="evDonor"
+                    class="form-control form-control-sm d-none"
+                    placeholder="optional"
+                  />
+                </div>
+              </div>
+              <div class="mt-2">
+                <label class="form-label mb-1">Location</label>
+                <input
+                  type="text"
+                  id="evLocation"
+                  class="form-control form-control-sm"
+                  placeholder="e.g., pickup address"
+                />
+              </div>
+              <div class="mt-2">
+                <label class="form-label mb-1">Notes</label>
+                <textarea
+                  id="evNotes"
+                  class="form-control form-control-sm"
+                  rows="3"
+                  placeholder="Include batch/donation details, contact person, etc."
+                ></textarea>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-outline-danger"
+              id="deleteEventBtn"
+            >
+              Delete
+            </button>
+            <button type="button" class="btn btn-primary" id="saveEventBtn">
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notifications Modal (existing shared) -->
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body p-0">
+            <ul id="notificationsList" class="list-group list-group-flush">
+              <li class="list-group-item text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading notifications...</span>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              id="markAllReadBtn"
+            >
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <!-- Shared config and API helpers (Phase 1) -->
+    <script src="scripts/js/config/constants.js?v=20250925"></script>
+    <script src="scripts/js/api/http.js?v=20250925"></script>
+    <script src="scripts/js/api/communications.js?v=20250925"></script>
+    <script src="scripts/js/utils/auth.js"></script>
+    <script src="scripts/js/ui/messages.js"></script>
+    <script src="scripts/js/ui/notifications.js"></script>
+    <script src="scripts/js/charts/adminDashboard.js"></script>
+    <script src="scripts/js/ui/sidebar.js"></script>
+    <script src="scripts/js/ui/scheduleRoleUi.js"></script>
+    <script src="scripts/js/api/schedule.js?v=20250925"></script>
+    <script src="scripts/js/utils/calendar.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    <script src="scripts/js/ui/animatedMessage.js"></script>
+  </body>
+</html>

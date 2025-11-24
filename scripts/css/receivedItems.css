@@ -1,0 +1,23 @@
+@import url(tableLayout.css);
+@import url(dropdownOptions.css);
+
+/* Standardize status badge width for alignment */
+/* td.status-col .badge {
+        display: inline-block;
+        min-width: 110px;
+      } */
+/* Keep a smooth transition on edit buttons; rely on Bootstrap's outline->solid hover */
+.btn.edit-donation,
+.btn.edit-batch {
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
+}
+
+/* Toast wrapper/container for Received Items feedback (moved from inline styles) */
+.received-toast-wrapper {
+  z-index: 1080;
+}
+
+.received-toast-container {
+  z-index: 1090;
+}
