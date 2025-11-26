@@ -331,11 +331,11 @@ class Auth {
         $baseUrl = rtrim(APP_URL, '/');
         switch ($role) {
             case 'admin':
-                return $baseUrl . '/AdminDashboard.html';
+                return $baseUrl . '/admindashboard.html';
             case 'donor':
-                return $baseUrl . '/DonorDashboard.html';
+                return $baseUrl . '/donordashboard.html';
             case 'recipient':
-                return $baseUrl . '/recipientDashboard.html';
+                return $baseUrl . '/recipientdashboard.html';
             default:
                 return $baseUrl . '/index.html';
         }
