@@ -112,12 +112,12 @@
     if (shouldLinkToAllocation) {
       const isCancellation = (t === 'allocation_cancelled');
       if (role === 'recipient') {
-        anchorHref = 'ReceivedItems.html';
+        anchorHref = 'receiveditems.html';
       } else {
-        anchorHref = isCancellation ? 'DistributeItems.html' : 'DistributionPickup.html';
+        anchorHref = isCancellation ? 'distributeitems.html' : 'distributionpickup.html';
       }
     } else if (t === 'schedule_event_created' || (n.reference_type && n.reference_type.toLowerCase() === 'schedule_event')) {
-      anchorHref = 'Schedule.html';
+      anchorHref = 'schedule.html';
     }
     // Use a stretched-link anchor so the whole row is clickable even without JS
     const linkHtml = anchorHref ? `<a href="${anchorHref}" class="stretched-link" aria-label="Open related page"></a>` : '';
@@ -206,42 +206,42 @@
           const user = getStoredUser();
           const role = (user?.role || '').toLowerCase();
           let dest = (li.getAttribute('data-dest') || '').trim() || null;
-          // Admin: new donation => Donation.html
+          // Admin: new donation => donation.html
           if (!dest && nType === 'new_recipient') {
-            dest = role === 'admin' ? 'Recipient.html' : dest;
+            dest = role === 'admin' ? 'recipient.html' : dest;
           } else if (!dest && nType === 'new_donor') {
-            dest = role === 'admin' ? 'Donors.html' : dest;
+            dest = role === 'admin' ? 'donors.html' : dest;
           } else if (!dest && nType === 'donation_created') {
-            dest = 'Donation.html';
+            dest = 'donation.html';
           } else if (!dest && nType === 'status_updated') {
-            // Donors: go to their donations page; Admins: Donation.html
-            if (role === 'donor') dest = 'MyDonations.html';
-            else if (role === 'admin') dest = 'Donation.html';
+            // Donors: go to their donations page; Admins: donation.html
+            if (role === 'donor') dest = 'mydonations.html';
+            else if (role === 'admin') dest = 'donation.html';
           } else if (!dest && nType === 'donation_cancelled') {
-            if (role === 'donor') dest = 'MyDonations.html';
-            else if (role === 'admin') dest = 'Donation.html';
+            if (role === 'donor') dest = 'mydonations.html';
+            else if (role === 'admin') dest = 'donation.html';
           } else if (!dest && nType === 'data_missing') {
             if (role === 'admin') dest = 'taxonomy.html#assignment';
           } else if (!dest && nType.startsWith('allocation_')) {
             const isCancellation = nType === 'allocation_cancelled';
-            if (role === 'recipient') dest = 'ReceivedItems.html';
-            else dest = isCancellation ? 'DistributeItems.html' : 'DistributionPickup.html';
+            if (role === 'recipient') dest = 'receiveditems.html';
+            else dest = isCancellation ? 'distributeitems.html' : 'distributionpickup.html';
           } else if (!dest && nType === 'schedule_event_created') {
-            dest = 'Schedule.html';
+            dest = 'schedule.html';
           } else if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) {
-            // Normalize generic updated notifications to ReceivedItems for recipients
-            if (role === 'recipient' || refType === 'allocation') dest = 'ReceivedItems.html';
+            // Normalize generic updated notifications to receiveditems for recipients
+            if (role === 'recipient' || refType === 'allocation') dest = 'receiveditems.html';
           }
           // Fallbacks by reference_type if not set above
-          if (!dest && refType === 'schedule_event') dest = 'Schedule.html';
+          if (!dest && refType === 'schedule_event') dest = 'schedule.html';
           if (!dest && refType === 'allocation') {
-            if (role === 'recipient') dest = 'ReceivedItems.html';
-            else dest = (nType === 'allocation_cancelled') ? 'DistributeItems.html' : 'DistributionPickup.html';
+            if (role === 'recipient') dest = 'receiveditems.html';
+            else dest = (nType === 'allocation_cancelled') ? 'distributeitems.html' : 'distributionpickup.html';
           }
-          if (!dest && refType === 'donation') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
-          if (!dest && refType === 'batch') dest = (role === 'admin') ? 'Donation.html' : (role === 'donor' ? 'MyDonations.html' : null);
+          if (!dest && refType === 'donation') dest = (role === 'admin') ? 'donation.html' : (role === 'donor' ? 'mydonations.html' : null);
+          if (!dest && refType === 'batch') dest = (role === 'admin') ? 'donation.html' : (role === 'donor' ? 'mydonations.html' : null);
           if (!dest && refType === 'user' && role === 'admin') {
-            dest = nType === 'new_donor' ? 'Donors.html' : (nType === 'new_recipient' ? 'Recipient.html' : dest);
+            dest = nType === 'new_donor' ? 'donors.html' : (nType === 'new_recipient' ? 'recipient.html' : dest);
           }
 
           if (dest) {
@@ -269,12 +269,12 @@
           const nType = (li.getAttribute('data-type') || '').toLowerCase();
           const refType = (li.getAttribute('data-ref-type') || '').toLowerCase();
           let dest = (li.getAttribute('data-dest') || '').trim() || null;
-          if (!dest && nType === 'new_recipient') dest = 'Recipient.html';
-          else if (!dest && nType === 'new_donor') dest = 'Donors.html';
-          else if (!dest && nType.startsWith('allocation_')) dest = 'ReceivedItems.html';
-          else if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) dest = 'ReceivedItems.html';
-          else if (!dest && refType === 'allocation') dest = 'ReceivedItems.html';
-          else if (!dest && (nType === 'schedule_event_created' || refType === 'schedule_event')) dest = 'Schedule.html';
+          if (!dest && nType === 'new_recipient') dest = 'recipient.html';
+          else if (!dest && nType === 'new_donor') dest = 'donors.html';
+          else if (!dest && nType.startsWith('allocation_')) dest = 'receiveditems.html';
+          else if (!dest && (nType === 'updated' || nType === 'allocation updated' || nType === 'status_updated')) dest = 'receiveditems.html';
+          else if (!dest && refType === 'allocation') dest = 'receiveditems.html';
+          else if (!dest && (nType === 'schedule_event_created' || refType === 'schedule_event')) dest = 'schedule.html';
           if (dest) {
             try {
               const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);

@@ -59,7 +59,7 @@
     if (lower === "donor") {
       body = `
         <li>
-          <a class="dropdown-item" href="donorProfile.html">
+          <a class="dropdown-item" href="donorprofile.html">
             <i class="bi bi-person me-2"></i>Profile
           </a>
         </li>
@@ -72,7 +72,7 @@
     } else if (lower === "recipient") {
       body = `
         <li>
-          <a class="dropdown-item" href="recipientProfile.html">
+          <a class="dropdown-item" href="recipientprofile.html">
             <i class="bi bi-person me-2"></i>Profile
           </a>
         </li>
@@ -88,7 +88,7 @@
 
   const donorSidebarMarkup = () => `
     <a
-      href="DonorDashboard.html"
+      href="donordashboard.html"
       class="nav-link d-flex align-items-center dashboard-link"
       data-bs-toggle="tooltip"
       data-bs-placement="right"
@@ -99,7 +99,7 @@
       <span class="sidebar-text">Dashboard</span>
     </a>
     <a
-      href="MyDonations.html"
+      href="mydonations.html"
       class="nav-link d-flex align-items-center dashboard-link"
       data-bs-toggle="tooltip"
       data-bs-placement="right"
@@ -110,7 +110,7 @@
       <span class="sidebar-text">My Donations</span>
     </a>
     <a
-      href="Schedule.html"
+      href="schedule.html"
       class="nav-link active d-flex align-items-center dashboard-link"
       data-bs-toggle="tooltip"
       data-bs-placement="right"
@@ -123,7 +123,7 @@
 
   const recipientSidebarMarkup = () => `
     <a
-      href="recipientDashboard.html"
+      href="recipientdashboard.html"
       class="nav-link d-flex align-items-center dashboard-link"
       data-bs-toggle="tooltip"
       data-bs-placement="right"
@@ -134,7 +134,7 @@
       <span class="sidebar-text">Dashboard</span>
     </a>
     <a
-      href="ReceivedItems.html"
+      href="receiveditems.html"
       class="nav-link d-flex align-items-center dashboard-link"
       data-bs-toggle="tooltip"
       data-bs-placement="right"
@@ -145,7 +145,7 @@
       <span class="sidebar-text">Received Items</span>
     </a>
     <a
-      href="Schedule.html"
+      href="schedule.html"
       class="nav-link active d-flex align-items-center dashboard-link"
       data-bs-toggle="tooltip"
       data-bs-placement="right"

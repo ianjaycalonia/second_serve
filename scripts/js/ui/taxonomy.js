@@ -1,6 +1,7 @@
 (function () {
   // Use the flattened project root
-  const API_BASE = "/php/api/taxonomy/index.php";
+  const API_ROOT = (window.API_BASE_URL || "php/api").replace(/^\//, "");
+  const API_BASE = API_ROOT + "/taxonomy/index.php";
 
   function authHeaders() {
     return { "Content-Type": "application/json" };

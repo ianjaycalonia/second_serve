@@ -158,7 +158,7 @@ try {
       if (role === "donor") {
         sidebar.innerHTML = `
           <a
-            href="DonorDashboard.html"
+            href="donordashboard.html"
             class="nav-link d-flex align-items-center dashboard-link"
             data-bs-toggle="tooltip"
             data-bs-placement="right"
@@ -175,7 +175,7 @@ try {
             <span class="sidebar-text">Dashboard</span>
           </a>
           <a
-            href="MyDonations.html"
+            href="mydonations.html"
             class="nav-link d-flex align-items-center dashboard-link"
             data-bs-toggle="tooltip"
             data-bs-placement="right"
@@ -192,7 +192,7 @@ try {
             <span class="sidebar-text">My Donations</span>
           </a>
           <a
-            href="Schedule.html"
+            href="schedule.html"
             class="nav-link d-flex align-items-center dashboard-link"
             data-bs-toggle="tooltip"
             data-bs-placement="right"
@@ -212,7 +212,7 @@ try {
       } else if (role === "recipient") {
         sidebar.innerHTML = `
           <a
-            href="recipientDashboard.html"
+            href="recipientdashboard.html"
             class="nav-link active d-flex align-items-center dashboard-link"
             data-bs-toggle="tooltip"
             data-bs-placement="right"
@@ -229,7 +229,7 @@ try {
             <span class="sidebar-text">Dashboard</span>
           </a>
           <a
-            href="ReceivedItems.html"
+            href="receiveditems.html"
             class="nav-link d-flex align-items-center dashboard-link"
             data-bs-toggle="tooltip"
             data-bs-placement="right"
@@ -246,7 +246,7 @@ try {
             <span class="sidebar-text">Received Items</span>
           </a>
           <a
-            href="Schedule.html"
+            href="schedule.html"
             class="nav-link d-flex align-items-center dashboard-link"
             data-bs-toggle="tooltip"
             data-bs-placement="right"
@@ -426,7 +426,7 @@ try {
       hideTooltips();
       try {
         const hrefRaw = link.getAttribute("href") || "";
-        if (hrefRaw && /(^|\/)DistributeResult\.html(\?|$)/i.test(hrefRaw)) {
+        if (hrefRaw && /(^|\/)distributeresult\.html(\?|$)/i.test(hrefRaw)) {
           const url = new URL(hrefRaw, window.location.href);
           if (!url.searchParams.has("v")) {
             url.searchParams.set("v", String(Date.now()));
