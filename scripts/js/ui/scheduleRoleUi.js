@@ -164,8 +164,12 @@
         .forEach((el) => {
           const existing = root.bootstrap.Tooltip.getInstance(el);
           if (existing) existing.dispose();
+          const cls =
+            (el.closest && el.closest("table"))
+              ? "table-tooltip"
+              : (el.getAttribute && el.getAttribute("data-bs-custom-class")) || "custom-tooltip";
           root.bootstrap.Tooltip.getOrCreateInstance(el, {
-            customClass: "custom-tooltip",
+            customClass: cls,
             container: "body",
             boundary: "viewport",
             fallbackPlacements: ["right", "left", "bottom", "top"],

@@ -987,11 +987,11 @@ if (typeof window.showToast !== "function") {
           <td data-label="Status">${status}</td>
           <td data-label="Actions">
             <div class="dropdown recipient-actions d-inline-flex align-items-center">
-              <a href="#" class="btn btn-outline-primary btn-sm me-1 view-btn" data-user-id="${u.user_id}">
+              <a href="#" class="btn btn-outline-primary btn-sm me-1 view-btn" data-user-id="${u.user_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="View recipient">
                 <i class="bi bi-eye-fill"></i>
               </a>
               <button class="btn btn-link p-0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
-                <i class="bi bi-three-dots-vertical"></i>
+                <i class="bi bi-three-dots-vertical" data-bs-toggle="tooltip" data-bs-placement="top" title="More actions"></i>
               </button>
               ${actionsMenu}
             </div>
@@ -1003,7 +1003,22 @@ if (typeof window.showToast !== "function") {
     // Initialize tooltips for dynamically added action icons
     try{
       const tips = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-      tips.forEach(el => { if (window.bootstrap && bootstrap.Tooltip) bootstrap.Tooltip.getOrCreateInstance(el); });
+      tips.forEach(el => {
+        if (window.bootstrap && bootstrap.Tooltip) {
+          const cls =
+            (el.closest && el.closest("table"))
+              ? "table-tooltip"
+              : (el.getAttribute && el.getAttribute("data-bs-custom-class")) || "custom-tooltip";
+          bootstrap.Tooltip.getOrCreateInstance(el, {
+            customClass: cls,
+            container: "body",
+            boundary: "viewport",
+            fallbackPlacements: ["right", "left", "bottom", "top"],
+            trigger: "hover focus",
+            delay: { show: 150, hide: 50 },
+          });
+        }
+      });
     }catch(_){ }
   }
 

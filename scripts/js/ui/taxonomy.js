@@ -61,6 +61,31 @@
 
   let editingCatId = null;
 
+  function initTableTooltips(root) {
+    try {
+      if (!root || !(window.bootstrap && bootstrap.Tooltip)) return;
+      const els = [].slice.call(root.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      els.forEach((el) => {
+        try {
+          const existing = bootstrap.Tooltip.getInstance(el);
+          if (existing) existing.dispose();
+          const cls =
+            (el.closest && el.closest("table"))
+              ? "table-tooltip"
+              : (el.getAttribute && el.getAttribute("data-bs-custom-class")) || "custom-tooltip";
+          bootstrap.Tooltip.getOrCreateInstance(el, {
+            customClass: cls,
+            container: "body",
+            boundary: "viewport",
+            fallbackPlacements: ["right", "left", "bottom", "top"],
+            trigger: "hover focus",
+            delay: { show: 150, hide: 50 },
+          });
+        } catch (_) {}
+      });
+    } catch (_) {}
+  }
+
   async function loadCategories() {
     if (!catBody) return;
     catBody.innerHTML =
@@ -91,16 +116,17 @@
         <td class="fit-content">
           <button class="btn btn-sm btn-outline-secondary me-1" data-action="cat-edit" data-id="${
             c.category_id
-          }">Edit</button>
+          }" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit category"><i class="bi bi-pencil"></i></button>
           ${
             c.is_active
-              ? `<button class="btn btn-sm btn-outline-danger" data-action="cat-deactivate" data-id="${c.category_id}">Deactivate</button>`
-              : `<button class="btn btn-sm btn-outline-success" data-action="cat-activate" data-id="${c.category_id}">Activate</button>`
+              ? `<button class="btn btn-sm btn-outline-danger" data-action="cat-deactivate" data-id="${c.category_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate category"><i class="bi bi-slash-circle"></i></button>`
+              : `<button class="btn btn-sm btn-outline-success" data-action="cat-activate" data-id="${c.category_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate category"><i class="bi bi-check-circle"></i></button>`
           }
         </td>
       </tr>`
         )
         .join("");
+      initTableTooltips(catBody);
     } catch (err) {
       catBody.innerHTML =
         '<tr><td colspan="5" class="text-danger py-3">Failed to load categories</td></tr>';
@@ -150,16 +176,17 @@
         <td class="fit-content">
           <button class="btn btn-sm btn-outline-secondary me-1" data-action="unit-edit" data-id="${
             u.unit_id
-          }">Edit</button>
+          }" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit unit"><i class="bi bi-pencil"></i></button>
           ${
             u.is_active
-              ? `<button class="btn btn-sm btn-outline-danger" data-action="unit-deactivate" data-id="${u.unit_id}">Deactivate</button>`
-              : `<button class="btn btn-sm btn-outline-success" data-action="unit-activate" data-id="${u.unit_id}">Activate</button>`
+              ? `<button class="btn btn-sm btn-outline-danger" data-action="unit-deactivate" data-id="${u.unit_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate unit"><i class="bi bi-slash-circle"></i></button>`
+              : `<button class="btn btn-sm btn-outline-success" data-action="unit-activate" data-id="${u.unit_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate unit"><i class="bi bi-check-circle"></i></button>`
           }
         </td>
       </tr>`
         )
         .join("");
+      initTableTooltips(unitBody);
     } catch (err) {
       unitBody.innerHTML =
         '<tr><td colspan="4" class="text-danger py-3">Failed to load units</td></tr>';
@@ -382,13 +409,13 @@
           const unitLabel = item.unit_label || item.unit_code || "—";
           const totalWeight = item.total_weight_kg != null ? Number(item.total_weight_kg) : null;
           const editBtn = item.sample_donation_item_id
-            ? `<button type="button" class="btn btn-sm btn-outline-primary" data-action="assign-edit" data-id="${item.sample_donation_item_id}">
+            ? `<button type="button" class="btn btn-sm btn-outline-primary" data-action="assign-edit" data-id="${item.sample_donation_item_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit metadata">
                 <i class="bi bi-pencil"></i>
               </button>`
             : "";
           const removeBtn = `<button type="button" class="btn btn-sm btn-outline-danger" data-action="assign-remove" data-product="${escapeHtml(
             item.product_name || ""
-          )}"><i class="bi bi-trash"></i></button>`;
+          )}" data-bs-toggle="tooltip" data-bs-placement="top" title="Remove incomplete entries"><i class="bi bi-trash"></i></button>`;
           return `
             <tr class="${rowClass}">
               <td>${escapeHtml(item.product_name || "—")}</td>
@@ -411,6 +438,8 @@
         .join("");
       assignmentBody.innerHTML = rows;
       updatePaginationUI(total, page, pageSize);
+
+      initTableTooltips(assignmentBody);
 
       Array.from(assignmentBody.querySelectorAll('button[data-action="assign-edit"]')).forEach((btn) => {
         btn.addEventListener("click", () => {

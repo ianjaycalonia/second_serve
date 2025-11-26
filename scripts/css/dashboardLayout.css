@@ -199,6 +199,11 @@ aside::-webkit-scrollbar {
   --bs-tooltip-color: var(--highlight-color);
 }
 
+.table-tooltip {
+  --bs-tooltip-bg: #000;
+  --bs-tooltip-color: var(--highlight-color);
+}
+
 aside.collapsed {
   width: 60px;
   min-width: 60px;

@@ -14,6 +14,30 @@ document.addEventListener("DOMContentLoaded", () => {
   const backdrop = document.querySelector(".sidebar-backdrop");
   const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
 
+  try {
+    const bell = document.querySelector(".bell-icon");
+    if (bell) {
+      bell.setAttribute("data-bs-toggle", "tooltip");
+      bell.setAttribute("data-bs-placement", "bottom");
+      bell.setAttribute("data-bs-title", "Notifications");
+      bell.setAttribute("data-bs-custom-class", "custom-tooltip");
+    }
+    const letter = document.querySelector(".letter-icon");
+    if (letter) {
+      letter.setAttribute("data-bs-toggle", "tooltip");
+      letter.setAttribute("data-bs-placement", "bottom");
+      letter.setAttribute("data-bs-title", "Messages");
+      letter.setAttribute("data-bs-custom-class", "custom-tooltip");
+    }
+    const profileImg = document.querySelector("nav .dropdown img[src*='profile.png']");
+    if (profileImg) {
+      profileImg.setAttribute("data-bs-toggle", "tooltip");
+      profileImg.setAttribute("data-bs-placement", "bottom");
+      profileImg.setAttribute("data-bs-title", "Account");
+      profileImg.setAttribute("data-bs-custom-class", "custom-tooltip");
+    }
+  } catch (_) {}
+
   const THEME_STORAGE_KEY = "ss_theme";
   const API_BASE_URL =
     typeof window !== "undefined" &&
@@ -302,9 +326,13 @@ try {
       const list = [];
       triggers.forEach((el) => {
         try {
+          const cls =
+            (el.closest && el.closest("table"))
+              ? "table-tooltip"
+              : (el.getAttribute && el.getAttribute("data-bs-custom-class")) || "custom-tooltip";
           list.push(
             new bootstrap.Tooltip(el, {
-              customClass: "custom-tooltip",
+              customClass: cls,
               container: "body",
               boundary: "viewport",
               fallbackPlacements: ["right", "left", "bottom", "top"],

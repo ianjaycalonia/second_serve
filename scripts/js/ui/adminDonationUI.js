@@ -294,7 +294,7 @@
           : showReceipt
           ? (
               hasReceiptImage
-                ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da}>View</button></div>`
+                ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da} title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
                 : '<div class="small text-muted text-center">Imported by an admin</div>'
             )
           : isCancelled && cancel

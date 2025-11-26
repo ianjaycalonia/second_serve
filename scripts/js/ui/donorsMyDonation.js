@@ -6,6 +6,33 @@
       ? window.API_BASE_URL
       : "/php/api";
 
+  function resolveTooltipClass(el) {
+    try {
+      if (!el) return "custom-tooltip";
+      if (el.closest && el.closest("table")) return "table-tooltip";
+      const attr = el.getAttribute && el.getAttribute("data-bs-custom-class");
+      return attr || "custom-tooltip";
+    } catch (_) {
+      return "custom-tooltip";
+    }
+  }
+
+  function createStandardTooltip(el) {
+    try {
+      if (!window.bootstrap || !bootstrap.Tooltip || !el) return null;
+      return new bootstrap.Tooltip(el, {
+        customClass: resolveTooltipClass(el),
+        container: "body",
+        boundary: "viewport",
+        fallbackPlacements: ["right", "left", "bottom", "top"],
+        trigger: "hover focus",
+        delay: { show: 150, hide: 50 },
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
   function badge(status) {
     switch (status) {
       case "Pending":
@@ -290,7 +317,7 @@
         tooltipTriggerList.forEach(function (el) {
           const existing = bootstrap.Tooltip.getInstance(el);
           if (existing) existing.dispose();
-          new bootstrap.Tooltip(el);
+          createStandardTooltip(el);
         });
       } catch (_) {
         /* ignore */
@@ -637,7 +664,7 @@
         // If a tooltip instance already exists, dispose before re-initializing
         const existing = bootstrap.Tooltip.getInstance(el);
         if (existing) existing.dispose();
-        new bootstrap.Tooltip(el);
+        createStandardTooltip(el);
       });
     } catch (_) {
       /* no-op if bootstrap tooltip not available */
@@ -706,9 +733,9 @@
             tip.setContent({ ".tooltip-inner": newTitle });
           } else if (tip) {
             tip.dispose();
-            new bootstrap.Tooltip(batchBtn);
+            createStandardTooltip(batchBtn);
           } else {
-            new bootstrap.Tooltip(batchBtn);
+            createStandardTooltip(batchBtn);
           }
         } catch (_) {
           /* ignore if tooltip not available */
@@ -824,7 +851,7 @@
             if (btn) {
               const existing = bootstrap.Tooltip.getInstance(btn);
               if (existing) existing.dispose();
-              new bootstrap.Tooltip(btn);
+              createStandardTooltip(btn);
             }
           }
         } catch (_) {

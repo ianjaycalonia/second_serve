@@ -610,7 +610,18 @@
           );
           tooltipTriggerList.forEach(function (tooltipTriggerEl) {
             if (window.bootstrap && bootstrap.Tooltip) {
-              bootstrap.Tooltip.getOrCreateInstance(tooltipTriggerEl);
+              const cls =
+                (tooltipTriggerEl.closest && tooltipTriggerEl.closest("table"))
+                  ? "table-tooltip"
+                  : (tooltipTriggerEl.getAttribute && tooltipTriggerEl.getAttribute("data-bs-custom-class")) || "custom-tooltip";
+              bootstrap.Tooltip.getOrCreateInstance(tooltipTriggerEl, {
+                customClass: cls,
+                container: "body",
+                boundary: "viewport",
+                fallbackPlacements: ["right", "left", "bottom", "top"],
+                trigger: "hover focus",
+                delay: { show: 150, hide: 50 },
+              });
             }
           });
         } catch (_) {}

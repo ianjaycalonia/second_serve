@@ -2134,7 +2134,7 @@
       const totalLots = Number(r.total_lots ?? 0);
       const dataAttributes = `data-item-name="${escapeAttr(rawItemName)}" data-category="${escapeAttr(rawCategory)}" data-tags="${escapeAttr(tagsRaw)}" data-total-lots="${escapeAttr(String(totalLots))}"`;
       const lotButton = totalLots > 1
-        ? `<button type="button" class="btn btn-sm btn-outline-info inv-view-lots" ${dataAttributes} title="View lots"><i class="bi bi-eye"></i></button>`
+        ? `<button type="button" class="btn btn-sm btn-outline-info inv-view-lots" ${dataAttributes} title="View lots" data-bs-toggle="tooltip"><i class="bi bi-eye"></i></button>`
         : "";
 
       // Status breakdown is still available in the tooltip on the status badge
@@ -2142,14 +2142,14 @@
       const actions = `
         <div class="dropdown text-center">
           <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
-            <i class="bi bi-three-dots-vertical"></i>
+            <i class="bi bi-three-dots-vertical" data-bs-toggle="tooltip" data-bs-placement="top" title="More actions"></i>
           </button>
           <div class="dropdown-menu p-2 text-center">
             <div class="d-flex align-items-center justify-content-center" style="gap:6px;">
               ${lotButton}
-              <button type="button" class="btn btn-sm btn-outline-warning inv-edit-tags" ${dataAttributes} title="Edit Tags"><i class="bi bi-tags"></i></button>
-              <button type="button" class="btn btn-sm btn-outline-secondary inv-issue-onsite" ${dataAttributes} title="On-site Giveaway"><i class="bi bi-people"></i></button>
-              <button type="button" class="btn btn-sm btn-outline-danger inv-discard" ${dataAttributes} title="Discard"><i class="bi bi-trash"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-warning inv-edit-tags" ${dataAttributes} title="Edit Tags" data-bs-toggle="tooltip"><i class="bi bi-tags"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-secondary inv-issue-onsite" ${dataAttributes} title="On-site Giveaway" data-bs-toggle="tooltip"><i class="bi bi-people"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-danger inv-discard" ${dataAttributes} title="Discard" data-bs-toggle="tooltip"><i class="bi bi-trash"></i></button>
             </div>
           </div>
         </div>`;
@@ -2172,12 +2172,25 @@
     });
     
     tbody.innerHTML = rows.join("");
-    
+
     // Initialize tooltips
-    if (typeof bootstrap !== 'undefined') {
-      const tooltipTriggerList = [].slice.call(tbody.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    if (typeof bootstrap !== "undefined") {
+      const tooltipTriggerList = [].slice.call(
+        tbody.querySelectorAll('[data-bs-toggle="tooltip"]')
+      );
       tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+        const cls =
+          (tooltipTriggerEl.closest && tooltipTriggerEl.closest("table"))
+            ? "table-tooltip"
+            : (tooltipTriggerEl.getAttribute && tooltipTriggerEl.getAttribute("data-bs-custom-class")) || "custom-tooltip";
+        return new bootstrap.Tooltip(tooltipTriggerEl, {
+          customClass: cls,
+          container: "body",
+          boundary: "viewport",
+          fallbackPlacements: ["right", "left", "bottom", "top"],
+          trigger: "hover focus",
+          delay: { show: 150, hide: 50 },
+        });
       });
     }
   }

@@ -1047,7 +1047,20 @@
         const instances = [];
         ttEls.forEach((el) => {
           try {
-            instances.push(new bootstrap.Tooltip(el, { container: "body" }));
+            const cls =
+              (el.closest && el.closest("table"))
+                ? "table-tooltip"
+                : (el.getAttribute && el.getAttribute("data-bs-custom-class")) || "custom-tooltip";
+            instances.push(
+              new bootstrap.Tooltip(el, {
+                customClass: cls,
+                container: "body",
+                boundary: "viewport",
+                fallbackPlacements: ["right", "left", "bottom", "top"],
+                trigger: "hover focus",
+                delay: { show: 150, hide: 50 },
+              })
+            );
           } catch (_) {}
         });
         window.__rl_tooltips = instances;
