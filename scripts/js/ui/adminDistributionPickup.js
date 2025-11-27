@@ -445,7 +445,8 @@
       if (DEBUG) console.debug('Raw API response rows:', rows);
       rawAllocations = rows
         .map(row => enrichAllocation(row, runId))
-        .filter(r => !isHiddenRecipientId(r.recipient_id));
+        .filter(r => !isHiddenRecipientId(r.recipient_id))
+        .filter(r => Array.isArray(r.items) && r.items.some(it => (Number(it.quantity || 0) || 0) > 0));
       if (DEBUG) console.debug('Enriched allocations:', rawAllocations);
       allocations = applyFilters(rawAllocations);
       if (DEBUG) console.debug('Filtered allocations:', allocations);

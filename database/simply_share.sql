@@ -117,12 +117,12 @@ CREATE TABLE `donor_categories` (
 
 -- beneficiary_categories (lookup for recipient/agency categories)
 CREATE TABLE `beneficiary_categories` (
-  `id` INT NOT NULL AUTO_INCREMENT,
+  `beneficiary_category_id` INT NOT NULL AUTO_INCREMENT,
   `name` VARCHAR(128) NOT NULL,
   `description` VARCHAR(255) DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
+  PRIMARY KEY (`beneficiary_category_id`),
   UNIQUE KEY `uq_beneficiary_category_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
@@ -669,6 +669,7 @@ CREATE TABLE `recipient_profiles` (
   `organization_name` varchar(150) DEFAULT NULL,
   `beneficiary_category_id` INT(11) DEFAULT NULL,
   `tags` varchar(255) DEFAULT NULL,
+  `advocacy` text DEFAULT NULL,
   `address` text DEFAULT NULL,
   `total_residents` int(11) DEFAULT NULL,
   `age_group` varchar(100) DEFAULT NULL,
@@ -681,7 +682,7 @@ CREATE TABLE `recipient_profiles` (
   KEY `rp_primary_contact_idx` (`primary_contact_id`),
   CONSTRAINT `rp_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `rp_primary_contact_fk` FOREIGN KEY (`primary_contact_id`) REFERENCES `recipient_contacts`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `rp_beneficiary_category_fk` FOREIGN KEY (`beneficiary_category_id`) REFERENCES `beneficiary_categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+  CONSTRAINT `rp_beneficiary_category_fk` FOREIGN KEY (`beneficiary_category_id`) REFERENCES `beneficiary_categories`(`beneficiary_category_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 -- settings (key-value store for global app settings)

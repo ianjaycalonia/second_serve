@@ -151,19 +151,32 @@
   }
 
   // Load allocations
+  const effectiveRunId = runId || window.__DR_RESOLVED_RUN_ID__ || 0;
+  if (DEBUG) console.log("[DR] effectiveRunId", effectiveRunId);
   const byRec = [];
   function shouldHideRecipient(items) {
-    if (!Array.isArray(items) || !items.length) return false;
+    const forSavedRun = !!effectiveRunId;
+    if (!Array.isArray(items) || !items.length) {
+      return forSavedRun;
+    }
     try {
-      return items.every(
-        (alloc) => String(alloc.status || '').toLowerCase() === 'cancelled'
+      const allCancelled = items.every(
+        (alloc) => String(alloc.status || "").toLowerCase() === "cancelled"
       );
+      if (allCancelled) return true;
+      if (!forSavedRun) return false;
+      const hasAnyItem = items.some(
+        (alloc) =>
+          Array.isArray(alloc.items) &&
+          alloc.items.some(
+            (it) => (Number(it.quantity || 0) || 0) > 0
+          )
+      );
+      return !hasAnyItem;
     } catch (_) {
       return false;
     }
   }
-  const effectiveRunId = runId || window.__DR_RESOLVED_RUN_ID__ || 0;
-  if (DEBUG) console.log("[DR] effectiveRunId", effectiveRunId);
   if (effectiveRunId) {
     try {
       const listUrl = `${API_BASE_URL}/allocations/index.php?action=list_by_run&run_id=${encodeURIComponent(
@@ -598,7 +611,7 @@
   const unifiedTableWrap = document.createElement("div");
   unifiedTableWrap.className = "table-responsive";
   const table = document.createElement("table");
-  table.className = "table table-bordered table-sm table-striped align-middle";
+  table.className = "table table-bordered table-sm align-middle dr-result-table";
   table.innerHTML = `
     <thead class="table-light">
       <tr>
@@ -622,11 +635,15 @@
 
     // Determine highest-level badge (for display in header)
     let badgeHtml = "";
+    let isRecipientNotified = false;
     try {
       const statuses = Array.isArray(items)
         ? items.map((a) => String(a.status || "").toLowerCase())
         : [];
-      if (statuses.some((s) => s === "completed")) {
+      if (statuses.some((s) => s === "notified")) {
+        badgeHtml = "<span class='badge bg-info text-dark'>Notified</span>";
+        isRecipientNotified = true;
+      } else if (statuses.some((s) => s === "completed")) {
         badgeHtml = "<span class='badge bg-primary'>Completed</span>";
       } else if (statuses.some((s) => s === "picked up")) {
         badgeHtml = "<span class='badge bg-secondary'>Picked Up</span>";
@@ -714,6 +731,12 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
 
+    const headerNotifyBtnHtml = isRecipientNotified
+      ? ""
+      : `<button class="btn btn-sm btn-outline-info dr-notify-one" data-rec="${rid}" title="Notify">
+           <i class="bi bi-bell"></i>
+         </button>`;
+
     const headerTr = document.createElement("tr");
     headerTr.className = "dr-rec-header";
     headerTr.dataset.rec = String(rid);
@@ -731,7 +754,7 @@
       })</td>
       <td class="bg-light"></td>
       <td class="bg-light">${headerTotalQty || ""}</td>
-      <td class="bg-light"></td>`;
+      <td class="bg-light text-center">${headerNotifyBtnHtml}</td>`;
     tb.appendChild(headerTr);
 
     if (!Array.isArray(items) || !items.length) {
@@ -745,7 +768,6 @@
       tb.appendChild(tr);
     } else {
       // Add one row per item (items nested under allocations)
-      let notifyAddedForThisRecipient = false;
       items.forEach((a) => {
         const created = a.created_at ? new Date(a.created_at) : null;
         const dt = created
@@ -759,24 +781,6 @@
             )}`
           : "";
         const status = a.status || "Allocated";
-        function statusBadge(s) {
-          const t = String(s || "").toLowerCase();
-          if (t === "cancelled")
-            return "<span class='badge bg-danger'>Cancelled</span>";
-          if (t === "acknowledged")
-            return "<span class='badge bg-success'>Acknowledged</span>";
-          if (t === "picked up")
-            return "<span class='badge bg-secondary'>Picked Up</span>";
-          if (t === "scheduled")
-            return "<span class='badge bg-warning text-dark'>Scheduled</span>";
-          if (t === "completed")
-            return "<span class='badge bg-primary'>Completed</span>";
-          if (t === "notified")
-            return "<span class='badge bg-info text-dark'>Notified</span>";
-          if (t === "updated")
-            return "<span class='badge bg-warning text-dark'>Updated</span>";
-          return "<span class='badge bg-info'>Allocated</span>";
-        }
 
         if (Array.isArray(a.items)) {
           a.items.forEach((it) => {
@@ -794,24 +798,16 @@
 
             const statusLower = String(status || "").toLowerCase();
             const isNotified = statusLower === "notified";
-            // Always render the Actions column. If already notified, render the buttons disabled
-            const disabledAttr = isNotified
-              ? 'disabled aria-disabled="true"'
-              : "";
-            const disabledClass = isNotified ? " disabled" : "";
-            const notifyBtnHtml = !notifyAddedForThisRecipient
-              ? `<button class="btn btn-sm btn-outline-info dr-notify-one${disabledClass}" data-rec="${rid}" title="Notify" ${disabledAttr}>
-                   <i class="bi bi-bell"></i>
-                 </button>`
-              : "";
-            const actionsCell = `<td>
-                <div class="d-flex justify-content-center gap-2">
-                  ${notifyBtnHtml}
-                  <button type="button" class="btn btn-sm btn-outline-danger dr-del${disabledClass}" title="Remove" ${disabledAttr}>
-                    <i class="bi bi-x"></i>
-                  </button>
-                </div>
-              </td>`;
+            // Actions: only per-item Remove button, hidden when notified
+            const actionsCell = isNotified
+              ? `<td></td>`
+              : `<td>
+                  <div class="d-flex justify-content-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-danger dr-del" title="Remove">
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </div>
+                </td>`;
 
             const safeName = itemNameRaw
               .replace(/&/g, "&amp;")
@@ -832,8 +828,8 @@
 
             tr.innerHTML = `
               <td></td>
-              <td>${statusBadge(status)}</td>
-              <td>${dt}</td>
+              <td></td>
+              <td></td>
               <td>
                 <input type="text" class="form-control form-control-sm dr-name" 
                   value="${safeName}" 
@@ -847,7 +843,6 @@
               ${actionsCell}`;
 
             tb.appendChild(tr);
-            if (!notifyAddedForThisRecipient) { notifyAddedForThisRecipient = true; }
           });
         }
       });
@@ -1190,15 +1185,19 @@
       if (tb) {
         tb.querySelectorAll('.dr-qty').forEach((el) => { try { el.disabled = true; el.readOnly = true; } catch(_){} });
         tb.querySelectorAll('.dr-name').forEach((el) => { try { el.readOnly = true; el.setAttribute('aria-readonly','true'); el.setAttribute('tabindex','-1'); } catch(_){} });
-        tb.querySelectorAll('.dr-del').forEach((btn) => { try { btn.disabled = true; btn.classList.add('disabled'); } catch(_){} });
-        // Update all rows to notified status so visibility logic hides the bell
+        // Remove all per-item Remove buttons once notified
+        tb.querySelectorAll('.dr-del').forEach((btn) => {
+          try { btn.remove(); } catch(_){}
+        });
+        // Update all rows to notified status; update status badge only on header row
         tb.querySelectorAll('tr').forEach((tr) => {
           try {
-            tr.dataset.status = 'notified';
-            const tds = tr.querySelectorAll('td');
-            // columns: Recipient | Status | Created | Item | Quantity | Actions
-            if (tds && tds[1]) {
-              tds[1].innerHTML = "<span class='badge bg-info text-dark'>Notified</span>";
+            tr.setAttribute('data-status', 'notified');
+            if (tr.classList && tr.classList.contains('dr-rec-header')) {
+              const tds = tr.querySelectorAll('td');
+              if (tds && tds[1]) {
+                tds[1].innerHTML = "<span class='badge bg-info text-dark'>Notified</span>";
+              }
             }
           } catch (_) {}
         });
@@ -2079,23 +2078,28 @@
     if (!rid) return false;
     let persistOk = true;
     try {
-      // Update rows and status badge
+      // Update rows and status badge: only header shows status text
       tb.querySelectorAll("tr").forEach((tr) => {
         try {
           tr.setAttribute("data-status", "notified");
-          const statusTd = tr.querySelector("td:nth-child(2)");
-          if (statusTd)
-            statusTd.innerHTML =
-              "<span class='badge bg-info text-dark'>Notified</span>";
+          if (tr.classList && tr.classList.contains("dr-rec-header")) {
+            const statusTd = tr.querySelector("td:nth-child(2)");
+            if (statusTd)
+              statusTd.innerHTML =
+                "<span class='badge bg-info text-dark'>Notified</span>";
+          }
         } catch (_) {}
       });
 
-      // Disable action buttons for this recipient (keep column visible)
-      tb.querySelectorAll(".dr-notify-one, .dr-del").forEach((el) => {
+      // Remove per-item Remove buttons entirely and hide per-recipient bell
+      tb.querySelectorAll(".dr-del").forEach((el) => {
         try {
-          if (typeof el.disabled !== "undefined") el.disabled = true;
-          el.setAttribute("aria-disabled", "true");
-          if (el.classList) el.classList.add("disabled");
+          el.remove();
+        } catch (_) {}
+      });
+      tb.querySelectorAll(".dr-notify-one").forEach((el) => {
+        try {
+          el.classList.add("d-none");
         } catch (_) {}
       });
 

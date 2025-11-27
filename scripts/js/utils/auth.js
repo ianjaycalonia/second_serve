@@ -676,9 +676,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (userRoleLower !== requiredRole) {
             const dest = (function(role){
                 switch(role){
-                    case 'admin': return 'AdminDashboard.html';
-                    case 'donor': return 'DonorDashboard.html';
-                    case 'recipient': return 'recipientDashboard.html';
+                    case 'admin': return 'admindashboard.html';
+                    case 'donor': return 'donordashboard.html';
+                    case 'recipient': return 'recipientdashboard.html';
                     default: return 'index.html';
                 }
             })(userRoleLower);
@@ -980,9 +980,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Helper function to get dashboard URL based on role
     function getDashboardUrl(role) {
         switch(role) {
-            case 'admin': return 'AdminDashboard.html';
-            case 'donor': return 'DonorDashboard.html';
-            case 'recipient': return 'recipientDashboard.html';
+            case 'admin': return 'admindashboard.html';
+            case 'donor': return 'donordashboard.html';
+            case 'recipient': return 'recipientdashboard.html';
             default: return 'index.html';
         }
     }

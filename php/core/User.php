@@ -88,7 +88,7 @@ class User
                         rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count, rp.external_id,
                         pc.position_designation, pc.contact_number, pc.email
                  FROM recipient_profiles rp
-                 LEFT JOIN beneficiary_categories bc ON bc.id = rp.beneficiary_category_id
+                 LEFT JOIN beneficiary_categories bc ON bc.beneficiary_category_id = rp.beneficiary_category_id
                  LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
                  WHERE rp.user_id = ?",
                 [$userId]
@@ -131,7 +131,7 @@ class User
             // Upsert recipient_profiles (no contact fields here; contacts are normalized into recipient_contacts)
             $this->db->query('INSERT IGNORE INTO recipient_profiles (user_id) VALUES (?)', [$userId]);
             $fields = [];$params=[];
-            foreach (['organization_name','beneficiary_category_id','address','total_residents','age_group','male_count','female_count','external_id'] as $col){
+            foreach (['organization_name','beneficiary_category_id','advocacy','address','total_residents','age_group','male_count','female_count','external_id'] as $col){
                 if (array_key_exists($col,$data)){ $fields[] = "$col = ?"; $params[] = $data[$col]; }
             }
             if ($fields){ $params[]=$userId; $this->db->query('UPDATE recipient_profiles SET '.implode(', ',$fields).' WHERE user_id = ?', $params); }
@@ -194,13 +194,14 @@ class User
         $role = $filters['role'] ?? null;
         if ($role === 'recipient') {
             // Join recipient_profiles with primary contact and category lookup; expose tags and age_group
-            $sql = "SELECT u.user_id, u.name, u.email, u.role, u.status, u.created_at,
-                           rp.organization_name, rp.beneficiary_category_id, bc.name AS beneficiary_category, rp.address,
-                           rp.tags, rp.age_group, rp.male_count, rp.female_count, rp.total_residents,
+            $sql = "SELECT u.user_id, u.name, u.email, u.status,
+                           rp.organization_name, rp.beneficiary_category_id, bc.name AS beneficiary_category,
+                           rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count,
+                           rp.external_id, rp.tags,
                            pc.position_designation, pc.contact_number
                     FROM users u
                     LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
-                    LEFT JOIN beneficiary_categories bc ON bc.id = rp.beneficiary_category_id
+                    LEFT JOIN beneficiary_categories bc ON bc.beneficiary_category_id = rp.beneficiary_category_id
                     LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id";
             if (!empty($filters['q'])){ $where[]='(u.name LIKE ? OR u.email LIKE ? OR rp.organization_name LIKE ?)'; $q='%'.$filters['q'].'%'; array_push($params,$q,$q,$q); }
         } elseif ($role === 'donor') {
@@ -296,6 +297,7 @@ class User
         $organizationType = $data['organization_type'] ?? ($data['agency_type'] ?? null); // used for tags derivation only
         $contactNumber = $data['contact_number'] ?? null;
         $address = $data['address'] ?? null;
+        $advocacy = $data['advocacy'] ?? null;
 
         // Placeholder email: use organization name sans spaces if no email provided
         $email = $data['email'] ?? $this->generatePlaceholderEmail($organization);
@@ -339,8 +341,8 @@ class User
             'tags' => $data['tags'] ?? null,
         ]);
         $this->db->query(
-            "INSERT INTO recipient_profiles (user_id, organization_name, beneficiary_category_id, tags, address, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [$userId, $organization, $beneficiaryCategoryId, $derivedTags, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
+            "INSERT INTO recipient_profiles (user_id, organization_name, beneficiary_category_id, tags, advocacy, address, total_residents, age_group, male_count, female_count, external_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            [$userId, $organization, $beneficiaryCategoryId, $derivedTags, $advocacy, $address, $totalResidents, $ageGroup, $maleCount, $femaleCount, $externalId]
         );
 
         // Create a primary contact if contact info is provided and set as primary
@@ -436,6 +438,7 @@ class User
                     // Map incoming org type variants to organization_type
                     'organization_type' => $r['organizationtype']
                         ?? ($r['organization_type'] ?? ($r['orgtype'] ?? ($r['org_type'] ?? ($r['agencytype'] ?? ($r['advocacy'] ?? null))))),
+                    'advocacy' => $r['advocacy'] ?? null,
                     'contact_person' => $r['contactperson'] ?? ($r['contact'] ?? null),
                     'contact_number' => $r['contactnumber'] ?? ($r['phone'] ?? ($r['contactno'] ?? null)),
                     'address' => $r['address'] ?? ($r['location'] ?? ($r['addresss'] ?? null)),
@@ -483,6 +486,17 @@ class User
                         }
                         $userId = $this->createRecipient($base);
                         $inserted++;
+                    }
+
+                    $advocacyVal = null;
+                    foreach ($items as $itAdv) {
+                        if (isset($itAdv['advocacy']) && trim((string)$itAdv['advocacy']) !== '') {
+                            $advocacyVal = trim((string)$itAdv['advocacy']);
+                            break;
+                        }
+                    }
+                    if ($advocacyVal !== null) {
+                        $this->db->query('UPDATE recipient_profiles SET advocacy = ? WHERE user_id = ?', [$advocacyVal, $userId]);
                     }
 
                     // Insert contacts for all items in the group; mark first with email/number as primary

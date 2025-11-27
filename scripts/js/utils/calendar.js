@@ -717,27 +717,48 @@
 
     qs('#evId').value = normalized?.id || '';
     qs('#evTitle').value = normalized?.title || data?.title || '';
-    // Populate start/end using robust formatter for datetime-local (avoid using any external arg)
+    // Populate date/time for new modal fields
     const startIso = data?.start || normalized.start || '';
     const endIso = data?.end || normalized.end || '';
     const startDate = startIso ? new Date(startIso) : null;
     const endDate = endIso ? new Date(endIso) : null;
     const dateInput = qs('#evDate');
-    const startTimeInput = qs('#evStartTime');
-    const endTimeInput = qs('#evEndTime');
+    const donorStartInput = qs('#donorStartTime');
+    const adminStartInput = qs('#adminStartTime');
+    const adminEndInput = qs('#adminEndTime');
+    const donorDateInput = qs('#donorDate');
+    const adminDateInput = qs('#adminDate');
+    const startTimeStr = startDate ? formatTimeInput(startDate) : '';
+    const endTimeStr = endDate ? formatTimeInput(endDate) : '';
     if (dateInput) dateInput.value = startDate ? formatDateInput(startDate) : '';
-    if (startTimeInput) startTimeInput.value = startDate ? formatTimeInput(startDate) : '';
-    if (endTimeInput) endTimeInput.value = endDate ? formatTimeInput(endDate) : '';
-    if (!data?.id && presetDate && dateInput){
-      if (!dateInput.value) dateInput.value = presetDate;
-      if (startTimeInput) startTimeInput.value = '';
-      if (endTimeInput) endTimeInput.value = '';
+    if (donorDateInput) donorDateInput.value = startDate ? formatDateInput(startDate) : (dateInput ? dateInput.value : '');
+    if (adminDateInput) adminDateInput.value = startDate ? formatDateInput(startDate) : (dateInput ? dateInput.value : '');
+    if (donorStartInput) donorStartInput.value = startTimeStr;
+    if (adminStartInput) adminStartInput.value = startTimeStr;
+    if (adminEndInput) adminEndInput.value = endTimeStr;
+    if (presetDate && dateInput && !dateInput.value) {
+      dateInput.value = presetDate;
     }
-    if (existingRecipients.length){
-      qs('#evRecipient').value = String(existingRecipients[0].id);
-      if (!normalized.location && existingRecipients[0].address) applyLocationFromAddress(existingRecipients[0].address);
-    } else {
-      qs('#evRecipient').value = normalized?.recipient_id || '';
+    if (donorDateInput && !donorDateInput.value && (dateInput?.value || presetDate)) {
+      donorDateInput.value = dateInput?.value || presetDate;
+    }
+    if (adminDateInput && !adminDateInput.value && (dateInput?.value || presetDate)) {
+      adminDateInput.value = dateInput?.value || presetDate;
+    }
+    const evRecipientHidden = qs('#evRecipient');
+    if (evRecipientHidden){
+      if (existingRecipients.length){
+        evRecipientHidden.value = String(existingRecipients[0].id);
+        if (!normalized.location && existingRecipients[0].address) applyLocationFromAddress(existingRecipients[0].address);
+      } else {
+        evRecipientHidden.value = normalized?.recipient_id || '';
+      }
+    }
+
+    if (!existingRecipients.length && !normalized?.id) {
+      try {
+        window.SchedulePickupUI?.resetRecipientFields({ date: '', time: '', clearAdditional: true });
+      } catch (_) { /* ignore reset errors */ }
     }
     qs('#evDonor').value = normalized?.donor_id || '';
     qs('#evLocation').value = normalized?.location || data?.location || '';
@@ -758,14 +779,7 @@
           if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(hint, anchor.nextSibling);
           else form.appendChild(hint);
         }
-        const r = role();
-        if (r==='recipient') {
-          hint.textContent = 'Recipients: Bookings allowed 10:00–16:00. If a donor is booked, recipient must wait 3 hours after the latest donor booking that day.';
-        } else if (r==='donor') {
-          hint.textContent = 'Donors: Only one booking per day. No past-date bookings.';
-        } else {
-          hint.textContent = 'Scheduling rules: No creating events in the past. Recipients: 10:00–16:00 window and 3 hours after donor; Donors: one per day.';
-        }
+        // Hint text removed as per user request
       }catch(_){ }
     })();
 
@@ -1101,8 +1115,10 @@
     if (typeSel){
       // Restrict options based on role
       const allowOptions = (r==='admin') ? ['admin','donor','recipient'] : (r==='donor') ? ['donor'] : (r==='recipient') ? ['recipient'] : ['admin'];
-      // Remove disallowed options from the select
-      Array.from(typeSel.options).forEach(opt=>{ if (!allowOptions.includes(opt.value)) opt.remove(); });
+      // If evType is a SELECT element, prune disallowed options. Hidden input has no options.
+      if (typeSel.tagName === 'SELECT' && typeSel.options) {
+        Array.from(typeSel.options).forEach(opt=>{ if (!allowOptions.includes(opt.value)) opt.remove(); });
+      }
       if (r==='admin'){
         typeSel.disabled = false;
         if (!allowOptions.includes(initType)) initType = 'admin';
@@ -1123,6 +1139,75 @@
       applyTypeUI(initType);
       typeSel.onchange = ()=> applyTypeUI(typeSel.value);
     }
+
+    // Toggle admin UI sections via schedulePickup helpers if available
+    const syncUiType = (evtType) => {
+      if (window.SchedulePickupUI?.updateUI) {
+        window.SchedulePickupUI.updateUI(evtType);
+      } else {
+        qs('#wrapRecipient')?.classList.toggle('d-none', evtType!=='recipient');
+        qs('#wrapDonor')?.classList.toggle('d-none', evtType!=='donor');
+        qs('#wrapAdminTimes')?.classList.toggle('d-none', evtType!=='admin');
+      }
+    };
+
+    const initialType = typeSel ? typeSel.value : inferTypeFromData(normalized);
+    if (typeSel) {
+      typeSel.value = initialType;
+    }
+    syncUiType(initialType);
+
+    if (typeSel) {
+      typeSel.addEventListener('change', (e) => {
+        syncUiType(e.target.value);
+        if (window.SchedulePickupUI?.updateDonorData) {
+          window.SchedulePickupUI.updateDonorData();
+        }
+      });
+    }
+
+    // Prefill donor/admin fields for admin role
+    try {
+      if (r === 'admin') {
+        const startIso = data?.start || '';
+        const endIso = data?.end || '';
+        if (initialType === 'donor') {
+          if (startIso) {
+            const d = new Date(startIso);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth()+1).padStart(2,'0');
+            const dd = String(d.getDate()).padStart(2,'0');
+            const hh = String(d.getHours()).padStart(2,'0');
+            const mi = String(d.getMinutes()).padStart(2,'0');
+            const donorTimeEl = qs('#donorStartTime');
+            if (donorTimeEl) donorTimeEl.value = `${hh}:${mi}`;
+            const dateInput = qs('.recipient-date');
+            if (dateInput) dateInput.value = `${yyyy}-${mm}-${dd}`;
+          }
+          const donorSelect = qs('#evDonor');
+          if (donorSelect && typeof window.$ === 'function' && window.$.fn?.select2 && data?.donor_id) {
+            const optionExists = !!window.$(donorSelect).find(`option[value="${data.donor_id}"]`).length;
+            if (!optionExists) {
+              const opt = document.createElement('option');
+              opt.value = data.donor_id;
+              opt.textContent = data?.donor_name || `Donor #${data.donor_id}`;
+              opt.selected = true;
+              donorSelect.appendChild(opt);
+            }
+            window.$(donorSelect).val(String(data.donor_id)).trigger('change');
+          }
+        } else if (initialType === 'admin') {
+          if (startIso) {
+            const d = new Date(startIso);
+            qs('#adminStartTime')?.setAttribute('value', `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`);
+          }
+          if (endIso) {
+            const d = new Date(endIso);
+            qs('#adminEndTime')?.setAttribute('value', `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`);
+          }
+        }
+      }
+    } catch(_){ }
 
     // If editing an existing admin-created donor pickup, try set donor select (use donor_display when available)
     if (r==='admin'){
@@ -1283,7 +1368,7 @@
   }
 
   function collectForm(){
-    const t = (qs('#evType')?.value)||defaultTypeForCurrentRole();
+    let t = (qs('#evType')?.value)||defaultTypeForCurrentRole();
     const r = role();
     const uid = userId();
     // Resolve donor from select2 if present
@@ -1299,17 +1384,57 @@
     if (!canCreateEventOfType(t)) {
       return null;
     }
+    // Parse recipients from new UI JSON payload
+    let recipientsUi = [];
+    let recipientIdsFromUi = [];
+    const recipientsRaw = qs('#evRecipients')?.value || '';
+    if (recipientsRaw) {
+      try {
+        const parsed = JSON.parse(recipientsRaw);
+        if (Array.isArray(parsed)) {
+          recipientsUi = parsed;
+          recipientIdsFromUi = parsed
+            .map(item => Number(item && item.id))
+            .filter(v => Number.isFinite(v) && v > 0);
+        }
+      } catch(_){}}
+    // Fallback: read from DOM if hidden JSON is empty or invalid
+    if (!recipientsUi.length) {
+      try {
+        const blocks = document.querySelectorAll('.recipient-selection');
+        const tmp = [];
+        blocks.forEach(b => {
+          const sel = b.querySelector('.recipient-select');
+          const id = sel ? Number(sel.value) : null;
+          if (!Number.isFinite(id) || id <= 0) return;
+          const dateEl = b.querySelector('.recipient-date');
+          const timeEl = b.querySelector('.recipient-time');
+          const date = (dateEl && dateEl.value) ? String(dateEl.value) : '';
+          const time = (timeEl && timeEl.value) ? String(timeEl.value) : '';
+          tmp.push({ id, date, time });
+        });
+        if (tmp.length) {
+          recipientsUi = tmp;
+          recipientIdsFromUi = tmp.map(x => Number(x.id)).filter(v => Number.isFinite(v) && v > 0);
+        }
+      } catch(_){}
+    }
+    // If recipient selections exist in UI, treat as recipient event regardless of current select state
+    if (recipientIdsFromUi.length && t !== 'recipient') {
+      t = 'recipient';
+    }
     // Enforce per role
-    if (r==='donor') { donorId = uid; recipientId = null; }
-    else if (r==='recipient') { recipientId = uid; donorId = null; }
+    if (r==='donor') { donorId = uid; recipientId = null; recipientIds = []; }
+    else if (r==='recipient') { recipientId = uid; donorId = null; recipientIds = []; }
     else if (r==='admin') {
       if (t==='admin'){ donorId = null; recipientId = null; }
       else if (t==='donor'){ recipientId = null; }
       else if (t==='recipient'){
         donorId = null;
-        recipientIds = getRecipientQueueIds();
+        recipientIds = recipientIdsFromUi.slice();
         if (!recipientIds.length && recipientId) recipientIds = [recipientId];
         if (recipientIds.length) recipientId = Number(recipientIds[0]);
+        else recipientId = null;
       }
     }
     let titleVal = qs('#evTitle').value.trim();
@@ -1321,17 +1446,79 @@
       else if (t==='donor') titleVal = 'Donor Pickup/Availability';
       else if (t==='recipient') titleVal = 'Recipient Pickup/Availability';
     }
-    // Build start/end: for admin 'donor' (Pickup), compose from evDate/evTime with no end
-    const dateVal = qs('#evDate')?.value || '';
-    const startTimeVal = qs('#evStartTime')?.value || '';
-    const endTimeVal = qs('#evEndTime')?.value || '';
+    // Build start/end from new modal fields
+    let dateVal = qs('#evDate')?.value || '';
+    const donorDateVal = qs('#donorDate')?.value || '';
+    const adminDateVal = qs('#adminDate')?.value || '';
+    const donorStartTimeVal = qs('#donorStartTime')?.value || '';
+    const adminStartVal = qs('#adminStartTime')?.value || '';
+    const adminEndVal = qs('#adminEndTime')?.value || '';
     let startIso = null;
     let endIso = null;
-    if (dateVal && startTimeVal){
-      startIso = new Date(`${dateVal}T${startTimeVal}`).toISOString();
-    }
-    if (dateVal && endTimeVal){
-      endIso = new Date(`${dateVal}T${endTimeVal}`).toISOString();
+    if (t === 'admin') {
+      dateVal = adminDateVal || dateVal;
+      if (dateVal && adminStartVal){
+        startIso = new Date(`${dateVal}T${adminStartVal}`).toISOString();
+      }
+      if (dateVal && adminEndVal){
+        endIso = new Date(`${dateVal}T${adminEndVal}`).toISOString();
+      }
+    } else if (t === 'donor') {
+      dateVal = donorDateVal || dateVal;
+      const timeVal = donorStartTimeVal || adminStartVal || '';
+      if (dateVal && timeVal){
+        startIso = new Date(`${dateVal}T${timeVal}`).toISOString();
+      }
+      endIso = null;
+    } else if (t === 'recipient') {
+      // Build grouped payloads by recipient date+time
+      const titleVal2 = titleVal;
+      const locationVal = qs('#evLocation').value.trim() || null;
+      const notesVal = qs('#evNotes').value.trim() || null;
+      const groups = new Map();
+      if (Array.isArray(recipientsUi) && recipientsUi.length){
+        recipientsUi.forEach(item => {
+          if (!item || !item.id) return;
+          const date = (item.date || '').trim();
+          let time = (item.time || '').trim();
+          if (!date || !time) return;
+          // normalize 12h to 24h if needed
+          const m = time.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
+          if (m){
+            let hh = Number(m[1]); const mm = m[2]; const ap = m[3].toLowerCase();
+            if (ap === 'pm' && hh < 12) hh += 12; if (ap === 'am' && hh === 12) hh = 0;
+            time = `${String(hh).padStart(2,'0')}:${mm}`;
+          }
+          const key = `${date}T${time}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(Number(item.id));
+        });
+      }
+      if (groups.size){
+        const payloads = Array.from(groups.entries()).map(([key, ids])=>({
+          id: null,
+          title: titleVal2,
+          start: new Date(key).toISOString(),
+          end: null,
+          recipient_id: ids[0] || null,
+          donor_id: null,
+          location: locationVal,
+          notes: notesVal,
+          event_type: t,
+          created_for_user_id: (r==='admin') ? null : uid,
+          recipient_ids: ids
+        })).sort((a,b)=> new Date(a.start) - new Date(b.start));
+        return payloads;
+      }
+      // If no per-recipient times, return empty array so save handler can warn appropriately
+      return [];
+    } else {
+      if (dateVal && adminStartVal){
+        startIso = new Date(`${dateVal}T${adminStartVal}`).toISOString();
+      }
+      if (dateVal && adminEndVal){
+        endIso = new Date(`${dateVal}T${adminEndVal}`).toISOString();
+      }
     }
 
     const payload = {
@@ -1648,17 +1835,32 @@
       try{
         const data = collectForm();
         if (!data) { calendarToast('You do not have permission to save this event type', 'warn'); return; }
-        if (!data.title || !data.start) { calendarToast('Title and start are required', 'warn'); return; }
-        // All roles: disallow creating/updating to past times
-        const now = new Date();
-        const startTest = new Date(data.start);
-        if (startTest < now) { calendarToast('Cannot create or update events in the past', 'warn'); return; }
-        // Client-side guard: recipients can only book 10:00-16:00
-        if (role()==='recipient'){
-          const d = new Date(data.start);
-          const mins = d.getHours()*60 + d.getMinutes();
-          if (mins < (10*60) || mins > (16*60)) { calendarToast('Recipients can only book between 10:00 and 16:00', 'warn'); return; }
+        // Batched recipient payloads
+        if (Array.isArray(data)){
+          const payloads = data.filter(p => p && p.title && p.start && Array.isArray(p.recipient_ids) && p.recipient_ids.length);
+          if (!payloads.length) { calendarToast('Add at least one recipient with a date and time', 'warn'); return; }
+          let minStart = null;
+          for (const p of payloads){
+            await createEvent(p);
+            const st = new Date(p.start); if (!minStart || st < minStart) minStart = st;
+          }
+          if (minStart){
+            const dateKey = getDateKey(minStart.toISOString());
+            if (dateKey) {
+              lastSelectedDate = dateKey;
+              const startDate = new Date(`${dateKey}T00:00:00`);
+              if (!Number.isNaN(startDate)) calendarInstance?.gotoDate(startDate);
+            }
+          }
+          bootstrap.Modal.getInstance(qs('#eventModal'))?.hide();
+          calendarToast('Events saved', 'success');
+          refreshVisibleRange();
+          return;
         }
+        // Single payload flow
+        if (!data.title) { calendarToast('Title is required', 'warn'); return; }
+        const isRecipientSingle = String(data.event_type||'').toLowerCase() === 'recipient';
+        if (!isRecipientSingle && !data.start) { calendarToast('Start time is required', 'warn'); return; }
         if (data.id){
           if (!canEditEvent(normalizeEventData(data))) { calendarToast('You do not have permission to update this event', 'warn'); return; }
           await updateEvent(data.id, data);

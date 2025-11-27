@@ -12,6 +12,36 @@ class Donation
     // Create a donation header and a single item, returns donation_id
     public function create(array $payload): int
     {
+        // Basic dedupe guard: if the same donor submitted a donation with the same
+        // name/quantity within the last 5 minutes, return the existing record to
+        // avoid duplicate inserts when clients retry quickly.
+        try {
+            $donorId = (int)($payload['donor_id'] ?? 0);
+            $name = isset($payload['name']) ? sanitize((string)$payload['name']) : null;
+            $quantity = isset($payload['quantity']) ? (int)$payload['quantity'] : 0;
+            $canonicalExpiry = isset($payload['expiry_date']) ? trim((string)$payload['expiry_date']) : '';
+            if ($donorId > 0 && $name !== null && $name !== '' && $quantity > 0) {
+                $params = [$donorId, $name, $quantity];
+                $sql = "SELECT d.donation_id
+                        FROM donations d
+                        INNER JOIN donation_items di ON di.donation_id = d.donation_id
+                        WHERE d.donor_id = ?
+                          AND di.product_name = ?
+                          AND di.quantity = ?
+                          AND d.created_at >= (NOW() - INTERVAL 5 MINUTE)";
+                if ($canonicalExpiry !== '') {
+                    $sql .= " AND (di.expiry_date = ? OR di.expiry_date IS NULL)";
+                    $params[] = $canonicalExpiry;
+                }
+                $row = $this->db->query($sql . " ORDER BY d.donation_id DESC LIMIT 1", $params)->fetch();
+                if ($row && isset($row['donation_id'])) {
+                    return (int)$row['donation_id'];
+                }
+            }
+        } catch (Exception $e) {
+            // Dedupe is best-effort; continue with normal creation if it fails
+        }
+
         $this->db->beginTransaction();
         try {
             $donationId = $this->createHeader([

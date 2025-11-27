@@ -63,3 +63,8 @@ tbody.dr-recipient[data-collapsed="1"] > tr.dr-rec-header > td {
   min-width: 110px;
   text-align: center;
 }
+
+/* DistributeResult: use a single light background color for rows (no stripes) */
+#resultContainer table.dr-result-table tbody tr.dr-rec-item td {
+  background-color: #f8fafc;
+}

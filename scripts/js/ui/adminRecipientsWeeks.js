@@ -71,17 +71,6 @@
       try {
         if (window.__rl_updateCounts) window.__rl_updateCounts();
       } catch (_) {}
-      const w5Col = document.getElementById("w5Col");
-      if (w5Col && w5Col.style.display !== "none") {
-        const w5Label = document.getElementById("w5Label");
-        if (w5Label) {
-          const w5Start = new Date(y, m, 29);
-          w5Label.textContent = `Week 5 (${formatLongDate(w5Start)})`;
-          try {
-            if (window.__rl_updateCounts) window.__rl_updateCounts();
-          } catch (_) {}
-        }
-      }
     } catch (_) {}
   }
 

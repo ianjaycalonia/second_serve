@@ -49,7 +49,7 @@
   async function clearUnsavedAcrossWeeks() {
     try {
       const pool = qs('#pool');
-      const dropIds = ['w1','w2','w3','w4','w5'];
+      const dropIds = ['w1','w2','w3','w4'];
       let moved = 0;
       for (const did of dropIds) {
         const dz = qs('#' + did);
@@ -162,6 +162,20 @@
           toast("Rolled over: cleared last week's assignments", "info");
         } catch (_) {
           /* ignore server error but continue */
+        }
+        // Ping backend to notify admins about the new week start (1, 8, 15, 22)
+        try {
+          await fetch(`${API_BASE_URL}/recipients/index.php?action=notify_new_week`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({ stamp }),
+          });
+        } catch (_) {
+          /* notification is best-effort */
         }
       }
       localStorage.setItem("rl_last_week_stamp", stamp);
@@ -648,8 +662,6 @@
         ["w3", "w3Label"],
         ["w4", "w4Label"],
       ];
-      if (qs("#w5Col") && qs("#w5Col").style.display !== "none")
-        pairs.push(["w5", "w5Label"]);
       pairs.forEach(([dropId, labelId]) => {
         const dz = qs("#" + dropId);
         const lbl = qs("#" + labelId);
@@ -841,7 +853,7 @@
 
       // setup drag handlers
       setupDragSources(document);
-      ["w1", "w2", "w3", "w4", "w5"].forEach((id) => {
+      ["w1", "w2", "w3", "w4"].forEach((id) => {
         const el = qs("#" + id);
         if (el) setupDropzone(el);
       });
@@ -894,15 +906,10 @@
         clearWeek("w4");
         console.info("Cleared week 4");
       });
-      qs("#clearW5")?.addEventListener("click", () => {
-        clearWeek("w5");
-        console.info("Cleared week 5");
-      });
       qs("#autoW1")?.addEventListener("click", () => autoFill("w1", 10));
       qs("#autoW2")?.addEventListener("click", () => autoFill("w2", 10));
       qs("#autoW3")?.addEventListener("click", () => autoFill("w3", 10));
       qs("#autoW4")?.addEventListener("click", () => autoFill("w4", 10));
-      qs("#autoW5")?.addEventListener("click", () => autoFill("w5", 10));
       const reloadBtn = qs('#reloadBtn');
       if (reloadBtn) {
         try {
@@ -917,14 +924,11 @@
       qs("#saveW2")?.addEventListener("click", () => saveWeekKey("W2", "w2"));
       qs("#saveW3")?.addEventListener("click", () => saveWeekKey("W3", "w3"));
       qs("#saveW4")?.addEventListener("click", () => saveWeekKey("W4", "w4"));
-      qs("#saveW5")?.addEventListener("click", () => saveWeekKey("W5", "w5"));
       // auto all: fill every week up to 10 (no save here)
       qs("#autoAllBtn")?.addEventListener("click", async () => {
         try {
           toast("Auto-filling all weeks…", "info");
           const dzIds = ["w1", "w2", "w3", "w4"];
-          if (qs("#w5Col") && qs("#w5Col").style.display !== "none")
-            dzIds.push("w5");
           // Fill each week up to 10
           dzIds.forEach((id) => {
             const dz = qs("#" + id);
@@ -946,8 +950,6 @@
           W3: collectWeekIds("w3"),
           W4: collectWeekIds("w4"),
         };
-        if (qs("#w5Col") && qs("#w5Col").style.display !== "none")
-          raw.W5 = collectWeekIds("w5");
         // Disallow saving if any column is empty
         const emptyKeys = Object.entries(raw)
           .filter(([k, ids]) => Array.isArray(ids) && ids.length === 0)
@@ -980,7 +982,6 @@
           await apiSavePlan(weeks, currentMonth());
           // Lock all saved recipients across all weeks
           const allKeys = ["W1", "W2", "W3", "W4"];
-          if ("W5" in weeks) allKeys.push("W5");
           allKeys.forEach((k) => {
             (weeks[k] || []).forEach((id) => {
               const poolCard = qs(`#pool .rcard[data-user-id="${id}"]`);
@@ -1205,16 +1206,6 @@
           const title = `Save Week ${idx + 1} (${formatLongDate(dt)})`;
           b.setAttribute("title", title);
           b.setAttribute("data-bs-original-title", title);
-        }
-
-        // Optional W5 label on the 29th if visible
-        const w5Col = document.getElementById("w5Col");
-        if (w5Col && w5Col.style.display !== "none") {
-          const w5Label = document.getElementById("w5Label");
-          if (w5Label) {
-            const w5Start = new Date(y, m, 29);
-            w5Label.textContent = `Week 5 (${formatLongDate(w5Start)})`;
-          }
         }
 
         // Preserve existing focus/button state logic

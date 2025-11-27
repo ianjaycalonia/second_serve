@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
+require_once __DIR__ . '/../../core/Notification.php';
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -79,13 +80,11 @@ function rl_week_start_date_from_month($month, $weekIndex, $weekStart){
         if (!preg_match('/^(\d{4})-(\d{2})$/', (string)$month, $m)) return null;
         $year = (int)$m[1];
         $mon  = (int)$m[2];
+        // Clamp to 1..4 and use fixed starts: 1, 8, 15, 22
         $weekIndex = max(1, min(4, (int)$weekIndex));
-        $weekStartDow = ($weekStart === 'monday') ? 1 : 0; // 0=Sun..6=Sat
-        $first = new DateTime(sprintf('%04d-%02d-01', $year, $mon));
-        $firstDow = (int)$first->format('w');
-        $offset = ($firstDow - $weekStartDow + 7) % 7; // days to go back to first week start
-        $firstWeekStart = clone $first; $firstWeekStart->modify(sprintf('-%d day', $offset));
-        $start = clone $firstWeekStart; $start->modify('+' . (7 * ($weekIndex - 1)) . ' day');
+        $dayMap = [1 => 1, 2 => 8, 3 => 15, 4 => 22];
+        $day = isset($dayMap[$weekIndex]) ? $dayMap[$weekIndex] : 1;
+        $start = new DateTime(sprintf('%04d-%02d-%02d', $year, $mon, $day));
         return $start->format('Y-m-d');
     } catch (Throwable $e){ return null; }
 }
@@ -155,10 +154,10 @@ try {
             $result = [];
             $resultEx = [];
             $locks = [];
-            // Support up to 5 weeks; the 5th will be included only if its start date is within the selected month
+            // Build strictly 4 weeks per month (W1..W4) using fixed week starts from rl_week_start_date_from_month
             $selYear = (int)substr($month, 0, 4);
             $selMonthNum = (int)substr($month, 5, 2);
-            for ($i=1; $i<=5; $i++){
+            for ($i=1; $i<=4; $i++){
                 $wStartStr = rl_week_start_date_from_month($month, $i, $weekStart);
                 // Derive lock key from computed start date
                 $wStart = new DateTime($wStartStr);
@@ -186,12 +185,7 @@ try {
                 }
                 $idsAll = array_map(fn($r)=> (int)$r['recipient_id'], $rows ?: []);
                 $inMonth = ((int)$wStart->format('n') === $selMonthNum && (int)$wStart->format('Y') === $selYear);
-                // Only populate IDs for W5 if in the selected month; always populate for W1..W4
-                if ($i <= 4 || ($i === 5 && $inMonth)) {
-                    $result['W'.$i] = $idsAll;
-                } else {
-                    $result['W'.$i] = [];
-                }
+                $result['W'.$i] = $idsAll;
                 $resultEx[] = [
                     'year' => (int)$wStart->format('Y'),
                     'month' => (int)$wStart->format('n'),
@@ -230,8 +224,8 @@ try {
             // Parse selected month to fix year/month attribution
             $yearParam = null; $monParam = null;
             if (preg_match('/^(\d{4})-(\d{2})$/', $month, $mm)) { $yearParam = (int)$mm[1]; $monParam = (int)$mm[2]; }
-            // Map week key to index for quick lookup (support optional W5)
-            $wkIndex = ['W1'=>0,'W2'=>1,'W3'=>2,'W4'=>3,'W5'=>4];
+            // Map week key to index for quick lookup (W1..W4 only)
+            $wkIndex = ['W1'=>0,'W2'=>1,'W3'=>2,'W4'=>3];
             foreach ($weeksData as $wk => $list) {
                 if (!isset($wkIndex[$wk])) continue; // ignore unknown keys
                 $i = $wkIndex[$wk]; // 0..3
@@ -289,6 +283,70 @@ try {
                 } catch (Throwable $e) { /* non-fatal */ }
             }
             sendJson(['success' => true, 'message' => 'Plan saved and locks updated']);
+            break;
+
+        case 'notify_new_week':
+            requireRole(['admin']);
+            try {
+                $today = new DateTime('now');
+                $year = (int)$today->format('Y');
+                $month = (int)$today->format('n');
+                $day = (int)$today->format('j');
+
+                $dayMap = [1, 8, 15, 22];
+                $startDay = null;
+                foreach ($dayMap as $candidate) {
+                    if ($day >= $candidate) {
+                        $startDay = $candidate;
+                    }
+                }
+                if ($startDay === null) {
+                    $startDay = 1;
+                }
+
+                $weekIndex = array_search($startDay, $dayMap, true);
+                if ($weekIndex === false) {
+                    $weekIndex = 0;
+                }
+                $weekNumber = $weekIndex + 1;
+
+                $startDateStr = sprintf('%04d-%02d-%02d', $year, $month, $startDay);
+                $settingKey = 'rl_last_week_notification';
+                $last = (string)rl_get_setting($settingKey, '');
+                if ($last === $startDateStr) {
+                    sendJson(['success' => true, 'data' => ['message' => 'Already notified for this week.']]);
+                    break;
+                }
+
+                $db = Database::getInstance();
+                $admins = $db->query("SELECT user_id FROM users WHERE role = 'admin' AND status = 'approved'")->fetchAll();
+                if ($admins && count($admins) > 0) {
+                    $notif = new Notification();
+                    $startDateObj = new DateTime($startDateStr);
+                    $formatted = $startDateObj->format('F j, Y');
+                    $msg = sprintf('Week %d distribution (starting %s) has begun. Review recipient plans.', $weekNumber, $formatted);
+                    foreach ($admins as $row) {
+                        $uid = (int)($row['user_id'] ?? 0);
+                        if ($uid <= 0) continue;
+                        try {
+                            $notif->create([
+                                'user_id' => $uid,
+                                'type' => 'week_rollover',
+                                'reference_type' => 'recipient_week',
+                                'reference_id' => null,
+                                'message' => $msg,
+                            ]);
+                        } catch (Throwable $e) {
+                            /* ignore per-admin failure */
+                        }
+                    }
+                }
+
+                rl_set_setting($settingKey, $startDateStr);
+                sendJson(['success' => true, 'message' => 'Admin notifications queued']);
+            } catch (Throwable $e) {
+                sendJson(['success' => false, 'error' => 'Failed to notify admins'], 500);
+            }
             break;
 
         case 'finalize_week':

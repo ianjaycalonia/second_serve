@@ -295,9 +295,22 @@ try {
                 $otherId = (int)($payload['conversation_id'] ?? 0);
                 $body = trim((string)($payload['body'] ?? ''));
                 if ($otherId <= 0 || $body === '') sendJson(['success'=>false,'error'=>'conversation_id and body are required'], 400);
-                db()->query('INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)', [$me, $otherId, $body]);
-                $id = (int)db()->lastInsertId();
-                $row = db()->query('SELECT id, sender_id, content AS body, created_at FROM messages WHERE id=?', [$id])->fetch();
+                $dedupe = db()->query(
+                    'SELECT id, sender_id, content AS body, created_at
+                     FROM messages
+                     WHERE sender_id=? AND receiver_id=? AND content=?
+                       AND created_at >= (NOW() - INTERVAL 2 MINUTE)
+                     ORDER BY id DESC LIMIT 1',
+                    [$me, $otherId, $body]
+                )->fetch();
+                if ($dedupe) {
+                    $row = $dedupe;
+                    $id = (int)$dedupe['id'];
+                } else {
+                    db()->query('INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)', [$me, $otherId, $body]);
+                    $id = (int)db()->lastInsertId();
+                    $row = db()->query('SELECT id, sender_id, content AS body, created_at FROM messages WHERE id=?', [$id])->fetch();
+                }
                 $row['id'] = (int)$row['id'];
                 $row['sender_id'] = (int)$row['sender_id'];
                 $role = (string)(currentUserRole() ?? '');
@@ -309,7 +322,16 @@ try {
                         foreach ($admins as $a) {
                             $aid = (int)$a['user_id'];
                             if ($aid > 0 && $aid !== $otherId) {
-                                db()->query('INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)', [$me, $aid, $body]);
+                                $exists = db()->query(
+                                    'SELECT id FROM messages
+                                     WHERE sender_id=? AND receiver_id=? AND content=?
+                                       AND created_at >= (NOW() - INTERVAL 2 MINUTE)
+                                     ORDER BY id DESC LIMIT 1',
+                                    [$me, $aid, $body]
+                                )->fetch();
+                                if (!$exists) {
+                                    db()->query('INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)', [$me, $aid, $body]);
+                                }
                             }
                         }
                     }

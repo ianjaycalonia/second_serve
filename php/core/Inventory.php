@@ -83,6 +83,38 @@ class Inventory
             )->fetch();
             if ($exists) { return; }
         }
+
+        // Additional dedupe guard: if the same donor/item/quantity/expiry was added very recently,
+        // reuse that inventory lot instead of inserting another row. This helps when the UI retries.
+        try {
+            $donorId = isset($donation['donor_id']) ? (int)$donation['donor_id'] : 0;
+            $itemNameRaw = isset($donation['name']) ? trim((string)$donation['name']) : '';
+            $qty = isset($donation['quantity']) ? (int)$donation['quantity'] : 0;
+            $expiryRaw = isset($donation['expiry_date']) ? trim((string)$donation['expiry_date']) : '';
+            if ($donorId > 0 && $itemNameRaw !== '' && $qty > 0) {
+                $params = [$donorId, $itemNameRaw, $qty, $qty];
+                $sql = "SELECT inv.inventory_id
+                        FROM inventory inv
+                        INNER JOIN donation_items di ON di.donation_item_id = inv.donation_item_id
+                        INNER JOIN donations d ON d.donation_id = di.donation_id
+                        WHERE d.donor_id = ?
+                          AND di.product_name = ?
+                          AND di.quantity = ?
+                          AND inv.quantity = ?
+                          AND inv.added_at >= (NOW() - INTERVAL 5 MINUTE)";
+                if ($expiryRaw !== '') {
+                    $sql .= " AND (di.expiry_date = ? OR di.expiry_date IS NULL)";
+                    $params[] = $expiryRaw;
+                }
+                $dupe = $this->db->query($sql . " ORDER BY inv.inventory_id DESC LIMIT 1", $params)->fetch();
+                if ($dupe && isset($dupe['inventory_id'])) {
+                    return; // treat as success; recent identical lot already exists
+                }
+            }
+        } catch (Exception $e) {
+            // best-effort guard; fall through to regular insert
+        }
+
         // Prepare safe values for new schema
         $itemName = isset($donation['name']) ? trim((string)$donation['name']) : '';
         if ($itemName === '') { $itemName = 'Unknown Item'; }

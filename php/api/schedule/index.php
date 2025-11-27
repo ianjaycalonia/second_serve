@@ -310,32 +310,9 @@ try {
             elseif ($eventType === 'donor' && $donorId){ $createdForUserId = $donorId; }
         }
 
-        // Scheduling constraints
+        // Scheduling constraints disabled per user request
         $startTs = strtotime($start);
-        if ($startTs < time()){
-            sendJson(['success'=>false,'error'=>'Cannot create events in the past'], 400);
-        }
         $startDate = date('Y-m-d', $startTs);
-        $startH = (int)date('H', $startTs); $startM = (int)date('i', $startTs);
-        if ($role === 'recipient'){
-            $mins = $startH*60 + $startM;
-            if ($mins < (10*60) || $mins > (16*60)){
-                sendJson(['success'=>false,'error'=>'Recipients can only book between 10:00 and 16:00'], 400);
-            }
-            $rowDon = $db->query('SELECT MAX(start_datetime) AS last_donor FROM schedule_events WHERE donor_id IS NOT NULL AND DATE(start_datetime)=? AND start_datetime<=?',[ $startDate, $start ])->fetch();
-            if (!empty($rowDon['last_donor'])){
-                $lastDonTs = strtotime($rowDon['last_donor']);
-                if ($startTs < ($lastDonTs + 3*3600)){
-                    sendJson(['success'=>false,'error'=>'Must be at least 3 hours after the latest donor booking'], 400);
-                }
-            }
-        }
-        if ($role === 'donor'){
-            $rowCnt = $db->query('SELECT COUNT(*) AS c FROM schedule_events WHERE donor_id=? AND DATE(start_datetime)=?', [ $currentId, $startDate ])->fetch();
-            if ((int)($rowCnt['c'] ?? 0) > 0){
-                sendJson(['success'=>false,'error'=>'Only one donor booking per day is allowed'], 400);
-            }
-        }
 
         $status = in_array($status, ['scheduled','confirmed','completed','cancelled'], true) ? $status : 'scheduled';
         $db->query('INSERT INTO schedule_events (title,event_type,status,start_datetime,end_datetime,location,notes,primary_recipient_id,donor_id,created_by,created_for_user_id,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [
@@ -596,29 +573,10 @@ try {
 
         if (!$fields){ sendJson(['success'=>false,'error'=>'No updates provided'],400); }
 
+        // Scheduling constraints disabled per user request
         $candidateStart = $newStart ?? $row['start_datetime'];
         $candidateTs = strtotime($candidateStart);
-        if ($candidateTs < time()){
-            sendJson(['success'=>false,'error'=>'Cannot update events to a past time'], 400);
-        }
         $candidateDate = date('Y-m-d', $candidateTs);
-        if ($role === 'recipient'){
-            $mins = (int)date('H',$candidateTs)*60 + (int)date('i',$candidateTs);
-            if ($mins < (10*60) || $mins > (16*60)){
-                sendJson(['success'=>false,'error'=>'Recipients can only book between 10:00 and 16:00'], 400);
-            }
-            $rowDon = $db->query('SELECT MAX(start_datetime) AS last_donor FROM schedule_events WHERE donor_id IS NOT NULL AND DATE(start_datetime)=? AND start_datetime<=? AND id<>?',[ $candidateDate, $candidateStart, $id ])->fetch();
-            if (!empty($rowDon['last_donor'])){
-                $lastDonTs = strtotime($rowDon['last_donor']);
-                if ($candidateTs < ($lastDonTs + 3*3600)){
-                    sendJson(['success'=>false,'error'=>'Must be at least 3 hours after the latest donor booking'], 400);
-                }
-            }
-        }
-        if ($role === 'donor'){
-            $rowCnt = $db->query('SELECT COUNT(*) AS c FROM schedule_events WHERE donor_id=? AND DATE(start_datetime)=? AND id<>?', [ $currentId, $candidateDate, $id ])->fetch();
-            if ((int)($rowCnt['c'] ?? 0) > 0){ sendJson(['success'=>false,'error'=>'Only one donor booking per day is allowed'], 400); }
-        }
 
         $params[] = $id;
         $db->query('UPDATE schedule_events SET '.implode(',', $fields).' WHERE id=?', $params);
