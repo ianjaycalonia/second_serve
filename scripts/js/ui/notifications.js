@@ -9,6 +9,7 @@
         // Same default used in auth.js
         return '/php/api';
       })();
+  const NOTIFS_ENDPOINT = `${API_BASE_URL}/communications/notifications.php`;
 
   // Attempt to read the current logged-in user from sessionStorage only
   function getStoredUser() {
@@ -194,13 +195,7 @@
           if (badge) badge.remove();
           // Only call PATCH when it was unread; ignore any errors (it might have been read via markAllRead)
           if (wasUnread && idNum !== null) {
-            try {
-              await fetch(`${API_BASE_URL}/communications/notifications.php?action=read&id=${idNum}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include'
-              });
-            } catch(_) { /* ignore */ }
+            await sendNotificationPatch('read', { id: idNum });
           }
           // Determine destination
           const user = getStoredUser();
@@ -339,10 +334,33 @@
     } catch(_) { return items; }
   }
 
+  async function sendNotificationPatch(action, extras) {
+    const params = new URLSearchParams();
+    params.append('_method', 'PATCH');
+    if (action) params.append('action', action);
+    if (extras && typeof extras === 'object') {
+      Object.entries(extras).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        params.append(key, String(value));
+      });
+    }
+    try {
+      await fetch(NOTIFS_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-HTTP-Method-Override': 'PATCH'
+        },
+        credentials: 'include',
+        body: params.toString()
+      });
+    } catch (_) {}
+  }
+
   async function fetchNotifications() {
     // Let server default to current session user
     try {
-      const res = await fetch(`${API_BASE_URL}/communications/notifications.php`, {
+      const res = await fetch(NOTIFS_ENDPOINT, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
@@ -419,14 +437,7 @@
   }
 
   async function markAllRead() {
-    try {
-      await fetch(`${API_BASE_URL}/communications/notifications.php?action=read_all`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include'
-      });
-    } catch (e) {
-    }
+    await sendNotificationPatch('read_all');
   }
 
   // Start when DOM ready

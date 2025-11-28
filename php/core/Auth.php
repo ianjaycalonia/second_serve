@@ -80,10 +80,7 @@ class Auth {
             throw new Exception('A system error occurred. Please try again later or contact the system administrator.');
         }
 
-        // If the user is required to change password, block normal login
-        if (!empty($user['must_change_password'])) {
-            throw new Exception('Password change required');
-        }
+        $mustChangePassword = !empty($user['must_change_password']);
 
         // Update last_login if column exists; ignore if not present
         try {
@@ -141,7 +138,26 @@ class Auth {
             $profile = $p ?: [];
         }
         unset($user['password_hash']);
-        return array_merge($user, $profile);
+        $userData = array_merge($user, $profile);
+
+        if ($user['role'] === 'recipient') {
+            try {
+                $allocationRow = $this->db->query(
+                    'SELECT status FROM allocations WHERE recipient_id = ? ORDER BY updated_at DESC, allocation_id DESC LIMIT 1',
+                    [$user['user_id']]
+                )->fetch();
+                if ($allocationRow && isset($allocationRow['status'])) {
+                    $userData['allocation_status'] = strtolower((string)$allocationRow['status']);
+                } else {
+                    $userData['allocation_status'] = null;
+                }
+            } catch (Exception $e) {
+                $userData['allocation_status'] = null;
+            }
+        }
+
+        $userData['must_change_password'] = $mustChangePassword ? 1 : 0;
+        return $userData;
     }
 
     /**

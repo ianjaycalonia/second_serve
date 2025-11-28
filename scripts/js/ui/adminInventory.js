@@ -3020,14 +3020,35 @@
           }
           return -1;
         };
+        const findBySubstring = (...patterns) => {
+          const lookups = patterns
+            .map((p) => String(p || "").toLowerCase())
+            .filter(Boolean);
+          if (!lookups.length) return -1;
+          for (let i = 0; i < header.length; i++) {
+            const col = header[i];
+            if (!col) continue;
+            const value = String(col).toLowerCase();
+            if (lookups.some((p) => value.includes(p))) {
+              return i;
+            }
+          }
+          return -1;
+        };
         const iItem = pick("item_name", "name", "product_name");
         const iCat = pick("category", "product_category");
         const iQty = ix("quantity");
         const iExpiry = ix("expiry_date");
         const iTags = ix("tags");
         const iUnit = pick("unit", "packed_by");
-        const iTW = pick("total_weight", "total_weight_kg");
-        const iTC = pick("total_cost", "total_cost_p");
+        const iTW = (() => {
+          const idx = pick("total_weight", "total_weight_kg", "weight", "weight_kg");
+          return idx >= 0 ? idx : findBySubstring("weight");
+        })();
+        const iTC = (() => {
+          const idx = pick("total_cost", "total_cost_p", "cost", "cost_php", "cost_p");
+          return idx >= 0 ? idx : findBySubstring("cost", "price");
+        })();
         const iBatch = ix("source_batch_id");
         const iEntryDate = pick("entry_date", "added_at");
         const iDonEmail = ix("donor_email");
@@ -3035,6 +3056,13 @@
         const iDonName = ix("donor_name");
         const iDonCategory = ix("donor_category");
         const iEntryBy = ix("entry_by");
+        const normalizeUnit = (value) => {
+          const val = String(value || '').trim().toLowerCase();
+          if (!val) return '';
+          if (val === 'packet') return 'pack';
+          if (val === 'packets') return 'packs';
+          return val;
+        };
         const payloadRows = [];
         for (const r of rows) {
           const item = (r[iItem] ?? r[0] ?? "").toString().trim();
@@ -3067,11 +3095,11 @@
           };
           // Prefer explicit unit column when present and non-empty; otherwise use unit derived from QUANTITY tail
           if (iUnit >= 0) {
-            const unitVal = (r[iUnit] || "").toString().trim();
+            const unitVal = normalizeUnit(r[iUnit]);
             if (unitVal) rowObj.unit = unitVal;
-            else if (derivedUnit) rowObj.unit = derivedUnit;
+            else if (derivedUnit) rowObj.unit = normalizeUnit(derivedUnit);
           } else if (derivedUnit) {
-            rowObj.unit = derivedUnit;
+            rowObj.unit = normalizeUnit(derivedUnit);
           }
           if (iTW >= 0) rowObj.total_weight = (r[iTW] || "").toString().trim();
           if (iTC >= 0) rowObj.total_cost = (r[iTC] || "").toString().trim();

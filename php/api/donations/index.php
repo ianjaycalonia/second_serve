@@ -58,6 +58,29 @@ function normalize_input($val) {
     return html_entity_decode(trim((string)$val), ENT_QUOTES | ENT_HTML5, 'UTF-8');
 }
 
+function getUnifiedPayload(): array {
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+    $data = [];
+    if ($contentType && stripos($contentType, 'application/json') !== false) {
+        $json = getJsonInput();
+        if (is_array($json)) {
+            $data = $json;
+        }
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = $_POST;
+    } else {
+        $raw = file_get_contents('php://input');
+        if ($raw !== false && $raw !== '') {
+            $parsed = [];
+            parse_str($raw, $parsed);
+            if (is_array($parsed)) { $data = $parsed; }
+        }
+    }
+    if (!is_array($data)) { $data = []; }
+    if (isset($data['_method'])) { unset($data['_method']); }
+    return sanitize($data);
+}
+
 try {
     // Routes
     // POST /api/donations (root) or /create
@@ -721,7 +744,7 @@ try {
     if ($method === 'PUT' && preg_match('#^/(\d+)/(status|status/)\z#', $sub, $m)) {
         requireRole(['admin']);
         $id = (int)$m[1];
-        $input = getJsonInput();
+        $input = getUnifiedPayload();
         $status = isset($input['status']) ? sanitize($input['status']) : '';
         if ($status === '') { sendJson(['success' => false, 'error' => 'Status is required'], 400); }
         $service = new Donation();
@@ -877,8 +900,8 @@ try {
     if ($method === 'PUT' && preg_match('#^/batch/([^/]{1,64})/status/?\z#', $sub, $m)) {
         requireRole(['admin']);
         $batchId = $m[1];
-        $input = getJsonInput();
-        $status = $input['status'] ?? '';
+        $input = getUnifiedPayload();
+        $status = isset($input['status']) ? sanitize($input['status']) : '';
         $service->updateStatusByBatch($batchId, $status);
         // Also reflect status in batches table
         try {

@@ -10,6 +10,7 @@
   const container = document.getElementById("resultContainer");
   const summary = document.getElementById("resultSummary");
   const feedback = document.getElementById("resultFeedback");
+  const scheduleBtn = document.getElementById("scheduleBtn");
   const API_BASE_URL =
     typeof window.API_BASE_URL === "string" && window.API_BASE_URL
       ? window.API_BASE_URL
@@ -40,6 +41,136 @@
 
   if (!container || !summary) {
     return;
+  }
+
+  function sanitizeText(text) {
+    return (text || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function extractSchedulePayloadFromResult() {
+    const recipientsMap = new Map();
+    const tables = container.querySelectorAll("tbody.dr-recipient[data-rec]");
+    tables.forEach((tb) => {
+      const ridAttr = tb.getAttribute("data-rec") || "";
+      const ridNum = parseInt(ridAttr, 10);
+      const fallbackKey = ridAttr || Math.random().toString(36).slice(2);
+      const key = Number.isFinite(ridNum) && ridNum > 0 ? ridNum : fallbackKey;
+      if (!recipientsMap.has(key)) {
+        const headerName = tb.querySelector(".fw-semibold");
+        const rawName = headerName ? sanitizeText(headerName.textContent) : "";
+        recipientsMap.set(key, {
+          recipient_id: Number.isFinite(ridNum) && ridNum > 0 ? ridNum : null,
+          recipient_name: rawName || null,
+          organization: rawName || null,
+          contact_number: null,
+          allocations: [],
+        });
+      }
+      const recipientEntry = recipientsMap.get(key);
+      tb.querySelectorAll("tr.dr-rec-item").forEach((row) => {
+        const status = (row.dataset.status || "").toLowerCase();
+        if (status === "completed" || status === "picked up" || status === "cancelled") {
+          return;
+        }
+        const allocationId = parseInt(row.dataset.allocationId || "0", 10) || null;
+        let allocation = recipientEntry.allocations.find(
+          (a) => a.allocation_id === allocationId
+        );
+        if (!allocation) {
+          allocation = {
+            allocation_id: allocationId,
+            status,
+            items: [],
+          };
+          recipientEntry.allocations.push(allocation);
+        }
+        const nameInput = row.querySelector(".dr-name");
+        const qtyInput = row.querySelector(".dr-qty");
+        const unitCell = row.querySelector("td:nth-child(5)");
+        const itemName = sanitizeText(nameInput ? nameInput.value : "");
+        const qtyVal = qtyInput ? parseFloat(qtyInput.value) : 0;
+        if (!itemName || !Number.isFinite(qtyVal) || qtyVal <= 0) return;
+        const unitText = sanitizeText(unitCell ? unitCell.textContent : "");
+        allocation.items.push({
+          item_name: itemName,
+          quantity: qtyVal,
+          unit: unitText || null,
+          status,
+        });
+      });
+    });
+    const recipients = Array.from(recipientsMap.values())
+      .map((rec) => {
+        const filteredAllocs = rec.allocations
+          .map((alloc) => {
+            const items = alloc.items.filter((it) => Number.isFinite(it.quantity) && it.quantity > 0);
+            return items.length ? Object.assign({}, alloc, { items }) : null;
+          })
+          .filter(Boolean);
+        return filteredAllocs.length
+          ? Object.assign({}, rec, { allocations: filteredAllocs })
+          : null;
+      })
+      .filter(Boolean);
+
+    if (!recipients.length) {
+      return null;
+    }
+
+    const periodKeyText = sanitizeText(
+      document.querySelector("#drWeekSelect option:checked")?.textContent || ""
+    );
+    return {
+      generated_at: new Date().toISOString(),
+      source: "distribution_result",
+      period_key_label: periodKeyText || null,
+      recipients,
+    };
+  }
+
+  function storeSchedulePayload(payload) {
+    let stored = false;
+    try {
+      sessionStorage.setItem(
+        "schedule_payload_from_pickup",
+        JSON.stringify(payload)
+      );
+      stored = true;
+    } catch (_) {}
+    if (!stored) {
+      try {
+        window.__schedulePayloadFromPickup = payload;
+        stored = true;
+      } catch (_) {}
+    }
+    return stored;
+  }
+
+  if (scheduleBtn) {
+    scheduleBtn.addEventListener("click", () => {
+      const payload = extractSchedulePayloadFromResult();
+      if (!payload || !Array.isArray(payload.recipients) || !payload.recipients.length) {
+        showMsg(
+          feedback,
+          "No recipients with distributable items found. Save or load allocations before scheduling.",
+          "warning"
+        );
+        return;
+      }
+      if (!storeSchedulePayload(payload)) {
+        showMsg(
+          feedback,
+          "Unable to prepare schedule data. Please try again or use Pickup Management.",
+          "danger"
+        );
+        return;
+      }
+      const dest = new URL("Schedule.html", window.location.origin);
+      dest.searchParams.set("from", "pickup");
+      window.location.href = dest.pathname + dest.search;
+    });
   }
 
   // Auto-load run: prefer explicit period_key, else latest run, unless recipient_ids provided

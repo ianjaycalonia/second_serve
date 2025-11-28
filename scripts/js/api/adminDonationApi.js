@@ -61,9 +61,13 @@
   }
 
   async function deleteDonation(id) {
+    const params = new URLSearchParams();
+    params.append('_method', 'DELETE');
     const res = await fetch(`${API_BASE_URL}/donations/index.php/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      credentials: 'include'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'include',
+      body: params.toString()
     });
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;
@@ -74,9 +78,13 @@
   }
 
   async function deleteDonationBatch(batchId) {
+    const params = new URLSearchParams();
+    params.append('_method', 'DELETE');
     const res = await fetch(`${API_BASE_URL}/donations/index.php/batch/${encodeURIComponent(batchId)}`, {
-      method: 'DELETE',
-      credentials: 'include'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'include',
+      body: params.toString()
     });
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;
@@ -87,11 +95,14 @@
   }
 
   async function updateDonationStatus(id, status) {
+    const params = new URLSearchParams();
+    params.append('_method', 'PUT');
+    params.append('status', status ?? '');
     const res = await fetch(`${API_BASE_URL}/donations/index.php/${encodeURIComponent(id)}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       credentials: 'include',
-      body: JSON.stringify({ status })
+      body: params.toString()
     });
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;
@@ -102,11 +113,14 @@
   }
 
   async function updateDonationBatchStatus(batchId, status) {
+    const params = new URLSearchParams();
+    params.append('_method', 'PUT');
+    params.append('status', status ?? '');
     const res = await fetch(`${API_BASE_URL}/donations/index.php/batch/${encodeURIComponent(batchId)}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       credentials: 'include',
-      body: JSON.stringify({ status })
+      body: params.toString()
     });
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;

@@ -12,7 +12,27 @@ setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
+$override = $_GET['_method'] ?? $_POST['_method'] ?? ($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? '');
+if ($override) {
+    $ov = strtoupper(trim((string)$override));
+    if (in_array($ov, ['GET','POST','PUT','PATCH','DELETE'], true)) {
+        $method = $ov;
+    }
+}
+
 $payload = getJsonInput(); // raw (no sanitize) to preserve strings
+
+function requestAction(): string {
+    if (isset($_GET['action'])) { return sanitize($_GET['action']); }
+    if (isset($_POST['action'])) { return sanitize($_POST['action']); }
+    return '';
+}
+
+function requestInt(string $key): int {
+    if (isset($_GET[$key])) { return (int)$_GET[$key]; }
+    if (isset($_POST[$key])) { return (int)$_POST[$key]; }
+    return 0;
+}
 
 try {
     switch ($method) {
@@ -53,7 +73,7 @@ try {
         case 'POST':
             // POST /notifications
             $svc = new Notification();
-            $actionName = isset($_GET['action']) ? sanitize($_GET['action']) : '';
+            $actionName = requestAction();
             $data = [
                 'user_id' => $payload['user_id'] ?? null,
                 'type' => $payload['type'] ?? null,
@@ -74,9 +94,9 @@ try {
 
         case 'PATCH':
             // PATCH /notifications/:id/read -> support via query: ?action=read&id=123
-            $action = isset($_GET['action']) ? sanitize($_GET['action']) : '';
+            $action = requestAction();
             if ($action === 'read') {
-                $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+                $id = requestInt('id');
                 if ($id <= 0) sendJson(['success' => false, 'error' => 'id is required'], 400);
                 $svc = new Notification();
                 $ok = $svc->markRead($id);
@@ -84,7 +104,7 @@ try {
                 sendJson(['success' => true, 'message' => 'Notification marked as read']);
             }
             if ($action === 'read_all') {
-                $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+                $userId = requestInt('user_id');
                 if ($userId <= 0) { $userId = (int)(currentUserId() ?? 0); }
                 if ($userId <= 0) sendJson(['success' => false, 'error' => 'Authentication required'], 401);
                 // Permission: user themselves or admin only

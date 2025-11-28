@@ -28,8 +28,14 @@ function showToast(message, options = {}) {
         container = document.createElement('div');
         container.id = 'toastContainer';
         container.className = 'toast-container position-fixed top-0 end-0 p-3';
-        container.style.zIndex = '1100';
         document.body.appendChild(container);
+    }
+    try {
+        const rootStyles = getComputedStyle(document.documentElement);
+        const zIndexVar = (rootStyles.getPropertyValue('--toast-z-index') || '').trim();
+        container.style.zIndex = zIndexVar || '2147483000';
+    } catch (_) {
+        container.style.zIndex = '2147483000';
     }
 
     const toast = document.createElement('div');
@@ -665,6 +671,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const stored = (() => { try { return sessionStorage.getItem('user'); } catch(_) { return null; } })();
     const currentUser = stored ? (() => { try { return JSON.parse(stored); } catch(_) { return null; } })() : null;
 
+    const shouldPromptPasswordChange = (() => {
+        try { return sessionStorage.getItem('password_change_reminder') === '1'; }
+        catch (_) { return false; }
+    })();
+    if (shouldPromptPasswordChange) {
+        const fireReminderToast = () => {
+            showToast(
+                'Please change your password from your profile settings to keep your account secure.',
+                { title: 'Password change required', variant: 'warning', delay: 8000 }
+            );
+            try { sessionStorage.removeItem('password_change_reminder'); } catch (_) {}
+        };
+        if (document.readyState === 'complete') {
+            setTimeout(fireReminderToast, 0);
+        } else {
+            window.addEventListener('load', () => setTimeout(fireReminderToast, 0), { once: true });
+        }
+    }
+
     if (requiredRole) {
         // If not logged in at all, go to login/index
         const userRoleLower = (currentUser?.role || '').toString().trim().toLowerCase();
@@ -676,6 +701,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.currentRecipientStatus = function currentRecipientStatus(){
             const u = getCurrentUser();
             if (!u) return '';
+            if (u.allocation_status) return String(u.allocation_status).toLowerCase();
             if (u.recipient_status) return String(u.recipient_status).toLowerCase();
             if (u.status) return String(u.status).toLowerCase();
             return '';
@@ -799,6 +825,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (response && response.user) {
                         try {
                             sessionStorage.setItem('user', JSON.stringify(response.user));
+                            if (response.user.must_change_password) {
+                                sessionStorage.setItem('password_change_reminder', '1');
+                            } else {
+                                sessionStorage.removeItem('password_change_reminder');
+                            }
                         } catch (_) {}
                     }
                     const dest = response?.redirect || (response?.user ? getDashboardUrl(response.user.role) : null);
