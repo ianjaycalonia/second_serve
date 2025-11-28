@@ -1,17 +1,9 @@
--- Clean rebuild SQL for simply_share with no ALTER statements
--- Drop-and-import friendly: drops DB, recreates with all constraints inline
-
-DROP DATABASE IF EXISTS `simply_share`;
-CREATE DATABASE `simply_share` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-USE `simply_share`;
-
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-SET time_zone = "+00:00";
+-- Simply Share schema (clean, hosting-friendly)
+-- Note: No database-level commands (DROP/CREATE DATABASE, USE, SET GLOBAL)
+SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';
+SET time_zone = '+00:00';
 /*!40101 SET NAMES utf8mb4 */;
 SET FOREIGN_KEY_CHECKS=0;
-
--- Enable event scheduler if not already enabled
-SET GLOBAL event_scheduler = ON;
 
 -- =========================
 -- Weeks and Week Recipients
@@ -98,9 +90,10 @@ CREATE TABLE `users` (
   `email` varchar(100) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
   `role` enum('donor','recipient','admin') NOT NULL,
-  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `status` enum('pending','approved','rejected','inactive') DEFAULT 'pending',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `last_login` timestamp NULL DEFAULT NULL,
+  `must_change_password` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
@@ -396,8 +389,6 @@ CREATE TABLE `products` (
   CONSTRAINT `products_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
--- Triggers removed: products_bi_sync_category, products_bu_sync_category, categories_au_sync_products
--- These will be implemented in backend logic
 
 -- donation_items (line items per donation) - normalized: use FKs for category and unit
 CREATE TABLE `donation_items` (
@@ -694,6 +685,7 @@ CREATE TABLE `settings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 INSERT INTO `settings` (`key`, `value`) VALUES
+  ('last_expiry_check', '1970-01-01'),
   ('week_start', 'sunday'),
   ('di_auto_open_alloc', '0'),
   ('require_ack_checkbox', '0'),
@@ -717,7 +709,7 @@ CREATE TABLE `allocations` (
   `allocation_id` int(11) NOT NULL AUTO_INCREMENT,
   `recipient_id` int(11) NOT NULL,
   `run_id` bigint(20) unsigned DEFAULT NULL COMMENT 'optional link to allocation_runs.period_key',
-  `status` enum('Pending','Notified','Acknowledged','Updated','Picked Up','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
+  `status` enum('Pending','Notified','Acknowledged','Updated','Picked Up','Completed','Cancelled','Delivered') NOT NULL DEFAULT 'Pending',
   `scheduled_pickup_at` datetime DEFAULT NULL,
   `acknowledged_at` datetime DEFAULT NULL,
   `cancelled_at` datetime DEFAULT NULL,
@@ -807,20 +799,5 @@ ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
 INSERT INTO `donor_profiles` (`user_id`, `organization_name`, `donor_category_id`, `contact_number`, `address`, `notes`) VALUES
   (5, 'TestDonor', NULL, '09910071273', 'Tabok, Mandaue City', NULL)
 ON DUPLICATE KEY UPDATE `organization_name`=VALUES(`organization_name`);
-
--- Settings table for application configuration
-CREATE TABLE IF NOT EXISTS `settings` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `key` VARCHAR(100) NOT NULL,
-    `value` TEXT,
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY `uk_settings_key` (`key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Insert default settings if they don't exist
-INSERT IGNORE INTO `settings` (`key`, `value`) VALUES
-('last_expiry_check', '1970-01-01'),
-('inventory_soon_expire_lead_days', '7');
 
 SET FOREIGN_KEY_CHECKS=1;

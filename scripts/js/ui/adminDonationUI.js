@@ -873,7 +873,7 @@
           } catch (_) {}
           const m = bootstrap.Modal.getOrCreateInstance(el),
             open = getEl("ackOpenMessagesBtn"),
-            close = getEl("ackCloseBtn"),
+            schedule = getEl("ackSchedulePickupBtn"),
             chk = getEl("ackDontShowAgain");
           if (chk) chk.checked = false;
           if (open) {
@@ -894,10 +894,23 @@
               }
             };
           }
-          if (close)
-            close.onclick = async () => {
-              if (chk && chk.checked)
-                await Api.setUserPref("ackNextStepsDontShow", "1");
+          if (schedule)
+            schedule.onclick = async () => {
+              try {
+                if (chk && chk.checked)
+                  await Api.setUserPref("ackNextStepsDontShow", "1");
+              } catch (_) {}
+              const params = new URLSearchParams({ from: "donation" });
+              if (Number.isFinite(Number(donorId)) && Number(donorId) > 0) {
+                params.set("donorId", String(donorId));
+              }
+              if (donorTitle) {
+                params.set("donorName", donorTitle);
+              }
+              try {
+                m.hide();
+              } catch (_) {}
+              window.location.href = `schedule.html?${params.toString()}`;
             };
           m.show();
         }

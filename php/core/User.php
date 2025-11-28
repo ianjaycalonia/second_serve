@@ -4,10 +4,29 @@ require_once __DIR__ . '/../includes/config.php';
 class User
 {
     private Database $db;
+    private ?string $beneficiaryCategoryPk = null;
 
     public function __construct()
     {
         $this->db = Database::getInstance();
+    }
+
+    private function getBeneficiaryCategoryPkColumn(): string
+    {
+        if ($this->beneficiaryCategoryPk !== null) {
+            return $this->beneficiaryCategoryPk;
+        }
+        try {
+            $row = $this->db->query('SHOW COLUMNS FROM beneficiary_categories LIKE "beneficiary_category_id"')->fetch();
+            if ($row) {
+                $this->beneficiaryCategoryPk = 'beneficiary_category_id';
+                return $this->beneficiaryCategoryPk;
+            }
+        } catch (Throwable $e) {
+            // ignore; fallback handled below
+        }
+        $this->beneficiaryCategoryPk = 'id';
+        return $this->beneficiaryCategoryPk;
     }
 
     // Normalize a free-form tags string/array into a canonical, unique, comma-separated string
@@ -83,16 +102,15 @@ class User
         $profile = [];
         if ($u['role'] === 'recipient') {
             // Read normalized profile and join primary contact directly (and map category)
-            $p = $this->db->query(
-                "SELECT rp.organization_name, rp.beneficiary_category_id, bc.name AS beneficiary_category,
-                        rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count, rp.external_id,
-                        pc.position_designation, pc.contact_number, pc.email
-                 FROM recipient_profiles rp
-                 LEFT JOIN beneficiary_categories bc ON bc.beneficiary_category_id = rp.beneficiary_category_id
-                 LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
-                 WHERE rp.user_id = ?",
-                [$userId]
-            )->fetch();
+            $bcPk = $this->getBeneficiaryCategoryPkColumn();
+            $sql = "SELECT rp.organization_name, rp.beneficiary_category_id, bc.name AS beneficiary_category,
+                           rp.advocacy, rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count, rp.external_id,
+                           pc.position_designation, pc.contact_number, pc.email
+                    FROM recipient_profiles rp
+                    LEFT JOIN beneficiary_categories bc ON bc.`$bcPk` = rp.beneficiary_category_id
+                    LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id
+                    WHERE rp.user_id = ?";
+            $p = $this->db->query($sql, [$userId])->fetch();
             $profile = $p ?: [];
         } elseif ($u['role'] === 'donor') {
             // Expose donor_category_id; UI may map it to a name via donor_categories table
@@ -194,14 +212,15 @@ class User
         $role = $filters['role'] ?? null;
         if ($role === 'recipient') {
             // Join recipient_profiles with primary contact and category lookup; expose tags and age_group
+            $bcPk = $this->getBeneficiaryCategoryPkColumn();
             $sql = "SELECT u.user_id, u.name, u.email, u.status,
                            rp.organization_name, rp.beneficiary_category_id, bc.name AS beneficiary_category,
-                           rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count,
+                           rp.advocacy, rp.address, rp.total_residents, rp.age_group, rp.male_count, rp.female_count,
                            rp.external_id, rp.tags,
                            pc.position_designation, pc.contact_number
                     FROM users u
                     LEFT JOIN recipient_profiles rp ON rp.user_id = u.user_id
-                    LEFT JOIN beneficiary_categories bc ON bc.beneficiary_category_id = rp.beneficiary_category_id
+                    LEFT JOIN beneficiary_categories bc ON bc.`$bcPk` = rp.beneficiary_category_id
                     LEFT JOIN recipient_contacts pc ON pc.id = rp.primary_contact_id";
             if (!empty($filters['q'])){ $where[]='(u.name LIKE ? OR u.email LIKE ? OR rp.organization_name LIKE ?)'; $q='%'.$filters['q'].'%'; array_push($params,$q,$q,$q); }
         } elseif ($role === 'donor') {
@@ -247,9 +266,38 @@ class User
         $allowed = ['approved','pending','rejected','inactive'];
         $s = strtolower(trim($status));
         if (!in_array($s, $allowed, true)) {
-            throw new Exception('Invalid status');
+            throw new Exception('Invalid status: ' . $status);
         }
         $this->db->query('UPDATE users SET status = ? WHERE user_id = ?', [$s, $userId]);
+    }
+
+    public function deleteUser(int $userId): void
+    {
+        if ($userId <= 0) {
+            throw new Exception('Invalid user_id');
+        }
+        $row = $this->db->query('SELECT user_id, role FROM users WHERE user_id = ? LIMIT 1', [$userId])->fetch();
+        if (!$row) {
+            throw new Exception('User not found');
+        }
+        $role = strtolower((string)($row['role'] ?? ''));
+        if ($role === 'admin') {
+            $count = $this->db->query('SELECT COUNT(*) AS c FROM users WHERE role = "admin" AND user_id <> ?', [$userId])->fetch();
+            $remaining = (int)($count['c'] ?? 0);
+            if ($remaining <= 0) {
+                throw new Exception('Cannot delete the last admin account');
+            }
+        }
+        $this->db->beginTransaction();
+        try {
+            $this->db->query('DELETE FROM users WHERE user_id = ?', [$userId]);
+            $this->db->commit();
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     // Generate a placeholder email from organization name (sanitized) with a non-routable domain
@@ -427,6 +475,60 @@ class User
         if (empty($rows)) { return ['inserted' => 0, 'errors' => []]; }
         $inserted = 0; // number of organizations created
         $errors = [];
+
+        // Preload beneficiary categories to map imported "type" values to lookup IDs
+        $categoryRows = [];
+        $categoryIdField = 'beneficiary_category_id';
+        try {
+            $categoryRows = $this->db->query('SELECT beneficiary_category_id AS category_id_lookup, name FROM beneficiary_categories')->fetchAll();
+        } catch (Throwable $e) {
+            // Fallback for legacy schema where primary key column is still named `id`
+            $categoryIdField = 'id';
+            $categoryRows = $this->db->query('SELECT id AS category_id_lookup, name FROM beneficiary_categories')->fetchAll();
+        }
+        $categoryExactMap = [];
+        $categoryNormalizedMap = [];
+        foreach ($categoryRows as $catRow) {
+            if (!isset($catRow['category_id_lookup'], $catRow['name'])) {
+                continue;
+            }
+            $nameLower = strtolower(trim((string)$catRow['name']));
+            if ($nameLower === '') {
+                continue;
+            }
+            $categoryExactMap[$nameLower] = (int)$catRow['category_id_lookup'];
+            $normalized = preg_replace('/[^a-z0-9]+/', '', $nameLower);
+            if ($normalized !== '') {
+                $categoryNormalizedMap[$normalized] = (int)$catRow['category_id_lookup'];
+            }
+        }
+        $resolveCategoryId = function (?string $label) use ($categoryExactMap, $categoryNormalizedMap, $categoryRows): ?int {
+            if ($label === null) {
+                return null;
+            }
+            $labelTrim = trim((string)$label);
+            if ($labelTrim === '') {
+                return null;
+            }
+            $labelLower = strtolower($labelTrim);
+            if (isset($categoryExactMap[$labelLower])) {
+                return $categoryExactMap[$labelLower];
+            }
+            $normalizedLabel = preg_replace('/[^a-z0-9]+/', '', $labelLower);
+            if ($normalizedLabel !== '' && isset($categoryNormalizedMap[$normalizedLabel])) {
+                return $categoryNormalizedMap[$normalizedLabel];
+            }
+            foreach ($categoryRows as $catRow) {
+                $name = isset($catRow['name']) ? (string)$catRow['name'] : '';
+                if ($name === '') {
+                    continue;
+                }
+                if (stripos($name, $labelTrim) !== false || stripos($labelTrim, $name) !== false) {
+                    return (int)$catRow['category_id_lookup'];
+                }
+            }
+            return null;
+        };
         // Step 1: normalize rows and group by organization
         $groups = [];
         foreach ($rows as $idx => $row) {
@@ -451,6 +553,20 @@ class User
                     'female_count' => $r['nooffemale'] ?? ($r['female'] ?? null),
                     'external_id' => $r['id'] ?? ($r['externalid'] ?? null),
                 ];
+                $providedCategoryId = null;
+                if (isset($r['beneficiarycategoryid']) && $r['beneficiarycategoryid'] !== '') {
+                    $tmpId = (int)$r['beneficiarycategoryid'];
+                    if ($tmpId > 0) {
+                        $providedCategoryId = $tmpId;
+                    }
+                } elseif (isset($r['beneficiarycategory']) && trim((string)$r['beneficiarycategory']) !== '') {
+                    $providedCategoryId = $resolveCategoryId($r['beneficiarycategory']);
+                }
+                if ($providedCategoryId === null) {
+                    $candidateLabel = $r['type'] ?? ($data['organization_type'] ?? null);
+                    $providedCategoryId = $resolveCategoryId($candidateLabel);
+                }
+                $data['beneficiary_category_id'] = $providedCategoryId;
                 if (empty($data['organization_name']) && empty($data['name'])) {
                     throw new Exception('Missing name/organization');
                 }
@@ -497,6 +613,20 @@ class User
                     }
                     if ($advocacyVal !== null) {
                         $this->db->query('UPDATE recipient_profiles SET advocacy = ? WHERE user_id = ?', [$advocacyVal, $userId]);
+                    }
+
+                    $categoryId = null;
+                    foreach ($items as $itCat) {
+                        if (isset($itCat['beneficiary_category_id'])) {
+                            $candidate = (int)$itCat['beneficiary_category_id'];
+                            if ($candidate > 0) {
+                                $categoryId = $candidate;
+                                break;
+                            }
+                        }
+                    }
+                    if ($categoryId !== null) {
+                        $this->db->query('UPDATE recipient_profiles SET beneficiary_category_id = ? WHERE user_id = ?', [$categoryId, $userId]);
                     }
 
                     // Insert contacts for all items in the group; mark first with email/number as primary

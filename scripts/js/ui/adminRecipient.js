@@ -923,7 +923,7 @@ if (typeof window.showToast !== "function") {
     return Array.isArray(j?.data?.items) ? j.data.items : [];
   }
 
-  // Render recipients to match Recipient.html table: Beneficiary, Beneficiary Category, Address, Contact Person, Position, Contact#, Email, Status, Actions
+  // Render recipients to match Recipient.html table: Beneficiary, Address, Contact Person, Position, Contact#, Email, Status, Actions
   function renderRecipients(items) {
     const tbody = document.querySelector("main .table tbody");
     if (!tbody) return;
@@ -933,9 +933,6 @@ if (typeof window.showToast !== "function") {
       const addr = decodeHtml(u.address || "");
       const recipientName =
         orgName && orgName.trim() ? orgName.trim() : (userName || "").trim();
-      const beneficiaryCategory = decodeHtml(
-        u.beneficiary_category || u.organization_type || ""
-      );
       const contact = (userName || "").trim() || "—";
       const position = decodeHtml(u.position_designation || "");
       const contactNo = decodeHtml(u.contact_number || "");
@@ -968,9 +965,6 @@ if (typeof window.showToast !== "function") {
       return `
         <tr>
           <td data-label="Name of Beneficiary">${escapeHtml(recipientName)}</td>
-          <td class="d-none d-sm-table-cell" data-label="Beneficiary Category">${escapeHtml(
-            beneficiaryCategory || "—"
-          )}</td>
           <td class="d-none d-sm-table-cell text-break" data-label="Address">${escapeHtml(
             location
           )}</td>
@@ -1226,6 +1220,15 @@ if (typeof window.showToast !== "function") {
         openEditModal(u);
         return;
       }
+      const view = e.target.closest && e.target.closest('.view-btn');
+      if (view) {
+        e.preventDefault();
+        const id = Number(view.getAttribute('data-user-id'));
+        const u = (recipientsData||[]).find(x=>Number(x.user_id)===id);
+        if (!u){ try{ showToast('Recipient not found', 'danger'); }catch(_){ } return; }
+        openViewModal(u);
+        return;
+      }
       const deactivate = e.target.closest && e.target.closest('.deactivate-btn');
       if (deactivate){
         e.preventDefault();
@@ -1305,6 +1308,97 @@ if (typeof window.showToast !== "function") {
       el.addEventListener('hidden.bs.modal', onCancel, { once: true });
       modal.show();
     });
+  }
+
+  function ensureViewModal(){
+    let el = document.getElementById('recipientViewModal');
+    if (el) return el;
+    const html = `
+      <div class="modal fade" id="recipientViewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="recipientViewTitle">Recipient Details</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <dl class="row mb-0">
+                <dt class="col-sm-4">Organization / Beneficiary</dt>
+                <dd class="col-sm-8" data-field="organization">—</dd>
+                <dt class="col-sm-4">Advocacy</dt>
+                <dd class="col-sm-8" data-field="advocacy">—</dd>
+                <dt class="col-sm-4">Beneficiary Category</dt>
+                <dd class="col-sm-8" data-field="category">—</dd>
+                <dt class="col-sm-4">Address</dt>
+                <dd class="col-sm-8" data-field="address">—</dd>
+                <dt class="col-sm-4">Contact Person</dt>
+                <dd class="col-sm-8" data-field="contact_person">—</dd>
+                <dt class="col-sm-4">Position / Designation</dt>
+                <dd class="col-sm-8" data-field="position">—</dd>
+                <dt class="col-sm-4">Contact #</dt>
+                <dd class="col-sm-8" data-field="contact_number">—</dd>
+                <dt class="col-sm-4">Email Address</dt>
+                <dd class="col-sm-8" data-field="email">—</dd>
+                <dt class="col-sm-4">Total Residents</dt>
+                <dd class="col-sm-8" data-field="total_residents">—</dd>
+                <dt class="col-sm-4">Age Group</dt>
+                <dd class="col-sm-8" data-field="age_group">—</dd>
+                <dt class="col-sm-4">Male Count</dt>
+                <dd class="col-sm-8" data-field="male_count">—</dd>
+                <dt class="col-sm-4">Female Count</dt>
+                <dd class="col-sm-8" data-field="female_count">—</dd>
+                <dt class="col-sm-4">Status</dt>
+                <dd class="col-sm-8" data-field="status">—</dd>
+              </dl>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html.trim();
+    document.body.appendChild(wrapper.firstElementChild);
+    return document.getElementById('recipientViewModal');
+  }
+
+  function openViewModal(u){
+    const el = ensureViewModal();
+    const titleEl = el.querySelector('#recipientViewTitle');
+    const setField = (name, value)=>{
+      const node = el.querySelector(`[data-field="${name}"]`);
+      if (!node) return;
+      const decoded = decodeHtml(value || '');
+      node.textContent = decoded && decoded.trim() ? decoded.trim() : '—';
+    };
+    const orgName = u.organization_name || u.name || '';
+    if (titleEl) {
+      const decodedTitle = decodeHtml(orgName || 'Recipient Details');
+      titleEl.textContent = decodedTitle && decodedTitle.trim() ? decodedTitle.trim() : 'Recipient Details';
+    }
+    setField('organization', orgName);
+    setField('advocacy', u.advocacy);
+    setField('category', u.beneficiary_category || u.organization_type);
+    setField('address', u.address);
+    setField('contact_person', u.name);
+    setField('position', u.position_designation);
+    setField('contact_number', u.contact_number);
+    setField('email', u.email);
+    setField('total_residents', u.total_residents != null ? String(u.total_residents) : '');
+    setField('age_group', u.age_group);
+    setField('male_count', u.male_count != null ? String(u.male_count) : '');
+    setField('female_count', u.female_count != null ? String(u.female_count) : '');
+    const statusText = (()=>{
+      const st = String(u.status || '').toLowerCase();
+      if (st === 'approved') return 'Active';
+      if (st === 'pending') return 'Pending';
+      if (st === 'rejected') return 'Rejected';
+      return st ? st.charAt(0).toUpperCase() + st.slice(1) : '—';
+    })();
+    setField('status', statusText);
+    const modal = bootstrap.Modal.getOrCreateInstance(el);
+    modal.show();
   }
 
   function ensureEditModal(){

@@ -1863,6 +1863,7 @@
       return;
     }
     const parts = [];
+    let referenceAllocationId = null;
     tb.querySelectorAll("tr").forEach((tr) => {
       const name = getRowName(tr);
       const qty = tr.querySelector(".dr-qty")?.value || "";
@@ -1870,6 +1871,15 @@
       if (name && qty) {
         const unitPart = unit ? ` ${unit}` : "";
         parts.push(`${qty}${unitPart} ${name}`.trim());
+      }
+      if (!referenceAllocationId) {
+        const allocIdAttr = tr.getAttribute("data-allocation-id");
+        if (allocIdAttr) {
+          const parsed = parseInt(allocIdAttr, 10);
+          if (Number.isFinite(parsed) && parsed > 0) {
+            referenceAllocationId = parsed;
+          }
+        }
       }
     });
     const msg = parts.length
@@ -1881,7 +1891,7 @@
     // Send notification
     try {
       await fetch(
-        `${API_BASE_URL}/communications/notifications.php?action=create`,
+        `${API_BASE_URL}/communications/notifications.php?action=replace_latest`,
         {
           method: "POST",
           credentials: "include",
@@ -1892,6 +1902,8 @@
           body: JSON.stringify({
             user_id: rid,
             type: "allocation_ready",
+            reference_type: "allocation",
+            reference_id: referenceAllocationId,
             message: msg,
           }),
         }
@@ -2156,6 +2168,7 @@
         continue;
       }
       const parts = [];
+      let referenceAllocationId = null;
       tb.querySelectorAll("tr").forEach((tr) => {
         const name = getRowName(tr);
         const qty = tr.querySelector(".dr-qty")?.value || "";
@@ -2163,6 +2176,15 @@
         if (name && qty) {
           const unitPart = unit ? ` ${unit}` : "";
           parts.push(`${qty}${unitPart} ${name}`.trim());
+        }
+        if (!referenceAllocationId) {
+          const allocIdAttr = tr.getAttribute("data-allocation-id");
+          if (allocIdAttr) {
+            const parsed = parseInt(allocIdAttr, 10);
+            if (Number.isFinite(parsed) && parsed > 0) {
+              referenceAllocationId = parsed;
+            }
+          }
         }
       });
       const msg = parts.length
@@ -2174,7 +2196,7 @@
       // Send notification (best-effort)
       try {
         await fetch(
-          `${API_BASE_URL}/communications/notifications.php?action=create`,
+          `${API_BASE_URL}/communications/notifications.php?action=replace_latest`,
           {
             method: "POST",
             credentials: "include",
@@ -2185,6 +2207,8 @@
             body: JSON.stringify({
               user_id: rid,
               type: "allocation_ready",
+              reference_type: "allocation",
+              reference_id: referenceAllocationId,
               message: msg,
             }),
           }

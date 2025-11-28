@@ -52,15 +52,24 @@ try {
 
         case 'POST':
             // POST /notifications
-            // Accepts: user_id, type, reference_id, message, optional reference_type
             $svc = new Notification();
-            $created = $svc->create([
+            $actionName = isset($_GET['action']) ? sanitize($_GET['action']) : '';
+            $data = [
                 'user_id' => $payload['user_id'] ?? null,
                 'type' => $payload['type'] ?? null,
-                'reference_type' => $payload['reference_type'] ?? 'donation',
+                'reference_type' => $payload['reference_type'] ?? null,
                 'reference_id' => $payload['reference_id'] ?? null,
                 'message' => $payload['message'] ?? null,
-            ]);
+            ];
+            if ($actionName === 'replace_latest') {
+                $updated = $svc->replaceLatest($data, false);
+                sendJson(['success' => true, 'data' => ['notification' => $updated]]);
+            }
+            // Default: create new notification (legacy behaviour)
+            if (!isset($data['reference_type']) || $data['reference_type'] === null) {
+                $data['reference_type'] = 'donation';
+            }
+            $created = $svc->create($data);
             sendJson(['success' => true, 'data' => ['notification' => $created]], 201);
 
         case 'PATCH':

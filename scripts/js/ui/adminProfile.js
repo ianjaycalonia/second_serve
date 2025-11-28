@@ -301,6 +301,84 @@
     }
   }
 
+  function ensureDangerModal() {
+    let el = document.getElementById("dangerConfirmModal");
+    if (el) return el;
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `
+      <div class="modal fade" id="dangerConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="dangerConfirmTitle">Confirm Action</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="dangerConfirmBody">
+              This action cannot be undone.
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-danger" id="dangerConfirmBtn">Confirm</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(wrapper.firstElementChild);
+    return document.getElementById("dangerConfirmModal");
+  }
+
+  function confirmDanger({ title, message, confirmLabel = "Confirm", confirmVariant = "btn-danger", onConfirm }) {
+    const modalEl = ensureDangerModal();
+    const titleEl = modalEl.querySelector("#dangerConfirmTitle");
+    const bodyEl = modalEl.querySelector("#dangerConfirmBody");
+    const confirmBtn = modalEl.querySelector("#dangerConfirmBtn");
+    if (titleEl) titleEl.textContent = title;
+    if (bodyEl) bodyEl.textContent = message;
+    if (confirmBtn) {
+      confirmBtn.className = `btn ${confirmVariant}`;
+      confirmBtn.textContent = confirmLabel;
+      confirmBtn.onclick = async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = "Processing...";
+        try {
+          await onConfirm();
+          const inst = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+          inst.hide();
+        } finally {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = confirmLabel;
+        }
+      };
+    }
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+  }
+
+  async function performSelfAction(action) {
+    const res = await fetchJson(`${API_BASE_URL}/users/index.php?action=${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res?.success) {
+      throw new Error(res?.error || "Request failed");
+    }
+    try {
+      sessionStorage.removeItem("user");
+    } catch (_) {}
+    try {
+      localStorage.removeItem("user");
+    } catch (_) {}
+    try {
+      if (typeof window.populateGreeting === "function") {
+        window.populateGreeting();
+      }
+    } catch (_) {}
+    showToast(res.message || "Action completed", "success");
+    setTimeout(() => {
+      window.location.href = "index.html";
+    }, 800);
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     loadProfile();
     loadActivity();
@@ -338,6 +416,36 @@
       upBtn.addEventListener("click", function (e) {
         e.preventDefault();
         updatePassword();
+      });
+    }
+
+    const deactivateBtn = byId("deactivateAccountBtn");
+    if (deactivateBtn && !deactivateBtn.dataset.bound) {
+      deactivateBtn.dataset.bound = "1";
+      deactivateBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        confirmDanger({
+          title: "Deactivate Account",
+          message: "Are you sure you want to deactivate your account? You will be logged out immediately.",
+          confirmLabel: "Deactivate",
+          confirmVariant: "btn-warning",
+          onConfirm: () => performSelfAction("deactivateSelf"),
+        });
+      });
+    }
+
+    const deleteBtn = byId("deleteAccountBtn");
+    if (deleteBtn && !deleteBtn.dataset.bound) {
+      deleteBtn.dataset.bound = "1";
+      deleteBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        confirmDanger({
+          title: "Delete Account",
+          message: "This will permanently delete your admin account and cannot be undone.",
+          confirmLabel: "Delete",
+          confirmVariant: "btn-danger",
+          onConfirm: () => performSelfAction("deleteSelf"),
+        });
       });
     }
   });

@@ -85,6 +85,20 @@
     if (r === 'recipient') return 'recipient';
     return 'admin';
   }
+  function recipientStatus(){
+    const user = getUser();
+    const raw = user?.recipient_status ?? user?.status ?? '';
+    return String(raw || '').toLowerCase();
+  }
+  function recipientEligibleForScheduling(){
+    if (role() !== 'recipient') return true;
+    const status = recipientStatus();
+    if (!status) return false;
+    return ['allocated','updated','acknowledged'].includes(status);
+  }
+  function recipientEligibilityMessage(){
+    return 'Only recipients with Allocated, Updated, or Acknowledged status can schedule pickups. Please contact support if you believe this is an error.';
+  }
   function normalizeEventData(raw, fallbackType){
     const data = raw ? { ...raw } : {};
     const userDefault = fallbackType || defaultTypeForCurrentRole();
@@ -516,13 +530,14 @@
   }
   function canCreateEvents(){
     const r = role();
-    return r === 'admin' || r === 'donor' || r === 'recipient';
+    if (r === 'recipient') return recipientEligibleForScheduling();
+    return r === 'admin' || r === 'donor';
   }
   function canCreateEventOfType(type){
     const r = role();
     if (r === 'admin') return true;
     if (r === 'donor') return type === 'donor';
-    if (r === 'recipient') return type === 'recipient';
+    if (r === 'recipient') return type === 'recipient' && recipientEligibleForScheduling();
     return false;
   }
   function canViewEvent(eventData){
@@ -549,6 +564,7 @@
       container = document.createElement('div');
       container.id = containerId;
       container.className = 'toast-container position-fixed top-0 end-0 p-3';
+      container.style.zIndex = '2000';
       document.body.appendChild(container);
     }
     const toastEl = document.createElement('div');
@@ -641,6 +657,10 @@
   }
 
   function openModal(data){
+    if (role() === 'recipient' && !recipientEligibleForScheduling()){
+      calendarToast(recipientEligibilityMessage(), 'warn');
+      return;
+    }
     const mEl = qs('#eventModal'); if (!mEl) return;
     const m = bootstrap.Modal.getOrCreateInstance(mEl);
     // Reset modal to a clean baseline to avoid leakage from previous event
@@ -696,6 +716,9 @@
     const myId = userId();
     const involved = eventIsForCurrentUser(normalized);
     let canEdit = canEditEvent(normalized);
+    if (!normalized?.id) {
+      canEdit = true;
+    }
     const existingRecipients = Array.isArray(normalized?.recipients)
       ? normalized.recipients.map(item => ({
           id: item.id || item.recipient_id,
@@ -1119,6 +1142,12 @@
       if (typeSel.tagName === 'SELECT' && typeSel.options) {
         Array.from(typeSel.options).forEach(opt=>{ if (!allowOptions.includes(opt.value)) opt.remove(); });
       }
+      if (typeof window !== 'undefined' && typeof window.enforceAllowedEventType === 'function') {
+        const enforced = window.enforceAllowedEventType(typeSel.value);
+        if (enforced && enforced !== typeSel.value) {
+          typeSel.value = enforced;
+        }
+      }
       if (r==='admin'){
         typeSel.disabled = false;
         if (!allowOptions.includes(initType)) initType = 'admin';
@@ -1371,6 +1400,10 @@
     let t = (qs('#evType')?.value)||defaultTypeForCurrentRole();
     const r = role();
     const uid = userId();
+    if (r === 'recipient' && !recipientEligibleForScheduling()) {
+      calendarToast(recipientEligibilityMessage(), 'warn');
+      return null;
+    }
     // Resolve donor from select2 if present
     let donorId = null;
     const donorSelect = qs('#evDonorSelect');
@@ -1814,6 +1847,10 @@
     if (newBtn){
       if (!canCreateEvents()) newBtn.style.display = 'none';
       else newBtn.addEventListener('click', ()=> {
+        if (role()==='recipient' && !recipientEligibleForScheduling()){
+          calendarToast(recipientEligibilityMessage(), 'warn');
+          return;
+        }
         lastViewedEvent = null;
         updateEditButtonState();
         const defaults = { status:'scheduled', event_type: defaultTypeForCurrentRole() };
@@ -1860,7 +1897,27 @@
         // Single payload flow
         if (!data.title) { calendarToast('Title is required', 'warn'); return; }
         const isRecipientSingle = String(data.event_type||'').toLowerCase() === 'recipient';
-        if (!isRecipientSingle && !data.start) { calendarToast('Start time is required', 'warn'); return; }
+        if (!isRecipientSingle) {
+          const needsDate = !data.start;
+          const donorDate = document.getElementById('donorDate')?.value || '';
+          const adminDate = document.getElementById('adminDate')?.value || '';
+          const hasDate = Boolean((donorDate || adminDate));
+          if (!hasDate) {
+            calendarToast('Pickup date is required', 'warn');
+            return;
+          }
+          const donorTime = document.getElementById('donorStartTime')?.value || '';
+          const adminStart = document.getElementById('adminStartTime')?.value || '';
+          const hasTime = Boolean(donorTime || adminStart);
+          if (!hasTime) {
+            calendarToast('Start time is required', 'warn');
+            return;
+          }
+          if (needsDate) {
+            calendarToast('Pickup date and time are required', 'warn');
+            return;
+          }
+        }
         if (data.id){
           if (!canEditEvent(normalizeEventData(data))) { calendarToast('You do not have permission to update this event', 'warn'); return; }
           await updateEvent(data.id, data);

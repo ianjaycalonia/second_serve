@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/User.php';
+require_once __DIR__ . '/../../core/Auth.php';
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -74,6 +75,14 @@ try {
             requireRole(['admin']);
             handleSetStatus($payload);
             break;
+        case 'deactivateSelf':
+            requireRole(['admin']);
+            handleDeactivateSelf();
+            break;
+        case 'deleteSelf':
+            requireRole(['admin']);
+            handleDeleteSelf();
+            break;
         case 'importRecipients':
             requireRole(['admin']);
             handleImportRecipients($payload);
@@ -119,6 +128,38 @@ function handleUpdateProfile(array $payload) {
         'position_designation' => $payload['position_designation'] ?? null,
     ]);
     sendJson(['success' => true, 'message' => 'Profile updated']);
+}
+
+function handleDeactivateSelf(): void {
+    $userId = (int)(currentUserId() ?? 0);
+    if ($userId <= 0) {
+        sendJson(['success' => false, 'error' => 'Unauthorized'], 401);
+    }
+    $svc = new User();
+    $svc->setStatus($userId, 'inactive');
+    try {
+        $auth = new Auth();
+        $auth->logout();
+    } catch (Exception $e) {
+        // Ignore logout errors to avoid masking primary action
+    }
+    sendJson(['success' => true, 'message' => 'Account deactivated']);
+}
+
+function handleDeleteSelf(): void {
+    $userId = (int)(currentUserId() ?? 0);
+    if ($userId <= 0) {
+        sendJson(['success' => false, 'error' => 'Unauthorized'], 401);
+    }
+    $svc = new User();
+    $svc->deleteUser($userId);
+    try {
+        $auth = new Auth();
+        $auth->logout();
+    } catch (Exception $e) {
+        // Ignore logout errors so deletion result is returned
+    }
+    sendJson(['success' => true, 'message' => 'Account deleted']);
 }
 
 function handleAdminUpdateProfile(array $payload) {

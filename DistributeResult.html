@@ -356,6 +356,16 @@
               <i class="bi bi-megaphone"></i> Notify All
             </button>
           </div>
+          <button
+            id="scheduleBtn"
+            class="btn btn-outline-success btn-sm px-2 py-1"
+            title="Schedule pickups"
+            aria-label="Schedule pickups"
+            type="button"
+          >
+            <i class="bi bi-calendar-event"></i>
+            <span class="d-none d-sm-inline ms-1">Schedule</span>
+          </button>
         </div>
       </div>
 
@@ -540,6 +550,7 @@
     <script src="scripts/js/ui/animation.js"></script>
     <script src="scripts/js/ui/animatedNotification.js"></script>
     <script src="scripts/js/ui/animatedMessage.js"></script>
+    <script src="scripts/js/ui/adminDistributionPickup.js"></script>
     <!-- Pre-hook: if user reloaded without params, restore last run_id into URL so the list still loads -->
     <!-- Cleanup: remove legacy week input UI if present (old periodKeyInput/periodKeyGo) -->
     <!-- Per-recipient Notify button injection -->

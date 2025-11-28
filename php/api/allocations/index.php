@@ -272,13 +272,14 @@ try {
                             if (!empty($parts)){
                                 $msg .= ' Items: ' . implode(', ', $parts);
                             }
-                            // Try to include reference fields if schema supports them
-                            try {
-                                $db->query('INSERT INTO notifications (user_id, type, message, reference_type, reference_id, created_at) VALUES (?, "status_updated", ?, "allocation", ?, NOW())', [ $rid, $msg, $allocId ]);
-                            } catch (Exception $e2) {
-                                // Fallback without reference columns
-                                $db->query('INSERT INTO notifications (user_id, type, message, created_at) VALUES (?, "status_updated", ?, NOW())', [ $rid, $msg ]);
-                            }
+                            $notif = new Notification();
+                            $notif->replaceLatest([
+                                'user_id' => $rid,
+                                'type' => 'allocation_ready',
+                                'reference_type' => 'allocation',
+                                'reference_id' => $allocId,
+                                'message' => $msg,
+                            ]);
                         }
                     } catch (Exception $e) { /* ignore */ }
                     sendJson(['success'=>true, 'data'=>['allocation_id'=>$allocId, 'updated'=>true]]);

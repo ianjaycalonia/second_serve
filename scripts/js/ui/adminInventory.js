@@ -1721,6 +1721,122 @@
     }
   });
 
+  async function openRepackInventoryView(itemName, category) {
+    const modalEl = document.getElementById("repackInventoryViewModal");
+    if (!modalEl || typeof bootstrap === "undefined") return;
+    const metaEl = document.getElementById("repackInventoryViewMeta");
+    const tbody = document.querySelector("#repackInventoryViewTable tbody");
+    const feedbackEl = document.getElementById("repackInventoryViewFeedback");
+    if (feedbackEl) feedbackEl.textContent = "";
+    if (metaEl) {
+      const parts = [];
+      const nameLabel = String(itemName || "").trim();
+      if (nameLabel) parts.push(nameLabel);
+      const catLabel = String(category || "").trim();
+      if (catLabel) parts.push(catLabel);
+      metaEl.textContent = parts.length ? parts.join(" · ") : "";
+    }
+    if (tbody) {
+      tbody.innerHTML =
+        '<tr><td colspan="3" class="text-center text-muted">Loading components...</td></tr>';
+    }
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+    try {
+      await ensureRepackReferenceData();
+      await fetchTemplates();
+      const keyName = String(itemName || "").trim().toLowerCase();
+      const keyCat = String(category || "").trim().toLowerCase();
+      let template =
+        repackState.templates.find((tpl) => {
+          const outName = String(tpl.output_product_name || "").trim().toLowerCase();
+          const outCat = String(tpl.output_category_label || "").trim().toLowerCase();
+          return outName === keyName && outCat === keyCat;
+        }) || null;
+      if (!template && repackState.templates.length) {
+        template =
+          repackState.templates.find((tpl) => {
+            const outName = String(tpl.output_product_name || "").trim().toLowerCase();
+            return outName === keyName;
+          }) || null;
+      }
+      if (template && (!Array.isArray(template.components) || !template.components.length)) {
+        const id = template.kit_template_id || template.id;
+        if (id) {
+          const detail = await fetchTemplateDetail(id);
+          if (detail) template = detail;
+        }
+      }
+      if (!template || !Array.isArray(template.components) || !template.components.length) {
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="3" class="text-center text-muted">No component definition found for this kit.</td></tr>';
+        }
+        if (feedbackEl) {
+          feedbackEl.textContent =
+            "No repack template was found matching this inventory item.";
+        }
+        return;
+      }
+      if (metaEl) {
+        const parts = [];
+        const tmplName = String(template.name || "").trim();
+        if (tmplName) parts.push(tmplName);
+        const catLabel = String(template.output_category_label || category || "").trim();
+        if (catLabel) parts.push(catLabel);
+        metaEl.textContent = parts.length ? parts.join(" · ") : metaEl.textContent;
+      }
+      if (tbody) {
+        const rows = template.components.map((component) => {
+          const name = escapeHtml(component.product_name || "");
+          const qty = formatWholeQuantity(component.quantity_per_kit || 0);
+          const unitLabel = escapeHtml(component.unit_label || "-");
+          const catLabel = component.category_label
+            ? `<div class="small text-muted">${escapeHtml(component.category_label || "")}</div>`
+            : "";
+          return `
+            <tr>
+              <td>
+                <div class="fw-semibold">${name}</div>
+                ${catLabel}
+              </td>
+              <td class="text-nowrap">${qty}</td>
+              <td class="text-nowrap">${unitLabel}</td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = rows.join("");
+      }
+    } catch (err) {
+      console.error("Failed to load repack components for inventory kit", err);
+      if (tbody) {
+        tbody.innerHTML =
+          '<tr><td colspan="3" class="text-center text-danger">Failed to load components.</td></tr>';
+      }
+      if (feedbackEl) {
+        feedbackEl.textContent = err?.message || "Failed to load components.";
+      }
+    }
+  }
+
+  document.addEventListener("click", async function (e) {
+    const btnRepack = e.target.closest(".inv-view-repack");
+    if (btnRepack) {
+      e.preventDefault();
+      const itemName = btnRepack.getAttribute("data-item-name") || "";
+      const category = btnRepack.getAttribute("data-category") || "";
+      await openRepackInventoryView(itemName, category);
+      return;
+    }
+    const btnLot = e.target.closest(".inv-view-lots");
+    if (!btnLot) return;
+    e.preventDefault();
+    const itemName = btnLot.getAttribute("data-item-name") || "";
+    const category = btnLot.getAttribute("data-category") || "";
+    const totalLots = parseInt(btnLot.getAttribute("data-total-lots") || "0", 10) || 0;
+    await openLotDetails(itemName, category, totalLots);
+  });
+
   async function openLotDetails(itemName, category, totalLots){
     const modalEl = document.getElementById("inventoryLotsModal");
     if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) return;
@@ -1813,16 +1929,6 @@
       }
     }
   }
-
-  document.addEventListener("click", async function (e) {
-    const btnLot = e.target.closest(".inv-view-lots");
-    if (!btnLot) return;
-    e.preventDefault();
-    const itemName = btnLot.getAttribute("data-item-name") || "";
-    const category = btnLot.getAttribute("data-category") || "";
-    const totalLots = parseInt(btnLot.getAttribute("data-total-lots") || "0", 10) || 0;
-    await openLotDetails(itemName, category, totalLots);
-  });
 
   // When discard modal is closed, apply immediate visual deduction if available
   (function bindDiscardHiddenImmediateUpdate(){
@@ -2136,6 +2242,10 @@
       const lotButton = totalLots > 1
         ? `<button type="button" class="btn btn-sm btn-outline-info inv-view-lots" ${dataAttributes} title="View lots" data-bs-toggle="tooltip"><i class="bi bi-eye"></i></button>`
         : "";
+      const isRepackKit = (tagsRaw || "").toLowerCase().includes("repack kit");
+      const repackButton = isRepackKit
+        ? `<button type="button" class="btn btn-sm btn-outline-primary inv-view-repack" ${dataAttributes} title="View kit components" data-bs-toggle="tooltip"><i class="bi bi-box-seam"></i></button>`
+        : "";
 
       // Status breakdown is still available in the tooltip on the status badge
       
@@ -2147,6 +2257,7 @@
           <div class="dropdown-menu p-2 text-center">
             <div class="d-flex align-items-center justify-content-center" style="gap:6px;">
               ${lotButton}
+              ${repackButton}
               <button type="button" class="btn btn-sm btn-outline-warning inv-edit-tags" ${dataAttributes} title="Edit Tags" data-bs-toggle="tooltip"><i class="bi bi-tags"></i></button>
               <button type="button" class="btn btn-sm btn-outline-secondary inv-issue-onsite" ${dataAttributes} title="On-site Giveaway" data-bs-toggle="tooltip"><i class="bi bi-people"></i></button>
               <button type="button" class="btn btn-sm btn-outline-danger inv-discard" ${dataAttributes} title="Discard" data-bs-toggle="tooltip"><i class="bi bi-trash"></i></button>
@@ -3186,24 +3297,6 @@
       loadAndRender(page);
     }
   });
-
-  try {
-    const filtersBar = document.querySelector("main .d-flex.flex-wrap");
-    if (filtersBar && !document.getElementById("invRefreshBtn")) {
-      const btnWrap = document.createElement("div");
-      btnWrap.className = "ms-0";
-      btnWrap.innerHTML =
-        '<button id="invRefreshBtn" type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Refresh</button>';
-      filtersBar.appendChild(btnWrap);
-      btnWrap
-        .querySelector("#invRefreshBtn")
-        .addEventListener("click", () => {
-          try { window.__invNonExpiredCache = {}; } catch (_) {}
-          const page = window.__inventoryLast?.pagination?.page || 1;
-          loadAndRender(page);
-        });
-    }
-  } catch (_) {}
 
   async function init() {
     bindFilters();

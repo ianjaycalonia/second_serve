@@ -668,6 +668,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (requiredRole) {
         // If not logged in at all, go to login/index
         const userRoleLower = (currentUser?.role || '').toString().trim().toLowerCase();
+        window.currentUserRole = function currentUserRole(){
+            const u = getCurrentUser();
+            return u ? String(u.role || '').toLowerCase() : '';
+        };
+
+        window.currentRecipientStatus = function currentRecipientStatus(){
+            const u = getCurrentUser();
+            if (!u) return '';
+            if (u.recipient_status) return String(u.recipient_status).toLowerCase();
+            if (u.status) return String(u.status).toLowerCase();
+            return '';
+        };
         if (!currentUser || !userRoleLower) {
             window.location.href = 'index.html';
             return;
