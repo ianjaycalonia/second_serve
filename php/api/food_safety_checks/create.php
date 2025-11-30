@@ -13,6 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 setCorsHeaders();
 header('Content-Type: application/json');
 
+if (in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST','PUT','PATCH','DELETE'], true)) {
+    requireCsrfToken();
+}
+
 try {
     requireRole(['admin']); // Only admins perform safety checks
 

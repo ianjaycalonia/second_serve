@@ -785,6 +785,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Form submission handlers
     const loginForm = document.getElementById('loginForm');
+    const updateCsrfToken = (token) => {
+        try {
+            const value = token ? String(token) : '';
+            sessionStorage.setItem('csrf_token', value);
+            window.CSRF_TOKEN = value || null;
+        } catch (_) {
+            window.CSRF_TOKEN = token || null;
+        }
+    };
+
     if (loginForm) {
         loginForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -831,6 +841,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 sessionStorage.removeItem('password_change_reminder');
                             }
                         } catch (_) {}
+                    }
+                    if (response && response.csrf_token) {
+                        updateCsrfToken(response.csrf_token);
                     }
                     const dest = response?.redirect || (response?.user ? getDashboardUrl(response.user.role) : null);
                     if (dest) {
@@ -1001,6 +1014,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     const approved = u && String(u.status||'').toLowerCase() === 'approved';
                     if (approved) {
                         try { sessionStorage.setItem('user', JSON.stringify(u)); } catch(_) {}
+                        if (response && response.csrf_token) {
+                            updateCsrfToken(response.csrf_token);
+                        }
                         const dest = response?.redirect || getDashboardUrl(u.role);
                         if (dest) { window.location.href = dest; return; }
                     }
@@ -1063,9 +1079,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const u = (function(){ try { return JSON.parse(sessionStorage.getItem('user')); } catch(_) { return null; } })();
         window.CURRENT_USER_ID = u && u.user_id ? Number(u.user_id) : null;
         window.CURRENT_USER_ROLE = u && u.role ? String(u.role).toLowerCase() : null;
+        const storedToken = (function(){ try { return sessionStorage.getItem('csrf_token'); } catch(_) { return null; } })();
+        window.CSRF_TOKEN = storedToken || null;
     } catch(_) {
         window.CURRENT_USER_ID = null;
         window.CURRENT_USER_ROLE = null;
+        window.CSRF_TOKEN = null;
     }
 
     // Wire up logout buttons (reuse across all pages)

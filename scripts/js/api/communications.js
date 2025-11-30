@@ -18,8 +18,16 @@
     return root.fetchJson(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{}) });
   }
   async function patch(action, params){
-    const url = MESSAGES_URL + '?' + new URLSearchParams(Object.assign({ action }, obj(params))).toString();
-    return root.fetchJson(url, { method:'PATCH' });
+    const search = new URLSearchParams(Object.assign({ action }, obj(params)));
+    search.append('_method', 'PATCH');
+    return root.fetchJson(MESSAGES_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-HTTP-Method-Override': 'PATCH'
+      },
+      body: search.toString()
+    });
   }
 
   const CommunicationsAPI = {

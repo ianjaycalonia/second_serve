@@ -13,6 +13,29 @@ define('DB_PASS', '');
 define('SESSION_LIFETIME', 86400); // 24 hours
 ini_set('session.gc_maxlifetime', SESSION_LIFETIME);
 ini_set('session.cookie_lifetime', SESSION_LIFETIME);
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_strict_mode', 1);
+if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    ini_set('session.cookie_secure', 1);
+}
+
+// Allow configuring approved origins for CORS via environment or fallback to same-origin
+if (!defined('APP_ALLOWED_ORIGINS')) {
+    $defaultOrigin = 'http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $envOrigins = getenv('APP_ALLOWED_ORIGINS');
+    $origins = $envOrigins ? array_filter(array_map('trim', explode(',', $envOrigins))) : [$defaultOrigin];
+    define('APP_ALLOWED_ORIGINS', $origins);
+}
+
+session_set_cookie_params([
+    'lifetime' => SESSION_LIFETIME,
+    'path' => '/',
+    'domain' => $_SERVER['HTTP_HOST'] ?? '',
+    'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+
 session_start();
 
 // Error reporting (log errors, do not display in HTTP responses)

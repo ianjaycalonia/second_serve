@@ -114,6 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 setCorsHeaders();
 header('Content-Type: application/json');
 
+if (in_array(strtoupper($method), ['POST','PUT','PATCH','DELETE'], true)) {
+    requireCsrfToken();
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 $uri = $_SERVER['REQUEST_URI'] ?? '';
 $path = parse_url($uri, PHP_URL_PATH);
@@ -127,15 +131,7 @@ if (strpos($sub, '/index.php') === 0) {
 
 try {
     // Only admins can view inventory for now
-    try {
-        requireRole(['admin']);
-    } catch (Exception $e) {
-        if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_role'])) {
-            $_SESSION['user_id'] = 1;
-            $_SESSION['user_role'] = 'admin';
-        }
-        requireRole(['admin']);
-    }
+    requireRole(['admin']);
 
     if ($method === 'GET' && preg_match('#^/lot-details/?$#', $sub)) {
         $itemName = trim((string)($_GET['item_name'] ?? ''));

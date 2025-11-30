@@ -24,6 +24,9 @@ class Auth {
         $user = $this->login($data['email'], $data['password'], $data['role']);
 
         // Session handling and CSRF generation
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
         $_SESSION['user_id'] = $user['user_id'];
         $_SESSION['user_role'] = $user['role'];
         if (empty($_SESSION['csrf_token'])) {
@@ -206,6 +209,9 @@ class Auth {
 
         // Auto-login only if status is approved; otherwise return pending status
         if (($user['status'] ?? '') === 'approved') {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_regenerate_id(true);
+            }
             $loggedIn = $this->login($data['email'], $data['password'], $data['role']);
             $_SESSION['user_id'] = $loggedIn['user_id'];
             $_SESSION['user_role'] = $loggedIn['role'];
@@ -368,6 +374,7 @@ class Auth {
         }
         session_destroy();
         session_start();
+        session_regenerate_id(true);
     }
 
     public function changePassword(int $userId, string $currentPassword, string $newPassword, string $confirmPassword): void {

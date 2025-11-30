@@ -1,7 +1,7 @@
 -- Simply Share schema (clean, hosting-friendly)
 -- Note: No database-level commands (DROP/CREATE DATABASE, USE, SET GLOBAL)
 SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';
-SET time_zone = '+00:00';
+SET time_zone = '+08:00';
 /*!40101 SET NAMES utf8mb4 */;
 SET FOREIGN_KEY_CHECKS=0;
 
@@ -320,6 +320,26 @@ CREATE TABLE `categories` (
   UNIQUE KEY `uq_categories_primary_secondary` (`primary_name`, `secondary_name`),
   UNIQUE KEY `uq_categories_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
+-- Seed default product categories (idempotent via UNIQUE keys)
+INSERT INTO `categories` (`code`, `primary_name`, `secondary_name`, `is_active`, `created_at`, `updated_at`) VALUES
+  ('BEV-WTR', 'Beverage', 'Water', 1, NOW(), NOW()),
+  ('BEV-SWT', 'Beverage', 'Sweetened Beverages', 1, NOW(), NOW()),
+  ('BEV-JCT', 'Beverage', 'Juices/Coffee/Tea', 1, NOW(), NOW()),
+  ('PREP-FD', 'Prepared Foods', NULL, 1, NOW(), NOW()),
+  ('RTE-SAV', 'Ready-To-Eat Savouries', NULL, 1, NOW(), NOW()),
+  ('SWEET', 'Sweeteners', NULL, 1, NOW(), NOW()),
+  ('GRAIN', 'Grains/Grain Products', NULL, 1, NOW(), NOW()),
+  ('NONF-HYG', 'Non-Food', 'Personal Hygiene', 1, NOW(), NOW()),
+  ('DAIRY', 'Dairy', NULL, 1, NOW(), NOW()),
+  ('PROT-ANI', 'Protein', 'Animal Based', 1, NOW(), NOW()),
+  ('FRU-VEG', 'Fruits & Vegetables', NULL, 1, NOW(), NOW()),
+  ('PROC-CER', 'Processed Cereals/Cereal Products', NULL, 1, NOW(), NOW()),
+  ('NONF-OTH', 'Non-Food', 'Others', 1, NOW(), NOW()),
+  ('CONFE', 'Confectionary', NULL, 1, NOW(), NOW())
+ON DUPLICATE KEY UPDATE
+  `is_active` = VALUES(`is_active`),
+  `updated_at` = VALUES(`updated_at`);
 
 -- units (lookup for measurement units; UI-controlled list)
 CREATE TABLE `units` (

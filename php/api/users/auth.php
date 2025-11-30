@@ -22,6 +22,18 @@ $data = getJsonInput();
 // Route the request
 try {
     switch ($endpoint) {
+        case 'csrf':
+            {
+                if ($method !== 'GET') {
+                    sendJson(['success' => false, 'error' => 'Method not allowed'], 405);
+                }
+                requireAuth();
+                if (empty($_SESSION['csrf_token'])) {
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                }
+                sendJson(['success' => true, 'csrf_token' => $_SESSION['csrf_token']]);
+            }
+            break;
         case 'login':
             if ($method === 'POST') {
                 handleLogin($data);

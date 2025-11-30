@@ -139,9 +139,61 @@
       let pollTimer = 0, msgTimer = 0, isTickRunning = false, uiInitialized = false;
       const qsM = (sel)=> modalEl.querySelector(sel);
 
+      async function ensureCsrfToken(){
+        if (window.CSRF_TOKEN && typeof window.CSRF_TOKEN === 'string' && window.CSRF_TOKEN.length > 0) return window.CSRF_TOKEN;
+        try { const t = sessionStorage.getItem('csrf_token'); if (t) { window.CSRF_TOKEN = t; return t; } } catch(_) {}
+        try {
+          const r = await fetch('/php/api/users/auth.php?action=csrf', { credentials: 'include' });
+          const j = await r.json();
+          if (j && j.success && j.csrf_token) {
+            window.CSRF_TOKEN = j.csrf_token;
+            try { sessionStorage.setItem('csrf_token', j.csrf_token); } catch(_) {}
+            return j.csrf_token;
+          }
+        } catch(_) { /* ignore */ }
+        return null;
+      }
+
       async function apiGet(params){ const url = apiBase + '?' + new URLSearchParams(params).toString(); const res = await fetch(url, { credentials:'include' }); return res.json(); }
-      async function apiPost(action, body){ const res = await fetch(apiBase + '?action=' + encodeURIComponent(action), { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(body||{}) }); return res.json(); }
-      async function apiPatch(action, params){ const url = apiBase + '?' + new URLSearchParams(Object.assign({ action }, params||{})).toString(); const res = await fetch(url, { method:'PATCH', credentials:'include' }); return res.json(); }
+      async function apiPost(action, body){
+        await ensureCsrfToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (window.CSRF_TOKEN) { headers['X-CSRF-Token'] = window.CSRF_TOKEN; }
+        const url = apiBase + '?action=' + encodeURIComponent(action) + (window.CSRF_TOKEN ? ('&csrf_token=' + encodeURIComponent(window.CSRF_TOKEN)) : '');
+        let res = await fetch(url, {
+          method:'POST',
+          headers,
+          credentials:'include',
+          body: JSON.stringify(body||{})
+        });
+        if (res && (res.status === 403 || res.status === 419)) {
+          await ensureCsrfToken();
+          if (window.CSRF_TOKEN) {
+            headers['X-CSRF-Token'] = window.CSRF_TOKEN;
+            const retryUrl = apiBase + '?action=' + encodeURIComponent(action) + (window.CSRF_TOKEN ? ('&csrf_token=' + encodeURIComponent(window.CSRF_TOKEN)) : '');
+            res = await fetch(retryUrl, {
+              method:'POST', headers, credentials:'include', body: JSON.stringify(body||{})
+            });
+          }
+        }
+        return res.json();
+      }
+      async function apiPatch(action, params){
+        const query = new URLSearchParams(params || {});
+        const url = apiBase + '?action=' + encodeURIComponent(action) + (query.toString() ? ('&' + query.toString()) : '');
+        await ensureCsrfToken();
+        const headers = { };
+        if (window.CSRF_TOKEN) { headers['X-CSRF-Token'] = window.CSRF_TOKEN; }
+        let res = await fetch(url, { method: 'PATCH', headers, credentials: 'include' });
+        if (res && (res.status === 403 || res.status === 419)) {
+          await ensureCsrfToken();
+          if (window.CSRF_TOKEN) {
+            headers['X-CSRF-Token'] = window.CSRF_TOKEN;
+            res = await fetch(url, { method: 'PATCH', headers, credentials: 'include' });
+          }
+        }
+        return res.json();
+      }
 
       function ensureTheme(){
   if (document.getElementById('messages-theme-override')) return;

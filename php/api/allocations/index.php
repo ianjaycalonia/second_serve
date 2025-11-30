@@ -43,6 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 setCorsHeaders();
 header('Content-Type: application/json');
 
+if (in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST','PUT','PATCH','DELETE'], true)) {
+    requireCsrfToken();
+}
+
 $action = isset($_GET['action']) ? sanitize($_GET['action']) : '';
 $payload = getJsonInput(); // accept raw then sanitize per field
 
@@ -81,9 +85,7 @@ try {
             break;
 
         case 'notify_run':
-            // Admin required; if not present, fallback to admin session for robustness
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             $payload = getJsonInput();
             $runId = isset($payload['run_id']) ? (int)$payload['run_id'] : 0;
             if ($runId <= 0) { sendJson(['success'=>false,'error'=>'run_id is required'], 400); }
@@ -114,9 +116,7 @@ try {
             break;
 
         case 'notify_recipient':
-            // Admin required; if not present, fallback to admin session for robustness
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             $payload = getJsonInput();
             $runId = isset($payload['run_id']) ? (int)$payload['run_id'] : 0;
             $recipientId = isset($payload['recipient_id']) ? (int)$payload['recipient_id'] : 0;
@@ -153,9 +153,7 @@ try {
             break;
 
         case 'create_result':
-            // Admin required; if not present, fallback to admin session for robustness (consistent with other endpoints)
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             $recipientId = isset($payload['recipient_id']) ? (int)$payload['recipient_id'] : 0;
             if ($recipientId <= 0) { sendJson(['success'=>false,'error'=>'recipient_id is required'], 400); }
             $items = isset($payload['items']) && is_array($payload['items']) ? $payload['items'] : [];
@@ -330,41 +328,11 @@ try {
             $periodKey = isset($payload['period_key']) ? trim((string)$payload['period_key']) : null;
 
             error_log("Extracted data - note: " . var_export($note, true) . ", period_key: " . var_export($periodKey, true));
-
-            // ROBUST AUTHENTICATION HANDLING
-            error_log("=== ROBUST AUTH START ===");
-
-            // Ensure session is started
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
-                error_log("Session started in create_run");
+            requireRole(['admin']);
+            $adminId = (int)(currentUserId() ?? 0);
+            if ($adminId <= 0) {
+                sendJson(['success' => false, 'error' => 'Authentication required'], 401);
             }
-
-            // Check if user is logged in
-            $currentUserId = $_SESSION['user_id'] ?? null;
-            $currentUserRole = $_SESSION['user_role'] ?? null;
-
-            error_log("Session check - user_id: " . var_export($currentUserId, true) . ", role: " . var_export($currentUserRole, true));
-
-            // If session doesn't have user data, try to set fallback
-            if (!$currentUserId || !$currentUserRole) {
-                error_log("No session data found, setting fallback admin session");
-                $_SESSION['user_id'] = 1; // Admin user ID
-                $_SESSION['user_role'] = 'admin';
-                $currentUserId = 1;
-                $currentUserRole = 'admin';
-            }
-
-            // Verify admin role
-            if ($currentUserRole !== 'admin') {
-                error_log("User role is not admin: $currentUserRole, setting to admin");
-                $_SESSION['user_role'] = 'admin';
-                $currentUserRole = 'admin';
-            }
-
-            $adminId = (int)$currentUserId;
-            error_log("Final admin ID: $adminId, role: $currentUserRole");
-            error_log("=== ROBUST AUTH END ===");
 
             // Create allocation service
             error_log("Creating Allocation service");
@@ -403,9 +371,7 @@ try {
             break;
 
         case 'latest_run':
-            // Admin required; if not present, fallback to admin session for robustness
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             $svc = new Allocation();
             $row = $svc->latestRun();
             if (!$row) sendJson(['success'=>false, 'error'=>'No runs found'], 404);
@@ -413,9 +379,7 @@ try {
             break;
 
         case 'list_runs':
-            // Admin required; if not present, fallback to admin session for robustness
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             try {
                 $limit = isset($_GET['limit']) ? max(1, min(100, (int)$_GET['limit'])) : 24;
                 $db = Database::getInstance();
@@ -428,8 +392,7 @@ try {
 
         case 'ensure_run':
             // Ensure a run exists for the given period_key, return the run row
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             $periodKey = isset($payload['period_key']) ? trim((string)$payload['period_key']) : (isset($_GET['period_key']) ? trim((string)$_GET['period_key']) : '');
             if ($periodKey === '' || !preg_match('/^\d{4}-\d{2}-W[1-4]$/', $periodKey)) { sendJson(['success'=>false,'error'=>'Invalid or missing period_key'], 400); }
             $adminId = (int)(currentUserId() ?? 1);
@@ -441,8 +404,7 @@ try {
 
         case 'list_by_period':
             // Return allocations for a given period_key, ensuring the run exists
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             $periodKey = isset($_GET['period_key']) ? trim((string)$_GET['period_key']) : '';
             if ($periodKey === '' || !preg_match('/^\d{4}-\d{2}-W[1-4]$/', $periodKey)) { sendJson(['success'=>false,'error'=>'Invalid or missing period_key'], 400); }
             $adminId = (int)(currentUserId() ?? 1);
@@ -497,9 +459,7 @@ try {
             break;
 
         case 'run_by_period':
-            // Admin required; if not present, fallback to admin session for robustness
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             $periodKey = isset($_GET['period_key']) ? trim((string)$_GET['period_key']) : '';
             if ($periodKey === '') { sendJson(['success'=>false,'error'=>'period_key is required'], 400); }
             $svc = new Allocation();
@@ -514,9 +474,7 @@ try {
             break;
 
         case 'list_by_run':
-            // Admin required; if not present, fallback to admin session for robustness
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             $runId = isset($_GET['run_id']) ? (int)$_GET['run_id'] : 0;
             if ($runId <= 0) { sendJson(['success'=>false,'error'=>'run_id is required'], 400); }
             try {
@@ -1212,9 +1170,7 @@ SQL);
             break;
 
         case 'update_item':
-            // Admin required; if not present, fallback to admin session for robustness
-            try { requireRole(['admin']); }
-            catch (Exception $e) { $_SESSION['user_id'] = 1; $_SESSION['user_role'] = 'admin'; }
+            requireRole(['admin']);
             // Accept either JSON body or query params (for accidental GET submissions)
             $itemId = isset($payload['item_id']) ? (int)$payload['item_id'] : (int)($_GET['item_id'] ?? 0);
             if ($itemId <= 0) { sendJson(['success'=>false,'error'=>'item_id is required'], 400); }

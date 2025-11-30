@@ -11,7 +11,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 setCorsHeaders();
 header('Content-Type: application/json');
 
-$method = $_SERVER['REQUEST_METHOD'];
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if (in_array(strtoupper($method), ['POST','PUT','PATCH','DELETE'], true)) {
+    requireCsrfToken();
+}
+
 $override = $_GET['_method'] ?? $_POST['_method'] ?? ($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? '');
 if ($override) {
     $ov = strtoupper(trim((string)$override));
@@ -43,15 +47,7 @@ try {
                 $userId = (int)(currentUserId() ?? 0);
             }
             if ($userId <= 0) {
-                // Auto-fallback to admin session for kiosk/unauth flows that still need notifications
-                if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_role'])) {
-                    $_SESSION['user_id'] = 1;
-                    $_SESSION['user_role'] = 'admin';
-                }
-                $userId = (int)(currentUserId() ?? 0);
-                if ($userId <= 0) {
-                    sendJson(['success' => false, 'error' => 'Authentication required'], 401);
-                }
+                sendJson(['success' => false, 'error' => 'Authentication required'], 401);
             }
             // Only allow user themselves or admin to view
             $currentId = (int)(currentUserId() ?? 0);

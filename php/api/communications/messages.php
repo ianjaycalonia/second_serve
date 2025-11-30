@@ -11,8 +11,19 @@ setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
+$override = $_GET['_method'] ?? $_POST['_method'] ?? ($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? '');
+if ($override) {
+    $ov = strtoupper(trim((string)$override));
+    if (in_array($ov, ['GET','POST','PUT','PATCH','DELETE'], true)) {
+        $method = $ov;
+    }
+}
 $payload = getJsonInput();
 $action = isset($_GET['action']) ? sanitize($_GET['action']) : '';
+
+if (in_array(strtoupper($method), ['POST','PUT','PATCH','DELETE'], true)) {
+    requireCsrfToken();
+}
 
 function db() { return Database::getInstance(); }
 
@@ -69,15 +80,7 @@ try {
     switch ($method) {
         case 'GET':
             if ($action === 'list_conversations') {
-                try {
-                    requireAuth();
-                } catch (Exception $e) {
-                    // Align with other admin-first APIs: fallback to admin session to keep notifications functional
-                    if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_role'])) {
-                        $_SESSION['user_id'] = 1;
-                        $_SESSION['user_role'] = 'admin';
-                    }
-                }
+                requireAuth();
                 $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : (int)(currentUserId() ?? 0);
                 if ($userId <= 0) sendJson(['success'=>false,'error'=>'user_id is required'], 400);
 
@@ -269,16 +272,21 @@ try {
 
         case 'POST':
             if ($action === 'get_or_create_direct') {
-                requireAuth();
-                $me = (int)(currentUserId() ?? 0);
-                $otherUserId = (int)($payload['other_user_id'] ?? 0);
-                $role = (string)(currentUserRole() ?? '');
-                if ($otherUserId <= 0 && $role !== 'admin') {
-                    $admin = db()->query("SELECT user_id FROM users WHERE role='admin' ORDER BY user_id ASC LIMIT 1")->fetch();
-                    if (!$admin) sendJson(['success'=>false,'error'=>'Admin user not found'], 500);
-                    $otherUserId = (int)$admin['user_id'];
+                requireRole(['admin','recipient','donor']);
+                $currentId = (int)(currentUserId() ?? 0);
+                if ($currentId <= 0) { sendJson(['success'=>false,'error'=>'Authentication required'], 401); }
+                $otherUserId = isset($payload['other_user_id']) ? (int)$payload['other_user_id'] : (isset($_POST['other_user_id']) ? (int)$_POST['other_user_id'] : (isset($_GET['other_user_id']) ? (int)$_GET['other_user_id'] : 0));
+                if ($otherUserId <= 0) {
+                    $role = (string)(currentUserRole() ?? '');
+                    if (strtolower($role) !== 'admin') {
+                        // Default to first admin id to support initial open for donors/recipients
+                        $adminRows = db()->query("SELECT user_id FROM users WHERE role='admin' ORDER BY user_id ASC")->fetchAll();
+                        $otherUserId = $adminRows ? (int)$adminRows[0]['user_id'] : 0;
+                    }
+                    if ($otherUserId <= 0) {
+                        sendJson(['success'=>false,'error'=>'other_user_id is required'], 400);
+                    }
                 }
-                if ($otherUserId <= 0) sendJson(['success'=>false,'error'=>'other_user_id is required'], 400);
 
                 $disp = getUserDisplay($otherUserId);
                 $conv = [
@@ -292,8 +300,9 @@ try {
             if ($action === 'send_message') {
                 requireAuth();
                 $me = (int)(currentUserId() ?? 0);
-                $otherId = (int)($payload['conversation_id'] ?? 0);
-                $body = trim((string)($payload['body'] ?? ''));
+                $otherId = isset($payload['conversation_id']) ? (int)$payload['conversation_id'] : (isset($_POST['conversation_id']) ? (int)$_POST['conversation_id'] : (isset($_GET['conversation_id']) ? (int)$_GET['conversation_id'] : 0));
+                $bodyRaw = isset($payload['body']) ? $payload['body'] : (isset($_POST['body']) ? $_POST['body'] : '');
+                $body = trim((string)$bodyRaw);
                 if ($otherId <= 0 || $body === '') sendJson(['success'=>false,'error'=>'conversation_id and body are required'], 400);
                 $dedupe = db()->query(
                     'SELECT id, sender_id, content AS body, created_at
@@ -345,7 +354,7 @@ try {
             if ($action === 'mark_read') {
                 requireAuth();
                 $me = (int)(currentUserId() ?? 0);
-                $otherId = isset($_GET['conversation_id']) ? (int)$_GET['conversation_id'] : 0;
+                $otherId = isset($_GET['conversation_id']) ? (int)$_GET['conversation_id'] : (isset($_POST['conversation_id']) ? (int)$_POST['conversation_id'] : 0);
                 if ($otherId <= 0) sendJson(['success'=>false,'error'=>'conversation_id is required'], 400);
                 $role = (string)(currentUserRole() ?? '');
                 $isAdminOther = (function($oid){ $r = db()->query('SELECT role FROM users WHERE user_id=? LIMIT 1', [$oid])->fetch(); return strtolower((string)($r['role'] ?? '')) === 'admin'; })($otherId);

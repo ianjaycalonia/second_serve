@@ -25,7 +25,43 @@ function sanitize($data) {
     if (is_array($data)) {
         return array_map('sanitize', $data);
     }
-    return trim((string)$data);
+    $value = trim((string)$data);
+    return strip_tags($value);
+}
+
+function getCsrfTokenFromRequest(): ?string {
+    $headers = [];
+    if (function_exists('getallheaders')) {
+        $headers = getallheaders();
+    }
+    $token = $headers['X-CSRF-Token'] ?? $headers['X-Csrf-Token'] ?? null;
+    if ($token === null && isset($_SERVER['HTTP_X_CSRF_TOKEN'])) {
+        $token = $_SERVER['HTTP_X_CSRF_TOKEN'];
+    }
+    if ($token === null && isset($_POST['csrf_token'])) {
+        $token = (string)$_POST['csrf_token'];
+    }
+    if ($token === null && isset($_GET['csrf_token'])) {
+        $token = (string)$_GET['csrf_token'];
+    }
+    return $token !== null ? trim((string)$token) : null;
+}
+
+function requireCsrfToken() {
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if (in_array(strtoupper($method), ['GET', 'HEAD', 'OPTIONS'], true)) {
+        return;
+    }
+
+    $sessionToken = $_SESSION['csrf_token'] ?? null;
+    if (empty($sessionToken)) {
+        sendJson(['success' => false, 'error' => 'Session expired'], 419);
+    }
+
+    $requestToken = getCsrfTokenFromRequest();
+    if (!$requestToken || !hash_equals((string)$sessionToken, (string)$requestToken)) {
+        sendJson(['success' => false, 'error' => 'Invalid CSRF token'], 403);
+    }
 }
 
 function getJsonInput(): array {
@@ -37,15 +73,22 @@ function getJsonInput(): array {
 
 function setCorsHeaders() {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    if ($origin) {
-        header('Access-Control-Allow-Origin: ' . $origin);
+    $allowed = defined('APP_ALLOWED_ORIGINS') && is_array(APP_ALLOWED_ORIGINS) ? APP_ALLOWED_ORIGINS : [];
+    $allowedOrigin = null;
+    if ($origin && in_array($origin, $allowed, true)) {
+        $allowedOrigin = $origin;
+    } elseif (!empty($allowed)) {
+        $allowedOrigin = $allowed[0];
+    } elseif (defined('APP_URL')) {
+        $allowedOrigin = APP_URL;
+    }
+
+    if ($allowedOrigin) {
+        header('Access-Control-Allow-Origin: ' . $allowedOrigin);
         header('Vary: Origin');
-    } else {
-        // Fallback for same-origin requests
-        header('Access-Control-Allow-Origin: *');
     }
     header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-CSRF-Token');
     header('Access-Control-Allow-Credentials: true');
 }
 
