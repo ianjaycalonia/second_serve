@@ -1,0 +1,95 @@
+/* Monthly Recipients page styles */
+.rpool .rcard,
+.dropzone .rcard {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .6rem;
+  border: 1px solid var(--card-border-color);
+  border-radius: .375rem;
+  background: var(--card-background);
+  color: var(--body-text-color);
+  cursor: grab;
+  user-select: none;
+}
+
+.rcard:active { cursor: grabbing; }
+
+.rpool { min-height: 64px; }
+.rpool-scroll {
+  max-height: 220px; /* ~5 rows depending on wrap */
+  overflow: auto;
+  border: 1px solid var(--card-border-color);
+  border-radius: .375rem;
+  padding: .5rem;
+  background: var(--card-background);
+}
+.rpool.drag-over { outline: 2px dashed #adb5bd; background: var(--table-row-hover); }
+
+.dropzone {
+  min-height: 220px;
+  background: var(--secondary-background);
+}
+.dropzone.drag-over {
+  outline: 2px dashed var(--primary-color);
+  background: var(--table-row-hover);
+}
+
+/* Current week focus */
+.dropzone.current-week {
+  border: 2px solid var(--primary-color);
+  background: var(--table-row-hover);
+}
+.week-label .badge-current {
+  margin-left: .5rem;
+  background-color: #00a0b0;
+}
+
+.rmeta {
+  color: #6c757d;
+  font-size: .8rem;
+}
+
+.rchip {
+  background: var(--table-row-striped);
+  border: 1px solid var(--card-border-color);
+  padding: .1rem .4rem;
+  border-radius: .25rem;
+  font-size: .75rem;
+}
+
+/* Status coloring */
+.rcard.status-allocated {
+  border-color: #198754;
+  background: #e9f7ef;
+}
+.rcard.status-completed {
+  border-color: #0d6efd;
+  background: #e7f1ff;
+}
+.rcard.status-cancelled {
+  border-color: #dc3545;
+  background: #fdecee;
+  text-decoration: line-through;
+}
+
+/* Constrained brand logo (moved from inline <style> in RecipientsList.html) */
+.brand img {
+  max-height: 36px;
+  width: auto;
+}
+
+/* Pending approvals table action column width */
+.pending-actions-col {
+  width: 140px;
+}
+
+/* Pool search input width */
+.pool-search-input {
+  width: 220px;
+}
+
+/* Toast container for RecipientsList */
+.rl-toast-container {
+  z-index: 1080;
+}

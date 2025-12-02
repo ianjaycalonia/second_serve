@@ -1,0 +1,70 @@
+table {
+  line-height: 1.4;
+
+  th,
+  td {
+    text-overflow: ellipsis;
+    padding: 0.75rem 0.5rem;
+    vertical-align: middle;
+  }
+
+  td {
+    font-size: 0.875rem;
+  }
+
+  th {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+}
+
+/* DistributeResult table: keep column widths stable */
+#resultContainer table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+tbody.dr-recipient[data-collapsed="0"] > tr.dr-rec-header > td {
+  background-color: #f2f4f8;
+  color: #616b7a;
+}
+
+tbody.dr-recipient[data-collapsed="1"] > tr.dr-rec-header > td {
+  background-color: #ffffff;
+  color: #495057;
+}
+
+/* DistributeResult: slimmer Recipient column with wrapping */
+#resultContainer .dr-rec-toggle {
+  white-space: normal;
+  text-align: left;
+}
+
+/* Column widths so spacing doesn't shift when collapsing/expanding */
+#resultContainer table thead th:first-child,
+#resultContainer table tbody td:first-child {
+  width: 24%; /* Recipient */
+}
+
+#resultContainer table thead th:nth-child(5),
+#resultContainer table tbody td:nth-child(5) {
+  width: 10%; /* Unit */
+}
+
+#resultContainer table thead th:nth-child(6),
+#resultContainer table tbody td:nth-child(6) {
+  width: 10%; /* Quantity */
+}
+
+/* DistributeResult: reserve space for Actions column so buttons stay visible */
+#resultContainer table thead th:last-child,
+#resultContainer table tbody td:last-child {
+  width: 110px;
+  min-width: 110px;
+  text-align: center;
+}
+
+/* DistributeResult: use a single light background color for rows (no stripes) */
+#resultContainer table.dr-result-table tbody tr.dr-rec-item td {
+  background-color: #f8fafc;
+}

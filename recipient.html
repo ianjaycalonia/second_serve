@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Recipients</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="scripts/css/recipients.css" />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body class="sidebar-collapsed">
+    <nav>
+      <div class="nav-items">
+        <div class="toggle">
+          <button id="sidebarToggle" class="btn">
+            <i class="bi bi-list fs-4"></i>
+          </button>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
+          <div class="brand d-none d-md-block">
+            Second Serve by <span>Simply</span><span>Share</span>
+          </div>
+        </div>
+        <div class="nav-icons">
+          <a
+            class="nav-link position-relative"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
+
+            <span
+              id="notificationsBadge"
+              class="position-absolute badge-message rounded-pill bg-danger"
+            ></span>
+          </a>
+          <a
+            class="nav-link"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span id="messagesBadge" class="badge bg-danger d-none">0</span>
+          </a>
+
+          <div class="dropdown">
+            <a
+              class="nav-link d-flex align-items-center dashboard-icon"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <img
+                src="images/profile.png"
+                alt="Dashboard Icon"
+                width="25"
+                height="25"
+              />
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li>
+                <a class="dropdown-item" href="adminprofile.html">
+                  <i class="bi bi-person me-2"></i>Profile
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="adminsettings.html">
+                  <i class="bi bi-gear me-2"></i>Settings
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="taxonomy.html">
+                  <i class="bi bi-tags me-2"></i>Categories
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="inventorymovements.html">
+                  <i class="bi bi-arrow-left-right me-2"></i>Movements
+                </a>
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#">
+                  <i class="bi bi-box-arrow-right me-2"></i>Logout
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar collapsed">
+      <a
+        href="admindashboard.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Dashboard"
+      >
+        <img
+          src="images/home.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+
+        <span class="sidebar-text">Dashboard</span>
+      </a>
+      <a
+        href="donation.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donations"
+      >
+        <img
+          src="images/values.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donation</span>
+      </a>
+
+      <a
+        href="distributionpickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
+      </a>
+
+      <div class="nav-item position-relative">
+        <a
+          href="#distributionMenu"
+          class="nav-link d-flex align-items-center sidebar-tooltip dashboard-link"
+          data-bs-toggle="collapse"
+          aria-expanded="false"
+          aria-controls="distributionMenu"
+          data-bs-placement="right"
+          data-bs-custom-class="custom-tooltip"
+          data-bs-title="Distribution"
+        >
+          <span class="d-flex align-items-center">
+            <img
+              src="images/diagram.gif"
+              alt="Dashboard Icon"
+              class="dashboard-icon"
+              width="35"
+              height="35"
+            />
+            <span class="sidebar-text">Distribution</span>
+          </span>
+        </a>
+        <div class="collapse" id="distributionMenu">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
+            <li class="nav-item">
+              <a class="nav-link" href="recipientslist.html">
+                <img
+                  src="images/checklist.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Recipients List
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="distributeitems.html">
+                <img
+                  src="images/diagram.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Allocation
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="distributeresult.html">
+                <img
+                  src="images/business (1).gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Result
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <a
+        href="donors.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Donors"
+      >
+        <img
+          src="images/employee.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donors</span>
+      </a>
+      <a
+        href="recipient.html"
+        class="nav-link active d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Recipients"
+      >
+        <img
+          src="images/leader.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Recipients</span>
+      </a>
+      <a
+        href="reports.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Reports & Analytics"
+      >
+        <img
+          src="images/business.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Reports & Analytics</span>
+      </a>
+      <a
+        href="inventory.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Inventory"
+      >
+        <img
+          src="images/available.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Inventory</span>
+      </a>
+      <a
+        href="schedule.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
+      </a>
+    </aside>
+
+    <main>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="admindashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">Recipients</li>
+        </ol>
+      </div>
+
+      <div class="card card-accent p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6>Recipients Log</h6>
+
+          <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center search-box">
+              <input
+                type="text"
+                id="donationSearch"
+                class="form-control form-control-sm"
+                placeholder="Search..."
+                aria-label="Search"
+              />
+            </div>
+            <div class="dropdown">
+              <button
+                class="dropdown-toggle"
+                type="button"
+                id="filtersDropdownBtn"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="false"
+                aria-expanded="false"
+              >
+                <i class="bi bi-funnel-fill fs-5"></i>
+              </button>
+              <div class="dropdown-menu">
+                <form id="filterForm" class="px-3 py-2">
+                  <h5>Filter by</h5>
+
+                  <div class="row g-3">
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="filterCategorySelect">
+                        Category
+                      </label>
+                      <select
+                        id="filterCategorySelect"
+                        class="form-select form-select-sm"
+                      >
+                        <option value="" selected>All</option>
+                      </select>
+                    </div>
+
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="filterStatusSelect">
+                        Status
+                      </label>
+                      <select
+                        id="filterStatusSelect"
+                        class="form-select form-select-sm"
+                      >
+                        <option value="" selected>All</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
+
+                    <div class="col-6">
+                      <label
+                        class="form-label small fw-bold mb-1"
+                        for="filterLocationSelect"
+                      >
+                        Location
+                      </label>
+                      <select
+                        id="filterLocationSelect"
+                        class="form-select form-select-sm"
+                      >
+                        <option value="" selected>All</option>
+                      </select>
+                    </div>
+
+                    <div class="col-6">
+                      <label class="form-label mb-1" for="filterPositionSelect">
+                        Position
+                      </label>
+                      <select
+                        id="filterPositionSelect"
+                        class="form-select form-select-sm"
+                      >
+                        <option value="" selected>All</option>
+                      </select>
+                    </div>
+
+                    <div class="col-12">
+                      <div class="border-top my-2"></div>
+                      <label class="form-label mb-1">Contact Info</label>
+                      <div class="d-flex justify-content-between">
+                        <div class="form-check form-check-sm">
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="checkHasEmail"
+                          />
+                          <label
+                            class="form-check-label small"
+                            for="checkHasEmail"
+                          >
+                            Has Email
+                          </label>
+                        </div>
+                        <div class="form-check form-check-sm">
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="checkHasPhone"
+                          />
+                          <label
+                            class="form-check-label small"
+                            for="checkHasPhone"
+                          >
+                            Has Phone #
+                          </label>
+                        </div>
+                        <div class="form-check form-check-sm">
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="checkHasContactPerson"
+                          />
+                          <label
+                            class="form-check-label small"
+                            for="checkHasContactPerson"
+                          >
+                            Has Contact Person
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+
+                <div class="dropdown-divider"></div>
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
+                >
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    Reset
+                  </button>
+                  <button type="button" class="btn btn-sm btn-primary">
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="dropdown">
+              <button
+                class="dropdown-toggle"
+                type="button"
+                id="sortsDropdownBtn"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="false"
+                aria-expanded="false"
+              >
+                <i class="bi bi-arrow-down-up fs-5"></i>
+              </button>
+              <div class="dropdown-menu">
+                <form id="sortForm" class="px-3 py-2">
+                  <h5>Sort by</h5>
+
+                  <div class="mb-3">
+                    <label class="form-label mb-1" for="sortBeneficiaryName"
+                      >Beneficiary Name</label
+                    >
+                    <select
+                      id="sortBeneficiaryName"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected value="">Default</option>
+                      <option value="asc">A to Z</option>
+                      <option value="desc">Z to A</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label mb-1" for="sortContactPerson"
+                      >Contact Person</label
+                    >
+                    <select
+                      id="sortContactPerson"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected value="">Default</option>
+                      <option value="asc">A to Z</option>
+                      <option value="desc">Z to A</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label mb-1" for="sortLocation"
+                      >Location</label
+                    >
+                    <select
+                      id="sortLocation"
+                      class="form-select form-select-sm"
+                    >
+                      <option selected value="">Default</option>
+                      <option value="asc">A to Z</option>
+                      <option value="desc">Z to A</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-0">
+                    <label class="form-label mb-1" for="sortStatus"
+                      >Status</label
+                    >
+                    <select id="sortStatus" class="form-select form-select-sm">
+                      <option selected value="">Default</option>
+                      <option value="active_first">Active First</option>
+                      <option value="inactive_first">Inactive First</option>
+                    </select>
+                  </div>
+                </form>
+
+                <div class="dropdown-divider"></div>
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2 px-3 py-2"
+                >
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    Reset
+                  </button>
+                  <button type="button" class="btn btn-sm btn-primary">
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button
+              id="addRecipientBtn"
+              class="btn btn-sm btn-success"
+              type="button"
+              data-bs-toggle="modal"
+              data-bs-target="#addRecipientModal"
+            >
+              <i class="bi bi-plus-lg me-1"></i> Add
+            </button>
+
+            <button
+              id="importRecipientsBtn"
+              class="btn btn-sm btn-light"
+              type="button"
+              title="Import recipients from Excel"
+            >
+              <i class="bi bi-file-earmark-arrow-up-fill me-1"></i> Import
+            </button>
+
+            <input
+              id="importRecipientsInput"
+              type="file"
+              accept=".xlsx,.xls"
+              hidden
+            />
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table
+            class="table table-bordered table-striped table-sm align-middle"
+          >
+            <thead class="table-light">
+              <tr>
+                <th>Name of Beneficiary</th>
+                <th class="d-none d-sm-table-cell">Address</th>
+                <th>Contact Person</th>
+                <th class="d-none d-md-table-cell">Position/Designation</th>
+                <th class="d-none d-md-table-cell">Contact#</th>
+                <th class="d-none d-lg-table-cell">Email Address</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <div
+      class="modal fade"
+      id="addRecipientModal"
+      tabindex="-1"
+      aria-labelledby="addRecipientModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="addRecipientModalLabel">
+              Add Recipient
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Organization Name</label>
+              <input
+                type="text"
+                id="addRecOrg"
+                class="form-control"
+                placeholder="e.g., Hope Center"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Beneficiary Category</label>
+              <select
+                id="addRecCategory"
+                class="form-select"
+                data-placeholder="Select a category"
+              ></select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Contact Person</label>
+              <input type="hidden" id="addRecName" />
+              <div class="row g-2">
+                <div class="col-12 col-md-4">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="addRecFirstName"
+                    placeholder="First name"
+                  />
+                </div>
+                <div class="col-4 col-md-2">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="addRecMiddleInitial"
+                    maxlength="2"
+                    placeholder="M.I."
+                  />
+                </div>
+                <div class="col-8 col-md-4">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="addRecLastName"
+                    placeholder="Last name"
+                  />
+                </div>
+                <div class="col-4 col-md-2">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="addRecSuffix"
+                    placeholder="Suffix"
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Position/Designation</label>
+              <input type="text" id="addRecPosition" class="form-control" placeholder="e.g., Program Coordinator" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Email</label>
+              <input
+                type="email"
+                id="addRecEmail"
+                class="form-control"
+                placeholder="name@org.org"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Contact Number</label>
+              <input type="text" id="addRecPhone" class="form-control" />
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Barangay</label>
+                <input type="text" id="addRecBarangay" class="form-control" placeholder="Barangay" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">City / Municipality</label>
+                <select class="form-select" id="addRecCity">
+                  <option value="">Select City / Municipality</option>
+                  <option value="Alcantara">Alcantara</option>
+                  <option value="Alcoy">Alcoy</option>
+                  <option value="Alegria">Alegria</option>
+                  <option value="Aloguinsan">Aloguinsan</option>
+                  <option value="Argao">Argao</option>
+                  <option value="Asturias">Asturias</option>
+                  <option value="Badian">Badian</option>
+                  <option value="Balamban">Balamban</option>
+                  <option value="Bantayan">Bantayan</option>
+                  <option value="Barili">Barili</option>
+                  <option value="Bogo">Bogo</option>
+                  <option value="Boljoon">Boljoon</option>
+                  <option value="Borbon">Borbon</option>
+                  <option value="Carcar">Carcar</option>
+                  <option value="Carmen">Carmen</option>
+                  <option value="Catmon">Catmon</option>
+                  <option value="Cebu City">Cebu City</option>
+                  <option value="Compostela">Compostela</option>
+                  <option value="Consolacion">Consolacion</option>
+                  <option value="Cordova">Cordova</option>
+                  <option value="Daanbantayan">Daanbantayan</option>
+                  <option value="Dalaguete">Dalaguete</option>
+                  <option value="Danao">Danao</option>
+                  <option value="Dumanjug">Dumanjug</option>
+                  <option value="Ginatilan">Ginatilan</option>
+                  <option value="Lapu-Lapu City">Lapu-Lapu City</option>
+                  <option value="Liloan">Liloan</option>
+                  <option value="Madridejos">Madridejos</option>
+                  <option value="Malabuyoc">Malabuyoc</option>
+                  <option value="Mandaue City">Mandaue City</option>
+                  <option value="Medellin">Medellin</option>
+                  <option value="Minglanilla">Minglanilla</option>
+                  <option value="Moalboal">Moalboal</option>
+                  <option value="Naga">Naga</option>
+                  <option value="Oslob">Oslob</option>
+                  <option value="Pilar">Pilar</option>
+                  <option value="Pinamungajan">Pinamungajan</option>
+                  <option value="Poro">Poro</option>
+                  <option value="Ronda">Ronda</option>
+                  <option value="Samboan">Samboan</option>
+                  <option value="San Fernando">San Fernando</option>
+                  <option value="San Francisco">San Francisco</option>
+                  <option value="San Remigio">San Remigio</option>
+                  <option value="Santa Fe">Santa Fe</option>
+                  <option value="Santander">Santander</option>
+                  <option value="Sibonga">Sibonga</option>
+                  <option value="Sogod">Sogod</option>
+                  <option value="Tabogon">Tabogon</option>
+                  <option value="Tabuelan">Tabuelan</option>
+                  <option value="Talisay">Talisay</option>
+                  <option value="Toledo">Toledo</option>
+                  <option value="Tuburan">Tuburan</option>
+                  <option value="Tudela">Tudela</option>
+                </select>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Address</label>
+              <input type="text" id="addRecAddress" class="form-control" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Total Residents (Population)</label>
+              <input
+                type="number"
+                min="0"
+                id="addRecPopulation"
+                class="form-control"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Age Group</label>
+              <input
+                type="text"
+                id="addRecAgeGroup"
+                class="form-control"
+                placeholder="e.g., 0-3, 4-7, 60+"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Male Count</label>
+              <input
+                type="number"
+                min="0"
+                id="addRecMale"
+                class="form-control"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Female Count</label>
+              <input
+                type="number"
+                min="0"
+                id="addRecFemale"
+                class="form-control"
+              />
+            </div>
+            <div id="addRecFeedback" class="small text-danger"></div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button type="button" class="btn btn-primary" id="addRecSubmitBtn">
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="modal fade"
+      id="recipientEditModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Edit Recipient</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="recipientEditForm" class="vstack gap-2">
+              <input type="hidden" id="edit_user_id" />
+              <div>
+                <label class="form-label">Organization/Beneficiary</label>
+                <input type="text" class="form-control" id="edit_org" />
+              </div>
+              <div>
+                <label class="form-label">Beneficiary Category</label>
+                <select
+                  id="edit_beneficiary_category"
+                  class="form-select"
+                  data-placeholder="Select a category"
+                ></select>
+              </div>
+              <div>
+                <label class="form-label">Contact Person</label>
+                <input type="text" class="form-control" id="edit_name" />
+              </div>
+              <div>
+                <label class="form-label">Address</label>
+                <input type="text" class="form-control" id="edit_address" />
+              </div>
+              <div>
+                <label class="form-label">Position/Designation</label>
+                <input type="text" class="form-control" id="edit_position" />
+              </div>
+              <div>
+                <label class="form-label">Contact #</label>
+                <input type="text" class="form-control" id="edit_contact_no" />
+              </div>
+              <div>
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control" id="edit_email" />
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="recipientEditSaveBtn"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notifications Modal -->
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body p-0">
+            <ul id="notificationsList" class="list-group list-group-flush">
+              <!-- Notifications will be inserted here by notifications.js -->
+              <li class="list-group-item text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading notifications...</span>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              id="markAllReadBtn"
+            >
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Messages Modal is injected by scripts/js/ui/messages.js on demand -->
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="scripts/js/utils/auth.js"></script>
+    <script src="scripts/js/ui/messages.js"></script>
+    <script src="scripts/js/ui/notifications.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="scripts/js/ui/adminRecipient.js"></script>
+    <script src="scripts/js/ui/sidebar.js"></script>
+    <script src="scripts/js/ui/dropdownFilters.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
+    <script src="scripts/js/ui/animatedMessage.js"></script>
+
+    <!-- Import Result Modal -->
+    <div
+      class="modal fade"
+      id="importResultModal"
+      tabindex="-1"
+      aria-labelledby="importResultModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importResultModalLabel">
+              Import Result
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body" id="importResultBody"></div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Options Modal (manual header row selection) -->
+    <div
+      class="modal fade"
+      id="importOptionsModal"
+      tabindex="-1"
+      aria-labelledby="importOptionsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importOptionsModalLabel">
+              Import Options
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-2">
+              We couldn't detect your header automatically. Specify the header
+              row number (1-based, Excel row number). For example, if your first
+              data is in A3, set header row to 2.
+            </div>
+            <label for="headerRowInput" class="form-label"
+              >Header row (1-10)</label
+            >
+            <input
+              type="number"
+              class="form-control"
+              id="headerRowInput"
+              value="2"
+              min="1"
+              max="50"
+            />
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="applyHeaderRowBtn"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Preview & Edit Modal -->
+    <div
+      class="modal fade"
+      id="importPreviewModal"
+      tabindex="-1"
+      aria-labelledby="importPreviewModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importPreviewModalLabel">
+              Preview & Edit Import
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="small text-muted">
+                Edit cells before importing. Rows in red have validation issues.
+              </div>
+              <div class="btn-group btn-group-sm" role="group">
+                <button
+                  class="btn btn-outline-secondary"
+                  id="previewSelectAllBtn"
+                >
+                  Select All
+                </button>
+                <button
+                  class="btn btn-outline-secondary"
+                  id="previewDeselectAllBtn"
+                >
+                  Deselect All
+                </button>
+                <div class="form-check form-check-inline ms-2">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="previewFillDownCheck"
+                    checked
+                  />
+                  <label class="form-check-label" for="previewFillDownCheck"
+                    >Fill down blanks</label
+                  >
+                </div>
+              </div>
+            </div>
+            <div
+              class="table-responsive border rounded recipients-preview-table-wrapper"
+            >
+              <table
+                class="table table-sm table-hover align-middle mb-0"
+                id="importPreviewTable"
+              >
+                <thead class="table-light">
+                  <tr>
+                    <th class="recipients-preview-select-col">
+                      <input type="checkbox" id="previewMasterCheck" />
+                    </th>
+                    <th>Name of Beneficiary</th>
+                    <th>Advocacy</th>
+                    <th>Type</th>
+                    <th>Address</th>
+                    <th>Contact Person</th>
+                    <th>Position/Designation</th>
+                    <th>Contact#</th>
+                    <th>Email Address</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <div class="me-auto small" id="previewStatus"></div>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button type="button" class="btn btn-primary" id="previewImportBtn">
+              Import Selected
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

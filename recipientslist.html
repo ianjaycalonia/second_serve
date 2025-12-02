@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="images/simply_share.png" />
+    <title>Second Serve: Recipients List</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.13.1/font/bootstrap-icons.min.css"
+    />
+    <link rel="stylesheet" href="scripts/css/dashboardLayout.css" />
+    <link rel="stylesheet" href="scripts/css/monthlyRecipients.css" />
+  </head>
+  <body class="sidebar-collapsed">
+    <nav>
+      <div class="nav-items">
+        <div class="toggle">
+          <button id="sidebarToggle" class="btn">
+            <i class="bi bi-list fs-4"></i>
+          </button>
+          <img
+            src="images/simply_share.png"
+            alt="Simply Share Logo"
+            class="logo"
+          />
+          <div class="brand d-none d-md-block">
+            Second Serve by <span>Simply</span><span>Share</span>
+          </div>
+
+          <!-- Pending Recipient Approvals -->
+          <div
+            class="card card-accent mb-3 d-none"
+            id="pendingApprovalsCard"
+          >
+            <div class="card-body">
+              <div
+                class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2"
+              >
+                <div class="fw-semibold">Pending Recipient Approvals</div>
+                <div class="d-flex align-items-center gap-2">
+                  <button
+                    id="reloadPendingBtn"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Organization</th>
+                      <th>Contact</th>
+                      <th>Email</th>
+                      <th>Address</th>
+                      <th class="pending-actions-col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pendingRecipientsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="nav-icons">
+          <a
+            class="nav-link position-relative"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#notificationsModal"
+            aria-label="Open notifications"
+          >
+            <img
+              class="bell-icon"
+              src="images/bell.gif"
+              alt="Bell"
+              width="40"
+              height="40"
+            />
+
+            <span
+              id="notificationsBadge"
+              class="position-absolute badge-message rounded-pill bg-danger"
+            ></span>
+          </a>
+          <a
+            class="nav-link"
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#messagesModal"
+            aria-label="Open messages"
+          >
+            <img
+              src="images/letter.gif"
+              class="letter-icon"
+              alt="Mail"
+              width="35"
+              height="35"
+            />
+            <span
+              id="messagesBadge"
+              class="badge bg-danger d-none"
+              >0</span
+            >
+          </a>
+
+          <div class="dropdown">
+            <a
+              class="nav-link d-flex align-items-center dashboard-icon"
+              href="#"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <img
+                src="images/profile.png"
+                alt="Dashboard Icon"
+                width="25"
+                height="25"
+              />
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li>
+                <a class="dropdown-item" href="adminprofile.html">
+                  <i class="bi bi-person me-2"></i>Profile
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="adminsettings.html">
+                  <i class="bi bi-gear me-2"></i>Settings
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="taxonomy.html">
+                  <i class="bi bi-tags me-2"></i>Categories
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="inventorymovements.html">
+                  <i class="bi bi-arrow-left-right me-2"></i>Movements
+                </a>
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <a class="dropdown-item text-danger logout-btn" href="#">
+                  <i class="bi bi-box-arrow-right me-2"></i>Logout
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar collapsed">
+      <a
+        href="admindashboard.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Dashboard"
+      >
+        <img
+          src="images/home.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+
+        <span class="sidebar-text">Dashboard</span>
+      </a>
+      <a
+        href="donation.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Donations"
+      >
+        <img
+          src="images/values.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donation</span>
+      </a>
+
+      <a
+        href="distributionpickup.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Pickup Management"
+      >
+        <img
+          src="images/pickup-truck.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Pickup Management</span>
+      </a>
+
+      <div class="nav-item position-relative">
+        <a
+          href="#distributionMenu"
+          class="nav-link active d-flex align-items-center sidebar-tooltip dashboard-link"
+          data-bs-toggle="collapse"
+          aria-expanded="false"
+          aria-controls="distributionMenu"
+          data-bs-placement="right"
+          data-bs-custom-class="custom-tooltip"
+          data-bs-title="Distribution"
+        >
+          <span class="d-flex align-items-center">
+            <img
+              src="images/diagram.gif"
+              alt="Dashboard Icon"
+              class="dashboard-icon"
+              width="35"
+              height="35"
+            />
+            <span class="sidebar-text">Distribution</span>
+          </span>
+        </a>
+        <div class="collapse" id="distributionMenu">
+          <ul class="nav flex-column mt-2 ms-4 gap-2">
+            <li class="nav-item">
+              <a class="nav-link active" href="recipientslist.html">
+                <img
+                  src="images/checklist.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Recipients List
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="distributeitems.html">
+                <img
+                  src="images/diagram.gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Allocation
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="distributeresult.html">
+                <img
+                  src="images/business (1).gif"
+                  alt="Dashboard Icon"
+                  class="dashboard-icon"
+                  width="35"
+                  height="35"
+                />Result
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <a
+        href="donors.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Donors"
+      >
+        <img
+          src="images/employee.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Donors</span>
+      </a>
+      <a
+        href="recipient.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Recipients"
+      >
+        <img
+          src="images/leader.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Recipients</span>
+      </a>
+      <a
+        href="reports.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        ata-bs-custom-class="custom-tooltip"
+        data-bs-title="Reports & Analytics"
+      >
+        <img
+          src="images/business.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Reports & Analytics</span>
+      </a>
+      <a
+        href="inventory.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Inventory"
+      >
+        <img
+          src="images/available.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Inventory</span>
+      </a>
+      <a
+        href="schedule.html"
+        class="nav-link d-flex align-items-center dashboard-link"
+        data-bs-toggle="tooltip"
+        data-bs-placement="right"
+        data-bs-custom-class="custom-tooltip"
+        data-bs-title="Schedule"
+      >
+        <img
+          src="images/calendar.gif"
+          alt="Dashboard Icon"
+          class="dashboard-icon"
+          width="35"
+          height="35"
+        />
+        <span class="sidebar-text">Schedule</span>
+      </a>
+    </aside>
+
+    <main>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="admindashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item">Distribution</li>
+          <li class="breadcrumb-item active" aria-current="page">
+            Recipients List
+          </li>
+        </ol>
+      </div>
+
+      <div
+        class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3"
+      >
+        <h5 class="mb-0">Recipients List (Weekly)</h5>
+        <div class="d-flex align-items-center gap-2">
+          <button
+            id="reloadBtn"
+            class="btn btn-outline-secondary btn-sm"
+            data-bs-toggle="tooltip"
+            data-bs-placement="bottom"
+            title="Reload recipients"
+          >
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+          <button
+            id="autoAllBtn"
+            class="btn btn-outline-primary btn-sm"
+            data-bs-toggle="tooltip"
+            data-bs-placement="bottom"
+            title="Auto-fill all weeks to 10"
+          >
+            <i class="bi bi-magic"></i>
+          </button>
+          <button
+            id="saveAllBtn"
+            class="btn btn-primary btn-sm"
+            data-bs-toggle="tooltip"
+            data-bs-placement="bottom"
+            title="Save all weeks"
+          >
+            <i class="bi bi-save"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="weeksRow" class="row g-3">
+        <div class="col-12 col-lg-3">
+          <div class="card card-accent h-100">
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex flex-column mb-3">
+                <div class="fw-semibold mb-1" id="w1Label">Week 1</div>
+                <div class="btn-group">
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    id="clearW1"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Clear Week 1"
+                  >
+                    <i class="bi bi-eraser"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    id="autoW1"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Auto-pick 10 for Week 1"
+                  >
+                    <i class="bi bi-magic"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-success"
+                    id="saveW1"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Save Week 1"
+                  >
+                    <i class="bi bi-save"></i>
+                  </button>
+                </div>
+              </div>
+              <div
+                id="w1"
+                class="dropzone border flex-grow-1 rounded p-2 d-flex flex-column gap-2"
+                aria-label="Week 1 assignments"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-3">
+          <div class="card card-accent h-100">
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex flex-column mb-3">
+                <div class="fw-semibold m-1" id="w2Label">Week 2</div>
+                <div class="btn-group">
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    id="clearW2"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Clear Week 2"
+                  >
+                    <i class="bi bi-eraser"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    id="autoW2"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Auto-pick 10 for Week 2"
+                  >
+                    <i class="bi bi-magic"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-success"
+                    id="saveW2"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Save Week 2"
+                  >
+                    <i class="bi bi-save"></i>
+                  </button>
+                </div>
+              </div>
+              <div
+                id="w2"
+                class="dropzone flex-grow-1 border rounded p-2 d-flex flex-column gap-2"
+                aria-label="Week 2 assignments"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-3">
+          <div class="card card-accent h-100">
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex flex-column mb-3">
+                <div class="fw-semibold mb-1" id="w3Label">Week 3</div>
+                <div class="btn-group">
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    id="clearW3"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Clear Week 3"
+                  >
+                    <i class="bi bi-eraser"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    id="autoW3"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Auto-pick 10 for Week 3"
+                  >
+                    <i class="bi bi-magic"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-success"
+                    id="saveW3"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Save Week 3"
+                  >
+                    <i class="bi bi-save"></i>
+                  </button>
+                </div>
+              </div>
+              <div
+                id="w3"
+                class="dropzone flex-grow-1 border rounded p-2 d-flex flex-column gap-2"
+                aria-label="Week 3 assignments"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-3">
+          <div class="card card-accent h-100">
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex flex-column mb-3">
+                <div class="fw-semibold mb-1" id="w4Label">Week 4</div>
+                <div class="btn-group">
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    id="clearW4"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Clear Week 4"
+                  >
+                    <i class="bi bi-eraser"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    id="autoW4"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Auto-pick 10 for Week 4"
+                  >
+                    <i class="bi bi-magic"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-success"
+                    id="saveW4"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Save Week 4"
+                  >
+                    <i class="bi bi-save"></i>
+                  </button>
+                </div>
+              </div>
+              <div
+                id="w4"
+                class="dropzone flex-grow-1 border rounded p-2 d-flex flex-column gap-2"
+                aria-label="Week 4 assignments"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Week 5 (conditionally shown) -->
+        <div class="col-12 col-lg-3 d-none" id="w5Col" style="display: none;">
+          <div class="card card-accent h-100">
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex flex-column mb-3">
+                <div class="fw-semibold mb-1" id="w5Label">Week 5</div>
+                <div class="btn-group">
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    id="clearW5"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Clear Week 5"
+                  >
+                    <i class="bi bi-eraser"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    id="autoW5"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Auto-pick 10 for Week 5"
+                  >
+                    <i class="bi bi-magic"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-success"
+                    id="saveW5"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    title="Save Week 5"
+                  >
+                    <i class="bi bi-save"></i>
+                  </button>
+                </div>
+              </div>
+              <div
+                id="w5"
+                class="dropzone flex-grow-1 border rounded p-2 d-flex flex-column gap-2"
+                aria-label="Week 5 assignments"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <!-- Pool below weeks -->
+          <div class="card card-accent p-3">
+            <div
+              class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2"
+            >
+              <div class="fw-semibold">Pool of Approved Recipients</div>
+              <div class="d-flex align-items-center flex-wrap gap-2">
+                <input
+                  id="poolSearch"
+                  class="form-control form-control-sm pool-search-input"
+                  placeholder="Search recipients..."
+                />
+                <div class="small text-muted">Drag to weeks above</div>
+              </div>
+            </div>
+            <div class="rpool-scroll">
+              <div
+                id="pool"
+                class="rpool list d-flex flex-wrap gap-2"
+                aria-label="Pool of recipients"
+              >
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Notifications Modal -->
+    <div
+      class="modal fade"
+      id="notificationsModal"
+      tabindex="-1"
+      aria-labelledby="notificationsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="notificationsModalLabel">
+              Notifications
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body p-0">
+            <ul id="notificationsList" class="list-group list-group-flush">
+              <li class="list-group-item text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading notifications...</span>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              id="markAllReadBtn"
+            >
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Messages Modal is injected by scripts/js/ui/messages.js on demand -->
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+    <!-- Toast container for Recipients List alerts -->
+    <div
+      id="rlToastContainer"
+      class="position-fixed bottom-0 end-0 p-3 rl-toast-container"
+    ></div>
+    <script src="scripts/js/utils/auth.js"></script>
+    <script src="scripts/js/ui/messages.js"></script>
+    <script src="scripts/js/ui/notifications.js"></script>
+    <script src="scripts/js/charts/adminDashboard.js"></script>
+    <script src="scripts/js/ui/sidebar.js"></script>
+    <script src="scripts/js/ui/adminRecipientsList.js"></script>
+    <script src="scripts/js/ui/animation.js"></script>
+    <script src="scripts/js/ui/animatedNotification.js"></script>
+    <script src="scripts/js/ui/animatedMessage.js"></script>
+    <script src="scripts/js/ui/adminRecipientsWeeks.js"></script>
+  </body>
+</html>

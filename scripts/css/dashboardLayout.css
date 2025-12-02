@@ -1,0 +1,600 @@
+@import url("globals.css");
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "header header"
+    "sidebar main";
+  overflow-y: auto;
+  transition: grid-template-columns 0.3s ease;
+}
+
+body.sidebar-collapsed {
+  grid-template-columns: 60px 1fr;
+}
+
+body::-webkit-scrollbar {
+  width: 0;
+}
+
+nav {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  z-index: 1000;
+  background-color: var(--primary-background);
+  color: var(--body-text-color);
+  height: 60px;
+  grid-area: header;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+  padding: 0 20px;
+
+  .brand {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--header-text-color);
+
+    & span:first-child {
+      color: var(--primary-color);
+    }
+
+    & span:last-child {
+      color: var(--secondary-color);
+    }
+  }
+
+  .nav-items {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      .logo {
+        height: 40px;
+        width: auto;
+      }
+    }
+
+    .nav-icons {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+
+      a > i {
+        font-size: 1.5em;
+        aspect-ratio: 1 / 1;
+        object-fit: contain;
+        transition: filter 0.3s ease;
+      }
+
+      a > img {
+        width: 45px;
+        aspect-ratio: 1 / 1;
+        object-fit: contain;
+        transition: filter 0.3s ease;
+      }
+      .dropdown {
+        .dropdown-menu {
+          li > a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+          }
+        }
+      }
+
+      .nav-link.dropdown-toggle::after {
+        display: none !important;
+      }
+    }
+  }
+}
+
+/* Themed tables (override Bootstrap defaults) */
+.table {
+  background-color: var(--card-background);
+  color: var(--body-text-color);
+}
+
+.table thead th,
+.table thead td {
+  background-color: var(--table-header-background) !important;
+  color: var(--header-text-color) !important;
+}
+
+.table thead.table-light th,
+.table thead.table-light td,
+.table.table-light > thead > tr > th,
+.table.table-light > thead > tr > td {
+  background-color: var(--table-header-background) !important;
+  color: var(--header-text-color) !important;
+}
+
+.table.table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: var(--table-row-striped) !important;
+}
+
+.table.table-hover > tbody > tr:hover > * {
+  background-color: var(--table-row-hover) !important;
+}
+
+.table.table-bordered > :not(caption) > * > * {
+  border-color: var(--card-border-color) !important;
+}
+
+aside {
+  top: 60px;
+  position: sticky;
+  align-self: start;
+  height: calc(100vh - 60px);
+  grid-area: sidebar;
+  background-color: var(--primary-background);
+  color: var(--body-text-color);
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+  transition: width 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  white-space: nowrap;
+  overflow-y: auto; /* ← make scrollable */
+  flex-shrink: 0; /* ← prevent shrinking */
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border-radius: 8px;
+    color: var(--body-text-color);
+    text-decoration: none;
+    font-weight: 500;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    gap: 3px;
+
+    &:hover {
+      background-color: var(--hover-color);
+      color: var(--secondary-color);
+    }
+
+    &.active {
+      background-color: var(--primary-color);
+      color: var(--highlight-color);
+
+      i {
+        color: var(--highlight-color);
+      }
+    }
+  }
+
+  .nav-link i {
+    font-size: 1.4em;
+    color: var(--secondary-color);
+  }
+}
+
+aside::-webkit-scrollbar {
+  width: 0;
+}
+
+.custom-tooltip {
+  --bs-tooltip-bg: var(--secondary-color);
+  --bs-tooltip-color: var(--highlight-color);
+}
+
+.table-tooltip {
+  --bs-tooltip-bg: #000;
+  --bs-tooltip-color: var(--highlight-color);
+}
+
+aside.collapsed {
+  width: 60px;
+  min-width: 60px;
+  padding: 20px 10px;
+  overflow: hidden;
+
+  span {
+    display: none;
+  }
+}
+
+main {
+  grid-area: main;
+  padding: 20px;
+  background-color: var(--secondary-background);
+  transition: all 0.3s ease;
+
+  /* Breadcrumbs */
+
+  .breadcrumb {
+    --bs-breadcrumb-divider: ">";
+    --bs-breadcrumb-padding-x: 0;
+    --bs-breadcrumb-divider-color: var(--primary-color);
+
+    font-weight: bold;
+
+    & .breadcrumb-item:not(:last-child) a {
+      color: var(--secondary-color);
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+
+    & .breadcrumb-item.active {
+      color: var(--primary-color);
+    }
+  }
+
+  /* End of Breadcrumbs 123*/
+
+  .card {
+    border: 1px solid var(--card-border-color);
+    background-color: var(--card-background);
+    color: var(--body-text-color);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+
+    .card-title {
+      font-size: 0.95em;
+      margin-bottom: 1em;
+    }
+
+    .card-elements {
+      display: flex;
+      align-items: center;
+
+      .card-icon {
+        padding: 15px;
+        border-radius: 0.5em;
+        background: linear-gradient(
+          120deg,
+          var(--primary-background),
+          rgb(255, 255, 255)
+        );
+        color: var(--primary-background);
+        margin-right: 20px;
+
+        i {
+          font-size: 2.5em;
+        }
+      }
+
+      .card-text {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+
+        h3 {
+          font-size: clamp(1.75rem, 4vw, 3rem);
+          font-weight: bold;
+          line-height: 1.1;
+          max-width: 100%;
+          overflow-wrap: anywhere;
+        }
+
+        small {
+          font-size: 0.85em;
+          color: #777;
+        }
+      }
+    }
+  }
+
+  .activity-feed::-webkit-scrollbar {
+    width: 0;
+  }
+}
+.card-hovered {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  cursor: pointer;
+}
+
+.card-hovered:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+.card-hovered .login-icon {
+  opacity: 1;
+}
+
+/* Create a "paused" overlay using the first frame */
+.card-hovered .login-icon::before {
+  content: "";
+  display: block;
+}
+
+/* Accent bar base */
+.card-accent-dynamic {
+  position: relative;
+}
+
+.card-accent-dynamic::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+
+  /* Default state — solid red, no animation, no glow */
+  background: #ed3f34;
+  background-size: 400% 100%;
+  box-shadow: none;
+  transition: box-shadow 0.3s ease, background 0.3s ease;
+}
+
+/* Hover state — start animation + glow */
+.card-hovered:hover .card-accent-dynamic::before {
+  background: linear-gradient(
+    90deg,
+    #ed3f34,
+    #ffaa00,
+    #ed3f34,
+    #ffbb00,
+    #ed3f34
+  );
+  background-size: 400% 100%;
+  animation: accentColorChange 8s linear infinite,
+    accentGlow 2s ease-in-out infinite alternate;
+  box-shadow: 0 0 15px rgba(255, 77, 0, 0.8), 0 0 30px rgba(255, 170, 0, 0.6),
+    0 0 45px rgba(255, 102, 51, 0.5);
+}
+
+/* Gradient animation */
+@keyframes accentColorChange {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Glowing animation */
+@keyframes accentGlow {
+  0% {
+    box-shadow: 0 0 10px rgba(237, 63, 52, 0.4), 0 0 20px rgba(255, 170, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 77, 0, 0.8), 0 0 40px rgba(255, 170, 0, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 10px rgba(237, 63, 52, 0.4), 0 0 20px rgba(255, 170, 0, 0.3);
+  }
+}
+.dashboard-icon {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.dashboard-icon:hover {
+  transform: scale(1.2);
+}
+
+.badge-message {
+  position: absolute;
+  top: 1px;
+  left: 30px;
+  display: none; /* hidden initially */
+  font-size: 0.6rem;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: white;
+  background-color: transparent; /* no background on reload */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.3s ease; /* smooth show */
+}
+
+/* When you want to show it later (e.g., when message arrives) */
+.badge-message.active {
+  display: flex;
+  background-color: red; /* or any color you want */
+}
+/* Hide submenu when sidebar is collapsed */
+.sidebar.collapsed .collapse {
+  display: none !important;
+}
+
+/* Optional: rotate the chevron when expanded */
+.nav-link[aria-expanded="true"] .chevron-icon {
+  transform: rotate(180deg);
+  transition: transform 0.3s;
+}
+
+/* Desktop sidebar links (expanded) */
+.dashboard-link {
+  display: flex;
+  align-items: center;
+  gap: 10px; /* always 10px between icon and text */
+  transition: all 0.3s ease;
+}
+
+/* Collapsed sidebar (desktop) */
+.sidebar.collapsed .dashboard-link {
+  justify-content: center; /* center icon when collapsed */
+  gap: 0; /* remove gap when collapsed */
+}
+
+/* Keep gap 10px for mobile even if sidebar is "collapsed" */
+@media (max-width: 768px) {
+  .dashboard-link {
+    gap: 10px !important;
+  }
+}
+
+.sidebar.collapsed .dashboard-link .sidebar-text {
+  display: none; /* hide the text when collapsed */
+}
+
+.dashboard-link {
+  transition: all 0.3s ease;
+}
+.card-accent {
+  position: relative;
+}
+/* Accent bar */
+.card-accent::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  background: var(--secondary-color);
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "header"
+      "main";
+  }
+
+  aside {
+    position: fixed;
+    left: 0;
+    top: 50px;
+    height: calc(100vh - 50px);
+    width: 300px;
+    max-width: 80vw;
+    background: var(--primary-background);
+    z-index: 2000;
+    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.15);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    display: none;
+    gap: 10px;
+    overflow-y: auto; /* ← scrollable */
+    a:not(:last-child) {
+      margin-bottom: 10px;
+    }
+  }
+
+  body.sidebar-open aside {
+    display: block;
+    transform: translateX(0);
+  }
+
+  nav {
+    grid-area: header;
+    width: 100vw;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+    padding: 20px;
+    position: sticky;
+    top: 0;
+    z-index: 3000;
+    background: var(--primary-background);
+
+    .nav-items {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  }
+
+  main {
+    grid-area: main;
+    width: 100vw;
+  }
+
+  /* Mobile sidebar backdrop */
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0; /* top:0; right:0; bottom:0; left:0 */
+    background-color: rgba(0, 0, 0, 0.4); /* gray overlay */
+    z-index: 1999;
+    display: none; /* hidden by default */
+    transition: opacity 0.3s ease;
+  }
+
+  body.sidebar-open .sidebar-backdrop {
+    display: block;
+    opacity: 1;
+  }
+}
+aside {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+.modal {
+  z-index: 10000 !important;
+  position: fixed !important;
+}
+#messagesModal {
+  z-index: 10001 !important;
+}
+#eventModal {
+  z-index: 10002 !important;
+}
+.modal-backdrop {
+  z-index: 9998 !important;
+}
+#notificationsModal {
+  z-index: 9999 !important;
+  position: fixed !important;
+}
+
+#notificationsModal ~ .modal-backdrop {
+  z-index: 9998 !important;
+}
+.dashboard-chart-wrapper {
+  height: 100%;
+}
+
+.recipient-dashboard-chart {
+  height: 300px;
+}
+
+.dashboard-toast-container {
+  z-index: 1100;
+}
+/* Chevron styling */
+.dropdown-chevron {
+  transition: transform 0.3s;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+/* Rotate chevron when dropdown is open */
+a[aria-expanded="true"] .dropdown-chevron {
+  transform: rotate(90deg);
+}
+/*Dropdown background color*/
+#distributionMenu {
+  background-color: gray; /* light gray */
+  border-radius: 5px;
+  padding: 10px;
+}

@@ -1,0 +1,91 @@
+@import url(globals.css);
+@import url(tableLayout.css);
+@import url(dropdownOptions.css);
+
+#importRecipientsBtn {
+  border: none;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background-color: var(--secondary-color);
+    filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.5));
+    transform: scale(1) translateY(-2px);
+    cursor: pointer;
+  }
+}
+
+/* Recipient preview modal layout helpers (moved from inline style) */
+.recipients-preview-table-wrapper {
+  max-height: 60vh;
+}
+
+.recipients-preview-select-col {
+  width: 32px;
+}
+
+/* Stacked table layout for very small screens (moved from Recipient.html) */
+@media (max-width: 575.98px) {
+  /* Nav compaction */
+  nav .nav-items {
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+  }
+  nav .nav-icons {
+    gap: 0.25rem;
+  }
+  nav .nav-icons .nav-link {
+    padding: 0.25rem;
+  }
+  nav .toggle .logo {
+    height: 28px;
+  }
+  nav .toggle .btn {
+    padding: 0.25rem 0.4rem;
+  }
+
+  /* Header bar readability */
+  .fw-bold.align-self-center {
+    color: #fff;
+  }
+  #filtersDropdownBtn {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.6);
+  }
+
+  /* Mobile import button spans full width */
+  #importRecipientsBtnMobile {
+    width: 100%;
+  }
+
+  table.stacked-table thead {
+    display: none;
+  }
+  table.stacked-table tbody tr {
+    display: block;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+  }
+  table.stacked-table tbody tr td {
+    /* Use grid so label and value align cleanly */
+    display: grid;
+    grid-template-columns: 140px 1fr; /* label fixed, value flexible */
+    column-gap: 0.5rem;
+    align-items: start;
+    border: 0 !important;
+    padding: 0.375rem 0 !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  /* Override Bootstrap's d-none on mobile to show all fields in stacked layout */
+  table.stacked-table tbody tr td.d-none,
+  table.stacked-table tbody tr td.d-sm-table-cell,
+  table.stacked-table tbody tr td.d-md-table-cell,
+  table.stacked-table tbody tr td.d-lg-table-cell {
+    display: grid !important;
+  }
+}

@@ -1,0 +1,391 @@
+@import url(globals.css);
+
+/* ===== Enhanced Recipient Pickup UI ===== */
+:root {
+  --recipient-primary: #0d6efd;
+  --recipient-primary-dark: #0a58ca;
+  --donor-primary: #198754;
+  --donor-primary-dark: #146c43;
+  --admin-primary: #6c757d;
+  --admin-primary-dark: #5c636a;
+  --status-scheduled: #ffc107;
+  --status-confirmed: #0dcaf0;
+  --status-in-progress: #fd7e14;
+  --status-completed: #198754;
+  --status-cancelled: #dc3545;
+}
+
+/* Event Type Badges */
+.event-type-badge {
+  font-size: 0.7em;
+  padding: 0.25em 0.6em;
+  border-radius: 50rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.event-type-badge i {
+  font-size: 0.9em;
+}
+
+.event-type-badge.recipient {
+  background-color: rgba(13, 110, 253, 0.1);
+  color: var(--recipient-primary);
+}
+
+.event-type-badge.donor {
+  background-color: rgba(25, 135, 84, 0.1);
+  color: var(--donor-primary);
+}
+
+.event-type-badge.admin {
+  background-color: rgba(108, 117, 125, 0.1);
+  color: var(--admin-primary);
+}
+
+/* Status Badges */
+.status-badge {
+  font-size: 0.7em;
+  padding: 0.3em 0.7em;
+  border-radius: 0.25rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-scheduled { background-color: var(--status-scheduled); color: #000; }
+.status-confirmed { background-color: var(--status-confirmed); color: #000; }
+.status-in_progress { background-color: var(--status-in-progress); color: #fff; }
+.status-completed { background-color: var(--status-completed); color: #fff; }
+.status-cancelled { background-color: var(--status-cancelled); color: #fff; }
+
+/* Calendar Event Styling */
+.fc-event {
+  border: none !important;
+  border-left: 4px solid transparent !important;
+  border-radius: 4px !important;
+  font-size: 0.85em !important;
+  padding: 4px 6px !important;
+  margin: 1px 2px !important;
+  transition: all 0.2s ease !important;
+}
+
+.fc-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.fc-event-recipient {
+  background-color: rgba(13, 110, 253, 0.1) !important;
+  border-left-color: var(--recipient-primary) !important;
+  color: var(--recipient-primary) !important;
+}
+
+.fc-event-donor {
+  background-color: rgba(25, 135, 84, 0.1) !important;
+  border-left-color: var(--donor-primary) !important;
+  color: var(--donor-primary) !important;
+}
+
+.fc-event-admin {
+  background-color: rgba(108, 117, 125, 0.1) !important;
+  border-left-color: var(--admin-primary) !important;
+  color: var(--admin-primary) !important;
+}
+
+/* Event Modal */
+#eventModal .modal-dialog {
+  max-width: 700px;
+}
+
+#eventModal .modal-header {
+  border-bottom: 1px solid #e9ecef;
+  padding: 1rem 1.5rem;
+}
+
+#eventModal .modal-body {
+  padding: 1.5rem;
+}
+
+#eventModal .modal-footer {
+  border-top: 1px solid #e9ecef;
+  padding: 1rem 1.5rem;
+}
+
+/* Recipient Selection */
+.recipient-selection {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.recipient-selection:last-child {
+  margin-bottom: 0;
+}
+
+.recipient-details {
+  transition: all 0.3s ease;
+  overflow: hidden;
+  margin-top: 0.5rem;
+  border-radius: 0.375rem;
+  background-color: #f8f9fa;
+  padding: 0.75rem;
+  border-left: 3px solid #dee2e6;
+}
+
+.recipient-details.show {
+  display: block !important;
+  max-height: 200px;
+  opacity: 1;
+}
+
+.recipient-contact, .recipient-last-pickup {
+  font-weight: 500;
+  color: #495057;
+}
+
+/* Form Controls */
+.form-control-sm {
+  border-radius: 0.25rem;
+  border: 1px solid #dee2e6;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-control-sm:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Buttons */
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  border-radius: 0.2rem;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  #eventModal .modal-dialog {
+    margin: 0.5rem;
+  }
+  
+  .fc-toolbar {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .fc-toolbar-chunk {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Loading State */
+.loading-spinner {
+  display: inline-block;
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 0.2rem solid rgba(13, 110, 253, 0.2);
+  border-radius: 50%;
+  border-top-color: var(--recipient-primary);
+  animation: spin 0.8s linear infinite;
+  vertical-align: text-bottom;
+  margin-right: 0.5rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Extracted from inline <style> in Schedule.html */
+.fc-toolbar-title {
+  font-size: 1.1rem;
+}
+
+.sidebar[data-role-pending="1"] {
+  visibility: hidden;
+}
+
+.fc .fc-button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.event-owned {
+  border-left: 4px solid #0d6efd;
+}
+
+.event-assigned {
+  border-left: 4px solid #198754;
+}
+
+/* Show past dates but make them unclickable */
+.fc-day-past {
+  pointer-events: none;
+}
+
+.schedule-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 992px) {
+  .schedule-layout {
+    flex-direction: row;
+    align-items: stretch;
+  }
+}
+
+.schedule-layout .calendar-pane,
+.schedule-layout .selected-pane {
+  min-width: 0;
+}
+
+.schedule-layout .calendar-pane {
+  flex: 1 1 auto;
+}
+
+.schedule-layout .selected-pane {
+  flex: 0 0 var(--selected-pane-width, 260px);
+  min-width: 240px;
+  max-width: 520px;
+  display: flex;
+}
+
+@media (min-width: 992px) {
+  .schedule-layout {
+    --calendar-min-width: 520px;
+  }
+  .schedule-layout .calendar-pane {
+    min-width: var(--calendar-min-width);
+  }
+}
+
+.schedule-layout .selected-pane .card,
+.schedule-layout .calendar-pane .card {
+  height: 100%;
+}
+
+.schedule-resizer {
+  display: none;
+}
+
+@media (min-width: 992px) {
+  .schedule-resizer {
+    display: block;
+    width: 8px;
+    border-radius: 4px;
+    background: #dee2e6;
+    cursor: col-resize;
+    position: relative;
+  }
+  .schedule-resizer::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2px;
+    height: 28px;
+    background: #adb5bd;
+    transform: translate(-50%, -50%);
+    border-radius: 1px;
+  }
+  body.schedule-resizing {
+    user-select: none;
+    cursor: col-resize;
+  }
+}
+
+.selected-pane .card-body {
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.fc .fc-daygrid-day.selected-day {
+  background-color: #f1f3f5;
+  outline: 2px solid #dee2e6;
+  outline-offset: -2px;
+}
+
+.fc .fc-daygrid-event,
+.fc .fc-timegrid-event,
+.fc .fc-event {
+  background-color: #f8f9fa !important;
+  border: 1px solid #dee2e6 !important;
+  color: #212529 !important;
+  box-shadow: none;
+}
+
+.fc .fc-daygrid-event,
+.fc .fc-timegrid-event {
+  box-shadow: none;
+}
+
+.fc .fc-daygrid-event:hover,
+.fc .fc-timegrid-event:hover,
+.fc .fc-event:hover {
+  border-color: #ced4da !important;
+  background-color: #f8f9fa !important;
+}
+
+.fc .fc-event-title,
+.fc .fc-event-title a,
+.fc .fc-event a {
+  color: inherit !important;
+  text-decoration: none !important;
+  pointer-events: none !important;
+}
+
+.fc .fc-event-main,
+.fc .fc-event-main-frame {
+  pointer-events: none !important;
+}
+
+.fc .fc-event,
+.fc .fc-event:hover {
+  cursor: pointer;
+}
+
+.fc .fc-event-selected,
+.fc .fc-event-selected:focus,
+.fc .fc-event-selected:active,
+.fc .fc-event:focus {
+  background-color: #f1f3f5 !important;
+  border-color: #dee2e6 !important;
+  color: #212529 !important;
+  box-shadow: inset 0 0 0 1px #dee2e6;
+}
+
+.fc .fc-event-selected .fc-event-main,
+.fc .fc-event-selected a,
+.fc .fc-event:focus .fc-event-main {
+  color: inherit !important;
+}
+
+.selected-day-item {
+  cursor: pointer;
+}
+
+.selected-day-item:hover,
+.selected-day-item:focus {
+  background-color: #43b9c5 !important;
+  border-color: #43b9c5 !important;
+  color: #ffffff !important;
+}
+
+.selected-day-item.active,
+.selected-day-item.active:hover,
+.selected-day-item.active:focus {
+  background-color: #43b9c5 !important;
+  border-color: #43b9c5 !important;
+  color: #ffffff !important;
+}
+
+.selected-day-item:hover .text-muted,
+.selected-day-item:focus .text-muted,
+.selected-day-item.active .text-muted {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
