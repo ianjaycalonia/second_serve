@@ -328,16 +328,22 @@ try {
                     MIN(u.code) AS unit_code,
                     MIN(u.label) AS unit_label,
                     SUM(di.quantity) AS quantity_total,
-                    SUM(CASE WHEN di.total_cost IS NOT NULL THEN di.total_cost ELSE 0 END) AS total_cost_sum,
-                    SUM(CASE WHEN di.total_cost IS NOT NULL THEN di.quantity ELSE 0 END) AS total_cost_quantity_sum,
-                    SUM(di.total_weight) AS total_weight_sum,
+                    SUM(CASE WHEN di.total_weight IS NOT NULL THEN di.total_weight ELSE 0 END) AS total_weight_sum,
                     SUM(CASE WHEN di.total_weight IS NOT NULL THEN 1 ELSE 0 END) AS weight_present_count,
                     MIN(di.created_at) AS first_recorded,
                     MAX(di.created_at) AS last_restocked,
                     SUM(CASE WHEN di.category_id IS NULL THEN 1 ELSE 0 END) AS missing_category_count,
                     SUM(CASE WHEN di.unit_id IS NULL THEN 1 ELSE 0 END) AS missing_unit_count,
                     SUM(CASE WHEN di.total_weight IS NULL THEN 1 ELSE 0 END) AS missing_weight_count,
-                    MAX(di.donation_item_id) AS sample_donation_item_id
+                    MAX(di.donation_item_id) AS sample_donation_item_id,
+                    (SELECT di2.total_cost
+                       FROM donation_items di2
+                       INNER JOIN donations d2 ON d2.donation_id = di2.donation_id
+                      WHERE di2.product_name = di.product_name
+                        AND di2.total_cost IS NOT NULL AND di2.total_cost > 0
+                        AND d2.deleted_at IS NULL
+                      ORDER BY di2.donation_item_id DESC
+                      LIMIT 1) AS last_unit_cost
                 FROM donation_items di
                 INNER JOIN donations d ON d.donation_id = di.donation_id
                 LEFT JOIN categories cat ON cat.category_id = di.category_id
@@ -357,8 +363,9 @@ try {
         $rows = $db->query($sql, $params)->fetchAll();
 
         $items = array_map(function ($row) {
-            $costQty = (float)($row['total_cost_quantity_sum'] ?? 0);
-            $unitCost = $costQty > 0 ? (float)$row['total_cost_sum'] / $costQty : null;
+            $unitCost = isset($row['last_unit_cost']) && $row['last_unit_cost'] !== null
+                ? (float)$row['last_unit_cost']
+                : null;
             $weightCount = (int)($row['weight_present_count'] ?? 0);
             $totalWeightKg = $weightCount > 0 && $row['total_weight_sum'] !== null
                 ? (float)$row['total_weight_sum']
@@ -478,6 +485,7 @@ try {
                     di.product_name,
                     di.quantity,
                     di.total_weight,
+                    di.total_cost,
                     di.category_id,
                     di.unit_id,
                     di.expiry_date,
@@ -508,6 +516,8 @@ try {
                 'product_name' => $row['product_name'],
                 'quantity' => (int)$row['quantity'],
                 'total_weight' => $row['total_weight'],
+                'unit_cost' => $row['total_cost'] !== null ? (float)$row['total_cost'] : null,
+                'total_cost' => $row['total_cost'] !== null ? (float)$row['total_cost'] : null,
                 'category_id' => $row['category_id'] !== null ? (int)$row['category_id'] : null,
                 'unit_id' => $row['unit_id'] !== null ? (int)$row['unit_id'] : null,
                 'category_label' => $row['primary_name'] ? ($row['secondary_name'] ? $row['primary_name'].' - '.$row['secondary_name'] : $row['primary_name']) : null,
@@ -530,7 +540,10 @@ try {
         $unitLabel = isset($input['unit_label']) ? trim((string)$input['unit_label']) : '';
         $weight = isset($input['weight']) && $input['weight'] !== '' ? (float)$input['weight'] : null;
 
-        if ($categoryId === null && $categoryLabel === '' && $unitId === null && $unitLabel === '' && $weight === null) {
+        $newProductName = isset($input['new_product_name']) ? trim((string)$input['new_product_name']) : '';
+        $unitCost = isset($input['unit_cost']) && $input['unit_cost'] !== '' ? (float)$input['unit_cost'] : null;
+
+        if ($categoryId === null && $categoryLabel === '' && $unitId === null && $unitLabel === '' && $weight === null && $newProductName === '' && $unitCost === null) {
             sendJson(['success'=>false,'error'=>'No metadata supplied'], 400);
         }
 
@@ -543,6 +556,12 @@ try {
                 sendJson(['success'=>false,'error'=>'Item not found'], 404);
             }
             $productName = $itemRow['product_name'];
+
+            // Optional rename of product name across items for this name
+            if ($newProductName !== '' && strcasecmp($newProductName, (string)$productName) !== 0) {
+                $db->query('UPDATE donation_items SET product_name = ? WHERE product_name = ?', [$newProductName, $productName]);
+                $productName = $newProductName;
+            }
 
             // Upsert category if needed
             if ($categoryId === null && $categoryLabel !== '') {
@@ -604,11 +623,16 @@ try {
                 $params[] = ($weight !== null ? $weight : null);
             }
             if (!$fields) {
-                $db->rollBack();
-                sendJson(['success'=>false,'error'=>'Nothing to update'], 400);
+                // It's okay if only name or unit_cost update was requested
+            } else {
+                $params[] = $productName;
+                $db->query('UPDATE donation_items SET ' . implode(',', $fields) . ' WHERE product_name = ?', $params);
             }
-            $params[] = $productName;
-            $db->query('UPDATE donation_items SET ' . implode(',', $fields) . ' WHERE product_name = ?', $params);
+
+            // Apply unit_cost to items without cost (store per-unit cost as-is)
+            if ($unitCost !== null && $unitCost >= 0) {
+                $db->query('UPDATE donation_items SET total_cost = ? WHERE product_name = ? AND (total_cost IS NULL OR total_cost = 0)', [$unitCost, $productName]);
+            }
             
             // Trigger logic: Sync product category for all products with this name
             if ($categoryId !== null) {
@@ -630,7 +654,7 @@ try {
             }
 
             $db->commit();
-            sendJson(['success'=>true, 'category_id'=>$categoryId, 'unit_id'=>$unitId, 'weight'=>$weight]);
+            sendJson(['success'=>true, 'category_id'=>$categoryId, 'unit_id'=>$unitId, 'weight'=>$weight, 'product_name'=>$productName, 'unit_cost'=>$unitCost]);
         } catch (Exception $e) {
             $db->rollBack();
             sendJson(['success'=>false,'error'=>$e->getMessage()], 500);

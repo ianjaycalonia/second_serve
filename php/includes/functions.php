@@ -88,7 +88,7 @@ function setCorsHeaders() {
         header('Vary: Origin');
     }
     header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-CSRF-Token');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-XSRF-TOKEN');
     header('Access-Control-Allow-Credentials: true');
 }
 
@@ -149,4 +149,31 @@ function buildImageFullUrl(string $relative): string {
         $base = $scheme . '://' . $host;
     }
     return $base . '/' . ltrim($relative, '/');
+}
+
+// CSRF helpers
+function csrfSessionToken(): string {
+    return isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token']) ? $_SESSION['csrf_token'] : '';
+}
+
+function csrfRequestToken(): string {
+    $hdr = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if ($hdr !== '') return (string)$hdr;
+    $hdr2 = $_SERVER['HTTP_X_XSRF_TOKEN'] ?? '';
+    if ($hdr2 !== '') return (string)$hdr2;
+    $cookie = $_COOKIE['XSRF-TOKEN'] ?? '';
+    if ($cookie !== '') return (string)$cookie;
+    // Do NOT consume php://input here to avoid interfering with endpoint parsers
+    $post = $_POST['csrf_token'] ?? '';
+    return (string)$post;
+}
+
+function requireCsrf(): void {
+    $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if (in_array($method, ['GET','HEAD','OPTIONS'], true)) { return; }
+    $sess = csrfSessionToken();
+    $provided = csrfRequestToken();
+    if ($sess === '' || $provided === '' || !hash_equals($sess, $provided)) {
+        sendJson(['success' => false, 'error' => 'CSRF token mismatch'], 419);
+    }
 }

@@ -69,6 +69,32 @@
     toast && toast.show();
   }
 
+  async function compressImageIfPossible(file, overrides){
+    if (!(file instanceof File)) return file;
+    const compressor = window.imageCompression;
+    if (typeof compressor !== 'function') return file;
+    const defaults = {
+      maxSizeMB: 1.2,
+      maxWidthOrHeight: 1600,
+      useWebWorker: true,
+      initialQuality: 0.8,
+      fileType: file.type || 'image/jpeg'
+    };
+    const options = overrides ? Object.assign({}, defaults, overrides) : defaults;
+    try {
+      const compressed = await compressor(file, options);
+      return compressed instanceof File ? compressed : new File([compressed], file.name, { type: options.fileType });
+    } catch(err){
+      if (DEBUG) console.warn('[Pickup] image compression failed', err);
+      return file;
+    }
+  }
+
+  async function fileToDataUrlCompressed(file, fallbackMime){
+    const source = await compressImageIfPossible(file);
+    return await toDataUrl(source, fallbackMime);
+  }
+
   async function loadExistingProofAsDataUrl(path, fallbackMime = 'image/png'){
     if (!path) return null;
     const absoluteUrl = new URL(path, window.location.origin).toString();
@@ -1110,7 +1136,7 @@
       updateConfirmState();
       return;
     }
-    photoUploadData = await toDataUrl(file, file.type || 'image/jpeg');
+    photoUploadData = await fileToDataUrlCompressed(file, file.type || 'image/jpeg');
     renderUploadedPhoto(photoUploadData);
     updateConfirmState();
   }

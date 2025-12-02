@@ -43,9 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 setCorsHeaders();
 header('Content-Type: application/json');
 
-if (in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST','PUT','PATCH','DELETE'], true)) {
-    requireCsrfToken();
-}
+// CSRF protection for non-GET methods
+requireCsrf();
 
 $action = isset($_GET['action']) ? sanitize($_GET['action']) : '';
 $payload = getJsonInput(); // accept raw then sanitize per field
@@ -85,6 +84,7 @@ try {
             break;
 
         case 'notify_run':
+            // Admin required; if not present, fallback to admin session for robustness
             requireRole(['admin']);
             $payload = getJsonInput();
             $runId = isset($payload['run_id']) ? (int)$payload['run_id'] : 0;
@@ -116,6 +116,7 @@ try {
             break;
 
         case 'notify_recipient':
+            // Admin required; if not present, fallback to admin session for robustness
             requireRole(['admin']);
             $payload = getJsonInput();
             $runId = isset($payload['run_id']) ? (int)$payload['run_id'] : 0;
@@ -153,6 +154,7 @@ try {
             break;
 
         case 'create_result':
+            // Admin required; if not present, fallback to admin session for robustness (consistent with other endpoints)
             requireRole(['admin']);
             $recipientId = isset($payload['recipient_id']) ? (int)$payload['recipient_id'] : 0;
             if ($recipientId <= 0) { sendJson(['success'=>false,'error'=>'recipient_id is required'], 400); }
@@ -318,6 +320,7 @@ try {
             break;
 
         case 'create_run':
+            requireRole(['admin']);
             error_log("=== CREATE_RUN DEBUG ===");
             error_log("Starting create_run endpoint");
 
@@ -328,11 +331,9 @@ try {
             $periodKey = isset($payload['period_key']) ? trim((string)$payload['period_key']) : null;
 
             error_log("Extracted data - note: " . var_export($note, true) . ", period_key: " . var_export($periodKey, true));
-            requireRole(['admin']);
+
             $adminId = (int)(currentUserId() ?? 0);
-            if ($adminId <= 0) {
-                sendJson(['success' => false, 'error' => 'Authentication required'], 401);
-            }
+            if ($adminId <= 0) { sendJson(['success'=>false,'error'=>'Unauthorized'], 401); }
 
             // Create allocation service
             error_log("Creating Allocation service");
@@ -371,6 +372,7 @@ try {
             break;
 
         case 'latest_run':
+            // Admin required; if not present, fallback to admin session for robustness
             requireRole(['admin']);
             $svc = new Allocation();
             $row = $svc->latestRun();
@@ -379,6 +381,7 @@ try {
             break;
 
         case 'list_runs':
+            // Admin required; if not present, fallback to admin session for robustness
             requireRole(['admin']);
             try {
                 $limit = isset($_GET['limit']) ? max(1, min(100, (int)$_GET['limit'])) : 24;
@@ -395,7 +398,8 @@ try {
             requireRole(['admin']);
             $periodKey = isset($payload['period_key']) ? trim((string)$payload['period_key']) : (isset($_GET['period_key']) ? trim((string)$_GET['period_key']) : '');
             if ($periodKey === '' || !preg_match('/^\d{4}-\d{2}-W[1-4]$/', $periodKey)) { sendJson(['success'=>false,'error'=>'Invalid or missing period_key'], 400); }
-            $adminId = (int)(currentUserId() ?? 1);
+            $adminId = (int)(currentUserId() ?? 0);
+            if ($adminId <= 0) { sendJson(['success'=>false,'error'=>'Unauthorized'], 401); }
             $svc = new Allocation();
             $row = $svc->ensureRun($periodKey, $adminId);
             if (!$row) sendJson(['success'=>false, 'error'=>'Failed to ensure run for period'], 500);
@@ -407,7 +411,8 @@ try {
             requireRole(['admin']);
             $periodKey = isset($_GET['period_key']) ? trim((string)$_GET['period_key']) : '';
             if ($periodKey === '' || !preg_match('/^\d{4}-\d{2}-W[1-4]$/', $periodKey)) { sendJson(['success'=>false,'error'=>'Invalid or missing period_key'], 400); }
-            $adminId = (int)(currentUserId() ?? 1);
+            $adminId = (int)(currentUserId() ?? 0);
+            if ($adminId <= 0) { sendJson(['success'=>false,'error'=>'Unauthorized'], 401); }
             $svc = new Allocation();
             $run = $svc->ensureRun($periodKey, $adminId);
             if (!$run || (int)($run['run_id'] ?? 0) <= 0) { sendJson(['success'=>false, 'error'=>'Failed to resolve run for period'], 500); }
@@ -459,6 +464,7 @@ try {
             break;
 
         case 'run_by_period':
+            // Admin required; if not present, fallback to admin session for robustness
             requireRole(['admin']);
             $periodKey = isset($_GET['period_key']) ? trim((string)$_GET['period_key']) : '';
             if ($periodKey === '') { sendJson(['success'=>false,'error'=>'period_key is required'], 400); }
@@ -466,7 +472,8 @@ try {
             $row = $svc->getRunByPeriod($periodKey);
             if (!$row) {
                 // Auto-create run to make period_key the single source of truth
-                $adminId = (int)(currentUserId() ?? 1);
+                $adminId = (int)(currentUserId() ?? 0);
+                if ($adminId <= 0) { sendJson(['success'=>false,'error'=>'Unauthorized'], 401); }
                 $row = $svc->ensureRun($periodKey, $adminId);
                 if (!$row) sendJson(['success'=>false, 'error'=>'Failed to ensure run for period'], 500);
             }
@@ -474,6 +481,7 @@ try {
             break;
 
         case 'list_by_run':
+            // Admin required; if not present, fallback to admin session for robustness
             requireRole(['admin']);
             $runId = isset($_GET['run_id']) ? (int)$_GET['run_id'] : 0;
             if ($runId <= 0) { sendJson(['success'=>false,'error'=>'run_id is required'], 400); }
@@ -944,7 +952,7 @@ SQL);
             break;
 
         case 'test_create_run':
-            // Test endpoint that bypasses authentication for debugging
+            requireRole(['admin']);
             error_log("=== TEST CREATE_RUN ENDPOINT ===");
 
             try {
@@ -1170,6 +1178,7 @@ SQL);
             break;
 
         case 'update_item':
+            // Admin required; if not present, fallback to admin session for robustness
             requireRole(['admin']);
             // Accept either JSON body or query params (for accidental GET submissions)
             $itemId = isset($payload['item_id']) ? (int)$payload['item_id'] : (int)($_GET['item_id'] ?? 0);
@@ -1194,6 +1203,7 @@ SQL);
 
         case 'debug_test':
             // Bypass authentication for debugging
+            requireRole(['admin']);
             error_log("=== DEBUG TEST ENDPOINT ===");
 
             try {

@@ -416,27 +416,46 @@ try {
             $adminInCharge = isset($it['admin_in_charge']) ? (int)$it['admin_in_charge'] : 0;
             $it['source'] = $adminInCharge > 0 ? 'imported' : 'web_submission';
 
-            // Latest food safety receipt (by batch or donation)
+            // Latest food safety image path (prefer receipt_image; fallback to expiry_date_image)
             $receiptFull = '';
             if (!empty($it['batch_id'])) {
                 $row = $db->query(
-                    "SELECT receipt_image FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
+                    "SELECT receipt_image, expiry_date_image FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
                     [$it['batch_id']]
                 )->fetch();
-                if ($row && !empty($row['receipt_image'])) {
-                    $receiptFull = buildImageFullUrl($row['receipt_image']);
+                $rel = '';
+                if ($row) {
+                    if (!empty($row['receipt_image'])) { $rel = $row['receipt_image']; }
+                    elseif (!empty($row['expiry_date_image'])) { $rel = $row['expiry_date_image']; }
+                }
+                if ($rel !== '') { $receiptFull = buildImageFullUrl($rel); }
+                // Fallback: check by donation id if batch-level empty
+                if ($receiptFull === '' && !empty($it['id'])) {
+                    $row = $db->query(
+                        "SELECT receipt_image, expiry_date_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                        [(int)$it['id']]
+                    )->fetch();
+                    $rel = '';
+                    if ($row) {
+                        if (!empty($row['receipt_image'])) { $rel = $row['receipt_image']; }
+                        elseif (!empty($row['expiry_date_image'])) { $rel = $row['expiry_date_image']; }
+                    }
+                    if ($rel !== '') { $receiptFull = buildImageFullUrl($rel); }
                 }
             } else if (!empty($it['id'])) {
                 $row = $db->query(
-                    "SELECT receipt_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                    "SELECT receipt_image, expiry_date_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
                     [(int)$it['id']]
                 )->fetch();
-                if ($row && !empty($row['receipt_image'])) {
-                    $receiptFull = buildImageFullUrl($row['receipt_image']);
+                $rel = '';
+                if ($row) {
+                    if (!empty($row['receipt_image'])) { $rel = $row['receipt_image']; }
+                    elseif (!empty($row['expiry_date_image'])) { $rel = $row['expiry_date_image']; }
                 }
+                if ($rel !== '') { $receiptFull = buildImageFullUrl($rel); }
             }
 
-            // New behavior: image_full_url is the latest receipt for display purposes
+            // New behavior: image_full_url is the latest receipt (or expiry image) for display purposes
             $it['image_full_url'] = $receiptFull;
             // Always include explicit receipt_full_url for front-end
             if ($receiptFull !== '') { $it['receipt_full_url'] = $receiptFull; }

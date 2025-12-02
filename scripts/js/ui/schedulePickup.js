@@ -5,6 +5,19 @@ let donationAutoTriggered = false;
 let allowedEventTypes = null;
 let currentUserRole = null;
 let currentUserData = null;
+let currentRunMeta = { runId: null, periodKey: null };
+let currentRunPromise = null;
+const recipientEligibilityCache = new Map();
+const RECIPIENT_ALLOWED_STATUSES = ['acknowledged', 'updated', 'notified', 'allocated', 'scheduled'];
+const RECIPIENT_SCHEDULE_REQUIRED_STATUS = 'acknowledged';
+const RECIPIENT_SCHEDULE_OK_STATUSES = new Set(['acknowledged','scheduled']);
+let scheduleEligibilityWarningShown = false;
+let recipientEligibilityChecked = false;
+let recipientEligibilityResult = true;
+let recipientStatusMap = new Map();
+let recipientStatusPromise = null;
+let recipientSelfEligibility = { checked: false, eligible: true, status: '' };
+let recipientSelfEligibilityPromise = null;
 
 const EVENT_TYPE_PRIORITY = ["admin", "donor", "recipient"];
 const KEY_CODES = {
@@ -51,6 +64,289 @@ function determineAllowedEventTypes(role) {
     default:
       return ["admin", "donor", "recipient"];
   }
+}
+
+function currentDistributionPeriodKey() {
+  const now = new Date();
+  const day = now.getDate();
+  const weekIndex = day <= 7 ? 1 : day <= 14 ? 2 : day <= 21 ? 3 : 4;
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-W${weekIndex}`;
+}
+
+async function resolveCurrentRunMeta(forceRefresh = false) {
+  if (forceRefresh) {
+    currentRunMeta = { runId: null, periodKey: null };
+    currentRunPromise = null;
+    recipientEligibilityCache.clear();
+    recipientStatusMap = new Map();
+    recipientStatusPromise = null;
+  }
+  if (currentRunMeta.periodKey && currentRunPromise === null) {
+    return currentRunMeta;
+  }
+  if (currentRunPromise) {
+    return currentRunPromise;
+  }
+  currentRunPromise = (async () => {
+    const periodKey = currentDistributionPeriodKey();
+    let runId = null;
+    if (currentUserRole === 'admin' && window.AllocationsAPI) {
+      if (typeof window.AllocationsAPI.runByPeriod === 'function') {
+        try {
+          const res = await window.AllocationsAPI.runByPeriod(periodKey);
+          const meta = res?.data || res;
+          const candidate = Number(meta?.run_id);
+          if (Number.isFinite(candidate) && candidate > 0) {
+            runId = candidate;
+          }
+        } catch (_) {/* ignore */}
+      }
+      if (!runId && typeof window.AllocationsAPI.latestRun === 'function') {
+        try {
+          const latest = await window.AllocationsAPI.latestRun();
+          const row = latest?.data || latest;
+          const candidate = Number(row?.run_id);
+          if (Number.isFinite(candidate) && candidate > 0) {
+            runId = candidate;
+          }
+        } catch (_) {/* ignore */}
+      }
+    }
+    currentRunMeta = { runId: Number.isFinite(runId) ? runId : null, periodKey };
+    currentRunPromise = null;
+    return currentRunMeta;
+  })();
+  return currentRunPromise;
+}
+
+function normalizeStatusValue(status) {
+  return String(status || '').trim().toLowerCase();
+}
+
+function isRecipientStatusEligible(status) {
+  const norm = normalizeStatusValue(status);
+  return RECIPIENT_ALLOWED_STATUSES.includes(norm);
+}
+
+function readableStatus(status) {
+  const norm = normalizeStatusValue(status);
+  if (!norm) return 'Unknown';
+  return norm.replace(/\b([a-z])/g, (m, ch) => ch.toUpperCase());
+}
+
+function statusForRecipientId(recipientId, fallbackStatus) {
+  const idNum = Number(recipientId);
+  if (Number.isFinite(idNum) && recipientStatusMap.has(idNum)) {
+    return recipientStatusMap.get(idNum);
+  }
+  if (fallbackStatus != null) {
+    const norm = normalizeStatusValue(fallbackStatus);
+    if (norm) return norm;
+  }
+  return '';
+}
+
+function updateRecipientStatusMap(id, status) {
+  const idNum = Number(id);
+  if (!Number.isFinite(idNum)) return;
+  const norm = normalizeStatusValue(status);
+  if (!norm) return;
+  recipientStatusMap.set(idNum, norm);
+}
+
+async function ensureRecipientStatusMap(forceRefresh = false) {
+  if (forceRefresh) {
+    recipientStatusMap = new Map();
+    recipientStatusPromise = null;
+  }
+  if (recipientStatusMap.size && !forceRefresh) {
+    return recipientStatusMap;
+  }
+  if (recipientStatusPromise) {
+    return recipientStatusPromise;
+  }
+  if (!window.AllocationsAPI || typeof window.AllocationsAPI.listByRun !== 'function') {
+    return recipientStatusMap;
+  }
+  recipientStatusPromise = (async () => {
+    try {
+      const meta = await resolveCurrentRunMeta();
+      const runId = meta?.runId;
+      if (!Number.isFinite(runId) || runId <= 0) {
+        recipientStatusPromise = null;
+        return recipientStatusMap;
+      }
+      const rows = await window.AllocationsAPI.listByRun(runId) || [];
+      recipientStatusMap = new Map();
+      rows.forEach(row => {
+        const rid = Number(row?.recipient_id);
+        const status = normalizeStatusValue(row?.status);
+        if (Number.isFinite(rid) && status) {
+          recipientStatusMap.set(rid, status);
+        }
+      });
+    } catch (_) {
+      recipientStatusMap = new Map();
+    } finally {
+      recipientStatusPromise = null;
+    }
+    return recipientStatusMap;
+  })();
+  return recipientStatusPromise;
+}
+
+function recipientStatusBadgeClass(status) {
+  const norm = normalizeStatusValue(status);
+  switch (norm) {
+    case 'acknowledged':
+    case 'updated':
+    case 'scheduled':
+      return 'text-bg-success';
+    case 'notified':
+    case 'allocated':
+      return 'text-bg-info';
+    case 'pending':
+      return 'text-bg-warning';
+    default:
+      return 'text-bg-secondary';
+  }
+}
+
+function clearRecipientEligibilityUi(block) {
+  if (!block) return;
+  delete block.dataset.recipientStatus;
+  delete block.dataset.recipientPeriod;
+  delete block.dataset.recipientRunId;
+  delete block.dataset.recipientName;
+  const statusRow = block.querySelector('.recipient-status-row');
+  if (statusRow) {
+    statusRow.remove();
+  }
+}
+
+function updateRecipientEligibilityUi(block, meta) {
+  if (!block) return;
+  const details = block.querySelector('.recipient-details');
+  if (!details) return;
+  block.dataset.recipientStatus = meta?.status ? String(meta.status) : '';
+  block.dataset.recipientPeriod = meta?.periodKey ? String(meta.periodKey) : '';
+  block.dataset.recipientRunId = meta?.runId ? String(meta.runId) : '';
+  block.dataset.recipientName = meta?.name ? String(meta.name) : '';
+
+  let statusRow = block.querySelector('.recipient-status-row');
+  if (!statusRow) {
+    statusRow = document.createElement('div');
+    statusRow.className = 'recipient-status-row d-flex justify-content-between align-items-center small mb-2';
+    details.prepend(statusRow);
+  }
+  const statusLabel = meta?.status ? meta.status : 'Unknown';
+  const badgeClass = recipientStatusBadgeClass(meta?.status);
+  const weekLabel = meta?.periodKey || currentDistributionPeriodKey();
+  statusRow.innerHTML = `
+    <span>Status: <span class="badge ${badgeClass}">${statusLabel}</span></span>
+    <span class="text-muted">Week: ${weekLabel}</span>
+  `;
+}
+
+function formatEligibilityWarning(meta, fallbackName) {
+  const name = meta?.name || fallbackName || 'Recipient';
+  switch (meta?.reason) {
+    case 'no-allocations':
+      return `${name} has no allocations for the current distribution run.`;
+    case 'status':
+      return `${name} has status "${meta?.status || 'unknown'}" and cannot be scheduled yet.`;
+    case 'week':
+      return `${name} is not part of the current distribution week.`;
+    case 'api':
+      return `Could not verify eligibility for ${name}. Please try again later.`;
+    case 'name':
+      return 'Please select a recipient with a valid name.';
+    default:
+      return `${name} cannot be scheduled right now.`;
+  }
+}
+
+async function evaluateRecipientEligibility(recipientId, recipientName) {
+  const idNum = Number(recipientId);
+  const safeName = (recipientName || '').trim();
+  if (!Number.isFinite(idNum) || idNum <= 0) {
+    return { eligible: false, reason: 'invalid', status: null, runId: null, periodKey: currentDistributionPeriodKey(), name: safeName };
+  }
+  if (!safeName) {
+    return { eligible: false, reason: 'name', status: null, runId: null, periodKey: currentDistributionPeriodKey(), name: '' };
+  }
+  const cached = recipientEligibilityCache.get(idNum);
+  if (cached) {
+    return Object.assign({}, cached, { name: cached.name || safeName });
+  }
+  if (!window.AllocationsAPI || typeof window.AllocationsAPI.listByRecipient !== 'function') {
+    const meta = { eligible: false, reason: 'api', status: null, runId: null, periodKey: currentDistributionPeriodKey(), name: safeName };
+    recipientEligibilityCache.set(idNum, meta);
+    return meta;
+  }
+  const runMeta = await resolveCurrentRunMeta();
+  let allocations = [];
+  try {
+    allocations = await window.AllocationsAPI.listByRecipient(idNum);
+  } catch (_) {
+    const meta = { eligible: false, reason: 'api', status: null, runId: null, periodKey: runMeta.periodKey, name: safeName };
+    recipientEligibilityCache.set(idNum, meta);
+    return meta;
+  }
+  if (!Array.isArray(allocations) || allocations.length === 0) {
+    const meta = { eligible: false, reason: 'no-allocations', status: null, runId: null, periodKey: runMeta.periodKey, name: safeName };
+    recipientEligibilityCache.set(idNum, meta);
+    return meta;
+  }
+  const normalized = allocations
+    .map(row => ({
+      status: row?.status || '',
+      runId: Number(row?.run_id) || null,
+      createdAt: row?.created_at || null,
+      updatedAt: row?.updated_at || null,
+    }));
+
+  let match = null;
+  if (runMeta.runId) {
+    match = normalized.find(entry => entry.runId === runMeta.runId && isRecipientStatusEligible(entry.status));
+    if (!match) {
+      const sameRun = normalized.find(entry => entry.runId === runMeta.runId);
+      if (sameRun) {
+        const meta = { eligible: false, reason: 'status', status: sameRun.status || '', runId: sameRun.runId, periodKey: runMeta.periodKey, name: safeName };
+        recipientEligibilityCache.set(idNum, meta);
+        return meta;
+      }
+    }
+  }
+  if (!match) {
+    match = normalized.find(entry => isRecipientStatusEligible(entry.status));
+  }
+  if (!match) {
+    const best = normalized[0] || { status: '' };
+    const meta = { eligible: false, reason: runMeta.runId ? 'week' : 'status', status: best.status || '', runId: best.runId || null, periodKey: runMeta.periodKey, name: safeName };
+    recipientEligibilityCache.set(idNum, meta);
+    return meta;
+  }
+  const meta = { eligible: true, reason: '', status: match.status || '', runId: runMeta.runId || match.runId || null, periodKey: runMeta.periodKey, name: safeName };
+  recipientEligibilityCache.set(idNum, meta);
+  updateRecipientStatusMap(idNum, match.status || '');
+  return meta;
+}
+
+async function ensureRecipientEligibilityForBlock(block, recipientId, recipientName, options = {}) {
+  if (!block) return false;
+  const silent = !!options.silent;
+  const meta = await evaluateRecipientEligibility(recipientId, recipientName);
+  if (!meta.eligible) {
+    clearRecipientEligibilityUi(block);
+    if (!silent) {
+      displayInlineScheduleToast(formatEligibilityWarning(meta, recipientName), 'warn');
+    }
+    return false;
+  }
+  updateRecipientEligibilityUi(block, meta);
+  return true;
 }
 
 function getCurrentUser() {
@@ -133,6 +429,9 @@ function enforceAllowedEventType(type) {
 }
 
 function getRecipientStatus() {
+  if (recipientSelfEligibility.checked) {
+    return recipientSelfEligibility.status || '';
+  }
   if (typeof window !== 'undefined' && typeof window.currentRecipientStatus === 'function') {
     const status = window.currentRecipientStatus();
     return status ? status.toLowerCase() : '';
@@ -143,18 +442,24 @@ function getRecipientStatus() {
 }
 
 function isRecipientEligibleForScheduling() {
-  if (currentUserRole !== 'recipient') return true;
+  if (recipientSelfEligibility.checked) {
+    return !!recipientSelfEligibility.eligible;
+  }
   const status = getRecipientStatus();
   if (!status) return false;
-  return ['allocated', 'updated', 'acknowledged'].includes(status);
+  return status === RECIPIENT_SCHEDULE_REQUIRED_STATUS;
 }
 
 function ensureRecipientSchedulingEligibility() {
-  const eligible = isRecipientEligibleForScheduling();
-  if (!eligible) {
-    disableSchedulingFormForRecipient();
+  if (currentUserRole !== 'recipient') return true;
+  if (recipientSelfEligibility.checked) {
+    return !!recipientSelfEligibility.eligible;
   }
-  return eligible;
+  if (!recipientSelfEligibilityPromise) {
+    fetchRecipientSelfEligibility().catch(()=>{});
+  }
+  // Optimistically allow access until eligibility data loads
+  return true;
 }
 
 function disableSchedulingFormForRecipient() {
@@ -162,10 +467,40 @@ function disableSchedulingFormForRecipient() {
   if (!form) return;
   form.querySelectorAll('input, textarea, select, button').forEach((el) => {
     if (el.id === 'deleteEventBtn') return;
+    if (el.disabled) return;
+    el.dataset.disabledByEligibility = '1';
     el.disabled = true;
   });
   const saveBtn = document.getElementById('saveEventBtn');
   if (saveBtn) saveBtn.disabled = true;
+  const newBtn = document.getElementById('newEventBtn');
+  if (newBtn) {
+    newBtn.style.removeProperty('display');
+    newBtn.dataset.disabledByEligibility = '1';
+    newBtn.disabled = true;
+    newBtn.classList.add('disabled');
+  }
+}
+
+function enableSchedulingFormForRecipient() {
+  const form = document.getElementById('eventForm');
+  if (!form) return;
+  form.querySelectorAll('[data-disabled-by-eligibility="1"]').forEach((el) => {
+    el.disabled = false;
+    delete el.dataset.disabledByEligibility;
+  });
+  const saveBtn = document.getElementById('saveEventBtn');
+  if (saveBtn && saveBtn.dataset.disabledByEligibility === '1') {
+    saveBtn.disabled = false;
+    delete saveBtn.dataset.disabledByEligibility;
+  }
+  const newBtn = document.getElementById('newEventBtn');
+  if (newBtn && newBtn.dataset.disabledByEligibility === '1') {
+    newBtn.disabled = false;
+    newBtn.classList.remove('disabled');
+    delete newBtn.dataset.disabledByEligibility;
+    newBtn.style.removeProperty('display');
+  }
 }
 
 function recipientEligibilityMessage() {
@@ -173,12 +508,90 @@ function recipientEligibilityMessage() {
 }
 
 function showScheduleEligibilityWarning() {
+  if (scheduleEligibilityWarningShown) return;
+  scheduleEligibilityWarningShown = true;
   const message = recipientEligibilityMessage();
   if (typeof window.calendarToast === 'function') {
     window.calendarToast(message, 'warn');
   } else {
     displayInlineScheduleToast(message, 'warn');
   }
+}
+
+async function fetchRecipientSelfEligibility(forceRefresh = false) {
+  if (currentUserRole !== 'recipient') {
+    recipientSelfEligibility = { checked: true, eligible: true, status: '' };
+    return recipientSelfEligibility;
+  }
+  if (!forceRefresh && recipientSelfEligibility.checked) {
+    return recipientSelfEligibility;
+  }
+  if (!forceRefresh && recipientSelfEligibilityPromise) {
+    return recipientSelfEligibilityPromise;
+  }
+  if (forceRefresh) {
+    recipientSelfEligibility = { checked: false, eligible: true, status: '' };
+    recipientSelfEligibilityPromise = null;
+  }
+  if (!window.AllocationsAPI || typeof window.AllocationsAPI.listByRecipient !== 'function') {
+    recipientSelfEligibility = { checked: true, eligible: false, status: '' };
+    disableSchedulingFormForRecipient();
+    showScheduleEligibilityWarning();
+    return recipientSelfEligibility;
+  }
+  recipientSelfEligibilityPromise = (async () => {
+    let eligible = false;
+    let status = '';
+    try {
+      const runMeta = await resolveCurrentRunMeta();
+      const rows = await window.AllocationsAPI.listByRecipient();
+      const allocations = Array.isArray(rows) ? rows : [];
+      const normalized = allocations.map(r => ({ status: normalizeStatusValue(r?.status), runId: Number(r?.run_id) || null }));
+      let match = null;
+      if (runMeta?.runId) {
+        match = normalized.find(r => r.runId === runMeta.runId && RECIPIENT_SCHEDULE_OK_STATUSES.has(r.status));
+        if (!match) {
+          const sameRun = normalized.find(r => r.runId === runMeta.runId);
+          if (sameRun) {
+            status = sameRun.status || '';
+          }
+        }
+      }
+      if (!match) {
+        match = normalized.find(r => RECIPIENT_SCHEDULE_OK_STATUSES.has(r.status));
+      }
+      if (match) {
+        eligible = !!match && (!runMeta?.runId || match.runId === runMeta.runId);
+        status = match.status || RECIPIENT_SCHEDULE_REQUIRED_STATUS;
+      } else if (normalized.length) {
+        status = normalized[0].status || '';
+      }
+    } catch (_) {
+      eligible = false;
+      status = '';
+    }
+    recipientSelfEligibility = { checked: true, eligible, status };
+    recipientSelfEligibilityPromise = null;
+    recipientEligibilityChecked = true;
+    recipientEligibilityResult = eligible;
+    if (!eligible) {
+      disableSchedulingFormForRecipient();
+      showScheduleEligibilityWarning();
+    } else {
+      enableSchedulingFormForRecipient();
+    }
+    return recipientSelfEligibility;
+  })();
+  return recipientSelfEligibilityPromise;
+}
+
+// Expose scheduling eligibility helpers/state to calendar.js
+if (typeof window !== 'undefined') {
+  window.ensureRecipientSchedulingEligibility = ensureRecipientSchedulingEligibility;
+  window.getRecipientSchedulingEligibility = function getRecipientSchedulingEligibility() {
+    return { checked: !!recipientSelfEligibility.checked, eligible: !!recipientSelfEligibility.eligible, status: recipientSelfEligibility.status || '' };
+  };
+  window.recipientEligibilityMessage = recipientEligibilityMessage;
 }
 
 function ensureScheduleToastContainer() {
@@ -349,6 +762,8 @@ async function resolveRecipientIdByName(name){
     // Prefer exact organization_name match (case-insensitive), else first item
     const lower = String(name).trim().toLowerCase();
     const exact = items.find(u => String(u.organization_name||'').trim().toLowerCase() === lower || String(u.name||'').trim().toLowerCase() === lower);
+    const statusMap = await ensureRecipientStatusMap();
+    if (!isRecipientStatusEligible(exact?.status)) return null;
     return Number(exact?.user_id || items[0]?.user_id) || null;
   } catch(_) { return null; }
 }
@@ -356,17 +771,24 @@ async function resolveRecipientIdByName(name){
 async function getValidRecipientsFromPayload(payload){
   if (!payload || !Array.isArray(payload.recipients)) return [];
   const candidates = [];
+  const statusMap = await ensureRecipientStatusMap();
   for (const r of payload.recipients){
     const allocs = Array.isArray(r.allocations) ? r.allocations : [];
-    const hasNonCancelled = allocs.some(a => String(a.status || '').toLowerCase() !== 'cancelled');
-    if (!hasNonCancelled) continue;
+    const allowedAlloc = allocs.find(a => isRecipientStatusEligible(a?.status));
+    if (!allowedAlloc) continue;
     let id = Number(r.recipient_id);
     const text = r.recipient_name || r.organization || (id ? `Recipient #${id}` : 'Recipient');
     if (!Number.isFinite(id) || id <= 0){
       // Try to resolve by name
       id = await resolveRecipientIdByName(text);
     }
-    if (Number.isFinite(id) && id > 0) candidates.push({ id, text });
+    if (Number.isFinite(id) && id > 0) {
+      const allocStatus = normalizeStatusValue(allowedAlloc?.status);
+      if (allocStatus) {
+        updateRecipientStatusMap(id, allocStatus);
+      }
+      candidates.push({ id, text });
+    }
   }
   // Deduplicate by id
   const seen = new Set();
@@ -407,6 +829,7 @@ async function tryAutoPopulateRecipientsFromPickup(){
       $sel.trigger({ type: 'select2:select', params: { data: { id: rec.id, text: rec.text, contact: 'N/A', phone: 'N/A', lastPickup: 'Never' } } });
     } else {
       select.value = String(rec.id);
+      ensureRecipientEligibilityForBlock(blk, rec.id, rec.text, { silent: true });
     }
 
     const dateEl = blk.querySelector('.recipient-date');
@@ -450,10 +873,9 @@ function initSchedulePickupUI() {
   if (eventForm) {
   }
   
-  // Initialize delete button
+  // Delete handled by calendar.js (with confirm modal and a single toast)
   const deleteBtn = document.getElementById('deleteEventBtn');
   if (deleteBtn) {
-    deleteBtn.addEventListener('click', handleDeleteEvent);
   }
 
   if (currentUserRole !== 'donor') {
@@ -513,11 +935,11 @@ function initSchedulePickupUI() {
   const modalEl = document.getElementById('eventModal');
   if (modalEl) {
     modalEl.addEventListener('shown.bs.modal', () => {
+      // Always show the modal; gate via disabled form + single warning toast
       if (!ensureRecipientSchedulingEligibility()) {
-        const modal = bootstrap.Modal.getInstance(modalEl);
-        modal?.hide();
+        // Kick off async verification and surface a single warning; do not close modal
         showScheduleEligibilityWarning();
-        return;
+        disableSchedulingFormForRecipient();
       }
       if (isFromPickup()) {
         setEventType(enforceAllowedEventType('recipient'));
@@ -666,6 +1088,9 @@ function setEventType(type) {
     updateDonorData();
   }
   if (allowedType === 'recipient') {
+    if (currentUserRole === 'admin') {
+      ensureRecipientStatusMap().catch(()=>{});
+    }
     if (!ensureRecipientSchedulingEligibility()) {
       showScheduleEligibilityWarning();
       return;
@@ -703,6 +1128,7 @@ function setEventTypeUI(type) {
   const adminTimes = document.getElementById('wrapAdminTimes');
   const pickupDetails = document.getElementById('wrapPickupDetails');
   const locationInput = document.getElementById('evLocation');
+  const isEditing = !!(document.getElementById('evId') && document.getElementById('evId').value);
   
   const showSection = (el) => {
     if (!el) return;
@@ -726,7 +1152,10 @@ function setEventTypeUI(type) {
         pickupDetails.querySelector('label[for="evLocation"]').textContent = 'Pickup Location';
       }
       if (locationInput) {
-        locationInput.value = 'Warehouse';
+        // Only set a default if not editing or if the field is empty
+        if (!isEditing && !locationInput.value) {
+          locationInput.value = 'Warehouse';
+        }
       }
       break;
       
@@ -740,7 +1169,10 @@ function setEventTypeUI(type) {
         pickupDetails.querySelector('label[for="evLocation"]').textContent = 'Pickup Address';
       }
       if (locationInput) {
-        locationInput.value = '';
+        // Preserve existing address while editing; clear only for brand new events with no value yet
+        if (!isEditing && !locationInput.value) {
+          locationInput.value = '';
+        }
       }
       break;
       
@@ -754,7 +1186,9 @@ function setEventTypeUI(type) {
         pickupDetails.querySelector('label[for="evLocation"]').textContent = 'Location';
       }
       if (locationInput) {
-        locationInput.value = 'Warehouse';
+        if (!isEditing && !locationInput.value) {
+          locationInput.value = 'Warehouse';
+        }
       }
       break;
   }
@@ -877,6 +1311,9 @@ function initRecipientSelect(selectEl) {
   if (!selectEl) return;
   const $sel = window.$ ? window.$(selectEl) : null;
   if (!$sel || !$sel.select2) return;
+  if (currentUserRole === 'admin') {
+    ensureRecipientStatusMap().catch(()=>{});
+  }
   $sel.select2({
     dropdownParent: window.$('#eventModal'),
     placeholder: 'Search recipients...',
@@ -892,30 +1329,76 @@ function initRecipientSelect(selectEl) {
       },
       processResults: function (data) {
         const items = (data?.data?.items) || [];
-        return { results: items.map(u => ({
-          id: u.user_id,
-          text: u.organization_name || u.name || (`Recipient #${u.user_id}`),
-          contact: u.contact_person || 'N/A',
-          phone: u.phone || 'N/A',
-          lastPickup: 'Never'
-        })) };
+        const results = [];
+        items.forEach(u => {
+          const id = Number(u.user_id);
+          if (!Number.isFinite(id) || id <= 0) return;
+          const status = statusForRecipientId(id, u.status);
+          const allowed = currentUserRole === 'admin' ? isRecipientStatusEligible(status) : true;
+          if (!allowed) return;
+          results.push({
+            id,
+            text: u.organization_name || u.name || (`Recipient #${u.user_id}`),
+            contact: u.contact_person || 'N/A',
+            phone: u.phone || 'N/A',
+            lastPickup: 'Never',
+            status
+          });
+        });
+        return { results };
       },
       error: function(xhr){ try{ console.warn('Recipient search failed', xhr?.status, xhr?.responseText); }catch(_){} },
       cache: true
     },
     minimumInputLength: 1
-  }).on('select2:select', function(e) {
-    const data = e.params?.data;
-    const details = this.closest('.recipient-selection')?.querySelector('.recipient-details');
+  }).on('select2:select', async function(e) {
+    const data = e.params?.data || {};
+    const block = this.closest('.recipient-selection');
+    const name = (data.text || '').trim();
+    const idNum = Number(data.id);
+    if (!name) {
+      displayInlineScheduleToast('Please select a recipient with a valid name.', 'warn');
+      if ($sel) {
+        $sel.val(null).trigger('change');
+      }
+      clearRecipientEligibilityUi(block);
+      updateRecipientSelections();
+      return;
+    }
+    let eligible = true;
+    if (currentUserRole === 'admin') {
+      try {
+        eligible = await ensureRecipientEligibilityForBlock(block, idNum, name);
+      } catch (_) {
+        eligible = false;
+      }
+      if (!eligible) {
+        if ($sel) {
+          $sel.val(null).trigger('change');
+        }
+        updateRecipientSelections();
+        return;
+      }
+    } else {
+      updateRecipientEligibilityUi(block, { status: '', periodKey: currentDistributionPeriodKey(), runId: null, name, eligible: true });
+    }
+    const details = block?.querySelector('.recipient-details');
     if (details) {
-      details.querySelector('.recipient-contact').textContent = `${data.contact} (${data.phone})`;
-      details.querySelector('.recipient-last-pickup').textContent = data.lastPickup;
+      const contactEl = details.querySelector('.recipient-contact');
+      if (contactEl) contactEl.textContent = `${data.contact || 'N/A'} (${data.phone || 'N/A'})`;
+      const pickupEl = details.querySelector('.recipient-last-pickup');
+      if (pickupEl) pickupEl.textContent = data.lastPickup || 'Never';
       details.style.display = 'block';
     }
     updateRecipientSelections();
   }).on('select2:clear', function(){
+    clearRecipientEligibilityUi(this.closest('.recipient-selection'));
     updateRecipientSelections();
   }).on('change', function(){
+    const block = this.closest('.recipient-selection');
+    if (!this.value) {
+      clearRecipientEligibilityUi(block);
+    }
     updateRecipientSelections();
   });
 }
@@ -997,12 +1480,22 @@ function updateRecipientSelections() {
       const recipientSelection = select.closest('.recipient-selection');
       const date = recipientSelection.querySelector('.recipient-date').value;
       const time = recipientSelection.querySelector('.recipient-time').value;
+      const status = recipientSelection?.dataset.recipientStatus || '';
+      const weekKey = recipientSelection?.dataset.recipientPeriod || '';
+      const nameFromDataset = recipientSelection?.dataset.recipientName || '';
+      let selectedName = select.options[select.selectedIndex]?.text || nameFromDataset;
+      if (!selectedName && typeof window.$ === 'function' && window.$.fn?.select2) {
+        const data = window.$(select).select2('data');
+        if (Array.isArray(data) && data[0]?.text) selectedName = data[0].text;
+      }
       
       selectedRecipients.push({
         id: select.value,
-        name: select.options[select.selectedIndex].text,
+        name: selectedName,
         date: date,
         time: time,
+        status: status,
+        week: weekKey,
         // Combine date and time for sorting/display
         datetime: date && time ? `${date}T${time}` : null
       });
@@ -1258,57 +1751,6 @@ function handleEventFormSubmit(e) {
   }, 1000);
 }
 
-function handleDeleteEvent() {
-  if (!confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
-    return;
-  }
-  
-  const eventId = document.getElementById('evId').value;
-  if (!eventId) return;
-  
-  // Show loading state
-  const deleteBtn = document.getElementById('deleteEventBtn');
-  const originalBtnText = deleteBtn.innerHTML;
-  deleteBtn.disabled = true;
-  deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Deleting...';
-  
-  // Simulate API call (replace with actual API call)
-  setTimeout(() => {
-    console.log('Deleting event:', eventId);
-    
-    // Reset button
-    deleteBtn.innerHTML = originalBtnText;
-    deleteBtn.disabled = false;
-    
-    // Show success message
-    const toast = document.createElement('div');
-    toast.className = 'position-fixed bottom-0 end-0 m-3 alert alert-success alert-dismissible fade show';
-    toast.role = 'alert';
-    toast.innerHTML = `
-      <i class="bi bi-check-circle-fill me-2"></i>
-      <strong>Success!</strong> Event deleted successfully.
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-    document.body.appendChild(toast);
-    
-    // Auto-dismiss after 3 seconds
-    setTimeout(() => {
-      const bsAlert = new bootstrap.Alert(toast);
-      bsAlert.close();
-    }, 3000);
-    
-    // Close modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('eventModal'));
-    if (modal) modal.hide();
-    
-    // Refresh calendar or remove event from view
-    if (window.calendar) {
-      window.calendar.refetchEvents();
-    }
-    
-  }, 1000);
-}
-
 // Make functions available globally
 window.SchedulePickupUI = {
   init: initSchedulePickupUI,
@@ -1316,7 +1758,6 @@ window.SchedulePickupUI = {
   updateRecipientSelections,
   resetRecipientFields,
   handleEventFormSubmit,
-  handleDeleteEvent,
   updateUI: setEventTypeUI,
   setType: setEventType,
   updateDonorData

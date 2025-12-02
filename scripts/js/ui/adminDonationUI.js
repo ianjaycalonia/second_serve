@@ -14,6 +14,21 @@
   function getEl(id) {
     return document.getElementById(id);
   }
+  function notifyToast(message, type){
+    try{
+      const cont = ensureToastContainer();
+      const toast = document.createElement('div');
+      const bg = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : type === 'info' ? 'bg-info' : 'bg-danger';
+      const textClass = (type === 'warning' || type === 'info') ? 'text-dark' : 'text-white';
+      const closeClass = textClass === 'text-white' ? 'btn-close btn-close-white' : 'btn-close';
+      toast.className = 'toast align-items-center ' + textClass + ' border-0 ' + bg;
+      toast.setAttribute('role','alert'); toast.setAttribute('aria-live','assertive'); toast.setAttribute('aria-atomic','true');
+      toast.innerHTML = `<div class="d-flex"><div class="toast-body">${(message||'').toString()}</div><button type="button" class="${closeClass} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+      cont && cont.appendChild(toast);
+      if (window.bootstrap?.Toast) { new bootstrap.Toast(toast, { delay: 2500 }).show(); }
+      else { toast.style.display='block'; setTimeout(()=>{ try{ toast.remove(); }catch(_){} }, 3000); }
+    } catch(_) { }
+  }
   function ensureToastContainer() {
     try {
       let cont = document.getElementById('globalToastContainer');
@@ -21,6 +36,7 @@
         cont = document.createElement('div');
         cont.id = 'globalToastContainer';
         cont.className = 'toast-container position-fixed top-0 end-0 p-3';
+        try { cont.style.zIndex = '1085'; } catch(_) {}
         document.body.appendChild(cont);
       }
       return cont;
@@ -67,6 +83,43 @@
     } catch (_) {
       return "";
     }
+  }
+
+  async function compressImageIfPossible(file, overrides) {
+    if (!(file instanceof File)) return file;
+    const compressor = window.imageCompression;
+    if (typeof compressor !== "function") return file;
+    const defaults = {
+      maxSizeMB: 1.2,
+      maxWidthOrHeight: 1600,
+      useWebWorker: true,
+      initialQuality: 0.8,
+      fileType: file.type || "image/jpeg",
+    };
+    const options = overrides ? Object.assign({}, defaults, overrides) : defaults;
+    try {
+      const compressed = await compressor(file, options);
+      return compressed instanceof File
+        ? compressed
+        : new File([compressed], file.name, { type: options.fileType });
+    } catch (err) {
+      if (window.__DEBUG) console.warn("[Donations] image compression failed", err);
+      return file;
+    }
+  }
+
+  async function buildCompressedFormData(form) {
+    const original = new FormData(form);
+    const result = new FormData();
+    for (const [key, value] of original.entries()) {
+      if (value instanceof File && value.size > 0 && /^image\//i.test(value.type)) {
+        const compressed = await compressImageIfPossible(value);
+        result.append(key, compressed, compressed.name || value.name);
+      } else {
+        result.append(key, value);
+      }
+    }
+    return result;
   }
   // Ensure cleanup runs whenever any Bootstrap modal finishes hiding
   try {
@@ -287,21 +340,29 @@
           cancel = (first.cancel_reason || "").trim();
         const showReceipt =
           first.status === "Picked Up" || first.status === "Completed";
-        const imgCell = isFailed
-          ? `<div class="small text-danger text-center">${escapeHtml(
-              decodeHtml(fail || "Failed safety check")
-            )}</div>`
-          : showReceipt
-          ? (
-              hasReceiptImage
-                ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da} title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
-                : '<div class="small text-muted text-center">Imported by an admin</div>'
-            )
-          : isCancelled && cancel
-          ? `<div class="small text-muted text-center">${escapeHtml(
-              decodeHtml(cancel)
-            )}</div>`
-          : '<div class="d-flex justify-content-center">—</div>';
+        const showImportedMsg = (items) =>
+          (items || []).some(
+            (it) => String(it?.source || "").toLowerCase() === "imported"
+          );
+        const missingReceiptLabel = showImportedMsg(gr.items)
+          ? "Imported by an admin"
+          : "Receipt not uploaded yet";
+        const canAttemptView = hasReceiptImage;
+        const viewBtnHtml = canAttemptView
+          ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da} title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
+          : "";
+        let imgCell = '';
+        if (isCancelled && cancel) {
+          imgCell = `<div class="small text-muted text-center">${escapeHtml(decodeHtml(cancel))}</div>`;
+        } else if (isFailed) {
+          imgCell = `<div class="small text-danger text-center">${escapeHtml(decodeHtml(fail || "Failed safety check"))}</div>`;
+        } else if (canAttemptView) {
+          imgCell = viewBtnHtml;
+        } else if (showReceipt) {
+          imgCell = `<div class="small text-muted text-center">${escapeHtml(decodeHtml(missingReceiptLabel))}</div>`;
+        } else {
+          imgCell = '<div class="d-flex justify-content-center">—</div>';
+        }
         const actions = [
           '<button class="btn btn-sm btn-outline-secondary batch-toggle" type="button" title="Toggle batch items" data-bs-toggle="tooltip"><i class="bi bi-eye"></i></button>'
         ];
@@ -371,27 +432,33 @@
           isCancelled = (r.status || "") === "Cancelled",
           cancel = (r.cancel_reason || "").trim(),
           needFail = isFailed && !fail;
-        const imgCell = isFailed
-          ? `<div class="small text-danger text-center" ${
-              needFail
-                ? `data-need-fail-reason="1" data-id="${r.id ?? ""}"`
-                : ""
-            }>${escapeHtml(decodeHtml(fail || "Failed safety check"))}</div>`
-          : showReceipt
-          ? (
-              hasReceiptImage
-                ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" data-id="${
-                    r.id ?? ""
-                  }" data-batch="${batch}" data-status="${
-                    r.status ?? ""
-                  }" title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
-                : '<div class="small text-muted text-center">Imported by an admin</div>'
-            )
-          : isCancelled && cancel
-          ? `<div class="small text-muted text-center">${escapeHtml(
-              decodeHtml(cancel)
-            )}</div>`
-          : '<div class="d-flex justify-content-center">—</div>';
+        const missingReceiptLabel =
+          String(r?.source || "").toLowerCase() === "imported"
+            ? "Imported by an admin"
+            : "Receipt not uploaded yet";
+        const canAttemptViewSingle = hasReceiptImage;
+        const viewBtnHtmlSingle = canAttemptViewSingle
+          ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" data-id="${
+              r.id ?? ""
+            }" data-batch="${batch}" data-status="${
+              r.status ?? ""
+            }" title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
+          : "";
+        const failHtml = `<div class="small text-danger text-center" ${
+          needFail ? `data-need-fail-reason="1" data-id="${r.id ?? ""}"` : ""
+        }>${escapeHtml(decodeHtml(fail || "Failed safety check"))}</div>`;
+        let imgCell = '';
+        if (isCancelled && cancel) {
+          imgCell = `<div class="small text-muted text-center">${escapeHtml(decodeHtml(cancel))}</div>`;
+        } else if (isFailed) {
+          imgCell = failHtml;
+        } else if (canAttemptViewSingle) {
+          imgCell = viewBtnHtmlSingle;
+        } else if (showReceipt) {
+          imgCell = `<div class="small text-muted text-center">${escapeHtml(decodeHtml(missingReceiptLabel))}</div>`;
+        } else {
+          imgCell = '<div class="d-flex justify-content-center">—</div>';
+        }
         const da = `data-id="${
           r.id ?? ""
         }" data-batch="${batch}" data-status="${r.status ?? ""}"`;
@@ -1091,7 +1158,7 @@
       const btnSubmit = getEl("foodSafetySubmitBtn"),
         btnFail = getEl("foodSafetyFailBtn"),
         modal = getEl("foodSafetyModal");
-      const fd = new FormData(form);
+      const fd = await buildCompressedFormData(form);
       fd.set("result", result);
       const receipt = getEl("fsReceipt");
       if (
@@ -1126,15 +1193,11 @@
             bootstrap.Modal.getOrCreateInstance(fm).hide();
         } catch (_) {}
         try {
-          const msg = getEl("fsSuccessMessage");
-          if (msg)
-            msg.textContent =
-              result === "passed"
-                ? "Items updated. Status set to Picked Up."
-                : "Food safety recorded as Failed.";
-          const sm = getEl("fsSuccessModal");
-          if (sm && bootstrap?.Modal)
-            bootstrap.Modal.getOrCreateInstance(sm).show();
+          const successMsg =
+            result === "passed"
+              ? "Items updated. Status set to Picked Up."
+              : "Food safety recorded as Failed.";
+          notifyToast(successMsg, result === "passed" ? "success" : "warning");
         } catch (_) {}
         const newStatus = result === "passed" ? "Picked Up" : "Failed Safety",
           failVal =
@@ -1734,19 +1797,10 @@
       } catch (_) {}
       try {
         await Api.setUserPref("ackNextStepsDontShow", "");
-        const mEl = getEl("restoreAckModal");
-        const msg = getEl("restoreAckModalMessage");
-        if (msg)
-          msg.textContent = "Acknowledge prompt will show again next time.";
-        if (mEl && window.bootstrap)
-          window.bootstrap.Modal.getOrCreateInstance(mEl).show();
+        notifyToast("Acknowledge prompt will show again next time.", "success");
       } catch (err) {
         console.error("Failed to reset acknowledge prompt preference:", err);
-        const mEl = getEl("restoreAckModal");
-        const msg = getEl("restoreAckModalMessage");
-        if (msg) msg.textContent = "Failed to reset preference.";
-        if (mEl && window.bootstrap)
-          window.bootstrap.Modal.getOrCreateInstance(mEl).show();
+        notifyToast("Failed to reset preference.", "danger");
       }
     });
   }

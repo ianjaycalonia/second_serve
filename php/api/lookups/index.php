@@ -50,11 +50,17 @@ try {
     if ($method === 'GET' && preg_match('#^/(beneficiary-categories|beneficiary-categories/)\z#', $sub)) {
         $db = Database::getInstance();
         [$q, $limit, $activeOnly] = readQueryParams();
+        // Detect PK column name to support both legacy and current schemas
+        $pk = 'beneficiary_category_id';
+        try {
+            $col = $db->query('SHOW COLUMNS FROM beneficiary_categories LIKE ?',[ 'beneficiary_category_id' ])->fetch();
+            if (!$col) { $pk = 'id'; }
+        } catch (Exception $e) { /* default to beneficiary_category_id */ }
         $where = [];
         $params = [];
         if ($q !== '') { $where[] = 'name LIKE ?'; $params[] = '%' . $q . '%'; }
         if ($activeOnly !== null) { $where[] = 'is_active = ?'; $params[] = $activeOnly; }
-        $sql = 'SELECT id, name FROM beneficiary_categories';
+        $sql = 'SELECT ' . $pk . ' AS id, name FROM beneficiary_categories';
         if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
         $sql .= ' ORDER BY name ASC LIMIT ' . (int)$limit;
         $rows = $db->query($sql, $params)->fetchAll();

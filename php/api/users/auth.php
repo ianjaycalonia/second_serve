@@ -16,6 +16,11 @@ header('Content-Type: application/json');
 $method = $_SERVER['REQUEST_METHOD'];
 $endpoint = isset($_GET['action']) ? sanitize($_GET['action']) : '';
 
+// Require CSRF for state-changing auth actions (not for login/register)
+if ($method === 'POST' && in_array($endpoint, ['logout','changePassword'], true)) {
+    requireCsrf();
+}
+
 // Get request data (do not sanitize to avoid altering passwords/emails)
 $data = getJsonInput();
 
@@ -83,6 +88,11 @@ function handleLogin($data) {
     try {
         $auth = new Auth();
         $result = $auth->loginWithRequest($data);
+        // Set XSRF-TOKEN cookie for client-side frameworks and fetch() callers not using headers
+        if (!empty($result['csrf_token'])) {
+            $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+            setcookie('XSRF-TOKEN', $result['csrf_token'], 0, '/', '', $secure, false);
+        }
         sendJson([
             'success' => true,
             'message' => 'Login successful',
@@ -104,6 +114,10 @@ function handleRegister($data) {
     try {
         $auth = new Auth();
         $result = $auth->registerWithRequest($data);
+        if (!empty($result['csrf_token'])) {
+            $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+            setcookie('XSRF-TOKEN', $result['csrf_token'], 0, '/', '', $secure, false);
+        }
         sendJson([
             'success' => true,
             'message' => 'Registration successful. Redirecting to your dashboard...',

@@ -114,9 +114,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 setCorsHeaders();
 header('Content-Type: application/json');
 
-if (in_array(strtoupper($method), ['POST','PUT','PATCH','DELETE'], true)) {
-    requireCsrfToken();
-}
+// CSRF protection for non-GET methods
+requireCsrf();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $uri = $_SERVER['REQUEST_URI'] ?? '';

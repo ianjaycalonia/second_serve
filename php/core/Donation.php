@@ -220,7 +220,7 @@ class Donation
                         LEFT JOIN donation_items di ON di.donation_id = d.donation_id" . $whereSqlGrouped . "
                         GROUP BY d.donor_id, u.name, dp.organization_name, d.batch_id";
 
-            // Ungrouped singles: rows with batch_id NULL are returned as-is
+            // Ungrouped singles: rows with batch_id NULL are returned as-is (align columns with grouped SELECT)
             $sqlSingles = "SELECT 
                             d.donation_id AS id,
                             d.donor_id,
@@ -229,9 +229,6 @@ class Donation
                             di.product_name AS name,
                             CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type,
                             di.quantity,
-                            di.unit_id,
-                            COALESCE(un.label, un.code) AS unit_label,
-                            di.unit AS unit,
                             di.expiry_date,
                             d.status,
                             d.created_at,
@@ -241,8 +238,7 @@ class Donation
                         LEFT JOIN users u ON u.user_id = d.donor_id
                         LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
                         INNER JOIN donation_items di ON di.donation_id = d.donation_id
-                        LEFT JOIN categories c ON c.category_id = di.category_id
-                        LEFT JOIN units un ON un.unit_id = di.unit_id" . $whereSqlSingles . "";
+                        LEFT JOIN categories c ON c.category_id = di.category_id" . $whereSqlSingles . "";
 
             $sql = "SELECT * FROM (" . $sqlGrouped . ") g
                     UNION ALL

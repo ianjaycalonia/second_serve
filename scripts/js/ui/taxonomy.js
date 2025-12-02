@@ -16,6 +16,67 @@
       throw new Error("Unexpected response: " + text.slice(0, 120));
     }
   }
+
+  function openDeactivateModal({ type, id, name }) {
+    pendingDeactivate = { type, id };
+    if (deactivateText) {
+      deactivateText.textContent =
+        type === "category"
+          ? `Deactivate category “${name || "this category"}”?`
+          : `Deactivate unit “${name || "this unit"}”?`;
+    }
+    if (deactivateConfirmBtn) {
+      deactivateConfirmBtn.disabled = false;
+      deactivateConfirmBtn.textContent = "Deactivate";
+    }
+    if (deactivateModal && window.bootstrap?.Modal) {
+      window.bootstrap.Modal.getOrCreateInstance(deactivateModal).show();
+    } else {
+      const fallback = window.confirm(
+        type === "category"
+          ? `Deactivate category "${name}"?`
+          : `Deactivate unit "${name}"?`
+      );
+      if (fallback) {
+        handleDeactivateConfirmed();
+      } else {
+        pendingDeactivate = null;
+      }
+    }
+  }
+
+  async function handleDeactivateConfirmed() {
+    if (!pendingDeactivate) return;
+    const { type, id } = pendingDeactivate;
+    const endpoint = type === "category" ? `/categories/${id}` : `/units/${id}`;
+    const label = type === "category" ? "Category" : "Unit";
+    let originalText = null;
+    try {
+      if (deactivateConfirmBtn) {
+        originalText = deactivateConfirmBtn.textContent;
+        deactivateConfirmBtn.disabled = true;
+        deactivateConfirmBtn.textContent = "Deactivating...";
+      }
+      await apiSend("DELETE", endpoint);
+      showToast(`${label} deactivated`, "success");
+      if (deactivateModal && window.bootstrap?.Modal) {
+        window.bootstrap.Modal.getOrCreateInstance(deactivateModal).hide();
+      }
+      if (type === "category") {
+        loadCategories();
+      } else {
+        loadUnits();
+      }
+    } catch (err) {
+      showToast(String(err?.message || err || "Failed to deactivate"), "danger");
+    } finally {
+      if (deactivateConfirmBtn) {
+        deactivateConfirmBtn.disabled = false;
+        deactivateConfirmBtn.textContent = originalText || "Deactivate";
+      }
+      pendingDeactivate = null;
+    }
+  }
   async function apiSend(method, path, body) {
     const res = await fetch(API_BASE + path, {
       method,
@@ -208,11 +269,18 @@
   let masterTotal = 0;
 
   const assignModalEl = document.getElementById("assignmentModal");
-  const assignItemName = document.getElementById("assignItemName");
+  const assignItemNameInput = document.getElementById("assignItemNameInput");
   const assignItemContext = document.getElementById("assignItemContext");
   const assignWeightInput = document.getElementById("assignWeightInput");
+  const assignUnitCostInput = document.getElementById("assignUnitCostInput");
   const assignFeedback = document.getElementById("assignFeedback");
   const assignSaveBtn = document.getElementById("assignSaveBtn");
+  const assignRemoveModal = document.getElementById("assignmentRemoveModal");
+  const assignRemoveProductLabel = document.getElementById("assignmentRemoveProduct");
+  const assignRemoveConfirmBtn = document.getElementById("assignmentRemoveConfirmBtn");
+  const deactivateModal = document.getElementById("deactivateConfirmModal");
+  const deactivateText = document.getElementById("deactivateConfirmText");
+  const deactivateConfirmBtn = document.getElementById("deactivateConfirmBtn");
   const $assignCategorySelect = window.jQuery
     ? window.jQuery("#assignCategorySelect")
     : null;
@@ -220,6 +288,8 @@
     ? window.jQuery("#assignUnitSelect")
     : null;
   let currentAssignment = null;
+  let pendingRemovalProduct = null;
+  let pendingDeactivate = null;
 
   function ensureAssignmentSelect2() {
     if (!window.jQuery) return;
@@ -296,12 +366,21 @@
     if (!assignModalEl || !item) return;
     ensureAssignmentSelect2();
     currentAssignment = item;
-    if (assignItemName)
-      assignItemName.textContent = item.product_name || "Unnamed Item";
+    if (assignItemNameInput)
+      assignItemNameInput.value = item.product_name || "";
     if (assignItemContext)
       assignItemContext.textContent = `Donation #${item.donation_id || "—"} · Item ID ${item.donation_item_id}`;
     if (assignWeightInput)
       assignWeightInput.value = item.total_weight != null ? String(item.total_weight) : "";
+    if (assignUnitCostInput) {
+      const costValue =
+        item.unit_cost != null && item.unit_cost !== ""
+          ? item.unit_cost
+          : item.total_cost != null && item.total_cost !== ""
+          ? item.total_cost
+          : null;
+      assignUnitCostInput.value = costValue != null ? String(costValue) : "";
+    }
     if ($assignCategorySelect) {
       $assignCategorySelect.val(null).trigger("change");
       if (item.category_id && item.category_label) {
@@ -318,6 +397,32 @@
     }
     if (assignFeedback) assignFeedback.textContent = "";
     new bootstrap.Modal(assignModalEl).show();
+  }
+
+  async function handleAssignmentRemoval(productName) {
+    if (!productName) return;
+    let originalText = null;
+    try {
+      if (assignRemoveConfirmBtn) {
+        originalText = assignRemoveConfirmBtn.textContent;
+        assignRemoveConfirmBtn.disabled = true;
+        assignRemoveConfirmBtn.textContent = "Removing...";
+      }
+      await apiSend("DELETE", `/master-items`, { product_name: productName });
+      showToast(`Removed incomplete entries for ${productName}`, "success");
+      pendingRemovalProduct = null;
+      if (assignRemoveModal && window.bootstrap?.Modal) {
+        window.bootstrap.Modal.getOrCreateInstance(assignRemoveModal).hide();
+      }
+      loadMasterItems();
+    } catch (err) {
+      showToast(String(err?.message || err || "Failed to remove entries"), "danger");
+    } finally {
+      if (assignRemoveConfirmBtn) {
+        assignRemoveConfirmBtn.disabled = false;
+        assignRemoveConfirmBtn.textContent = originalText || "Remove";
+      }
+    }
   }
 
   async function loadSingleMissingItem(donationItemId) {
@@ -450,20 +555,30 @@
           });
         });
       });
-      Array.from(assignmentBody.querySelectorAll('button[data-action="assign-remove"]')).forEach((btn) => {
-        btn.addEventListener("click", async () => {
+      Array.from(
+        assignmentBody.querySelectorAll('button[data-action="assign-remove"]')
+      ).forEach((btn) => {
+        btn.addEventListener("click", () => {
           const name = btn.getAttribute("data-product") || "";
           if (!name) return;
-          const confirmed = confirm(
-            `This will remove all donation items for "${name}" that lack metadata. Continue?`
-          );
-          if (!confirmed) return;
-          try {
-            await apiSend("DELETE", `/master-items`, { product_name: name });
-            showToast(`Removed incomplete entries for ${name}`, "success");
-            loadMasterItems();
-          } catch (err) {
-            showToast(String(err.message || err), "danger");
+          pendingRemovalProduct = name;
+          if (assignRemoveProductLabel)
+            assignRemoveProductLabel.textContent = name;
+          if (assignRemoveConfirmBtn) {
+            assignRemoveConfirmBtn.disabled = false;
+            assignRemoveConfirmBtn.textContent = "Remove";
+          }
+          if (assignRemoveModal && window.bootstrap?.Modal) {
+            window.bootstrap.Modal.getOrCreateInstance(assignRemoveModal).show();
+          } else {
+            const fallback = window.confirm(
+              `This will remove all donation items for "${name}" that lack metadata. Continue?`
+            );
+            if (!fallback) {
+              pendingRemovalProduct = null;
+              return;
+            }
+            handleAssignmentRemoval(name);
           }
         });
       });
@@ -562,9 +677,18 @@
           }
         }
         const weightRaw = assignWeightInput ? assignWeightInput.value.trim() : "";
+        const nameRaw = assignItemNameInput ? assignItemNameInput.value.trim() : "";
+        const unitCostRaw = assignUnitCostInput ? assignUnitCostInput.value.trim() : "";
         const payload = Object.assign({}, categoryPayload, unitPayload, {
           weight: weightRaw === "" ? null : parseFloat(weightRaw),
         });
+        if (nameRaw && nameRaw !== (currentAssignment.product_name || "")) {
+          payload.new_product_name = nameRaw;
+        }
+        if (unitCostRaw !== "") {
+          const uc = parseFloat(unitCostRaw);
+          if (!Number.isNaN(uc) && uc >= 0) payload.unit_cost = uc;
+        }
         const res = await fetch(
           `${API_BASE}/missing-metadata/${currentAssignment.donation_item_id}`,
           {
@@ -668,13 +792,9 @@
         catEditFeedback.textContent = "";
         showModal(catEditModal);
       } else if (action === "cat-deactivate") {
-        try {
-          await apiSend("DELETE", `/categories/${id}`);
-          showToast("Category deactivated", "success");
-        } catch (err) {
-          showToast(String(err.message || err), "danger");
-        }
-        loadCategories();
+        const row = btn.closest("tr");
+        const name = row ? row.children[1].textContent.trim() : "this category";
+        openDeactivateModal({ type: "category", id, name });
       } else if (action === "cat-activate") {
         try {
           await apiSend("PUT", `/categories/${id}`, { is_active: true });
@@ -751,13 +871,9 @@
         unitEditFeedback.textContent = "";
         showModal(unitEditModal);
       } else if (action === "unit-deactivate") {
-        try {
-          await apiSend("DELETE", `/units/${id}`);
-          showToast("Unit deactivated", "success");
-        } catch (err) {
-          showToast(String(err.message || err), "danger");
-        }
-        loadUnits();
+        const row = btn.closest("tr");
+        const name = row ? row.children[0].textContent.trim() : "this unit";
+        openDeactivateModal({ type: "unit", id, name });
       } else if (action === "unit-activate") {
         try {
           await apiSend("PUT", `/units/${id}`, { is_active: true });

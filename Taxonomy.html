@@ -630,6 +630,82 @@
       </div>
     </div>
 
+    <!-- Deactivate Confirmation Modal -->
+    <div
+      class="modal fade"
+      id="deactivateConfirmModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Confirm Deactivation</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <p id="deactivateConfirmText" class="mb-0">
+              Are you sure you want to deactivate this item?
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button type="button" class="btn btn-danger" id="deactivateConfirmBtn">
+              Deactivate
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Assignment Remove Confirmation Modal -->
+    <div
+      class="modal fade"
+      id="assignmentRemoveModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Remove Incomplete Entries</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-3">
+              This will remove all donation items missing metadata for
+              <span class="fw-semibold" id="assignmentRemoveProduct">—</span>.
+            </p>
+            <p class="mb-0">This action cannot be undone. Continue?</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+              Cancel
+            </button>
+            <button type="button" class="btn btn-danger" id="assignmentRemoveConfirmBtn">
+              Remove
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Category Edit Modal -->
     <div class="modal fade" id="catEditModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog">
@@ -764,17 +840,18 @@
       </div>
     </div>
 
-    <!-- Metadata Assignment Modal -->
+    <!-- Assignment Edit Modal -->
     <div
       class="modal fade"
       id="assignmentModal"
       tabindex="-1"
+      aria-labelledby="assignmentModalLabel"
       aria-hidden="true"
     >
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Assign Metadata</h5>
+            <h5 class="modal-title" id="assignmentModalLabel">Assign Metadata</h5>
             <button
               type="button"
               class="btn-close"
@@ -784,8 +861,8 @@
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label class="form-label">Item</label>
-              <div class="fw-semibold" id="assignItemName">-</div>
+              <label class="form-label" for="assignItemNameInput">Item</label>
+              <input type="text" id="assignItemNameInput" class="form-control" placeholder="Item name" />
               <div class="small text-muted" id="assignItemContext"></div>
             </div>
             <div class="mb-3">
@@ -811,6 +888,11 @@
               <div class="form-text">
                 Type to search existing units or enter a new one.
               </div>
+            </div>
+            <div class="mb-3">
+              <label for="assignUnitCostInput" class="form-label">Unit Cost (₱)</label>
+              <input type="number" step="0.01" min="0" id="assignUnitCostInput" class="form-control" placeholder="e.g., 15.00" />
+              <div class="form-text">Applied to items without cost. Average updates after save.</div>
             </div>
             <div class="mb-3">
               <label for="assignWeightInput" class="form-label"

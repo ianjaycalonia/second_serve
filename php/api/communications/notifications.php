@@ -42,13 +42,9 @@ try {
     switch ($method) {
         case 'GET':
             // GET /notifications (defaults to current session) or /notifications?user_id=xxx
-            $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
-            if ($userId <= 0) {
-                $userId = (int)(currentUserId() ?? 0);
-            }
-            if ($userId <= 0) {
-                sendJson(['success' => false, 'error' => 'Authentication required'], 401);
-            }
+            requireAuth();
+            $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : (int)(currentUserId() ?? 0);
+            if ($userId <= 0) { sendJson(['success' => false, 'error' => 'Authentication required'], 401); }
             // Only allow user themselves or admin to view
             $currentId = (int)(currentUserId() ?? 0);
             $role = (string)(currentUserRole() ?? '');

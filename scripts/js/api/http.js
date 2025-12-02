@@ -75,6 +75,22 @@
     ensureBase();
     const opts = options || {};
     const headers = Object.assign({ 'Accept': 'application/json' }, opts.headers||{});
+    try {
+      const method = String(opts.method || 'GET').toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS'){
+        let token = '';
+        try { token = sessionStorage.getItem('csrf_token') || ''; } catch(_) { token = ''; }
+        if (!token && typeof document !== 'undefined' && document.cookie){
+          try {
+            const cookies = document.cookie.split(';').map(s=>s.trim());
+            for (const c of cookies){
+              if (c.startsWith('XSRF-TOKEN=')) { token = decodeURIComponent(c.substring('XSRF-TOKEN='.length)); break; }
+            }
+          } catch(_) { /* ignore */ }
+        }
+        if (token){ headers['X-CSRF-Token'] = token; }
+      }
+    } catch(_) { }
     const final = Object.assign({}, opts, { headers, credentials: opts.credentials || 'include' });
     const res = await fetch(url, final);
     const data = await parseJsonLenient(res);
@@ -84,6 +100,12 @@
       err.status = res.status;
       err.response = data;
       try{ root.showToast(`Something went wrong. ${msg}`, 'danger'); }catch(_){ }
+      if (res.status === 401 || res.status === 403) {
+        try {
+          const dest = (root.location && root.location.origin) ? (root.location.origin + '/index.html') : '/index.html';
+          setTimeout(()=>{ try{ root.location.href = dest; }catch(_){ } }, 800);
+        } catch(_){ }
+      }
       throw err;
     }
     return data;

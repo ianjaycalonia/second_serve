@@ -92,12 +92,31 @@
   }
   function recipientEligibleForScheduling(){
     if (role() !== 'recipient') return true;
+    try {
+      // Prefer authoritative state from Schedule UI if available
+      if (typeof window.ensureRecipientSchedulingEligibility === 'function') {
+        // Trigger async check (non-blocking)
+        try { window.ensureRecipientSchedulingEligibility(); } catch(_){}
+        if (typeof window.getRecipientSchedulingEligibility === 'function') {
+          const state = window.getRecipientSchedulingEligibility();
+          if (state && state.checked) return !!state.eligible;
+          // Not yet checked – allow until verified by Schedule UI
+          return true;
+        }
+        // No state getter – allow optimistically; Schedule UI will disable if needed
+        return true;
+      }
+    } catch(_){}
+    // Fallback to basic status heuristic if Schedule UI not present
     const status = recipientStatus();
-    if (!status) return false;
-    return ['allocated','updated','acknowledged'].includes(status);
+    if (!status) return true; // default allow to avoid blocking valid recipients
+    return ['acknowledged'].includes(status);
   }
   function recipientEligibilityMessage(){
-    return 'Only recipients with Allocated, Updated, or Acknowledged status can schedule pickups. Please contact support if you believe this is an error.';
+    if (typeof window.recipientEligibilityMessage === 'function') {
+      try { return window.recipientEligibilityMessage(); } catch(_){}
+    }
+    return 'Only recipients with an allocation scheduled for this week can create pickup events. Please contact support if you believe this is an error.';
   }
   function normalizeEventData(raw, fallbackType){
     const data = raw ? { ...raw } : {};
@@ -301,11 +320,10 @@
     const btn = qs('#editEventBtn');
     if (!btn) return;
     let candidate = null;
-    if (lastViewedEvent && canEditEvent(lastViewedEvent)) candidate = lastViewedEvent;
-    if (!candidate){
-      const sel = getSelectedEventData();
-      if (sel && canEditEvent(sel)) candidate = sel;
-    }
+    // Prefer the currently selected event in the list/day over any stale lastViewedEvent
+    const sel = getSelectedEventData();
+    if (sel && canEditEvent(sel)) candidate = sel;
+    if (!candidate && lastViewedEvent && canEditEvent(lastViewedEvent)) candidate = lastViewedEvent;
     btn.disabled = !candidate;
     if (!candidate) {
       btn.title = 'Select an event you can edit';
@@ -358,13 +376,33 @@
       const startStr = new Date(ev.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
       const endStr = ev.end ? new Date(ev.end).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
       const roleBadge = role()==='admin' ? `<span class="badge ${ev.event_type==='donor'?'bg-primary':ev.event_type==='recipient'?'bg-success':'bg-warning text-dark'} ms-2">${ev.event_type}</span>` : '';
-      const location = ev.location ? `<div class="small text-muted">${escapeHtml(ev.location)}</div>` : '';
+      let targetName = '';
+      if (ev.event_type === 'recipient') {
+        if (Array.isArray(ev.recipients) && ev.recipients.length) {
+          const names = ev.recipients.map(r => r?.display_name || r?.name || r?.text).filter(Boolean);
+          targetName = names.join(', ');
+        } else if (ev.recipient_name || ev.recipient_org || ev.recipient_display) {
+          targetName = ev.recipient_name || ev.recipient_org || ev.recipient_display;
+        } else if (ev.recipient_id) {
+          targetName = `Recipient #${ev.recipient_id}`;
+        }
+      } else if (ev.event_type === 'donor') {
+        targetName = ev.donor_display || ev.donor_name || ev.donor_org || (ev.donor_id ? `Donor #${ev.donor_id}` : '');
+      } else {
+        if (Array.isArray(ev.recipients) && ev.recipients.length) {
+          const names = ev.recipients.map(r => r?.display_name || r?.name || r?.text).filter(Boolean);
+          targetName = names.join(', ');
+        } else if (ev.donor_display || ev.donor_name || ev.donor_org) {
+          targetName = ev.donor_display || ev.donor_name || ev.donor_org;
+        }
+      }
+      const targetLine = targetName ? `<div class="small text-muted">${escapeHtml(targetName)}</div>` : '';
       item.innerHTML = `
         <div class="d-flex justify-content-between align-items-start gap-2">
           <div class="flex-grow-1">
             <div class="fw-semibold">${escapeHtml(ev.title||'Event')}${roleBadge}</div>
             <div class="small text-muted">${startStr}${endStr?(' - '+endStr):''}</div>
-            ${location}
+            ${targetLine}
           </div>
           <div>
             <button type="button" class="btn btn-sm btn-outline-secondary selected-day-open" data-event-id="${ev.id}">View</button>
@@ -588,6 +626,39 @@
     }
   }
 
+  // Small helper to show a confirm modal (Bootstrap) and resolve true/false
+  function confirmModal(opts){
+    const o = Object.assign({ title: 'Confirm', message: 'Are you sure?', confirmText: 'Confirm', confirmClass: 'btn-primary' }, opts||{});
+    return new Promise(resolve => {
+      const id = 'calConfirm'+Date.now();
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = `
+        <div class="modal fade" id="${id}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">${escapeHtml(o.title)}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">${escapeHtml(o.message)}</div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn ${o.confirmClass}" data-confirm="1">${escapeHtml(o.confirmText)}</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      const el = wrapper.firstElementChild;
+      document.body.appendChild(el);
+      const modal = bootstrap.Modal.getOrCreateInstance(el);
+      const onHide = ()=>{ el.removeEventListener('hidden.bs.modal', onHide); el.remove(); resolve(false); };
+      el.addEventListener('hidden.bs.modal', onHide, { once: true });
+      const okBtn = el.querySelector('[data-confirm]');
+      if (okBtn){ okBtn.addEventListener('click', ()=>{ resolve(true); modal.hide(); }, { once: true }); }
+      modal.show();
+    });
+  }
+
   async function parseJsonSafe(res){
     const txt = await res.text();
     if (!txt) return { ok: true, data: { success: true }, raw: '' };
@@ -686,7 +757,7 @@
       // Re-enable all form controls by default (role logic will adjust afterward)
       const form0 = qs('#eventForm'); if (form0){ form0.querySelectorAll('input,select,textarea,button').forEach(c=>{ if (c.id !== 'deleteEventBtn') c.disabled = false; }); }
       // Clear select2 fields
-      const donorSel0 = qs('#evDonorSelect');
+      const donorSel0 = qs('#evDonor');
       if (donorSel0){
         if (typeof window.$ === 'function' && $(donorSel0).select2) { $(donorSel0).val(null).trigger('change'); }
         else donorSel0.value = '';
@@ -708,6 +779,9 @@
     }catch(_){ }
     // Populate
     const normalized = normalizeEventData(data);
+    const donorDisplay = normalized?.donor_display || normalized?.donor_name || data?.donor_name || '';
+    const donorAddress = normalized?.donor_address || data?.donor_address || normalized?.location || data?.location || '';
+    const donorUserId = normalized?.donor_id || (normalized?.event_type === 'donor' ? (normalized?.created_for_user_id || normalized?.created_by_user_id || null) : null);
     const presetDate = data?.preset_date || data?.presetDate || null;
     lastViewedEvent = normalized;
     const r = role();
@@ -783,8 +857,8 @@
         window.SchedulePickupUI?.resetRecipientFields({ date: '', time: '', clearAdditional: true });
       } catch (_) { /* ignore reset errors */ }
     }
-    qs('#evDonor').value = normalized?.donor_id || '';
-    qs('#evLocation').value = normalized?.location || data?.location || '';
+    qs('#evDonor').value = donorUserId || '';
+    qs('#evLocation').value = donorAddress || '';
     qs('#evNotes').value = normalized?.notes || data?.notes || '';
 
     // Ensure an informational hint element exists
@@ -812,7 +886,7 @@
     const wrapDon = qs('#wrapDonor');
     const wrapDtDefault = qs('#wrapDateTimeDefault');
     const wrapStatus = qs('#wrapStatus');
-    const donorSelect = qs('#evDonorSelect');
+    const donorSelect = qs('#evDonor');
     const recipientSelect = qs('#evRecipientSelect');
     const recipientHidden = qs('#evRecipient');
 
@@ -1169,6 +1243,17 @@
       typeSel.onchange = ()=> applyTypeUI(typeSel.value);
     }
 
+    // Sync schedulePickup UI tab and permissions
+    try {
+      if (window.SchedulePickupUI) {
+        // Flag editing early so UI defaults don't overwrite prefilled fields
+        window.SchedulePickupUI._editing = Boolean(normalized?.id);
+        if (typeof window.SchedulePickupUI.setType === 'function') {
+          window.SchedulePickupUI.setType(initType);
+        }
+      }
+    } catch(_){ }
+
     // Toggle admin UI sections via schedulePickup helpers if available
     const syncUiType = (evtType) => {
       if (window.SchedulePickupUI?.updateUI) {
@@ -1195,6 +1280,62 @@
       });
     }
 
+    // Bridge: prefill schedulePickup recipient UI when editing recipient-type events
+    if (window.SchedulePickupUI && initialType === 'recipient') {
+      try {
+        const dateStr = dateInput ? dateInput.value : (startDate ? formatDateInput(startDate) : '');
+        const timeStr = startTimeStr;
+        if (typeof window.SchedulePickupUI.resetRecipientFields === 'function') {
+          window.SchedulePickupUI.resetRecipientFields({ date: dateStr || '', time: timeStr || '', clearAdditional: true });
+        }
+        const container = document.getElementById('recipientSelections');
+        if (container) {
+          const need = Math.max(1, existingRecipients.length);
+          while (container.querySelectorAll('.recipient-selection').length < need) {
+            if (typeof window.SchedulePickupUI.addRecipientField === 'function') window.SchedulePickupUI.addRecipientField();
+            else break;
+          }
+          const blocks = Array.from(container.querySelectorAll('.recipient-selection'));
+          if (existingRecipients.length) {
+            existingRecipients.forEach((r, idx) => {
+              const blk = blocks[idx]; if (!blk) return;
+              const sel = blk.querySelector('.recipient-select'); if (!sel) return;
+              let opt = Array.from(sel.options||[]).find(o=>String(o.value)===String(r.id));
+              if (!opt) { opt = new Option(r.text || (`Recipient #${r.id}`), r.id, true, true); sel.appendChild(opt); }
+              if (typeof window.$ === 'function' && window.$.fn && window.$.fn.select2) {
+                const $sel = window.$(sel);
+                if (!$sel.data('select2')) { if (typeof window.initRecipientSelect === 'function') window.initRecipientSelect(sel); }
+                $sel.val(String(r.id)).trigger('change');
+              } else {
+                sel.value = String(r.id);
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+              const dEl = blk.querySelector('.recipient-date'); if (dEl && dateStr) dEl.value = dateStr;
+              const tEl = blk.querySelector('.recipient-time'); if (tEl && timeStr) tEl.value = timeStr;
+            });
+          } else if (normalized.recipient_id) {
+            const blk = blocks[0]; if (!blk) return;
+            const sel = blk.querySelector('.recipient-select'); if (!sel) return;
+            const rid = normalized.recipient_id;
+            let opt = Array.from(sel.options||[]).find(o=>String(o.value)===String(rid));
+            const text = normalized.recipient_display || normalized.recipient_name || (`Recipient #${rid}`);
+            if (!opt) { opt = new Option(text, rid, true, true); sel.appendChild(opt); }
+            if (typeof window.$ === 'function' && window.$.fn && window.$.fn.select2) {
+              const $sel = window.$(sel);
+              if (!$sel.data('select2')) { if (typeof window.initRecipientSelect === 'function') window.initRecipientSelect(sel); }
+              $sel.val(String(rid)).trigger('change');
+            } else {
+              sel.value = String(rid);
+              sel.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            const dEl = blk.querySelector('.recipient-date'); if (dEl && dateStr) dEl.value = dateStr;
+            const tEl = blk.querySelector('.recipient-time'); if (tEl && timeStr) tEl.value = timeStr;
+          }
+          if (typeof window.SchedulePickupUI.updateRecipientSelections === 'function') window.SchedulePickupUI.updateRecipientSelections();
+        }
+      } catch(_){ }
+    }
+
     // Prefill donor/admin fields for admin role
     try {
       if (r === 'admin') {
@@ -1213,17 +1354,11 @@
             const dateInput = qs('.recipient-date');
             if (dateInput) dateInput.value = `${yyyy}-${mm}-${dd}`;
           }
-          const donorSelect = qs('#evDonor');
-          if (donorSelect && typeof window.$ === 'function' && window.$.fn?.select2 && data?.donor_id) {
-            const optionExists = !!window.$(donorSelect).find(`option[value="${data.donor_id}"]`).length;
-            if (!optionExists) {
-              const opt = document.createElement('option');
-              opt.value = data.donor_id;
-              opt.textContent = data?.donor_name || `Donor #${data.donor_id}`;
-              opt.selected = true;
-              donorSelect.appendChild(opt);
-            }
-            window.$(donorSelect).val(String(data.donor_id)).trigger('change');
+          const prefillId = donorUserId || data?.donor_id;
+          if (prefillId) {
+            ensureDonorSelect();
+            setDonorSelectValue(prefillId, donorDisplay || undefined, donorAddress || undefined);
+            rememberOptionAddress(qs('#evDonor'), prefillId, donorAddress || '');
           }
         } else if (initialType === 'admin') {
           if (startIso) {
@@ -1240,14 +1375,15 @@
 
     // If editing an existing admin-created donor pickup, try set donor select (use donor_display when available)
     if (r==='admin'){
-      if (donorSelect && normalized?.donor_id){
+      if (donorSelect && (donorUserId || normalized?.donor_id)){
         ensureDonorSelect();
-        setDonorSelectValue(normalized.donor_id, normalized.donor_display || normalized.donor_name || undefined, normalized.donor_address || data?.donor_address);
+        setDonorSelectValue(donorUserId || normalized.donor_id, donorDisplay || undefined, donorAddress || undefined);
       }
       if (recipientSelect && normalized?.recipient_id){
         ensureRecipientSelect();
         setRecipientSelectValue(normalized.recipient_id, normalized.recipient_display || normalized.recipient_name || undefined, normalized.recipient_address || data?.recipient_address);
       }
+      try { if (window.SchedulePickupUI?.updateDonorData) window.SchedulePickupUI.updateDonorData(); } catch(_){ }
     }
     if (recipientSelect && existingRecipients.length){
       ensureRecipientSelect();
@@ -1400,13 +1536,14 @@
     let t = (qs('#evType')?.value)||defaultTypeForCurrentRole();
     const r = role();
     const uid = userId();
+    const editingId = Number(qs('#evId')?.value||0)||0;
     if (r === 'recipient' && !recipientEligibleForScheduling()) {
       calendarToast(recipientEligibilityMessage(), 'warn');
       return null;
     }
     // Resolve donor from select2 if present
     let donorId = null;
-    const donorSelect = qs('#evDonorSelect');
+    const donorSelect = qs('#evDonor');
     if (donorSelect && donorSelect.value) donorId = Number(donorSelect.value);
     if (!donorId) { donorId = qs('#evDonor')?.value ? Number(qs('#evDonor').value) : null; }
     let recipientId = null;
@@ -1417,44 +1554,65 @@
     if (!canCreateEventOfType(t)) {
       return null;
     }
-    // Parse recipients from new UI JSON payload
+    // Parse recipients ONLY when the active type is recipient
     let recipientsUi = [];
     let recipientIdsFromUi = [];
-    const recipientsRaw = qs('#evRecipients')?.value || '';
-    if (recipientsRaw) {
-      try {
-        const parsed = JSON.parse(recipientsRaw);
-        if (Array.isArray(parsed)) {
-          recipientsUi = parsed;
-          recipientIdsFromUi = parsed
-            .map(item => Number(item && item.id))
-            .filter(v => Number.isFinite(v) && v > 0);
-        }
-      } catch(_){}}
-    // Fallback: read from DOM if hidden JSON is empty or invalid
-    if (!recipientsUi.length) {
-      try {
-        const blocks = document.querySelectorAll('.recipient-selection');
-        const tmp = [];
-        blocks.forEach(b => {
-          const sel = b.querySelector('.recipient-select');
-          const id = sel ? Number(sel.value) : null;
-          if (!Number.isFinite(id) || id <= 0) return;
-          const dateEl = b.querySelector('.recipient-date');
-          const timeEl = b.querySelector('.recipient-time');
-          const date = (dateEl && dateEl.value) ? String(dateEl.value) : '';
-          const time = (timeEl && timeEl.value) ? String(timeEl.value) : '';
-          tmp.push({ id, date, time });
-        });
-        if (tmp.length) {
-          recipientsUi = tmp;
-          recipientIdsFromUi = tmp.map(x => Number(x.id)).filter(v => Number.isFinite(v) && v > 0);
-        }
-      } catch(_){}
-    }
-    // If recipient selections exist in UI, treat as recipient event regardless of current select state
-    if (recipientIdsFromUi.length && t !== 'recipient') {
-      t = 'recipient';
+    if (t === 'recipient') {
+      const recipientsRaw = qs('#evRecipients')?.value || '';
+      if (recipientsRaw) {
+        try {
+          const parsed = JSON.parse(recipientsRaw);
+          if (Array.isArray(parsed)) {
+            recipientsUi = parsed;
+            recipientIdsFromUi = parsed
+              .map(item => Number(item && item.id))
+              .filter(v => Number.isFinite(v) && v > 0);
+          }
+        } catch(_){ }
+      }
+      // Fallback: read from DOM if hidden JSON is empty or invalid
+      if (!recipientsUi.length) {
+        try {
+          const blocks = document.querySelectorAll('.recipient-selection');
+          const tmp = [];
+          blocks.forEach(b => {
+            const sel = b.querySelector('.recipient-select');
+            const id = sel ? Number(sel.value) : null;
+            if (!Number.isFinite(id) || id <= 0) return;
+            const dateEl = b.querySelector('.recipient-date');
+            const timeEl = b.querySelector('.recipient-time');
+            const date = (dateEl && dateEl.value) ? String(dateEl.value) : '';
+            const time = (timeEl && timeEl.value) ? String(timeEl.value) : '';
+            tmp.push({ id, date, time });
+          });
+          if (tmp.length) {
+            recipientsUi = tmp;
+            recipientIdsFromUi = tmp.map(x => Number(x.id)).filter(v => Number.isFinite(v) && v > 0);
+          }
+        } catch(_){ }
+      }
+      // If editing an existing recipient event, update it (single payload) instead of creating new ones
+      if (editingId) {
+        const first = Array.isArray(recipientsUi) && recipientsUi.length ? recipientsUi[0] : null;
+        const rid = first && Number(first.id) > 0 ? Number(first.id) : (recipientId || null);
+        const d = (first && first.date) ? String(first.date).trim() : (qs('#evDate')?.value || '');
+        let tstr = (first && first.time) ? String(first.time).trim() : '';
+        const m = tstr.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
+        if (m){ let hh = Number(m[1]); const mm = m[2]; const ap = m[3].toLowerCase(); if (ap==='pm' && hh<12) hh+=12; if (ap==='am' && hh===12) hh=0; tstr = `${String(hh).padStart(2,'0')}:${mm}`; }
+        const startIso = (d && tstr) ? new Date(`${d}T${tstr}`).toISOString() : null;
+        return {
+          id: editingId,
+          title: qs('#evTitle').value.trim(),
+          start: startIso,
+          end: null,
+          recipient_id: rid,
+          donor_id: null,
+          location: qs('#evLocation').value.trim() || null,
+          notes: qs('#evNotes').value.trim() || null,
+          event_type: t,
+          created_for_user_id: (r==='admin') ? null : uid
+        };
+      }
     }
     // Enforce per role
     if (r==='donor') { donorId = uid; recipientId = null; recipientIds = []; }
@@ -1648,12 +1806,10 @@
     if (editBtn){
       editBtn.addEventListener('click', ()=>{
         let targetEvent = null;
-        if (lastViewedEvent && canEditEvent(lastViewedEvent)) {
-          targetEvent = lastViewedEvent;
-        } else {
-          const selected = getSelectedEventData();
-          if (selected && canEditEvent(selected)) targetEvent = normalizeEventData(selected);
-        }
+        // Prefer currently selected event over any previously viewed
+        const selected = getSelectedEventData();
+        if (selected && canEditEvent(selected)) targetEvent = normalizeEventData(selected);
+        else if (lastViewedEvent && canEditEvent(lastViewedEvent)) targetEvent = lastViewedEvent;
         if (!targetEvent){
           calendarToast('Select an event you can edit first', 'warn');
           return;
@@ -1674,6 +1830,8 @@
         const match = cachedCalendarItems.find(item => Number(item.id) === id || Number(item.event_id) === id);
         if (!match) return;
         selectedEventId = id;
+        // Reset any previously viewed event so edits reflect the current selection
+        lastViewedEvent = null;
         updateSelectedListActive();
         updateEditButtonState();
         if (trigger.classList.contains('selected-day-open')){
@@ -1815,6 +1973,9 @@
         lastSelectedDate = info.dateStr;
         highlightSelectedDate(info.dateStr);
         renderDateFromCache(info.dateStr);
+        // Changing the selected day invalidates any prior viewed event
+        lastViewedEvent = null;
+        updateEditButtonState();
       },
       eventClick: (arg)=>{
         const raw = { ...(arg.event.extendedProps || {}),
@@ -1836,6 +1997,8 @@
             updateSelectedListActive();
           }
         }
+        // Clicking a different event should not keep an old lastViewedEvent
+        lastViewedEvent = null;
         updateEditButtonState();
       }
     });
@@ -1845,12 +2008,7 @@
     // New event button
     const newBtn = qs('#newEventBtn');
     if (newBtn){
-      if (!canCreateEvents()) newBtn.style.display = 'none';
-      else newBtn.addEventListener('click', ()=> {
-        if (role()==='recipient' && !recipientEligibleForScheduling()){
-          calendarToast(recipientEligibilityMessage(), 'warn');
-          return;
-        }
+      newBtn.addEventListener('click', ()=> {
         lastViewedEvent = null;
         updateEditButtonState();
         const defaults = { status:'scheduled', event_type: defaultTypeForCurrentRole() };
@@ -1949,6 +2107,8 @@
         const id = Number(qs('#evId').value||0)||0; if (!id) return;
         const evData = normalizeEventData({ id });
         if (!canEditEvent(evData)) { calendarToast('You do not have permission to delete this event', 'warn'); return; }
+        const ok = await confirmModal({ title: 'Delete Event', message: 'Are you sure you want to delete this event? This action cannot be undone.', confirmText: 'Delete', confirmClass: 'btn-danger' });
+        if (!ok) return;
         await deleteEvent(id);
         bootstrap.Modal.getInstance(qs('#eventModal'))?.hide();
         calendarToast('Event deleted', 'success');
