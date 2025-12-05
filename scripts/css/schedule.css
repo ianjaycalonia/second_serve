@@ -62,6 +62,38 @@
 .status-cancelled { background-color: var(--status-cancelled); color: #fff; }
 
 /* Calendar Event Styling */
+.fc .fc-daygrid-day-frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fc .fc-daygrid-day-top {
+  flex: 0 0 auto;
+}
+
+.fc .fc-daygrid-day-events {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 7rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  padding-right: 2px;
+}
+
+.fc .fc-daygrid-day-events::-webkit-scrollbar {
+  width: 6px;
+}
+
+.fc .fc-daygrid-day-events::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.fc .fc-daygrid-day-events::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .fc-event {
   border: none !important;
   border-left: 4px solid transparent !important;
@@ -267,6 +299,20 @@
 .schedule-layout .selected-pane .card,
 .schedule-layout .calendar-pane .card {
   height: 100%;
+}
+
+@media (min-width: 992px) {
+  .schedule-layout .selected-pane .card {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 180px);
+    overflow: hidden;
+  }
+
+  .schedule-layout .selected-pane .card-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
 }
 
 .schedule-resizer {

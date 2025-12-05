@@ -36,11 +36,10 @@ error_log("DB_PASS: " . (defined('DB_PASS') ? '[HIDDEN]' : 'NOT DEFINED'));
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
 
-setCorsHeaders();
 header('Content-Type: application/json');
 
 // CSRF protection for non-GET methods

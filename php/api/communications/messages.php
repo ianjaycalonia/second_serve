@@ -3,11 +3,10 @@ require_once __DIR__ . '/../../includes/config.php';
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
 
-setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];

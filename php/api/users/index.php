@@ -3,10 +3,10 @@ require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/User.php';
 require_once __DIR__ . '/../../core/Auth.php';
 
-// Handle preflight
+// Handle OPTIONS requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
 
 function handleSetStatus(array $payload) {
@@ -18,7 +18,6 @@ function handleSetStatus(array $payload) {
     sendJson(['success' => true, 'message' => 'Status updated']);
 }
 
-setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];

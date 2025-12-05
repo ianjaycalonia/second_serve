@@ -291,6 +291,21 @@
   let pendingRemovalProduct = null;
   let pendingDeactivate = null;
 
+  if (deactivateConfirmBtn)
+    deactivateConfirmBtn.addEventListener("click", () => {
+      if (!pendingDeactivate) return;
+      handleDeactivateConfirmed();
+    });
+  if (assignRemoveModal)
+    assignRemoveModal.addEventListener("hidden.bs.modal", () => {
+      pendingRemovalProduct = null;
+    });
+  if (assignRemoveConfirmBtn)
+    assignRemoveConfirmBtn.addEventListener("click", () => {
+      if (!pendingRemovalProduct) return;
+      handleAssignmentRemoval(pendingRemovalProduct);
+    });
+
   function ensureAssignmentSelect2() {
     if (!window.jQuery) return;
     if (!$assignCategorySelect || !$assignCategorySelect.length) return;
@@ -411,9 +426,6 @@
       await apiSend("DELETE", `/master-items`, { product_name: productName });
       showToast(`Removed incomplete entries for ${productName}`, "success");
       pendingRemovalProduct = null;
-      if (assignRemoveModal && window.bootstrap?.Modal) {
-        window.bootstrap.Modal.getOrCreateInstance(assignRemoveModal).hide();
-      }
       loadMasterItems();
     } catch (err) {
       showToast(String(err?.message || err || "Failed to remove entries"), "danger");

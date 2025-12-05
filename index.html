@@ -203,13 +203,13 @@
 
     <!-- Auth Modal -->
     <div
-      class="modal fade"
+      class="modal fade auth-modal"
       id="authModal"
       tabindex="-1"
       aria-labelledby="authModalLabel"
       aria-hidden="true"
     >
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="authModalLabel">
@@ -358,8 +358,7 @@
                           id="registerOrganization"
                           placeholder="e.g., ABC Corp / Community Org"
                           minlength="3"
-                          maxlength="150"
-                          pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
+                          maxlength="80"
                           required
                         />
                         <div class="invalid-feedback">
@@ -415,7 +414,6 @@
                             placeholder="Barangay"
                             minlength="2"
                             maxlength="150"
-                            pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
                           />
                         </div>
                         <div class="col-12 col-md-6">
@@ -527,8 +525,6 @@
                           id="registerName"
                           minlength="2"
                           maxlength="150"
-                          pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
-                          required
                         />
                         <div class="invalid-feedback">
                           Please provide your full name
@@ -539,8 +535,9 @@
                           >Name of Representative
                           <span class="text-danger">*</span></label
                         >
-                        <div class="row g-2">
+                        <div class="row g-2 register-name-row">
                           <div class="col-12 col-md-4">
+                            <label for="registerFirstName" class="form-label">First name <span class="text-danger">*</span></label>
                             <input
                               type="text"
                               class="form-control"
@@ -548,20 +545,31 @@
                               placeholder="First name"
                               minlength="2"
                               maxlength="80"
-                              pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
                               required
                             />
                           </div>
-                          <div class="col-4 col-md-2">
+                          <div class="col-12 col-md-2">
+                            <label for="registerMiddleInitial" class="form-label">
+                              Middle initial
+                              <span
+                                id="registerMiddleInitialHelp"
+                                class="ms-1 text-muted small text-nowrap"
+                              >
+                                (skip if none)
+                              </span>
+                            </label>
                             <input
                               type="text"
                               class="form-control"
                               id="registerMiddleInitial"
-                              maxlength="2"
-                              placeholder="M.I."
+                              maxlength="1"
+                              pattern="[A-Za-z]?"
+                              title="Enter a single letter or leave blank"
+                              aria-describedby="registerMiddleInitialHelp"
                             />
                           </div>
-                          <div class="col-8 col-md-4">
+                          <div class="col-12 col-md-4">
+                            <label for="registerLastName" class="form-label">Last name <span class="text-danger">*</span></label>
                             <input
                               type="text"
                               class="form-control"
@@ -569,16 +577,16 @@
                               placeholder="Last name"
                               minlength="2"
                               maxlength="80"
-                              pattern="^[A-Za-z0-9][A-Za-z0-9 .,'&amp;-]*$"
                               required
                             />
                           </div>
-                          <div class="col-4 col-md-2">
+                          <div class="col-12 col-md-2">
+                            <label for="registerSuffix" class="form-label">Suffix <span class="text-muted">(optional)</span></label>
                             <input
                               type="text"
                               class="form-control"
                               id="registerSuffix"
-                              placeholder="Suffix"
+                              placeholder="Jr., Sr., III"
                             />
                           </div>
                         </div>

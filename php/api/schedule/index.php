@@ -2,9 +2,11 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/Notification.php';
 
-// CORS + JSON header
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { setCorsHeaders(); exit(0); }
-setCorsHeaders();
+// Handle OPTIONS requests without emitting CORS headers
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];

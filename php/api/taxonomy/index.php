@@ -3,10 +3,9 @@ require_once __DIR__ . '/../../includes/config.php';
 
 // Basic helpers mirroring other APIs
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
-setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -504,6 +503,26 @@ try {
         if (!$row) {
             sendJson(['success'=>false,'error'=>'Item not found'], 404);
         }
+        $unitCost = isset($row['total_cost']) && $row['total_cost'] !== null ? (float)$row['total_cost'] : null;
+        if ($unitCost === null && isset($row['product_name'])) {
+            $fallbackCost = $db->query(
+                'SELECT di2.total_cost
+                 FROM donation_items di2
+                 INNER JOIN donations d2 ON d2.donation_id = di2.donation_id
+                 WHERE di2.product_name = ?
+                   AND di2.total_cost IS NOT NULL
+                   AND di2.total_cost > 0
+                   AND d2.deleted_at IS NULL
+                   AND d2.status IN (\'Picked Up\', \'Completed\')
+                 ORDER BY di2.donation_item_id DESC
+                 LIMIT 1',
+                [$row['product_name']]
+            )->fetch();
+            if ($fallbackCost && $fallbackCost['total_cost'] !== null) {
+                $unitCost = (float)$fallbackCost['total_cost'];
+            }
+        }
+
         $missing = [];
         if ($row['category_id'] === null) { $missing[] = 'Category'; }
         if ($row['unit_id'] === null) { $missing[] = 'Unit'; }
@@ -516,7 +535,7 @@ try {
                 'product_name' => $row['product_name'],
                 'quantity' => (int)$row['quantity'],
                 'total_weight' => $row['total_weight'],
-                'unit_cost' => $row['total_cost'] !== null ? (float)$row['total_cost'] : null,
+                'unit_cost' => $unitCost,
                 'total_cost' => $row['total_cost'] !== null ? (float)$row['total_cost'] : null,
                 'category_id' => $row['category_id'] !== null ? (int)$row['category_id'] : null,
                 'unit_id' => $row['unit_id'] !== null ? (int)$row['unit_id'] : null,
@@ -631,6 +650,9 @@ try {
 
             // Apply unit_cost to items without cost (store per-unit cost as-is)
             if ($unitCost !== null && $unitCost >= 0) {
+                // Always update the edited donation item with the new cost
+                $db->query('UPDATE donation_items SET total_cost = ? WHERE donation_item_id = ?', [$unitCost, $donationItemId]);
+                // Propagate to items without an explicit cost for consistency
                 $db->query('UPDATE donation_items SET total_cost = ? WHERE product_name = ? AND (total_cost IS NULL OR total_cost = 0)', [$unitCost, $productName]);
             }
             

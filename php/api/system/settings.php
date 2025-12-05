@@ -1,7 +1,12 @@
 <?php
 require_once __DIR__ . '/../../includes/config.php';
 
-setCorsHeaders();
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($method === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
 header('Content-Type: application/json');
 
 const SUPPORTED_SETTINGS = [
@@ -29,8 +34,7 @@ const SETTING_ROLE_OVERRIDES = [
     'expiry_lead_time_days' => ['admin', 'donor', 'recipient']
 ];
 
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-if ($method === 'OPTIONS') { exit(0); }
+
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'get';
 $payload = sanitize(getJsonInput());

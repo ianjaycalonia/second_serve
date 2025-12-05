@@ -87,6 +87,8 @@ document.addEventListener('DOMContentLoaded', function(){
     const tracker = document.getElementById('registerStepTracker');
     const trackerTitle = document.getElementById('registerStepTitle');
 
+    const authModal = document.getElementById('authModal');
+    const authTabs = document.getElementById('authTabs');
     const toggleHiddenClass = (el, show) => {
         if (!el) return;
         if (show) {
@@ -95,53 +97,48 @@ document.addEventListener('DOMContentLoaded', function(){
             el.classList.add('d-none');
         }
     };
+    const updateModalWidth = () => {
+        if (!authModal || !authTabs) return;
+        const active = authTabs.querySelector('.nav-link.active');
+        const isRegister = active?.getAttribute('data-bs-target') === '#register-tab-pane';
+        authModal.classList.toggle('register-expanded', !!isRegister);
+    };
+    if (authTabs) {
+        authTabs.addEventListener('shown.bs.tab', updateModalWidth);
+    }
+    updateModalWidth();
     const setStep = (step) => {
-        // Apply horizontal slide animation using the two step cards
+        const makeActive = (el) => {
+            if (!el) return;
+            el.classList.add('active');
+            el.classList.remove('leaving');
+        };
+        const makeInactive = (el) => {
+            if (!el) return;
+            el.classList.remove('active');
+            el.classList.add('leaving');
+            window.setTimeout(() => {
+                if (!el.classList.contains('active')) {
+                    el.classList.remove('leaving');
+                }
+            }, 400);
+        };
+
         if (orgStep && repStep) {
             if (step === 1) {
-                orgStep.style.transform = 'translateX(0%)';
-                repStep.style.transform = 'translateX(100%)';
-                orgStep.style.pointerEvents = 'auto';
-                repStep.style.pointerEvents = 'none';
-                orgStep.style.zIndex = '2';
-                repStep.style.zIndex = '1';
+                makeActive(orgStep);
+                makeInactive(repStep);
             } else {
-                orgStep.style.transform = 'translateX(-100%)';
-                repStep.style.transform = 'translateX(0%)';
-                orgStep.style.pointerEvents = 'none';
-                repStep.style.pointerEvents = 'auto';
-                orgStep.style.zIndex = '1';
-                repStep.style.zIndex = '2';
-            }
-
-            // Ensure the wrapper stays tall enough for the tallest step and center cards vertically
-            if (detailsWrapper) {
-                try {
-                    const h1 = orgStep.scrollHeight || 0;
-                    const h2 = repStep.scrollHeight || 0;
-                    const maxH = Math.max(h1, h2);
-                    if (maxH > 0) {
-                        detailsWrapper.style.minHeight = maxH + 'px';
-                        const offset1 = Math.max((maxH - h1) / 2, 0);
-                        const offset2 = Math.max((maxH - h2) / 2, 0);
-                        orgStep.style.top = offset1 + 'px';
-                        repStep.style.top = offset2 + 'px';
-                    }
-                } catch (_) { /* non-fatal */ }
+                makeInactive(orgStep);
+                makeActive(repStep);
             }
         }
 
-        // Keep wrapper state in sync for potential CSS hooks
         if (detailsWrapper) {
             detailsWrapper.dataset.step = String(step);
-            if (step === 2) {
-                detailsWrapper.classList.add('step-2');
-            } else {
-                detailsWrapper.classList.remove('step-2');
-            }
+            detailsWrapper.classList.toggle('step-2', step === 2);
         }
 
-        // Always keep tracker + buttons in sync with the current step
         if (!tracker || !trackerTitle || !nextBtn || !backBtn) return;
         if (step === 1) {
             tracker.querySelector('.fw-semibold').textContent = 'Step 1 of 2';
@@ -297,10 +294,14 @@ document.addEventListener('DOMContentLoaded', function(){
                 addField('registerBeneficiaryCategory');
             }
             let ok = true;
+            let firstInvalidMessage = '';
             requiredFields.forEach((el) => {
                 if (!el.checkValidity()) {
                     el.reportValidity();
                     el.classList.add('is-invalid');
+                    if (!firstInvalidMessage) {
+                        firstInvalidMessage = el.validationMessage || 'Please correct this field';
+                    }
                     ok = false;
                 } else {
                     el.classList.remove('is-invalid');
@@ -313,7 +314,12 @@ document.addEventListener('DOMContentLoaded', function(){
                 showError('registerOrganization', 'Organization name must start with a letter or number');
                 ok = false;
             }
-            if (!ok) return;
+            if (!ok) {
+                if (firstInvalidMessage) {
+                    showToast(firstInvalidMessage, { title: 'Validation error', variant: 'danger', delay: 6000 });
+                }
+                return;
+            }
             // Ensure hidden address is composed before proceeding
             const brgyVal = (barangayInput?.value||'').trim();
             const cityVal = (citySelect?.value||'').trim();
@@ -416,6 +422,10 @@ function showError(elementId, message) {
     field?.classList.add('is-invalid');
     // Also show a small tooltip on the field
     showFieldTooltip(elementId, message || 'Please correct this field');
+    const toastMsg = message || 'Please correct the highlighted field.';
+    if (toastMsg) {
+        showToast(toastMsg, { title: 'Validation error', variant: 'danger', delay: 6000 });
+    }
 }
 
 // Clear error message

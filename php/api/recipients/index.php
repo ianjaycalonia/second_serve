@@ -4,8 +4,8 @@ require_once __DIR__ . '/../../core/Notification.php';
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
 
 // Helper: compute start of week for a given date and basis
@@ -113,7 +113,6 @@ function rl_ensure_run_id_for_period(Database $db, string $periodKey, int $year,
     return $row2 && isset($row2['run_id']) ? (int)$row2['run_id'] : 0;
 }
 
-setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];

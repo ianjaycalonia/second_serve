@@ -6,10 +6,10 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
-// CORS and preflight
-setCorsHeaders();
-header('Content-Type: application/json');
+// Handle OPTIONS requests (no CORS headers)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+
+header('Content-Type: application/json');
 
 $action = isset($_GET['action']) ? sanitize($_GET['action']) : '';
 $debug  = isset($_GET['debug']) ? (int)$_GET['debug'] : 0;

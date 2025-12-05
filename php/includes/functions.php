@@ -71,27 +71,6 @@ function getJsonInput(): array {
     return is_array($decoded) ? $decoded : [];
 }
 
-function setCorsHeaders() {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    $allowed = defined('APP_ALLOWED_ORIGINS') && is_array(APP_ALLOWED_ORIGINS) ? APP_ALLOWED_ORIGINS : [];
-    $allowedOrigin = null;
-    if ($origin && in_array($origin, $allowed, true)) {
-        $allowedOrigin = $origin;
-    } elseif (!empty($allowed)) {
-        $allowedOrigin = $allowed[0];
-    } elseif (defined('APP_URL')) {
-        $allowedOrigin = APP_URL;
-    }
-
-    if ($allowedOrigin) {
-        header('Access-Control-Allow-Origin: ' . $allowedOrigin);
-        header('Vary: Origin');
-    }
-    header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-XSRF-TOKEN');
-    header('Access-Control-Allow-Credentials: true');
-}
-
 // RBAC helpers
 function currentUserId() {
     return $_SESSION['user_id'] ?? null;

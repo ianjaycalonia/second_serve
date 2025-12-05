@@ -346,7 +346,7 @@
           );
         const missingReceiptLabel = showImportedMsg(gr.items)
           ? "Imported by an admin"
-          : "Receipt not uploaded yet";
+          : "Imported by an admin";
         const canAttemptView = hasReceiptImage;
         const viewBtnHtml = canAttemptView
           ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da} title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
@@ -435,7 +435,7 @@
         const missingReceiptLabel =
           String(r?.source || "").toLowerCase() === "imported"
             ? "Imported by an admin"
-            : "Receipt not uploaded yet";
+            : "Imported by an admin";
         const canAttemptViewSingle = hasReceiptImage;
         const viewBtnHtmlSingle = canAttemptViewSingle
           ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" data-id="${

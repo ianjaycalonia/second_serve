@@ -4,12 +4,10 @@ require_once __DIR__ . '/../../core/Auth.php';
 
 // Handle preflight request
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
 
-// Set CORS headers
-setCorsHeaders();
 header('Content-Type: application/json');
 
 // Get request method and action

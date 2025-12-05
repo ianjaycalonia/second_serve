@@ -38,6 +38,22 @@
     return name.replace(/[<>:"/\\|?*]+/g, "").replace(/\s{2,}/g, " ").trim();
   }
 
+  function getCategoryLabel(row) {
+    if (!row || typeof row !== 'object') return '';
+    return (
+      row['PRODUCT CATEGORY'] ??
+      row['product_category'] ??
+      row.product_category ??
+      row.category ??
+      ''
+    );
+  }
+
+  function isFoodCategory(label) {
+    if (!label) return true;
+    return !/^\s*non-food/i.test(String(label));
+  }
+
   function buildExportFilename(prefix, isoStart, fallback) {
     try {
       if (isoStart) {
@@ -409,9 +425,14 @@
       const rows = Array.isArray(resp?.data?.rows) ? resp.data.rows : [];
       const seenGroups = new Set();
       const seenMovements = new Set();
-      const totals = { quantity: 0, weight: 0, count: 0, groupCount: 0, movementCount: 0 };
+      const totals = { count: 0, groupCount: 0, movementCount: 0 };
 
       for (const row of rows) {
+        const categoryLabel = getCategoryLabel(row);
+        if (!isFoodCategory(categoryLabel)) {
+          continue;
+        }
+
         // Unique pickup grouping (recipient + date)
         const recipientId = row?.RECIPIENT_ID ?? row?.recipient_id ?? row?.recipient_user_id ?? null;
         const dateOut = row?.DATE ?? row?.date_out ?? row?.created_at ?? null;
@@ -423,59 +444,16 @@
         }
         totals.count += 1;
 
-        // Aggregate strictly by movement to avoid double counting with repack expansion
         const movementId = row?.MOVEMENT_ID ?? row?.movement_id ?? row?.Movement_ID ?? null;
-        // Prefer precise movement metadata; fall back to row-level values if missing
-        let weightRaw = row?.MOVEMENT_WEIGHT;
-        if (weightRaw == null) {
-          weightRaw = row?.["TOTAL WEIGHT (KG)"] ?? row?.TOTAL_WEIGHT_KG ?? row?.total_weight ?? row?.total_weight_kg ?? null;
-        }
-        let qtyRaw = row?.MOVEMENT_QTY;
-        if (qtyRaw == null) {
-          qtyRaw = row?.QUANTITY ?? row?.quantity ?? null;
-        }
-
-        const parseNum = (v) => (typeof v === 'number' ? v : v != null ? parseFloat(v) : NaN);
-        const weightNum = parseNum(weightRaw);
-        const qtyNum = parseNum(qtyRaw);
-
-        if (movementId != null) {
-          if (!seenMovements.has(String(movementId))) {
-            seenMovements.add(String(movementId));
-            totals.movementCount += 1;
-            if (Number.isFinite(weightNum)) totals.weight += weightNum;
-            if (Number.isFinite(qtyNum)) totals.quantity += qtyNum;
-          }
-        } else {
-          // Legacy fallback: no movement id; add row-level values directly
-          if (Number.isFinite(weightNum)) totals.weight += weightNum;
-          if (Number.isFinite(qtyNum)) totals.quantity += qtyNum;
+        if (movementId != null && !seenMovements.has(String(movementId))) {
+          seenMovements.add(String(movementId));
+          totals.movementCount += 1;
         }
       }
 
       const totalPickupsEl = document.getElementById("totalPickups");
       if (totalPickupsEl) {
         totalPickupsEl.textContent = formatNumber(totals.groupCount || totals.count);
-      }
-
-      const totalWeightEl = document.getElementById("totalWeightKg");
-      if (totalWeightEl) {
-        totalWeightEl.textContent = formatNumber(totals.weight, {
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 2,
-        });
-        try {
-          const small = totalWeightEl.parentElement?.querySelector('small');
-          if (small) small.textContent = timeframeLabel(timeframe || currentTimeframe);
-        } catch(_) {}
-      }
-
-      const avgValueEl = document.getElementById("avgDonationValue");
-      if (avgValueEl) {
-        // Average weight per Product Out movement
-        const divisor = totals.movementCount > 0 ? totals.movementCount : (seenGroups.size || totals.count);
-        const avg = divisor > 0 ? totals.weight / divisor : 0;
-        avgValueEl.textContent = formatNumber(avg, { maximumFractionDigits: 2 });
       }
     } catch (err) {
       console.error("Failed to load pickup totals", err);
@@ -515,8 +493,16 @@
 
   async function loadAnalytics(timeframe) {
     try {
+      const range = getTimeframeRange(timeframe || currentTimeframe);
+      const startIso = formatIsoDate(range.start);
+      const endIso = formatIsoDate(range.end);
+      const summaryParams = new URLSearchParams({
+        start: startIso,
+        end: endIso,
+        timeframe: (timeframe || currentTimeframe || "daily").toLowerCase(),
+      });
       const summaryPromise = fetchJson(
-        `${API_BASE_URL}/dashboard/summary.php`
+        `${API_BASE_URL}/dashboard/summary.php?${summaryParams.toString()}`
       ).catch(() => ({ data: { totals: {} } }));
       const donationsPromise = fetchJson(
         `${API_BASE_URL}/donations/index.php/list?group=batch`
@@ -535,14 +521,14 @@
 
       donationRecords = items.map(normalizeDonation);
       filteredRecords = filterRecordsByTimeframe(donationRecords, timeframe);
-      updateTiles(totals, filteredRecords);
+      updateTiles(totals, filteredRecords, timeframe || currentTimeframe);
     } catch (err) {
       console.error("Failed to load analytics", err);
       filteredRecords = [];
     }
   }
 
-  function updateTiles(totals, records) {
+  function updateTiles(totals, records, timeframe) {
     const totalDonationsEl = document.getElementById("totalDonations");
 
     const totalDonations = records.length;
@@ -551,6 +537,36 @@
       totalDonationsEl.textContent = formatNumber(totalDonations);
     }
 
+    const totalWeightEl = document.getElementById("totalWeightKg");
+    if (totalWeightEl) {
+      const totalWeight = Number(totals?.total_weight_kg ?? totals?.weight ?? 0);
+      totalWeightEl.textContent = formatNumber(totalWeight, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+      const small = totalWeightEl.parentElement?.querySelector('small');
+      if (small) {
+        small.textContent = `Food items • ${timeframeLabel(timeframe || currentTimeframe)}`;
+      }
+    }
+
+    const avgValueEl = document.getElementById("avgDonationValue");
+    if (avgValueEl) {
+      const avgValue = Number(totals?.avg_donation_value ?? 0);
+      const mode = totals?.avg_donation_value_mode || "per_item";
+      avgValueEl.textContent = formatNumber(avgValue, { maximumFractionDigits: 2 });
+      const small = avgValueEl.parentElement?.querySelector('small');
+      if (small) {
+        const tfLabel = timeframeLabel(timeframe || currentTimeframe);
+        if (mode === "daily_total") {
+          small.textContent = `Total donation value • ${tfLabel}`;
+        } else if (mode === "average_daily") {
+          small.textContent = `Average daily donation value • ${tfLabel}`;
+        } else {
+          small.textContent = `Average per item • ${tfLabel}`;
+        }
+      }
+    }
   }
 
   function ensureLineChart() {

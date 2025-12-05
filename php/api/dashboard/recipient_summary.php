@@ -5,12 +5,10 @@
 require_once __DIR__ . '/../../includes/config.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
     http_response_code(204);
     exit;
 }
 
-setCorsHeaders();
 header('Content-Type: application/json');
 
 try {

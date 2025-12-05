@@ -5,10 +5,10 @@ require_once __DIR__ . '/../../core/Inventory.php';
 require_once __DIR__ . '/../../core/Notification.php';
 require_once __DIR__ . '/../../core/DonationNotifier.php';
 
-// Handle CORS / preflight
+// Handle OPTIONS (no CORS headers)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
 
 // Generate a UUID v4 string (xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx)
@@ -28,7 +28,6 @@ function generateUuidV4(): string {
         substr($hex, 20)
     );
 }
-setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];

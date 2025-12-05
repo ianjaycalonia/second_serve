@@ -5,12 +5,11 @@ require_once __DIR__ . '/../../core/Inventory.php';
 require_once __DIR__ . '/../../core/Notification.php';
 require_once __DIR__ . '/../../core/DonationNotifier.php';
 
-// CORS / preflight
+// Handle OPTIONS requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
-setCorsHeaders();
 header('Content-Type: application/json');
 
 if (in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST','PUT','PATCH','DELETE'], true)) {

@@ -2,13 +2,12 @@
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../core/SchedulingEngine.php';
 
-// Handle preflight
+// Handle OPTIONS requests with empty 204 response
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    setCorsHeaders();
-    exit(0);
+    http_response_code(204);
+    exit;
 }
 
-setCorsHeaders();
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
