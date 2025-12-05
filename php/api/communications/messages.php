@@ -26,9 +26,6 @@ if (in_array(strtoupper($method), ['POST','PUT','PATCH','DELETE'], true)) {
 
 function db() { return Database::getInstance(); }
 
-// Ensure session is available for tracking last-read markers
-if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
-
 // Store and read last-read message id per other user (conversation)
 function getLastReadId($otherUserId) {
     if (!isset($_SESSION['messages_last_read']) || !is_array($_SESSION['messages_last_read'])) {

@@ -39,3 +39,31 @@
 .pickup-image-viewer-info {
   word-break: break-all;
 }
+
+/* Mobile layout tweaks for donations toolbar (search + filter + sort) */
+@media (max-width: 576px) {
+  .donations-toolbar-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .donations-toolbar-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.5rem;
+  }
+
+  .donations-toolbar-controls .donations-page-size-wrap {
+    min-width: 0;
+  }
+
+  .donations-toolbar-controls .search-box {
+    flex: 1 1 100%;
+  }
+
+  .donations-toolbar-controls .search-box .form-control {
+    width: 100%;
+  }
+}

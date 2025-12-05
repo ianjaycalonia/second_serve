@@ -37,7 +37,7 @@ function handleSuggest(array $payload): void {
     $roundSize = isset($payload['round_size']) ? (int)$payload['round_size'] : 5;
     $poolType = isset($payload['pool_type']) && $payload['pool_type'] === 'specialty' ? 'specialty' : 'general';
     $specialtyKey = isset($payload['specialty_key']) && is_string($payload['specialty_key']) ? trim($payload['specialty_key']) : null;
-    $adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+    $adminId = (int)(currentUserId() ?? 0) ?: null;
     $svc = new Distribution();
     $result = $svc->suggest($type, $key, $roundSize, $poolType, $specialtyKey, $adminId);
     sendJson(['success' => true, 'data' => $result]);

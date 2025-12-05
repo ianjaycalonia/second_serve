@@ -137,6 +137,8 @@ function handleRegister($data) {
 function handleLogout() {
     $auth = new Auth();
     $auth->logout();
+    $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    setcookie('XSRF-TOKEN', '', time() - 3600, '/', '', $secure, false);
     sendJson(['success' => true, 'message' => 'Logged out successfully']);
 }
 

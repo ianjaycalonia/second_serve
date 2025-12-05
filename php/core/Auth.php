@@ -372,9 +372,9 @@ class Auth {
             $params = session_get_cookie_params();
             setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
         }
-        session_destroy();
-        session_start();
-        session_regenerate_id(true);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
     }
 
     public function changePassword(int $userId, string $currentPassword, string $newPassword, string $confirmPassword): void {

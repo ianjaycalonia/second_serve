@@ -1,5 +1,8 @@
 <?php
 // Application configuration (environment overrides for hosted environments)
+ini_set('date.timezone', 'Asia/Manila');
+date_default_timezone_set('Asia/Manila');
+
 define('APP_NAME', getenv('APP_NAME') ?: 'Second Serve');
 $hostHeader = $_SERVER['HTTP_HOST'] ?? '';
 $hostName = null;
@@ -38,10 +41,24 @@ if (!defined('APP_COOKIE_SECURE')) {
 }
 
 // Database configuration (override via environment for hosting providers)
-define('DB_HOST', getenv('DB_HOST') ?: 'mysql1001.site4now.net');
-define('DB_NAME', getenv('DB_NAME') ?: 'db_ac1941_sshare');
-define('DB_USER', getenv('DB_USER') ?: 'ac1941_sshare');
-define('DB_PASS', getenv('DB_PASS') ?: 'NewSmart4sp!');
+// Default to hosting DB on SmarterASP, but use local MySQL when running on localhost.
+$defaultDbHost = 'mysql1001.site4now.net';
+$defaultDbName = 'db_ac1941_sshare';
+$defaultDbUser = 'ac1941_sshare';
+$defaultDbPass = 'NewSmart4sp!';
+
+// On local XAMPP (localhost / 127.0.0.1), prefer the local database by default.
+if (in_array($hostName, ['localhost', '127.0.0.1'], true)) {
+    $defaultDbHost = '127.0.0.1';
+    $defaultDbName = 'simply_share';
+    $defaultDbUser = 'root';
+    $defaultDbPass = '';
+}
+
+define('DB_HOST', getenv('DB_HOST') ?: $defaultDbHost);
+define('DB_NAME', getenv('DB_NAME') ?: $defaultDbName);
+define('DB_USER', getenv('DB_USER') ?: $defaultDbUser);
+define('DB_PASS', getenv('DB_PASS') ?: $defaultDbPass);
 
 // Session configuration
 define('SESSION_LIFETIME', 86400); // 24 hours
@@ -50,6 +67,16 @@ ini_set('session.cookie_lifetime', SESSION_LIFETIME);
 ini_set('session.cookie_httponly', 1);
 ini_set('session.use_strict_mode', 1);
 ini_set('session.cookie_secure', $isHttps ? 1 : 0);
+
+// Ensure a stable, writable session storage directory (important on shared hosting)
+$sessionPath = getenv('SESSION_SAVE_PATH');
+if (!$sessionPath) {
+    $sessionPath = __DIR__ . '/../sessions';
+}
+if (!is_dir($sessionPath)) {
+    @mkdir($sessionPath, 0777, true);
+}
+ini_set('session.save_path', $sessionPath);
 
 // Allow configuring approved origins for CORS via environment or fallback to same-origin
 if (!defined('APP_ALLOWED_ORIGINS')) {
@@ -70,6 +97,10 @@ session_set_cookie_params([
 
 session_start();
 
+if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['user_id'] ?? null) && empty($_SESSION['csrf_token'] ?? null)) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // Error reporting (log errors, do not display in HTTP responses)
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
@@ -78,9 +109,6 @@ define('APP_DEBUG', filter_var(getenv('APP_DEBUG') ?: '0', FILTER_VALIDATE_BOOLE
 ini_set('html_errors', 0);
 // Enable output buffering so API helpers can clear any warnings/notices before emitting JSON
 if (function_exists('ob_get_level') && @ob_get_level() === 0) { @ob_start(); }
-
-// Set default timezone
-date_default_timezone_set('Asia/Manila');
 
 // Include required files
 require_once __DIR__ . '/../core/Database.php';
