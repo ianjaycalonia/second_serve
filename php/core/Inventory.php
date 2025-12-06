@@ -519,9 +519,9 @@ class Inventory
                             if ($suffix > 99) { $email = $local . uniqid() . '@simplyshare.org'; break; }
                         }
                     }
-                    // Generate a random password hash
-                    $raw = bin2hex(random_bytes(8));
-                    $hash = password_hash($raw, PASSWORD_BCRYPT);
+                    // Use default donor password for parity with admin-created donors
+                    $plain = 'donor123';
+                    $hash = password_hash($plain, PASSWORD_DEFAULT);
                     // Create user as approved donor
                     $this->db->query(
                         "INSERT INTO users (name, email, password_hash, role, status, created_at, last_login) VALUES (?, ?, ?, 'donor', 'approved', NOW(), NOW())",
@@ -529,6 +529,12 @@ class Inventory
                     );
                     $newUid = (int)$this->db->lastInsertId();
                     $donorId = $newUid;
+                    // Require password change on first login when supported
+                    try {
+                        $this->db->query('UPDATE users SET must_change_password = 1 WHERE user_id = ?', [$newUid]);
+                    } catch (Exception $flagEx) {
+                        // Column may be absent; ignore
+                    }
                     try {
                         // Create donor profile with organization_name and optional donor_category reference
                         $this->db->query(

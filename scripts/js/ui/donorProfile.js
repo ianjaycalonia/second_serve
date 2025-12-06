@@ -28,10 +28,10 @@
       toastEl.setAttribute("aria-live", "assertive");
       toastEl.setAttribute("aria-atomic", "true");
       toastEl.innerHTML = `
-              <div class="d-flex">
-                <div class="toast-body">${String(message || "")}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-              </div>`;
+        <div class="d-flex">
+          <div class="toast-body">${String(message || "")}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>`;
       container.appendChild(toastEl);
       const t = bootstrap.Toast.getOrCreateInstance(toastEl, {
         delay: 3000,
@@ -40,6 +40,60 @@
     } catch (_) {
       /* ignore */
     }
+  }
+
+  function confirmAction({
+    title,
+    message,
+    confirmLabel = "Confirm",
+    confirmVariant = "btn-danger",
+    onConfirm,
+  }) {
+    let modalEl = document.getElementById("donorDangerModal");
+    if (!modalEl) {
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = `
+        <div class="modal fade" id="donorDangerModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="donorDangerTitle"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body" id="donorDangerBody"></div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn" id="donorDangerConfirm"></button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(wrapper.firstElementChild);
+      modalEl = document.getElementById("donorDangerModal");
+    }
+    const titleEl = modalEl.querySelector("#donorDangerTitle");
+    const bodyEl = modalEl.querySelector("#donorDangerBody");
+    const confirmBtn = modalEl.querySelector("#donorDangerConfirm");
+    if (titleEl) titleEl.textContent = title || "Confirm Action";
+    if (bodyEl) bodyEl.textContent = message || "This action cannot be undone.";
+    if (confirmBtn) {
+      confirmBtn.className = `btn ${confirmVariant}`;
+      confirmBtn.textContent = confirmLabel;
+      confirmBtn.onclick = async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = "Processing...";
+        try {
+          await onConfirm();
+          const inst = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+          inst.hide();
+        } finally {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = confirmLabel;
+        }
+      };
+    }
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
   }
 
   async function loadProfile() {
@@ -51,6 +105,10 @@
       const u = res && res.data && res.data.user ? res.data.user : null;
       if (!u) return;
       setVal("donorName", u.name);
+      setVal(
+        "donorPosition",
+        u.position_designation || u.position || u.designation || u.title
+      );
       setVal("donorEmail", u.email);
       setVal("donorPhone", u.contact_number);
       setVal("donorOrg", u.organization_name);
@@ -65,8 +123,11 @@
       btn.textContent = "Saving...";
     }
     try {
+      const nameVal = getVal("donorName") || null;
       const payload = {
-        name: getVal("donorName") || null,
+        name: nameVal,
+        contact_person: nameVal,
+        position_designation: getVal("donorPosition") || null,
         email: getVal("donorEmail") || null,
         contact_number: getVal("donorPhone") || null,
         organization_name: getVal("donorOrg") || null,
@@ -85,6 +146,10 @@
         const u = s ? JSON.parse(s) : null;
         if (u) {
           if (payload.name) u.name = payload.name;
+          if (payload.contact_person)
+            u.contact_person = payload.contact_person;
+          if (payload.position_designation)
+            u.position_designation = payload.position_designation;
           if (payload.email) u.email = payload.email;
           if (payload.contact_number)
             u.contact_number = payload.contact_number;
@@ -249,6 +314,29 @@
     } catch (_) {}
   }
 
+  async function performSelfAction(action) {
+    const res = await fetchJson(
+      `${API_BASE_URL}/users/index.php?action=${action}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+    if (!res?.success) {
+      throw new Error(res?.error || "Request failed");
+    }
+    try {
+      sessionStorage.removeItem("user");
+    } catch (_) {}
+    try {
+      localStorage.removeItem("user");
+    } catch (_) {}
+    showToast(res.message || "Action completed", "success");
+    setTimeout(() => {
+      window.location.href = "index.html";
+    }, 800);
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     loadProfile();
     loadActivity();
@@ -267,6 +355,24 @@
       upBtn.addEventListener("click", function (e) {
         e.preventDefault();
         updatePassword();
+      });
+    }
+
+    const saveSecondary = byId("saveProfileBtnSecondary");
+    if (saveSecondary && !saveSecondary.dataset.bound) {
+      saveSecondary.dataset.bound = "1";
+      saveSecondary.addEventListener("click", function (e) {
+        e.preventDefault();
+        saveProfile();
+      });
+    }
+
+    const resetBtn = byId("resetProfileBtn");
+    if (resetBtn && !resetBtn.dataset.bound) {
+      resetBtn.dataset.bound = "1";
+      resetBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        loadProfile();
       });
     }
   });

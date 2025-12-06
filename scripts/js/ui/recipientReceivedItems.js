@@ -581,15 +581,11 @@
               currentIds.forEach((id) => seenAllocationIds.add(id));
               // Persist seen ids so reloads don't re-show the banner
               saveSeenAllocationIds(seenAllocationIds);
-              // Show a transient message (only for newly-detected allocations)
-              showTemporaryBanner(
-                banner,
-                `${newIds.length} new allocation${
-                  newIds.length === 1 ? "" : "s"
-                } detected.`,
-                "alert alert-success py-2",
-                4000
-              );
+              // Banner intentionally suppressed per latest UX request; keep banner hidden
+              if (banner) {
+                banner.style.display = "none";
+                banner.textContent = "";
+              }
             }
           } else {
             // No items: hide banner to avoid empty visible alert and clear seen ids

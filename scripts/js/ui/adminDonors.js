@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // In-memory datasets and derived index
   let donorsData = [];
   let donationsData = [];
+  let donorCategoryMap = new Map();
   let currentEditDonorId = null;
   let confirmActionCallback = null;
 
@@ -67,7 +68,48 @@ document.addEventListener("DOMContentLoaded", () => {
     return str ? escapeHtml(str) : "&mdash;";
   }
 
+  function loadDonorCategoryMap() {
+    return fetch(`${API_BASE_URL}/lookups/index.php/donor-categories?limit=200&active=1`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (!data?.success || !Array.isArray(data?.items)) {
+          return;
+        }
+        donorCategoryMap = new Map(
+          data.items.map((item) => [Number(item.id), String(item.name)])
+        );
+      })
+      .catch(() => {
+        // Leave map empty on failure; fallback logic will handle names from donorsData
+      });
+  }
+
+  function getDonorCategoryName(donor) {
+    if (!donor) return "—";
+    const id = donor.donor_category_id || donor.donor_category;
+    if (id && donorCategoryMap.has(Number(id))) {
+      return donorCategoryMap.get(Number(id));
+    }
+    if (donor.donor_category && typeof donor.donor_category === "string") {
+      return donor.donor_category;
+    }
+    if (id) {
+      return `Category ${id}`;
+    }
+    return "—";
+  }
+
   function showDonorDetails(donor) {
+    const categoryName = getDonorCategoryName(donor);
     const details = document.getElementById("viewDonorDetails");
     if (details) {
       const rows = [
@@ -76,7 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ["Email", donor.email],
         ["Contact Number", donor.contact_number],
         ["Address", donor.address],
-        ["Category", donor.donor_category || donor.donor_category_id],
+        ["Category", categoryName],
         ["Status", formatUserStatus(donor.status)],
         ["Notes", donor.notes],
       ];
@@ -130,25 +172,44 @@ document.addEventListener("DOMContentLoaded", () => {
     }">${text}</span>`;
   }
 
+  function donationKey(donation) {
+    if (!donation || typeof donation !== "object") return null;
+    if (donation.batch_id) return `batch:${String(donation.batch_id)}`;
+    if (donation.donation_id) return `single:${String(donation.donation_id)}`;
+    if (donation.id) return `single:${String(donation.id)}`;
+    return null;
+  }
+
+  function buildDonorAggregates(donations) {
+    const map = new Map();
+    donations.forEach((d) => {
+      const donorId = d.donor_id;
+      if (!donorId) return;
+      const entry = map.get(donorId) || {
+        completed: new Set(),
+        last: null,
+        lastStatus: null,
+      };
+      const status = (d.status || "").trim();
+      const createdAt = d.created_at ? new Date(d.created_at) : null;
+      if (createdAt && (!entry.last || createdAt > entry.last)) {
+        entry.last = createdAt;
+        entry.lastStatus = status || null;
+      }
+      if (status === "Completed") {
+        const key = donationKey(d);
+        if (key) entry.completed.add(key);
+      }
+      map.set(donorId, entry);
+    });
+    return map;
+  }
+
   function renderDonors(donors, donations) {
     const tbody = document.querySelector("main .table tbody");
     if (!tbody) return;
     // Aggregate donations per donor_id for metrics and last activity/status
-    const byDonor = new Map();
-    donations.forEach((d) => {
-      const id = d.donor_id;
-      if (!id) return;
-      const cur = byDonor.get(id) || { batches: new Set(), last: null, lastStatus: null };
-      const ts = d.created_at ? new Date(d.created_at) : null;
-      if (d.batch_id && (d.status || "") === "Completed") {
-        cur.batches.add(String(d.batch_id));
-      }
-      if (ts && (!cur.last || ts > cur.last)) {
-        cur.last = ts;
-        cur.lastStatus = d.status || null;
-      }
-      byDonor.set(id, cur);
-    });
+    const byDonor = buildDonorAggregates(donations);
 
     const rows = donors.map((u) => {
       const name =
@@ -157,8 +218,13 @@ document.addEventListener("DOMContentLoaded", () => {
           : (u.name || "").trim();
       const contact = (u.name || "").trim() || "—";
       const location = (u.address || "").trim() || "—";
-      const agg = byDonor.get(u.user_id) || { batches: new Set(), last: null, lastStatus: null };
-      const total = agg.batches.size; // total completed batches
+      const category = escapeHtml(getDonorCategoryName(u));
+      const agg = byDonor.get(u.user_id) || {
+        completed: new Set(),
+        last: null,
+        lastStatus: null,
+      };
+      const total = agg.completed.size; // total completed donations (batch or single)
       const last = agg.last ? agg.last.toLocaleDateString() : "—";
       const statusLower = String(u.status || '').toLowerCase();
       const status =
@@ -190,6 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <td>${escapeHtml(name)}</td>
           <td>${escapeHtml(contact)}</td>
           <td>${escapeHtml(location)}</td>
+          <td>${category}</td>
           <td>${total}</td>
           <td>${last}</td>
           <td>${status}</td>
@@ -268,22 +335,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const nameOrder = nameSel ? nameSel.value : 'None';
 
     // Build aggregates map once
-    const byDonor = new Map();
-    donationsData.forEach((d) => {
-      const id = d.donor_id;
-      if (!id) return;
-      const cur = byDonor.get(id) || { batches: new Set(), last: null, lastStatus: null };
-      const ts = d.created_at ? new Date(d.created_at) : null;
-      if (d.batch_id && (d.status || '') === 'Completed') cur.batches.add(String(d.batch_id));
-      if (ts && (!cur.last || ts > cur.last)) { cur.last = ts; cur.lastStatus = d.status || null; }
-      byDonor.set(id, cur);
-    });
+    const byDonor = buildDonorAggregates(donationsData);
 
     // Filter donors
     let list = donorsData.filter((u) => {
       const name = (u.organization_name || u.name || '').toLowerCase();
       if (q && !name.includes(q)) return false;
-      const agg = byDonor.get(u.user_id) || { batches: new Set(), last: null, lastStatus: null };
+      const agg = byDonor.get(u.user_id) || {
+        completed: new Set(),
+        last: null,
+        lastStatus: null,
+      };
       // Date range on last donation date
       if (fromStr) {
         const from = new Date(fromStr + 'T00:00:00');
@@ -298,7 +360,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (String(u.address || '').trim() !== location) return false;
       }
       // Donation activity by total completed batches
-      const total = agg.batches.size;
+      const total = agg.completed.size;
       if (activity === 'Low' && !(total >= 1 && total < 3)) return false;
       if (activity === 'Medium' && !(total >= 3 && total < 10)) return false;
       if (activity === 'High' && !(total >= 10)) return false;
@@ -330,8 +392,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (dateOrder && dateOrder !== 'None') {
       list.sort((a,b)=>{
-        const aa = donationsData.filter(d=>d.donor_id===a.user_id).reduce((m,d)=>{const t=d.created_at?new Date(d.created_at):null;return t && (!m||t>m)?t:m;}, null);
-        const bb = donationsData.filter(d=>d.donor_id===b.user_id).reduce((m,d)=>{const t=d.created_at?new Date(d.created_at):null;return t && (!m||t>m)?t:m;}, null);
+        const aggA = byDonor.get(a.user_id) || {
+          completed: new Set(),
+          last: null,
+          lastStatus: null,
+        };
+        const aggB = byDonor.get(b.user_id) || {
+          completed: new Set(),
+          last: null,
+          lastStatus: null,
+        };
+        const aa = aggA.last;
+        const bb = aggB.last;
         const av = aa ? aa.getTime() : 0;
         const bv = bb ? bb.getTime() : 0;
         return (dateOrder === 'Newest First') ? (bv - av) : (av - bv);
@@ -339,8 +411,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (qtyOrder && qtyOrder !== 'None') {
       list.sort((a,b)=>{
-        const ac = (donationsData.filter(d=>d.donor_id===a.user_id && d.batch_id && (d.status||'')==='Completed').reduce((set,d)=>set.add(String(d.batch_id)), new Set()).size);
-        const bc = (donationsData.filter(d=>d.donor_id===b.user_id && d.batch_id && (d.status||'')==='Completed').reduce((set,d)=>set.add(String(d.batch_id)), new Set()).size);
+        const aggA = byDonor.get(a.user_id) || {
+          completed: new Set(),
+          last: null,
+          lastStatus: null,
+        };
+        const aggB = byDonor.get(b.user_id) || {
+          completed: new Set(),
+          last: null,
+          lastStatus: null,
+        };
+        const ac = aggA.completed.size;
+        const bc = aggB.completed.size;
         return (qtyOrder === 'High to Low') ? (bc - ac) : (ac - bc);
       });
     }
@@ -410,9 +492,13 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear placeholder rows while loading
       const tbody = document.querySelector("main .table tbody");
       if (tbody)
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-3">Loading donors...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-3">Loading donors...</td></tr>`;
 
-      const [donors, donations] = await Promise.all([ fetchDonors(), fetchDonations() ]);
+      const [categories, donors, donations] = await Promise.all([
+        loadDonorCategoryMap(),
+        fetchDonors(),
+        fetchDonations(),
+      ]);
       donorsData = donors; donationsData = donations;
       populateFilters();
       bindUI();
@@ -599,7 +685,7 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Failed to load donors:", err);
       const tbody = document.querySelector("main .table tbody");
       if (tbody)
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Failed to load donors (${escapeHtml(
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Failed to load donors (${escapeHtml(
           err.message
         )})</td></tr>`;
     }
@@ -650,7 +736,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (categorySel && window.$ && $.fn.select2) {
       const val = donor.donor_category_id || null;
       if (val) {
-        const option = new Option(donor.donor_category || `Category ${val}`, val, true, true);
+        const option = new Option(getDonorCategoryName(donor), val, true, true);
         $(categorySel).html(option).trigger('change');
       } else {
         $(categorySel).val(null).trigger('change');

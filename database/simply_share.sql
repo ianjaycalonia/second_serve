@@ -356,7 +356,6 @@ INSERT IGNORE INTO `units` (`code`, `label`) VALUES
   ('bottle', 'bottle'),
   ('can', 'can'),
   ('pack', 'pack'),
-  ('packs', 'packs'),
   ('box', 'box'),
   ('piece', 'piece'),
   ('kg', 'kilogram'),

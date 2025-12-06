@@ -169,161 +169,207 @@
     </aside>
 
     <main>
-      <div class="profile-tab">
-        <div aria-label="breadcrumb">
-          <ol class="breadcrumb">
-            <li class="breadcrumb-item">
-              <a href="donordashboard.html">Dashboard</a>
-            </li>
-            <li class="breadcrumb-item active" aria-current="page">Profile</li>
-          </ol>
+      <div aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+          <li class="breadcrumb-item">
+            <a href="donordashboard.html">Dashboard</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">Profile</li>
+        </ol>
+      </div>
+
+      <div
+        class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-2"
+      >
+        <div>
+          <h5 class="mb-0">Donor Profile</h5>
+          <p class="text-muted small mb-0">
+            Keep your organization contact details up to date.
+          </p>
+        </div>
+        <div class="text-md-end">
+          <button id="saveProfileBtn" class="btn btn-primary btn-sm">
+            Save Changes
+          </button>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-12">
+          <div class="card card-accent h-100">
+            <div class="card-header border-0 pb-0">
+              <h6 class="mb-1">Organization Information</h6>
+              <p class="text-muted small mb-0">
+                Share how we can reach you and where donations are delivered.
+              </p>
+            </div>
+            <div class="card-body">
+              <form class="row g-3" id="profileInfoForm">
+                <div class="col-12 col-md-6">
+                  <label for="donorName" class="form-label"
+                    >Contact Person</label
+                  >
+                  <input
+                    type="text"
+                    id="donorName"
+                    class="form-control form-control-sm"
+                    placeholder="Your name"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="donorPosition" class="form-label"
+                    >Position / Designation</label
+                  >
+                  <input
+                    type="text"
+                    id="donorPosition"
+                    class="form-control form-control-sm"
+                    placeholder="e.g. Program Manager"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="donorEmail" class="form-label">Email</label>
+                  <input
+                    type="email"
+                    id="donorEmail"
+                    class="form-control form-control-sm"
+                    placeholder="name@organization.com"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="donorPhone" class="form-label">Phone</label>
+                  <input
+                    type="tel"
+                    id="donorPhone"
+                    class="form-control form-control-sm"
+                    placeholder="(000) 000-0000"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="donorOrg" class="form-label">Organization</label>
+                  <input
+                    type="text"
+                    id="donorOrg"
+                    class="form-control form-control-sm"
+                    placeholder="Organization name"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="donorAddress" class="form-label">Address</label>
+                  <input
+                    type="text"
+                    id="donorAddress"
+                    class="form-control form-control-sm"
+                    placeholder="Street, city, province"
+                  />
+                </div>
+                <div class="col-12">
+                  <div class="d-flex justify-content-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary btn-sm"
+                      id="resetProfileBtn"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                      id="saveProfileBtnSecondary"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
 
-        <div class="profile-elements">
-          <h4>Donor Profile</h4>
-          <hr />
-          <div class="row g-4">
-            <div class="col-6">
-              <h5>Personal Information</h5>
-              <div class="row g-3 align-items-center">
-                <div class="col-6 profile-info">
-                  <div>
-                    <label for="donorName" class="form-label">Name</label>
-                    <input
-                      type="text"
-                      id="donorName"
-                      class="form-control form-control-sm"
-                    />
-                  </div>
-                  <div>
-                    <label for="donorEmail" class="form-label">Email</label>
-                    <input
-                      type="email"
-                      id="donorEmail"
-                      class="form-control form-control-sm"
-                    />
-                  </div>
-                  <div>
-                    <label for="donorPhone" class="form-label">Phone</label>
-                    <input
-                      type="tel"
-                      id="donorPhone"
-                      class="form-control form-control-sm"
-                    />
-                  </div>
-                  <div>
-                    <label for="donorOrg" class="form-label"
-                      >Organization</label
-                    >
-                    <input
-                      type="text"
-                      id="donorOrg"
-                      class="form-control form-control-sm"
-                    />
-                  </div>
-                  <div>
-                    <label for="donorAddress" class="form-label">Address</label>
-                    <input
-                      type="text"
-                      id="donorAddress"
-                      class="form-control form-control-sm"
-                    />
-                  </div>
-                </div>
-                <div class="col-6 profile-photo">
-                  <img
-                    src="images/uploads/food_safety/food_safety_20251007_194916_30d43576.jpg"
-                    alt="Profile Photo"
-                  />
-                  <div class="d-flex align-items-center gap-2">
-                    <button class="btn btn-sm btn-primary">Change</button>
-                    <button class="btn btn-sm btn-danger">Remove</button>
-                  </div>
-                </div>
-              </div>
+        <div class="col-12 col-xl-6">
+          <div class="card card-accent h-100">
+            <div class="card-header border-0 pb-0">
+              <h6 class="mb-1">Change Password</h6>
+              <p class="text-muted small mb-0">
+                Set a strong password to keep your donor account secure.
+              </p>
             </div>
-            <div class="col-6">
-              <div class="profile-security">
-                <h5>Change Password</h5>
-                <div class="d-flex flex-column gap-2">
-                  <div>
-                    <label for="currentPassword" class="form-label"
-                      >Current Password</label
-                    >
-                    <input
-                      type="password"
-                      id="currentPassword"
-                      class="form-control form-control-sm"
-                      placeholder="Enter current password"
-                    />
-                  </div>
-                  <div>
-                    <label for="newPassword" class="form-label"
-                      >New Password</label
-                    >
-                    <input
-                      type="password"
-                      id="newPassword"
-                      class="form-control form-control-sm"
-                      placeholder="Enter new password"
-                    />
-                  </div>
-                  <div>
-                    <label for="confirmPassword" class="form-label"
-                      >Confirm New Password</label
-                    >
-                    <input
-                      type="password"
-                      id="confirmPassword"
-                      class="form-control form-control-sm"
-                      placeholder="Confirm new password"
-                    />
-                  </div>
-                  <div>
-                    <div class="form-check">
-                      <input
-                        class="form-check-input"
-                        type="checkbox"
-                        id="showPassword"
-                      />
-                      <label for="showPassword" class="form-check-label"
-                        >Show Password</label
-                      >
-                    </div>
-                  </div>
-                  <button
-                    id="updatePasswordBtn"
-                    class="btn btn-sm btn-success mt-2 align-self-end"
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12">
+                  <label for="currentPassword" class="form-label"
+                    >Current Password</label
                   >
+                  <input
+                    type="password"
+                    id="currentPassword"
+                    autocomplete="current-password"
+                    class="form-control form-control-sm"
+                    placeholder="Enter current password"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="newPassword" class="form-label">New Password</label>
+                  <input
+                    type="password"
+                    id="newPassword"
+                    autocomplete="new-password"
+                    class="form-control form-control-sm"
+                    placeholder="Enter new password"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="confirmPassword" class="form-label"
+                    >Confirm New Password</label
+                  >
+                  <input
+                    type="password"
+                    id="confirmPassword"
+                    autocomplete="new-password"
+                    class="form-control form-control-sm"
+                    placeholder="Confirm new password"
+                  />
+                </div>
+                <div class="col-12">
+                  <div class="form-check">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="showPassword"
+                    />
+                    <label for="showPassword" class="form-check-label"
+                      >Show Password</label
+                    >
+                  </div>
+                </div>
+                <div class="col-12 d-flex justify-content-end">
+                  <button id="updatePasswordBtn" class="btn btn-success btn-sm">
                     Update Password
                   </button>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <div class="card card-accent mt-4 p-3 border rounded">
-            <h5>Activity Overview</h5>
-            <hr />
-            <div class="activity-overview">
-              <p><strong>Last Login:</strong> <span id="lastLogin">—</span></p>
-              <p class="mb-1"><strong>Recent Activities:</strong></p>
-              <ul id="activityList" class="mb-2"></ul>
-              <div class="small text-muted" id="activityMeta"></div>
-              <p class="mt-2">
-                <strong>IP Address:</strong> <span id="ipAddress">—</span>
+        <div class="col-12 col-xl-6">
+          <div class="card card-accent h-100">
+            <div class="card-header border-0 pb-0">
+              <h6 class="mb-1">Activity Overview</h6>
+              <p class="text-muted small mb-0">
+                Recent events from your donor account.
               </p>
             </div>
-          </div>
-
-          <div class="card card-accent mt-4 p-3 border rounded">
-            <h5>Profile Management Controls</h5>
-            <hr />
-            <div class="d-flex gap-2">
-              <button id="saveProfileBtn" class="btn btn-sm btn-primary">
-                Save Changes
-              </button>
-              <button class="btn btn-sm btn-secondary">Cancel</button>
+            <div class="card-body">
+              <p class="mb-1">
+                <strong>Last Login:</strong> <span id="lastLogin">—</span>
+              </p>
+              <p class="mb-2 text-muted small">
+                <strong>IP Address:</strong> <span id="ipAddress">—</span>
+              </p>
+              <p class="mb-1"><strong>Recent Activities:</strong></p>
+              <ul id="activityList" class="small mb-2 ps-3"></ul>
+              <div class="small text-muted" id="activityMeta"></div>
             </div>
           </div>
         </div>

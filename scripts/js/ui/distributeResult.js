@@ -1935,50 +1935,6 @@
     }
   });
   // Handlers: Save Changes, Notify All (run)
-  container.querySelectorAll(".dr-del").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      if (isLocked) return;
-      const tr = e.target.closest("tr");
-      if (!tr) return;
-      const confirmed = confirmDelete();
-      if (!confirmed) return;
-      const itemId = parseInt(tr.getAttribute("data-item-id") || "0", 10) || 0;
-      if (itemId > 0) {
-        try {
-          if (
-            window.AllocationsAPI &&
-            typeof window.AllocationsAPI.deleteItem === "function"
-          ) {
-            await window.AllocationsAPI.deleteItem(itemId);
-          } else {
-            const res = await fetch(
-              `${API_BASE_URL}/allocations/index.php?action=delete_item`,
-              {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                  "Content-Type": "application/json",
-                  Accept: "application/json",
-                },
-                body: JSON.stringify({ item_id: itemId }),
-              }
-            );
-            const j = await res.json().catch(() => null);
-            if (!res.ok || !j?.success)
-              throw new Error(j?.error || `HTTP ${res.status}`);
-          }
-          tr.remove();
-        } catch (err) {
-          const em = err?.message || "Failed to delete item";
-          showMsg(feedback, em, "danger");
-          showToast(em, "danger", 2500);
-        }
-      } else {
-        // Unsaved row, just remove from DOM
-        tr.remove();
-      }
-    });
-  });
 
   // Per-recipient Notify button (manual notify) - delegated (single registration)
   container.addEventListener("click", async (e) => {

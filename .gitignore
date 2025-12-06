@@ -1,0 +1,8 @@
+# Ignore generated session files
+php/sessions/
+
+# Ignore uploaded images and other dynamic media
+images/uploads/
+
+# Ignore local working documents
+FoodBank Files/

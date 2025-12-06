@@ -15,6 +15,7 @@
     searchInput: document.getElementById('searchInput'),
     refreshBtn: document.getElementById('refreshBtn'),
     scheduleBtn: document.getElementById('scheduleBtn'),
+    downloadImagesBtn: document.getElementById('downloadImagesBtn'),
     exportBtn: document.getElementById('exportBtn'),
     pickupModal: document.getElementById('pickupModal'),
     pickupRecipientDetails: document.getElementById('pickupRecipientDetails'),
@@ -55,6 +56,7 @@
   let allocationsFetchQueued = false;
   let autoRefreshTimer = null;
   let allocationsFetchPromise = null;
+  let downloadInProgress = false;
 
   const toastId = 'pickupToast';
   const toastEl = document.getElementById(toastId);
@@ -296,6 +298,126 @@
       }
     }
     return `/${normalized}`;
+  }
+
+  function sanitizeFilenamePart(part){
+    return String(part || '')
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function deriveProofDate(row){
+    const source = row?.picked_up_at || row?.delivered_at || row?.updated_at || row?.created_at || new Date().toISOString();
+    const d = new Date(source);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toISOString().slice(0, 10);
+    }
+    const now = new Date();
+    return now.toISOString().slice(0, 10);
+  }
+
+  function buildProofBaseName(row, type){
+    const recipientRaw = row?.recipient_name || (row?.organization ? row.organization : `Recipient ${row?.recipient_id || ''}`) || 'Recipient';
+    const organizationRaw = row?.organization || 'Unknown Org';
+    const recipient = sanitizeFilenamePart(recipientRaw) || 'Recipient';
+    const organization = sanitizeFilenamePart(organizationRaw) || 'Org';
+    const datePart = deriveProofDate(row);
+    const typePart = type === 'sig' ? 'sig' : 'pic';
+    const combined = `${recipient} (${organization})_${typePart}_${datePart}`;
+    return sanitizeFilenamePart(combined).replace(/\s+/g, ' ');
+  }
+
+  function guessExtensionFromMime(mime){
+    if (!mime) return '';
+    const map = {
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif'
+    };
+    return map[mime.toLowerCase()] || '';
+  }
+
+  function guessExtensionFromUrl(url){
+    if (!url) return '';
+    const match = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(url);
+    return match ? match[1].toLowerCase() : '';
+  }
+
+  function collectProofAssets(){
+    const source = rawAllocations && rawAllocations.length ? rawAllocations : allocations;
+    if (!Array.isArray(source) || !source.length) return [];
+    const seen = new Set();
+    const assets = [];
+    source.forEach((row) => {
+      if (!row) return;
+      [
+        { field: 'pickup_photo_path', type: 'pic' },
+        { field: 'pickup_signature_path', type: 'sig' },
+      ].forEach(({ field, type }) => {
+        const rel = row[field];
+        if (!rel) return;
+        const url = getFullImagePath(rel);
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        assets.push({ url, type, row });
+      });
+    });
+    return assets;
+  }
+
+  async function downloadProofAsset(asset){
+    const res = await fetch(asset.url, { credentials: 'include' });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch ${asset.url} (HTTP ${res.status})`);
+    }
+    const blob = await res.blob();
+    const mime = res.headers.get('Content-Type') || '';
+    const ext = guessExtensionFromMime(mime) || guessExtensionFromUrl(asset.url) || 'png';
+    const base = buildProofBaseName(asset.row, asset.type);
+    const filename = `${base}.${ext}`;
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+    return filename;
+  }
+
+  async function downloadAllProofImages(){
+    if (downloadInProgress) return;
+    const assets = collectProofAssets();
+    if (!assets.length) {
+      showToast('No proof images available to download.', 'warn');
+      return;
+    }
+    downloadInProgress = true;
+    if (els.downloadImagesBtn) els.downloadImagesBtn.disabled = true;
+    const results = { success: 0, failures: [] };
+    for (const asset of assets) {
+      try {
+        await downloadProofAsset(asset);
+        results.success += 1;
+      } catch (err) {
+        results.failures.push({ asset, error: err });
+        if (DEBUG) console.error('[Pickup] download failed', err, asset);
+      }
+    }
+    if (results.failures.length && results.success) {
+      showToast(`Downloaded ${results.success} files, but ${results.failures.length} failed.`, 'warn');
+    } else if (results.failures.length && !results.success) {
+      showToast('Failed to download proof images.', 'error');
+    } else {
+      showToast(`Downloaded ${results.success} proof image${results.success === 1 ? '' : 's'}.`, 'success');
+    }
+    downloadInProgress = false;
+    if (els.downloadImagesBtn) els.downloadImagesBtn.disabled = false;
   }
 
   function renderAllocations(){
@@ -593,6 +715,11 @@
         const dest = new URL('Schedule.html', window.location.origin);
         dest.searchParams.set('from', 'pickup');
         window.location.href = dest.pathname + dest.search;
+      });
+    }
+    if (els.downloadImagesBtn){
+      els.downloadImagesBtn.addEventListener('click', () => {
+        downloadAllProofImages();
       });
     }
     if (els.exportBtn){

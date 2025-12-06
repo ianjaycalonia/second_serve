@@ -6,6 +6,10 @@
       ? window.API_BASE_URL
       : "/php/api";
 
+  let allGroups = [];
+  let currentPage = 1;
+  let currentPageSize = 20;
+
   function resolveTooltipClass(el) {
     try {
       if (!el) return "custom-tooltip";
@@ -507,17 +511,77 @@
     return summary;
   }
 
-  function render(groups) {
+  function readPageSizeSelect() {
+    const select = document.getElementById("myDonationsPageSize");
+    if (!select) return currentPageSize;
+    const val = parseInt(select.value, 10);
+    if (Number.isFinite(val) && val > 0) {
+      currentPageSize = val;
+    }
+    select.value = String(currentPageSize);
+    return currentPageSize;
+  }
+
+  function updatePagination(totalCount) {
+    try {
+      const pager = document.getElementById("myDonationsPagination");
+      const sizeSelect = document.getElementById("myDonationsPageSize");
+      if (sizeSelect) {
+        sizeSelect.value = String(currentPageSize);
+      }
+      if (!pager) return;
+      pager.innerHTML = "";
+      const pageSize = currentPageSize || 20;
+      const totalPages = totalCount > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1;
+      const page = totalCount > 0 ? currentPage : 0;
+
+      const makeLi = (disabled, pageValue, label, aria, title) => {
+        const li = document.createElement("li");
+        li.className = "page-item" + (disabled ? " disabled" : "");
+        if (disabled || pageValue === null) {
+          li.innerHTML = `<span class="page-link">${label}</span>`;
+        } else {
+          li.innerHTML = `<button class="page-link" type="button" data-page="${pageValue}" aria-label="${aria}" title="${title}">${label}</button>`;
+        }
+        return li;
+      };
+
+      const prevDisabled = page <= 1 || !totalCount;
+      pager.appendChild(
+        makeLi(prevDisabled, page - 1, "«", "Previous", "Previous page")
+      );
+
+      const infoLabel = totalCount > 0 ? `Page ${page} of ${totalPages}` : "Page 0 of 0";
+      pager.appendChild(makeLi(true, null, infoLabel, "", ""));
+
+      const nextDisabled = !totalCount || page >= totalPages || page === 0;
+      pager.appendChild(
+        makeLi(nextDisabled, page + 1, "»", "Next", "Next page")
+      );
+    } catch (_) {}
+  }
+
+  function renderPage() {
     const tbody = document.querySelector(".table tbody");
     if (!tbody) return;
-    if (!groups.length) {
+    if (!allGroups.length) {
       tbody.innerHTML =
         '<tr><td colspan="4" class="text-center">No donations logged yet.</td></tr>';
+      updatePagination(0);
       return;
     }
 
+    const pageSize = currentPageSize || 20;
+    const totalGroups = allGroups.length;
+    const totalPages = Math.max(1, Math.ceil(totalGroups / pageSize));
+    if (currentPage < 1) currentPage = 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const startIdx = (currentPage - 1) * pageSize;
+    const pageGroups = allGroups.slice(startIdx, startIdx + pageSize);
+
     let html = "";
-    groups.forEach((group) => {
+    pageGroups.forEach((group) => {
       const isBatch = !!group.batch_id;
       if (isBatch) {
         const count = group.items.length;
@@ -655,6 +719,7 @@
     });
 
     tbody.innerHTML = html;
+    updatePagination(totalGroups);
     // Initialize Bootstrap tooltips for dynamically added icon buttons
     try {
       const tooltipTriggerList = Array.prototype.slice.call(
@@ -671,10 +736,38 @@
     }
   }
 
+  function render(groups, { resetPage = true } = {}) {
+    allGroups = Array.isArray(groups) ? groups.slice() : [];
+    if (resetPage) currentPage = 1;
+    readPageSizeSelect();
+    renderPage();
+  }
+
   let eventsBound = false;
   function bindEvents() {
     if (eventsBound) return;
     eventsBound = true;
+
+    const sizeSelect = document.getElementById("myDonationsPageSize");
+    if (sizeSelect) {
+      sizeSelect.addEventListener("change", () => {
+        readPageSizeSelect();
+        currentPage = 1;
+        renderPage();
+      });
+    }
+
+    const pager = document.getElementById("myDonationsPagination");
+    if (pager) {
+      pager.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-page]");
+        if (!btn) return;
+        const targetPage = parseInt(btn.getAttribute("data-page"), 10);
+        if (!Number.isFinite(targetPage)) return;
+        currentPage = targetPage;
+        renderPage();
+      });
+    }
 
     function initEditNameSelect2() {
       const $sel = window.jQuery && window.jQuery('#editNameSelect');
@@ -1018,7 +1111,7 @@
     try {
       const items = await fetchAll();
       const groups = groupByBatch(items);
-      render(groups);
+      render(groups, { resetPage: false });
     } catch (e) {
       console.error("Reload failed", e);
     }
@@ -1030,7 +1123,7 @@
       // Attach absolute image URLs are already provided by API as image_full_url in index.php list
       // Group by batch and render all
       const groups = groupByBatch(items);
-      render(groups);
+      render(groups, { resetPage: true });
       bindEvents();
 
       // KPI counters (batch-based)

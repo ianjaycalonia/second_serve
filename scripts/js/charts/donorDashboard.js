@@ -439,6 +439,14 @@
       return labels;
     }
 
+    function donationKey(it) {
+      if (!it || typeof it !== "object") return null;
+      if (it.batch_id) return `batch:${String(it.batch_id)}`;
+      if (it.id) return `single:${String(it.id)}`;
+      if (it.donation_id) return `single:${String(it.donation_id)}`;
+      return null;
+    }
+
     function updateChartWith(items) {
       const chart = ensureChart();
       if (!chart) return;
@@ -448,14 +456,15 @@
       if (Array.isArray(items)) {
         for (const it of items) {
           const s = (it.status || "").trim();
-          const b = it.batch_id ? String(it.batch_id) : null;
-          if (!b || s !== "Completed") continue; // batch-based completed only
+          if (s !== "Completed") continue;
           const dt = it.created_at ? new Date(it.created_at) : null;
           if (!dt || isNaN(dt)) continue;
           dt.setHours(0, 0, 0, 0);
           const key = dt.toISOString().slice(0, 10);
           if (!perDay.has(key)) continue; // outside range
-          perDay.get(key).add(b);
+          const donationIdKey = donationKey(it);
+          if (!donationIdKey) continue;
+          perDay.get(key).add(donationIdKey);
         }
       }
       const labels = days.map((d) => d.label);
@@ -1009,55 +1018,32 @@
 
     function renderMetricsFrom(items) {
       try {
-        // Total Donations Made: count DISTINCT completed batches only
-        let total = 0;
+        const totals = {
+          completed: new Set(),
+          pending: new Set(),
+          acknowledged: new Set(),
+          cancelled: new Set(),
+        };
         if (Array.isArray(items)) {
-          const set = new Set();
           for (const it of items) {
-            const s = (it.status || "").trim();
-            if (it.batch_id && s === "Completed") set.add(String(it.batch_id));
+            const status = (it.status || "").trim();
+            const key = donationKey(it);
+            if (!key) continue;
+            if (status === "Completed") totals.completed.add(key);
+            if (status === "Pending") totals.pending.add(key);
+            if (status === "Acknowledged") totals.acknowledged.add(key);
+            if (status === "Cancelled") totals.cancelled.add(key);
           }
-          total = set.size;
         }
-        // Pending Donations: count DISTINCT batches that have at least one 'Pending' item
-        let pending = 0;
-        if (Array.isArray(items)) {
-          const pendingBatches = new Set();
-          for (const it of items) {
-            const s = (it.status || "").trim();
-            if (s === "Pending" && it.batch_id) {
-              pendingBatches.add(String(it.batch_id));
-            }
-          }
-          pending = pendingBatches.size;
-        }
-        // Scheduled Pickups: count DISTINCT batches in 'Acknowledged' (pickup to be scheduled/ongoing)
-        let allocated = 0;
-        if (Array.isArray(items)) {
-          const ackBatches = new Set();
-          for (const it of items) {
-            const s = (it.status || "").trim();
-            if (s === "Acknowledged" && it.batch_id) {
-              ackBatches.add(String(it.batch_id));
-            }
-          }
-          allocated = ackBatches.size;
-        }
-        // For cancelled, keep simple item counts (unchanged)
-        const byStatus = items.reduce((acc, it) => {
-          const s = (it.status || "").trim();
-          acc[s] = (acc[s] || 0) + 1;
-          return acc;
-        }, {});
-        const cancelled = byStatus["Cancelled"] || 0;
+
         const elTotal = document.getElementById("totalDonations");
         const elUpcoming = document.getElementById("upcomingDonations");
         const elPending = document.getElementById("activeDonors");
         const elCancelled = document.getElementById("activeRecipients");
-        if (elTotal) elTotal.textContent = String(total);
-        if (elUpcoming) elUpcoming.textContent = String(allocated);
-        if (elPending) elPending.textContent = String(pending);
-        if (elCancelled) elCancelled.textContent = String(cancelled);
+        if (elTotal) elTotal.textContent = String(totals.completed.size);
+        if (elUpcoming) elUpcoming.textContent = String(totals.acknowledged.size);
+        if (elPending) elPending.textContent = String(totals.pending.size);
+        if (elCancelled) elCancelled.textContent = String(totals.cancelled.size);
       } catch (_e) {}
     }
 

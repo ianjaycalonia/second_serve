@@ -30,6 +30,7 @@ try {
     $timeFilterClause = '';
     $timeFilterClauseNoAlias = '';
     $metricsSubTimeFilterClause = '';
+    $movementTimeFilterClause = '';
 
     if (($startParam && !$endParam) || ($endParam && !$startParam)) {
         sendJson(['success' => false, 'error' => 'Both start and end dates are required'], 400);
@@ -52,6 +53,7 @@ try {
         $timeFilterClause = ' AND d.created_at BETWEEN ? AND ?';
         $timeFilterClauseNoAlias = ' AND created_at BETWEEN ? AND ?';
         $metricsSubTimeFilterClause = ' AND d_avg.created_at BETWEEN ? AND ?';
+        $movementTimeFilterClause = ' AND im.created_at BETWEEN ? AND ?';
     }
 
     // Total meals donated: sum of donation_items.quantity for donations that are Picked Up/Completed
@@ -66,37 +68,36 @@ try {
     $totalMeals = (int)($row['total_meals'] ?? 0);
 
     // Aggregate food-only donation metrics with weight/cost estimation via per-product averages
+    $weightExpr = "CASE
+            WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
+            WHEN di.quantity IS NOT NULL AND di.quantity <> 0 AND di.total_weight IS NOT NULL THEN (di.total_weight / NULLIF(di.quantity,0)) * im.quantity
+            WHEN metrics.avg_weight_per_unit IS NOT NULL THEN im.quantity * metrics.avg_weight_per_unit
+            ELSE 0
+        END";
+    $costExpr = "CASE
+            WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
+            WHEN di.quantity IS NOT NULL AND di.quantity <> 0 AND di.total_cost IS NOT NULL THEN (di.total_cost / NULLIF(di.quantity,0)) * im.quantity
+            WHEN metrics.avg_cost_per_unit IS NOT NULL THEN im.quantity * metrics.avg_cost_per_unit
+            ELSE 0
+        END";
+
     $metricsSql = "SELECT
+            SUM($weightExpr) AS total_weight,
+            SUM($costExpr) AS total_cost,
             SUM(
                 CASE
                     WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
-                    WHEN di.total_weight IS NOT NULL THEN di.total_weight
-                    WHEN metrics.avg_weight_per_unit IS NOT NULL THEN di.quantity * metrics.avg_weight_per_unit
-                    ELSE 0
-                END
-            ) AS total_weight,
-            SUM(
-                CASE
-                    WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
-                    WHEN di.total_cost IS NOT NULL THEN di.total_cost
-                    WHEN metrics.avg_cost_per_unit IS NOT NULL THEN di.quantity * metrics.avg_cost_per_unit
-                    ELSE 0
-                END
-            ) AS total_cost,
-            SUM(
-                CASE
-                    WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
-                    WHEN di.quantity IS NOT NULL THEN di.quantity
-                    ELSE 0
+                    ELSE im.quantity
                 END
             ) AS total_quantity,
             COUNT(DISTINCT CASE
                 WHEN cat.primary_name IS NULL OR cat.primary_name NOT LIKE 'Non-Food%'
-                    THEN d.donation_id
+                    THEN im.id
                 ELSE NULL
-            END) AS food_donation_count
-         FROM donation_items di
-         INNER JOIN donations d ON d.donation_id = di.donation_id
+            END) AS product_out_count
+         FROM inventory_movements im
+         LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
+         LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
          LEFT JOIN categories cat ON cat.category_id = di.category_id
          LEFT JOIN (
              SELECT di_avg.product_name,
@@ -113,36 +114,30 @@ try {
                 ($metricsSubTimeFilterClause !== '' ? $metricsSubTimeFilterClause : '') . "
               GROUP BY di_avg.product_name
          ) metrics ON metrics.product_name = di.product_name
-         WHERE d.status IN ('Picked Up','Completed')
-           AND d.deleted_at IS NULL" . $timeFilterClause;
+         WHERE im.direction = 'out'
+           AND (im.mode IS NULL OR im.mode <> 'repack')" . $movementTimeFilterClause;
 
     $metricsParams = [];
     if (!empty($timeParams)) {
         // Subquery consumes first pair, outer query consumes second
-        $metricsParams = array_merge($timeParams, $timeParams);
+        $metricsParams = array_merge($timeParams, $timeParams, $timeParams);
     }
     $metricsRow = $db->query($metricsSql, $metricsParams)->fetch();
     $totalWeightKg = (float)($metricsRow['total_weight'] ?? 0);
     $totalDonationValue = (float)($metricsRow['total_cost'] ?? 0);
     $totalFoodQuantity = (int)($metricsRow['total_quantity'] ?? 0);
-    $foodDonationCount = (int)($metricsRow['food_donation_count'] ?? 0);
+    $foodDonationCount = (int)($metricsRow['product_out_count'] ?? 0);
 
     $avgDonationValue = 0.0;
     $avgDonationValueMode = 'per_item';
     $avgDonationValueSampleDays = null;
 
     if ($timeframe && $startDt && $endDt) {
-        $dailyTotalsSql = "SELECT DATE(d.created_at) AS donation_day,
-                SUM(
-                    CASE
-                        WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
-                        WHEN di.total_cost IS NOT NULL THEN di.total_cost
-                        WHEN metrics.avg_cost_per_unit IS NOT NULL THEN di.quantity * metrics.avg_cost_per_unit
-                        ELSE 0
-                    END
-                ) AS total_cost
-             FROM donation_items di
-             INNER JOIN donations d ON d.donation_id = di.donation_id
+        $dailyTotalsSql = "SELECT DATE(im.created_at) AS donation_day,
+                SUM($costExpr) AS total_cost
+             FROM inventory_movements im
+             LEFT JOIN inventory inv ON inv.inventory_id = im.inventory_id
+             LEFT JOIN donation_items di ON di.donation_item_id = COALESCE(im.donation_item_id, inv.donation_item_id)
              LEFT JOIN categories cat ON cat.category_id = di.category_id
              LEFT JOIN (
                  SELECT di_avg.product_name,
@@ -159,9 +154,9 @@ try {
                     ($metricsSubTimeFilterClause !== '' ? $metricsSubTimeFilterClause : '') . "
                  GROUP BY di_avg.product_name
              ) metrics ON metrics.product_name = di.product_name
-             WHERE d.status IN ('Picked Up','Completed')
-               AND d.deleted_at IS NULL" . $timeFilterClause . "
-             GROUP BY DATE(d.created_at)
+             WHERE im.direction = 'out'
+               AND (im.mode IS NULL OR im.mode <> 'repack')" . $movementTimeFilterClause . "
+             GROUP BY DATE(im.created_at)
              ORDER BY donation_day ASC";
 
         $dailyParams = [];
