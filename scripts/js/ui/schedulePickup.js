@@ -24,6 +24,135 @@ const KEY_CODES = {
   ENTER: 13,
 };
 
+const ROLE_TIME_WINDOWS = Object.freeze({
+  admin: { min: '08:00', max: '18:00' },
+  donor: { min: '10:00', max: '15:00' },
+  recipient: { min: '10:00', max: '15:00' },
+  default: { min: '08:00', max: '18:00' },
+});
+
+function getTimeWindowForRole(role) {
+  const key = typeof role === 'string' ? role.toLowerCase() : '';
+  return ROLE_TIME_WINDOWS[key] || ROLE_TIME_WINDOWS.default;
+}
+
+function getActiveTimeWindow() {
+  return getTimeWindowForRole(currentUserRole || 'admin');
+}
+
+function normalizeTimeValue(value) {
+  if (!value) return '';
+  return String(value).slice(0, 5);
+}
+
+function clampTimeToWindow(value, window) {
+  const time = normalizeTimeValue(value);
+  if (!time) return time;
+  if (time < window.min) return window.min;
+  if (time > window.max) return window.max;
+  return time;
+}
+
+function applyTimeWindowToInput(input, window) {
+  if (!input || !window) return;
+  input.min = window.min;
+  input.max = window.max;
+  if (input.value) {
+    const clamped = clampTimeToWindow(input.value, window);
+    if (clamped !== input.value) {
+      input.value = clamped;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+}
+
+function bindTimeConstraintHandlers(input, window, options = {}) {
+  if (!input || !window) return;
+  if (input.dataset.timeWindowBound === '1') return;
+
+  const { onClamp } = options;
+
+  const enforce = () => {
+    const clamped = clampTimeToWindow(input.value, window);
+    if (clamped !== input.value) {
+      input.value = clamped;
+      if (typeof onClamp === 'function') {
+        onClamp(clamped);
+      }
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  };
+
+  input.addEventListener('input', enforce);
+  input.addEventListener('blur', enforce);
+  input.addEventListener('change', enforce);
+  input.dataset.timeWindowBound = '1';
+}
+
+function computeDefaultTimeWithinWindow(preferred) {
+  const window = getActiveTimeWindow();
+  const base = preferred ? normalizeTimeValue(preferred) : '';
+  if (!base) return window.min;
+  return clampTimeToWindow(base, window);
+}
+
+function ensureAdminEndAfterStart(adminStart, adminEnd) {
+  if (!adminStart || !adminEnd) return;
+  if (adminStart.value && adminEnd.value && adminEnd.value < adminStart.value) {
+    adminEnd.value = adminStart.value;
+  }
+}
+
+function applyActiveTimeConstraints(root = document) {
+  const scope = root || document;
+  const window = getActiveTimeWindow();
+  if (!window) return;
+
+  scope.querySelectorAll('.recipient-time').forEach((input) => {
+    applyTimeWindowToInput(input, window);
+    bindTimeConstraintHandlers(input, window);
+  });
+
+  const donorStart = scope.querySelector('#donorStartTime');
+  if (donorStart) {
+    applyTimeWindowToInput(donorStart, window);
+    bindTimeConstraintHandlers(donorStart, window);
+  }
+
+  const adminStart = scope.querySelector('#adminStartTime');
+  const adminEnd = scope.querySelector('#adminEndTime');
+  if (adminStart) {
+    applyTimeWindowToInput(adminStart, window);
+    bindTimeConstraintHandlers(adminStart, window, {
+      onClamp: () => ensureAdminEndAfterStart(adminStart, adminEnd),
+    });
+  }
+  if (adminEnd) {
+    applyTimeWindowToInput(adminEnd, window);
+    bindTimeConstraintHandlers(adminEnd, window, {
+      onClamp: () => ensureAdminEndAfterStart(adminStart, adminEnd),
+    });
+  }
+  ensureAdminEndAfterStart(adminStart, adminEnd);
+}
+
+function isTimeWithinWindow(value, window) {
+  const time = normalizeTimeValue(value);
+  if (!time) return true;
+  return time >= window.min && time <= window.max;
+}
+
+function formatTimeForDisplay(value) {
+  const time = normalizeTimeValue(value);
+  if (!time) return '';
+  const [hourStr, minute] = time.split(':');
+  let hour = Number(hourStr);
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour}:${minute} ${suffix}`;
+}
+
 function getStoredUserRole() {
   try {
     if (
@@ -648,6 +777,7 @@ function initializeEventTypePermissions() {
     currentUserRole = "admin";
   }
   allowedEventTypes = determineAllowedEventTypes(currentUserRole);
+  applyActiveTimeConstraints();
 
   eventTypeButtons.forEach((button) => {
     const btnType = String(button.dataset.type || "").toLowerCase();
@@ -858,6 +988,7 @@ function initSchedulePickupUI() {
 
   const defaultType = initializeEventTypePermissions();
   setEventType(defaultType);
+  applyActiveTimeConstraints();
 
   // Add recipient button
   const addRecipientBtn = document.getElementById('addAnotherRecipient');
@@ -946,6 +1077,7 @@ function initSchedulePickupUI() {
         // Delay to ensure select2 is fully mounted
         setTimeout(() => tryAutoPopulateRecipientsFromPickup(), 0);
       }
+      applyActiveTimeConstraints();
     });
   }
 }
@@ -1098,6 +1230,7 @@ function setEventType(type) {
     tryAutoPopulateRecipientsFromPickup();
   }
   applyRoleSpecificFormLock(allowedType);
+  applyActiveTimeConstraints();
 }
 
 function setActiveEventTypeButton(type) {
@@ -1129,7 +1262,18 @@ function setEventTypeUI(type) {
   const pickupDetails = document.getElementById('wrapPickupDetails');
   const locationInput = document.getElementById('evLocation');
   const isEditing = !!(document.getElementById('evId') && document.getElementById('evId').value);
-  
+  const locationLabel = pickupDetails?.querySelector('label[for="evLocation"]');
+
+  const updateLocationLabel = (text, hidden = false) => {
+    if (!locationLabel) return;
+    locationLabel.textContent = text;
+    if (hidden) {
+      locationLabel.classList.add('visually-hidden');
+    } else {
+      locationLabel.classList.remove('visually-hidden');
+    }
+  };
+
   const showSection = (el) => {
     if (!el) return;
     el.classList.remove('d-none');
@@ -1149,7 +1293,7 @@ function setEventTypeUI(type) {
       hideSection(adminTimes);
       if (pickupDetails) {
         pickupDetails.querySelector('.card-header h6').textContent = 'Pickup Details';
-        pickupDetails.querySelector('label[for="evLocation"]').textContent = 'Pickup Location';
+        updateLocationLabel('', true);
       }
       if (locationInput) {
         // Only set a default if not editing or if the field is empty
@@ -1166,7 +1310,7 @@ function setEventTypeUI(type) {
       hideSection(adminTimes);
       if (pickupDetails) {
         pickupDetails.querySelector('.card-header h6').textContent = 'Pickup Information';
-        pickupDetails.querySelector('label[for="evLocation"]').textContent = 'Pickup Address';
+        updateLocationLabel('', true);
       }
       if (locationInput) {
         // Preserve existing address while editing; clear only for brand new events with no value yet
@@ -1183,7 +1327,7 @@ function setEventTypeUI(type) {
       showSection(adminTimes);
       if (pickupDetails) {
         pickupDetails.querySelector('.card-header h6').textContent = 'Event Details';
-        pickupDetails.querySelector('label[for="evLocation"]').textContent = 'Location';
+        updateLocationLabel('Location');
       }
       if (locationInput) {
         if (!isEditing && !locationInput.value) {
@@ -1410,7 +1554,8 @@ function addRecipientField() {
   const now = new Date();
   const nextHour = new Date(now.getTime() + 60 * 60 * 1000);
   const defaultDate = now.toISOString().split('T')[0];
-  const defaultTime = `${String(nextHour.getHours()).padStart(2, '0')}:${String(nextHour.getMinutes()).padStart(2, '0')}`;
+  const proposedTime = `${String(nextHour.getHours()).padStart(2, '0')}:${String(nextHour.getMinutes()).padStart(2, '0')}`;
+  const defaultTime = computeDefaultTimeWithinWindow(proposedTime);
   
   const newRecipient = document.createElement('div');
   newRecipient.className = 'recipient-selection mb-3 p-3 border rounded';
@@ -1461,6 +1606,7 @@ function addRecipientField() {
   }
   
   updateRecipientSelections();
+  applyActiveTimeConstraints(newRecipient);
 }
 
 function updateRecipientSelections() {
@@ -1560,12 +1706,14 @@ function resetRecipientFields(options = {}) {
     }
     const timeInput = block.querySelector('.recipient-time');
     if (timeInput && time !== null) {
-      timeInput.value = time;
+      const value = time ? clampTimeToWindow(time, getActiveTimeWindow()) : computeDefaultTimeWithinWindow('');
+      timeInput.value = value;
     }
   });
 
   recipientsLoadedFromPickup = false;
   updateRecipientSelections();
+  applyActiveTimeConstraints();
 }
 
 function updateDonorData() {
@@ -1575,10 +1723,16 @@ function updateDonorData() {
   
   if (donorSelect && donorInput) {
     if (donorSelect.value) {
+      const win = getActiveTimeWindow();
+      const timeValue = donorTime ? clampTimeToWindow(donorTime.value, win) : null;
+      if (donorTime) {
+        donorTime.value = timeValue || donorTime.value;
+        applyTimeWindowToInput(donorTime, win);
+      }
       donorInput.value = JSON.stringify({
         id: donorSelect.value,
         name: donorSelect.options[donorSelect.selectedIndex].text,
-        time: donorTime ? donorTime.value : null
+        time: timeValue || null
       });
     } else {
       donorInput.value = '';
@@ -1646,20 +1800,50 @@ function initDateTimePickers() {
   const now = new Date();
   const nextHour = new Date(now.getTime() + 60 * 60 * 1000);
   const defaultTime = `${String(nextHour.getHours()).padStart(2, '0')}:${String(nextHour.getMinutes()).padStart(2, '0')}`;
+  const clampedDefaultTime = computeDefaultTimeWithinWindow(defaultTime);
   
   document.querySelectorAll('.recipient-time').forEach(input => {
-    if (!isFromPickup() && !input.value) { input.value = defaultTime; }
+    if (!isFromPickup() && !input.value) {
+      input.value = clampedDefaultTime;
+    } else if (input.value) {
+      input.value = clampTimeToWindow(input.value, getActiveTimeWindow());
+    }
+    applyTimeWindowToInput(input, getActiveTimeWindow());
   });
 
   const donorTime = document.getElementById('donorStartTime');
-  if (donorTime && !donorTime.value) donorTime.value = defaultTime;
+  if (donorTime) {
+    if (!donorTime.value) {
+      donorTime.value = clampedDefaultTime;
+    }
+    applyTimeWindowToInput(donorTime, getActiveTimeWindow());
+  }
 
   const adminStart = document.getElementById('adminStartTime');
   const adminEnd = document.getElementById('adminEndTime');
-  if (adminStart && !adminStart.value) adminStart.value = defaultTime;
-  if (adminEnd && !adminEnd.value) {
+  const timeWindow = getActiveTimeWindow();
+  if (adminStart) {
+    if (!adminStart.value) {
+      adminStart.value = clampedDefaultTime;
+    } else {
+      adminStart.value = clampTimeToWindow(adminStart.value, timeWindow);
+    }
+    applyTimeWindowToInput(adminStart, timeWindow);
+  }
+  if (adminEnd) {
     const twoHours = new Date(nextHour.getTime() + 60 * 60 * 1000);
-    adminEnd.value = `${String(twoHours.getHours()).padStart(2, '0')}:${String(twoHours.getMinutes()).padStart(2, '0')}`;
+    const proposedEnd = `${String(twoHours.getHours()).padStart(2, '0')}:${String(twoHours.getMinutes()).padStart(2, '0')}`;
+    if (!adminEnd.value) {
+      let defaultEnd = clampTimeToWindow(proposedEnd, timeWindow);
+      if (adminStart && adminStart.value && defaultEnd < adminStart.value) {
+        defaultEnd = adminStart.value;
+      }
+      adminEnd.value = defaultEnd;
+    } else {
+      adminEnd.value = clampTimeToWindow(adminEnd.value, timeWindow);
+    }
+    applyTimeWindowToInput(adminEnd, timeWindow);
+    ensureAdminEndAfterStart(adminStart, adminEnd);
   }
 }
 
@@ -1701,6 +1885,43 @@ function handleEventFormSubmit(e) {
     submitBtn.innerHTML = originalBtnText;
     submitBtn.disabled = false;
     return;
+  }
+
+  const window = getActiveTimeWindow();
+  const timeRangeMessage = `between ${formatTimeForDisplay(window.min)} and ${formatTimeForDisplay(window.max)}`;
+
+  if (type === 'recipient') {
+    const invalidRecipient = recipients.some((rec) => rec.time && !isTimeWithinWindow(rec.time, window));
+    if (invalidRecipient) {
+      alert(`Please select recipient pickup times ${timeRangeMessage}.`);
+      submitBtn.innerHTML = originalBtnText;
+      submitBtn.disabled = false;
+      return;
+    }
+  }
+
+  if (type === 'donor') {
+    if (donorData && donorData.time && !isTimeWithinWindow(donorData.time, window)) {
+      alert(`Please select a donor pickup time ${timeRangeMessage}.`);
+      submitBtn.innerHTML = originalBtnText;
+      submitBtn.disabled = false;
+      return;
+    }
+  }
+
+  if (type === 'admin') {
+    if ((adminStart && !isTimeWithinWindow(adminStart, window)) || (adminEnd && !isTimeWithinWindow(adminEnd, window))) {
+      alert(`Admin event times must be ${timeRangeMessage}.`);
+      submitBtn.innerHTML = originalBtnText;
+      submitBtn.disabled = false;
+      return;
+    }
+    if (adminStart && adminEnd && adminEnd < adminStart) {
+      alert('End time cannot be earlier than the start time.');
+      submitBtn.innerHTML = originalBtnText;
+      submitBtn.disabled = false;
+      return;
+    }
   }
 
   const formData = {
@@ -1760,5 +1981,8 @@ window.SchedulePickupUI = {
   handleEventFormSubmit,
   updateUI: setEventTypeUI,
   setType: setEventType,
-  updateDonorData
+  updateDonorData,
+  applyTimeConstraints: applyActiveTimeConstraints,
+  getTimeWindowForRole,
+  formatTimeForDisplay
 };
