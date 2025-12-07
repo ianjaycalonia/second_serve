@@ -399,16 +399,19 @@ ON DUPLICATE KEY UPDATE `role`='donor', `status`='approved';
 
 -- products (must be created before inventory)
 CREATE TABLE `products` (
-  `product_id` int(11) NOT NULL AUTO_INCREMENT,
-  `product_name` varchar(255) NOT NULL,
-  `product_category` varchar(100) DEFAULT NULL,
-  `category_id` int(11) DEFAULT NULL,
-  `default_unit` varchar(50) DEFAULT NULL,
-  `tags` varchar(255) DEFAULT NULL,
+  `product_id` INT NOT NULL AUTO_INCREMENT,
+  `product_name` VARCHAR(191) NOT NULL,
+  `category_id` INT DEFAULT NULL,
+  `default_unit_id` INT DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`product_id`),
   UNIQUE KEY `uniq_product_name` (`product_name`),
   KEY `products_category_idx` (`category_id`),
-  CONSTRAINT `products_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
+  KEY `products_unit_idx` (`default_unit_id`),
+  CONSTRAINT `products_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `products_unit_fk` FOREIGN KEY (`default_unit_id`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
 

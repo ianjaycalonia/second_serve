@@ -32,8 +32,9 @@ function ensureMasterItemExclusionTable($db){
     if ($ensured) {
         return;
     }
+    // Keep key length < 767 bytes for utf8mb4 on older MySQL versions
     $db->query('CREATE TABLE IF NOT EXISTS master_item_exclusions (
-        product_name VARCHAR(255) NOT NULL PRIMARY KEY
+        product_name VARCHAR(191) NOT NULL PRIMARY KEY
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci');
     $ensured = true;
 }
