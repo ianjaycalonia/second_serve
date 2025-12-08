@@ -54,6 +54,37 @@ document.addEventListener("DOMContentLoaded", () => {
     modal?.show();
   }
 
+  function escapeHtml(str) {
+    return String(str || "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        }[c])
+    );
+  }
+
+  function isValidEmail(email) {
+    const s = String(email || "").trim();
+    if (!s) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
+
+  function uniqueSorted(values) {
+    if (!Array.isArray(values)) return [];
+    return Array.from(
+      new Set(
+        values
+          .map((v) => (v == null ? "" : String(v).trim()))
+          .filter((v) => v !== "")
+      )
+    ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }
+
   function formatUserStatus(status) {
     const s = String(status || "").toLowerCase();
     if (!s) return "—";
@@ -277,7 +308,9 @@ document.addEventListener("DOMContentLoaded", () => {
     tbody.innerHTML = rows.join("");
     // Initialize tooltips for dynamically added action icons
     try {
-      const tips = Array.from(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      const tips = Array.from(
+        document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      );
       tips.forEach((el) => {
         if (window.bootstrap && bootstrap.Tooltip) {
           const cls =
@@ -295,24 +328,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     } catch (_) {}
-  }
-
-  function escapeHtml(str) {
-    return String(str || "").replace(
-      /[&<>"']/g,
-      (c) =>
-        ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        }[c])
-    );
-  }
-
-  function uniqueSorted(vals){
-    return Array.from(new Set(vals.filter(v => v && String(v).trim()))).sort((a,b)=>String(a).localeCompare(String(b)));
   }
 
   function getValueFrom(ids, fallback = "") {
@@ -758,6 +773,54 @@ document.addEventListener("DOMContentLoaded", () => {
           if (fb) fb.textContent = '';
           if (!org && !name) {
             if (fb) fb.textContent = 'Organization Name or Contact Person is required.';
+            return;
+          }
+          if (email && !isValidEmail(email)) {
+            try { showToast('Please enter a valid email address.', 'danger'); } catch (_) {
+              showMessageModal('Add Donor', 'Please enter a valid email address.');
+            }
+            return;
+          }
+          const existingDonors = Array.isArray(donorsData) ? donorsData : [];
+          const emailLower = email.toLowerCase();
+          const orgLower = org.toLowerCase();
+          const nameLower = name.toLowerCase();
+          let emailExists = false;
+          let orgExists = false;
+          let contactExists = false;
+          if (emailLower) {
+            emailExists = existingDonors.some((d) =>
+              String(d.email || '').trim().toLowerCase() === emailLower
+            );
+          }
+          if (orgLower) {
+            orgExists = existingDonors.some((d) =>
+              String(d.organization_name || '').trim().toLowerCase() === orgLower
+            );
+          }
+          if (nameLower) {
+            contactExists = existingDonors.some((d) =>
+              String(d.name || '').trim().toLowerCase() === nameLower
+            );
+          }
+          if (emailExists) {
+            let msg = 'A donor with this email already exists.';
+            if (orgExists || contactExists) {
+              msg += ' Please review the organization name and contact person before creating another record.';
+            }
+            try { showToast(msg, { title: 'Duplicate donor', variant: 'danger' }); } catch (_) {
+              showMessageModal('Add Donor', msg);
+            }
+            return;
+          }
+          if (orgExists || contactExists) {
+            const fields = [];
+            if (orgExists) fields.push('organization name');
+            if (contactExists) fields.push('contact person');
+            const msg = `A donor with the same ${fields.join(' and ')} already exists.`;
+            try { showToast(msg, { title: 'Duplicate donor', variant: 'danger' }); } catch (_) {
+              showMessageModal('Add Donor', msg);
+            }
             return;
           }
           addBtn.disabled = true;

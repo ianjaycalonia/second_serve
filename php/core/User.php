@@ -348,8 +348,19 @@ class User
         $advocacy = $data['advocacy'] ?? null;
 
         // Placeholder email: use organization name sans spaces if no email provided
-        $email = $data['email'] ?? $this->generatePlaceholderEmail($organization);
-        $email = $this->ensureUniqueEmail($email);
+        if (isset($data['email']) && trim((string)$data['email']) !== '') {
+            $email = trim((string)$data['email']);
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('Invalid email format');
+            }
+            $exists = $this->db->query('SELECT 1 FROM users WHERE email = ? LIMIT 1', [$email])->fetch();
+            if ($exists) {
+                throw new Exception('Email already in use');
+            }
+        } else {
+            $email = $this->generatePlaceholderEmail($organization);
+            $email = $this->ensureUniqueEmail($email);
+        }
         // Use a fixed default password for imported recipients per requirements
         $plain = 'recipient123';
         $hash = password_hash($plain, PASSWORD_DEFAULT);
@@ -657,8 +668,19 @@ class User
         $name = $data['name'] ?? ($data['contact_person'] ?? ($organization ?? 'Donor'));
         $contactNumber = $data['contact_number'] ?? null;
         $address = $data['address'] ?? null;
-        $email = $data['email'] ?? $this->generatePlaceholderEmail($organization);
-        $email = $this->ensureUniqueEmail($email);
+        if (isset($data['email']) && trim((string)$data['email']) !== '') {
+            $email = trim((string)$data['email']);
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('Invalid email format');
+            }
+            $exists = $this->db->query('SELECT 1 FROM users WHERE email = ? LIMIT 1', [$email])->fetch();
+            if ($exists) {
+                throw new Exception('Email already in use');
+            }
+        } else {
+            $email = $this->generatePlaceholderEmail($organization);
+            $email = $this->ensureUniqueEmail($email);
+        }
 
         $plain = 'donor123';
         $hash = password_hash($plain, PASSWORD_DEFAULT);

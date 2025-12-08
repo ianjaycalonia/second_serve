@@ -269,6 +269,12 @@ if (typeof window.showToast !== "function") {
     );
   }
 
+  function isValidEmail(email) {
+    const s = String(email || '').trim();
+    if (!s) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
+
   function decodeHtml(str) {
     // Deep-decode HTML entities (handles cases like &amp;#039; → ')
     let s = String(str ?? "");
@@ -2051,12 +2057,7 @@ if (typeof window.showToast !== "function") {
       const contact_number = document.getElementById('addRecPhone')?.value.trim() || '';
       const brgy = document.getElementById('addRecBarangay')?.value.trim() || '';
       const city = document.getElementById('addRecCity')?.value.trim() || '';
-      const addrInput = document.getElementById('addRecAddress');
-      const composedAddress = [brgy, city].filter(Boolean).join(', ');
-      if (addrInput && composedAddress) {
-        addrInput.value = composedAddress;
-      }
-      const address = composedAddress || addrInput?.value.trim() || '';
+      const address = [brgy, city].filter(Boolean).join(', ');
       const total_residents = document.getElementById('addRecPopulation')?.value || '';
       const age_group = document.getElementById('addRecAgeGroup')?.value.trim() || '';
       const male_count = document.getElementById('addRecMale')?.value || '';
@@ -2066,6 +2067,63 @@ if (typeof window.showToast !== "function") {
       if (fb) fb.textContent = '';
       if (!org && !name) {
         if (fb) fb.textContent = 'Organization Name or Contact Person is required.';
+        return;
+      }
+      if (!contact_number || !brgy || !city) {
+        const msg = 'Contact number, barangay, and city/municipality are required.';
+        try {
+          showToast(msg, { title: 'Validation error', variant: 'danger' });
+        } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
+      if (email && !isValidEmail(email)) {
+        try { showToast('Please enter a valid email address.', { title: 'Invalid email', variant: 'danger' }); } catch (_) {
+          alert('Please enter a valid email address.');
+        }
+        return;
+      }
+      const existingRecipients = Array.isArray(recipientsData) ? recipientsData : [];
+      const emailLower = email.toLowerCase();
+      const orgLower = org.toLowerCase();
+      const nameLower = name.toLowerCase();
+      let emailExists = false;
+      let orgExists = false;
+      let contactExists = false;
+      if (emailLower) {
+        emailExists = existingRecipients.some((u) =>
+          String(u.email || '').trim().toLowerCase() === emailLower
+        );
+      }
+      if (orgLower) {
+        orgExists = existingRecipients.some((u) =>
+          String(u.organization_name || '').trim().toLowerCase() === orgLower
+        );
+      }
+      if (nameLower) {
+        contactExists = existingRecipients.some((u) =>
+          String(u.name || '').trim().toLowerCase() === nameLower
+        );
+      }
+      if (emailExists) {
+        let msg = 'A recipient with this email already exists.';
+        if (orgExists || contactExists) {
+          msg += ' Please review the organization name and contact person before creating another record.';
+        }
+        try { showToast(msg, { title: 'Duplicate recipient', variant: 'danger' }); } catch (_) {
+          alert(msg);
+        }
+        return;
+      }
+      if (orgExists || contactExists) {
+        const fields = [];
+        if (orgExists) fields.push('organization name');
+        if (contactExists) fields.push('contact person');
+        const msg = `A recipient with the same ${fields.join(' and ')} already exists.`;
+        try { showToast(msg, { title: 'Duplicate recipient', variant: 'danger' }); } catch (_) {
+          alert(msg);
+        }
         return;
       }
       addBtn.disabled = true;
@@ -2097,9 +2155,16 @@ if (typeof window.showToast !== "function") {
           if (m && window.bootstrap && bootstrap.Modal) bootstrap.Modal.getOrCreateInstance(m).hide();
         } catch (_) {}
         const tmp = data.temporary_password ? `Temporary password: ${String(data.temporary_password)}` : '';
-        alert(`Recipient created. ${tmp}`.trim());
-        // Simple reload to repopulate list consistently
-        window.location.reload();
+        const successMsg = [`Recipient created.`, tmp].filter(Boolean).join(' ').trim();
+        try {
+          showToast(successMsg, 'success');
+        } catch (_) {
+          alert(successMsg);
+        }
+        // Allow the toast to render briefly before refreshing
+        setTimeout(() => {
+          window.location.reload();
+        }, 600);
       } catch (err) {
         if (fb) fb.textContent = err?.message || 'Failed to create recipient';
       } finally {
