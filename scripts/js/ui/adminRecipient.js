@@ -1020,6 +1020,68 @@ if (typeof window.showToast !== "function") {
     return Array.from(new Set(vals.filter(v => v && String(v).trim()))).sort((a,b)=>String(a).localeCompare(String(b)));
   }
 
+  function getValueFrom(ids, fallback = "") {
+    const list = Array.isArray(ids) ? ids : [ids];
+    for (const id of list) {
+      const el = document.getElementById(id);
+      if (el && el.value != null) return String(el.value);
+    }
+    return fallback;
+  }
+
+  function setInputValue(ids, value) {
+    (Array.isArray(ids) ? ids : [ids]).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    });
+  }
+
+  function resetSelects(ids) {
+    (Array.isArray(ids) ? ids : [ids]).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.selectedIndex = 0;
+    });
+  }
+
+  function resetCheckboxes(ids) {
+    (Array.isArray(ids) ? ids : [ids]).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = false;
+    });
+  }
+
+  function resetFilterControls() {
+    setInputValue(['filterDateFrom','filterDateTo','fromDate','toDate'], '');
+    resetSelects([
+      'filterCategorySelect','filterStatusSelect','filterLocationSelect','filterPositionSelect',
+      'recipientStatusSelectMobile','recipientDonationActivitySelectMobile','recipientCategorySelectMobile'
+    ]);
+    resetCheckboxes(['checkHasEmail','checkHasPhone','checkHasContactPerson']);
+    const search = document.getElementById('donationSearch');
+    if (search) search.value = '';
+  }
+
+  function resetSortControls() {
+    resetSelects([
+      'sortBeneficiaryName','sortContactPerson','sortLocation','sortStatus',
+      'recipientQuantityOrderSelectMobile','recipientSubmissionDateSelectMobile','recipientDonorOrderSelectMobile'
+    ]);
+  }
+
+  function closeDropdownFromButton(btn) {
+    if (!btn) return;
+    const menu = btn.closest('.dropdown-menu');
+    if (!menu) return;
+    const toggle = menu.parentElement?.querySelector('[data-bs-toggle="dropdown"]');
+    if (toggle && window.bootstrap?.Dropdown) {
+      const inst = bootstrap.Dropdown.getInstance(toggle) || bootstrap.Dropdown.getOrCreateInstance(toggle);
+      inst?.hide();
+    } else {
+      menu.classList.remove('show');
+      menu.parentElement?.classList.remove('show');
+    }
+  }
+
   // Derive a city/municipality label from a freeform address
   function extractCity(addr){
     const s = String(addr || '').trim();
@@ -1081,34 +1143,101 @@ if (typeof window.showToast !== "function") {
   }
 
   function populateFilters(){
-    const sel = document.getElementById('recipientCategorySelectMobile');
-    if (sel){
-      // Build consolidated city list from addresses
+    // Location (city) options
+    const locationSelects = [
+      document.getElementById('filterLocationSelect'),
+      document.getElementById('recipientCategorySelectMobile'),
+    ].filter(Boolean);
+    if (locationSelects.length){
       const rawCities = recipientsData.map(u=>extractCity(u.address||'')).filter(Boolean);
       const consolidated = consolidateLabels(rawCities).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
-      const cur = sel.value;
-      sel.innerHTML = '<option>All</option>' + consolidated.map(c=>`<option${c===cur?' selected':''}>${c.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');
+      locationSelects.forEach(sel => {
+        const cur = sel.value || '';
+        const options = consolidated.map(c=>{
+          const safe = c.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+          const selected = cur && cur === c ? ' selected' : '';
+          return `<option value="${safe}"${selected}>${safe}</option>`;
+        }).join('');
+        sel.innerHTML = `<option value="">All</option>${options}`;
+        if (cur && !consolidated.includes(cur)) sel.selectedIndex = 0;
+      });
+    }
+
+    // Category options (beneficiary category / organization type)
+    const categorySelect = document.getElementById('filterCategorySelect');
+    if (categorySelect){
+      const categories = uniqueSorted(
+        recipientsData
+          .map(u => String(u.beneficiary_category || u.organization_type || '').trim())
+          .filter(Boolean)
+      );
+      const cur = categorySelect.value || '';
+      const options = categories.map(c=>{
+        const safe = c.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+        const selected = cur && cur === c ? ' selected' : '';
+        return `<option value="${safe}"${selected}>${safe}</option>`;
+      }).join('');
+      categorySelect.innerHTML = `<option value="">All</option>${options}`;
+      if (cur && !categories.includes(cur)) categorySelect.selectedIndex = 0;
+    }
+
+    // Position options
+    const positionSelect = document.getElementById('filterPositionSelect');
+    if (positionSelect){
+      const positions = uniqueSorted(
+        recipientsData.map(u=>String(u.position_designation || '').trim()).filter(Boolean)
+      );
+      const cur = positionSelect.value || '';
+      const options = positions.map(p=>{
+        const safe = p.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+        const selected = cur && cur === p ? ' selected' : '';
+        return `<option value="${safe}"${selected}>${safe}</option>`;
+      }).join('');
+      positionSelect.innerHTML = `<option value="">All</option>${options}`;
+      if (cur && !positions.includes(cur)) positionSelect.selectedIndex = 0;
     }
   }
 
   function applyFiltersAndSort(){
     const q = (document.getElementById('donationSearch')?.value || '').trim().toLowerCase();
-    const fromStr = document.getElementById('fromDate')?.value || '';
-    const toStr = document.getElementById('toDate')?.value || '';
-    const statusSel = document.getElementById('recipientStatusSelectMobile');
-    const statusFilter = (statusSel && statusSel.value) ? statusSel.value : 'All';
-    const actSel = document.getElementById('recipientDonationActivitySelectMobile');
-    const activity = (actSel && actSel.value) ? actSel.value : 'All';
-    const locSel = document.getElementById('recipientCategorySelectMobile');
-    const location = (locSel && locSel.value) ? locSel.value : '';
+    const fromStr = getValueFrom(['filterDateFrom','fromDate']).trim();
+    const toStr = getValueFrom(['filterDateTo','toDate']).trim();
+    const statusVal = getValueFrom(['filterStatusSelect','recipientStatusSelectMobile']).trim();
+    const statusFilter = statusVal ? statusVal : 'All';
+    const activityRaw = getValueFrom(['recipientDonationActivitySelectMobile']).trim();
+    const activity = activityRaw ? activityRaw : 'All';
+    const locVal = getValueFrom(['filterLocationSelect','recipientCategorySelectMobile']).trim();
+    const location = locVal && locVal.toLowerCase() !== 'all' ? locVal : '';
+    const categoryVal = getValueFrom('filterCategorySelect').trim();
+    const positionVal = getValueFrom('filterPositionSelect').trim();
+    const requireEmail = document.getElementById('checkHasEmail')?.checked;
+    const requirePhone = document.getElementById('checkHasPhone')?.checked;
+    const requireContactPerson = document.getElementById('checkHasContactPerson')?.checked;
 
-    // Sort controls
-    const qtySel = document.getElementById('recipientQuantityOrderSelectMobile');
-    const qtyOrder = qtySel ? qtySel.value : 'None';
-    const dateSel = document.getElementById('recipientSubmissionDateSelectMobile');
-    const dateOrder = dateSel ? dateSel.value : 'None';
-    const nameSel = document.getElementById('recipientDonorOrderSelectMobile');
-    const nameOrder = nameSel ? nameSel.value : 'None';
+    // Sort controls (desktop + legacy IDs)
+    const nameOrderRaw = getValueFrom(['sortBeneficiaryName','recipientDonorOrderSelectMobile']).trim();
+    const contactOrderRaw = getValueFrom(['sortContactPerson']).trim();
+    const locationOrderRaw = getValueFrom(['sortLocation']).trim();
+    const statusOrderRaw = getValueFrom(['sortStatus']).trim();
+    const dateOrderRaw = getValueFrom(['recipientSubmissionDateSelectMobile']).trim();
+
+    const mapAscDesc = (raw) => {
+      const lc = raw.toLowerCase();
+      if (lc === 'asc' || lc === 'a to z' || lc === 'ascending') return 'asc';
+      if (lc === 'desc' || lc === 'z to a' || lc === 'descending') return 'desc';
+      return 'none';
+    };
+
+    const nameOrder = mapAscDesc(nameOrderRaw);
+    const contactOrder = mapAscDesc(contactOrderRaw);
+    const locOrder = mapAscDesc(locationOrderRaw);
+    const dateOrder = (() => {
+      const lc = dateOrderRaw.toLowerCase();
+      if (lc === 'desc' || lc === 'newest' || lc === 'newest first') return 'desc';
+      if (lc === 'asc' || lc === 'oldest' || lc === 'oldest first') return 'asc';
+      return 'none';
+    })();
+    const statusOrder = statusOrderRaw.toLowerCase();
 
     let list = recipientsData.filter((u)=>{
       const orgName = String(u.organization_name||'');
@@ -1134,35 +1263,68 @@ if (typeof window.showToast !== "function") {
         const city = extractCity(u.address||'');
         if (!city || city.toLowerCase() !== String(location).toLowerCase()) return false;
       }
+      if (categoryVal){
+        const cat = String(u.beneficiary_category || u.organization_type || '').trim();
+        if (!cat || cat.toLowerCase() !== categoryVal.toLowerCase()) return false;
+      }
+      if (positionVal){
+        const pos = String(u.position_designation || '').trim();
+        if (!pos || pos.toLowerCase() !== positionVal.toLowerCase()) return false;
+      }
       // Status filter: try to match user account status
       if (statusFilter && statusFilter !== 'All'){
         const userStatus = String(u.status||'').toLowerCase();
         if (userStatus !== statusFilter.toLowerCase()) return false;
       }
+      if (requireEmail && !String(u.email || '').trim()) return false;
+      if (requirePhone && !String(u.contact_number || '').trim()) return false;
+      if (requireContactPerson && !String(u.name || '').trim()) return false;
       // Activity filter: no backend metric; treat as no-op for now
       return true;
     });
 
     // Sorting
-    if (nameOrder && nameOrder !== 'None'){
+    list = list.slice();
+    if (nameOrder === 'asc' || nameOrder === 'desc'){
       list.sort((a,b)=>{
         const an = (a.organization_name || a.name || '').toLowerCase();
         const bn = (b.organization_name || b.name || '').toLowerCase();
         const cmp = an.localeCompare(bn);
-        return nameOrder === 'Ascending' ? cmp : -cmp;
+        return nameOrder === 'asc' ? cmp : -cmp;
       });
     }
-    if (dateOrder && dateOrder !== 'None'){
+    if (contactOrder === 'asc' || contactOrder === 'desc'){
+      list.sort((a,b)=>{
+        const ac = String(a.name || '').toLowerCase();
+        const bc = String(b.name || '').toLowerCase();
+        const cmp = ac.localeCompare(bc);
+        return contactOrder === 'asc' ? cmp : -cmp;
+      });
+    }
+    if (locOrder === 'asc' || locOrder === 'desc'){
+      list.sort((a,b)=>{
+        const al = extractCity(a.address||'').toLowerCase();
+        const bl = extractCity(b.address||'').toLowerCase();
+        const cmp = al.localeCompare(bl);
+        return locOrder === 'asc' ? cmp : -cmp;
+      });
+    }
+    if (statusOrder === 'active_first' || statusOrder === 'inactive_first'){
+      const priority = statusOrder === 'active_first' ? ['approved','inactive'] : ['inactive','approved'];
+      list.sort((a,b)=>{
+        const pa = priority.indexOf(String(a.status||'').toLowerCase());
+        const pb = priority.indexOf(String(b.status||'').toLowerCase());
+        return pa - pb;
+      });
+    }
+    if (dateOrder === 'asc' || dateOrder === 'desc'){
       list.sort((a,b)=>{
         const at = a.updated_at || a.created_at || '';
         const bt = b.updated_at || b.created_at || '';
         const av = at ? new Date(at).getTime() : 0;
         const bv = bt ? new Date(bt).getTime() : 0;
-        return dateOrder === 'Newest First' ? (bv - av) : (av - bv);
+        return dateOrder === 'desc' ? (bv - av) : (av - bv);
       });
-    }
-    if (qtyOrder && qtyOrder !== 'None'){
-      // No quantity metric available; keep stable
     }
     renderRecipients(list);
   }
@@ -1189,20 +1351,49 @@ if (typeof window.showToast !== "function") {
         } else if (r==='month'){
           from = new Date(today.getFullYear(), today.getMonth(), 1);
         }
-        const fd=document.getElementById('fromDate'); const td=document.getElementById('toDate');
-        if (fd) fd.value = fmt(from); if (td) td.value = fmt(to);
+        setInputValue(['filterDateFrom','fromDate'], fmt(from));
+        setInputValue(['filterDateTo','toDate'], fmt(to));
         // Wait for Apply
+      });
+    }
+
+    const filterApplyBtn = document.getElementById('recipientsFilterApplyBtn');
+    if (filterApplyBtn){
+      filterApplyBtn.addEventListener('click', () => {
+        applyFiltersAndSort();
+        closeDropdownFromButton(filterApplyBtn);
+      });
+    }
+    const filterResetBtn = document.getElementById('recipientsFilterResetBtn');
+    if (filterResetBtn){
+      filterResetBtn.addEventListener('click', () => {
+        resetFilterControls();
+      });
+    }
+    const sortApplyBtn = document.getElementById('recipientsSortApplyBtn');
+    if (sortApplyBtn){
+      sortApplyBtn.addEventListener('click', () => {
+        applyFiltersAndSort();
+        closeDropdownFromButton(sortApplyBtn);
+      });
+    }
+    const sortResetBtn = document.getElementById('recipientsSortResetBtn');
+    if (sortResetBtn){
+      sortResetBtn.addEventListener('click', () => {
+        resetSortControls();
       });
     }
     // Reset/Apply in dropdowns
     document.querySelectorAll('.dropdown-menu').forEach(menu=>{
       menu.addEventListener('click', (e)=>{
         const btn = e.target.closest('button'); if (!btn) return;
+        if (btn.matches('#recipientsFilterResetBtn, #recipientsFilterApplyBtn, #recipientsSortResetBtn, #recipientsSortApplyBtn')){
+          return;
+        }
         const label = (btn.textContent||'').trim().toLowerCase();
         if (label==='reset'){
-          const fd=document.getElementById('fromDate'); const td=document.getElementById('toDate'); if (fd) fd.value=''; if (td) td.value='';
-          ['recipientStatusSelectMobile','recipientDonationActivitySelectMobile','recipientCategorySelectMobile','recipientQuantityOrderSelectMobile','recipientSubmissionDateSelectMobile','recipientDonorOrderSelectMobile'].forEach(id=>{ const el=document.getElementById(id); if (el) el.selectedIndex=0; });
-          const s=document.getElementById('donationSearch'); if (s) s.value='';
+          resetFilterControls();
+          resetSortControls();
         } else if (label==='apply'){
           applyFiltersAndSort();
         }

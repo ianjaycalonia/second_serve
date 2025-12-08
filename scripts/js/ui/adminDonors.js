@@ -315,24 +315,97 @@ document.addEventListener("DOMContentLoaded", () => {
     return Array.from(new Set(vals.filter(v => v && String(v).trim()))).sort((a,b)=>String(a).localeCompare(String(b)));
   }
 
+  function getValueFrom(ids, fallback = "") {
+    const list = Array.isArray(ids) ? ids : [ids];
+    for (const id of list) {
+      const el = document.getElementById(id);
+      if (el && el.value != null) return String(el.value);
+    }
+    return fallback;
+  }
+
+  function setInputValue(ids, value) {
+    (Array.isArray(ids) ? ids : [ids]).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    });
+  }
+
+  function resetSelects(ids) {
+    (Array.isArray(ids) ? ids : [ids]).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.selectedIndex = 0;
+    });
+  }
+
+  function resetFilterControls() {
+    setInputValue(['filterDateFrom','filterDateTo','fromDate','toDate'], '');
+    resetSelects([
+      'donorsStatusSelectMobile','donorsDonationActivitySelectMobile','donorsCategorySelectMobile',
+      'filterStatusSelect','filterLocationSelect'
+    ]);
+    const search = document.getElementById('donationSearch');
+    if (search) search.value = '';
+  }
+
+  function resetSortControls() {
+    resetSelects([
+      'recipientQuantityOrderSelectMobile','recipientSubmissionDateSelectMobile','recipientDonorOrderSelectMobile',
+      'donorsQuantityOrderSelectMobile','donorsSubmissionDateSelectMobile','donorsDonorOrderSelectMobile',
+      'sortTotalDonation','sortLastDonationDate','sortDonorName'
+    ]);
+  }
+
+  function closeDropdownFromButton(btn) {
+    if (!btn) return;
+    const menu = btn.closest('.dropdown-menu');
+    if (!menu) return;
+    const toggle = menu.parentElement?.querySelector('[data-bs-toggle="dropdown"]');
+    if (toggle && window.bootstrap?.Dropdown) {
+      const inst = bootstrap.Dropdown.getInstance(toggle) || bootstrap.Dropdown.getOrCreateInstance(toggle);
+      inst?.hide();
+    } else {
+      menu.classList.remove('show');
+      menu.parentElement?.classList.remove('show');
+    }
+  }
+
   function applyFiltersAndSort(){
     const q = (document.getElementById('donationSearch')?.value || '').trim().toLowerCase();
-    const fromStr = document.getElementById('fromDate')?.value || '';
-    const toStr = document.getElementById('toDate')?.value || '';
-    const statusSel = document.getElementById('donorsStatusSelectMobile');
-    const statusFilter = (statusSel && statusSel.value) ? statusSel.value : 'All';
-    const actSel = document.getElementById('donorsDonationActivitySelectMobile');
-    const activity = (actSel && actSel.value) ? actSel.value : 'All';
-    const locSel = document.getElementById('donorsCategorySelectMobile');
-    const location = (locSel && locSel.value) ? locSel.value : '';
+    const fromStr = getValueFrom(['filterDateFrom','fromDate']).trim();
+    const toStr = getValueFrom(['filterDateTo','toDate']).trim();
+    const statusVal = getValueFrom(['filterStatusSelect','donorsStatusSelectMobile']).trim();
+    const statusFilter = statusVal ? statusVal : 'All';
+    const activityRaw = getValueFrom(['donorsDonationActivitySelectMobile']).trim();
+    const activity = activityRaw ? activityRaw : 'All';
+    const locVal = getValueFrom(['filterLocationSelect','donorsCategorySelectMobile']).trim();
+    const location = locVal && locVal.toLowerCase() !== 'all' ? locVal : '';
 
-    // Sort controls (accept both donor and recipient IDs for robustness)
-    const qtySel = document.getElementById('recipientQuantityOrderSelectMobile') || document.getElementById('donorsQuantityOrderSelectMobile');
-    const qtyOrder = qtySel ? qtySel.value : 'None';
-    const dateSel = document.getElementById('recipientSubmissionDateSelectMobile') || document.getElementById('donorsSubmissionDateSelectMobile');
-    const dateOrder = dateSel ? dateSel.value : 'None';
-    const nameSel = document.getElementById('recipientDonorOrderSelectMobile') || document.getElementById('donorsDonorOrderSelectMobile');
-    const nameOrder = nameSel ? nameSel.value : 'None';
+    // Sort controls (desktop + legacy IDs)
+    const qtyOrderRaw = getValueFrom(['sortTotalDonation','donorsQuantityOrderSelectMobile','recipientQuantityOrderSelectMobile']).trim();
+    const dateOrderRaw = getValueFrom(['sortLastDonationDate','donorsSubmissionDateSelectMobile','recipientSubmissionDateSelectMobile']).trim();
+    const nameOrderRaw = getValueFrom(['sortDonorName','donorsDonorOrderSelectMobile','recipientDonorOrderSelectMobile']).trim();
+
+    const qtyOrder = (() => {
+      const lc = qtyOrderRaw.toLowerCase();
+      if (lc === 'desc' || lc === 'high to low' || lc === 'highest to lowest') return 'desc';
+      if (lc === 'asc' || lc === 'low to high' || lc === 'lowest to highest') return 'asc';
+      return 'none';
+    })();
+
+    const dateOrder = (() => {
+      const lc = dateOrderRaw.toLowerCase();
+      if (lc === 'newest' || lc === 'newest first' || lc === 'desc') return 'desc';
+      if (lc === 'oldest' || lc === 'oldest first' || lc === 'asc') return 'asc';
+      return 'none';
+    })();
+
+    const nameOrder = (() => {
+      const lc = nameOrderRaw.toLowerCase();
+      if (lc === 'asc' || lc === 'ascending' || lc === 'a to z') return 'asc';
+      if (lc === 'desc' || lc === 'descending' || lc === 'z to a') return 'desc';
+      return 'none';
+    })();
 
     // Build aggregates map once
     const byDonor = buildDonorAggregates(donationsData);
@@ -356,8 +429,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!agg.last || agg.last > to) return false;
       }
       // Location filter
-      if (location && location !== 'All') {
-        if (String(u.address || '').trim() !== location) return false;
+      if (location) {
+        const donorLocation = String(u.address || '').trim();
+        if (donorLocation.toLowerCase() !== location.toLowerCase()) return false;
       }
       // Donation activity by total completed batches
       const total = agg.completed.size;
@@ -382,15 +456,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Sort: apply in priority order (quantity, date, donor name) if set
     list = list.slice();
-    if (nameOrder && nameOrder !== 'None') {
+    if (nameOrder === 'asc' || nameOrder === 'desc') {
       list.sort((a,b)=>{
         const an = (a.organization_name || a.name || '').toLowerCase();
         const bn = (b.organization_name || b.name || '').toLowerCase();
         const cmp = an.localeCompare(bn);
-        return nameOrder === 'Ascending' ? cmp : -cmp;
+        return nameOrder === 'asc' ? cmp : -cmp;
       });
     }
-    if (dateOrder && dateOrder !== 'None') {
+    if (dateOrder === 'asc' || dateOrder === 'desc') {
       list.sort((a,b)=>{
         const aggA = byDonor.get(a.user_id) || {
           completed: new Set(),
@@ -406,10 +480,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const bb = aggB.last;
         const av = aa ? aa.getTime() : 0;
         const bv = bb ? bb.getTime() : 0;
-        return (dateOrder === 'Newest First') ? (bv - av) : (av - bv);
+        return dateOrder === 'desc' ? (bv - av) : (av - bv);
       });
     }
-    if (qtyOrder && qtyOrder !== 'None') {
+    if (qtyOrder === 'asc' || qtyOrder === 'desc') {
       list.sort((a,b)=>{
         const aggA = byDonor.get(a.user_id) || {
           completed: new Set(),
@@ -423,7 +497,7 @@ document.addEventListener("DOMContentLoaded", () => {
         };
         const ac = aggA.completed.size;
         const bc = aggB.completed.size;
-        return (qtyOrder === 'High to Low') ? (bc - ac) : (ac - bc);
+        return qtyOrder === 'desc' ? (bc - ac) : (ac - bc);
       });
     }
 
@@ -432,12 +506,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function populateFilters(){
     // Populate location options
-    const sel = document.getElementById('donorsCategorySelectMobile');
-    if (sel){
-      const locs = uniqueSorted(donorsData.map(u=>String(u.address||'').trim()).filter(Boolean));
-      const cur = sel.value;
-      sel.innerHTML = '<option>All</option>' + locs.map(l=>`<option${l===cur?' selected':''}>${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');
-    }
+    const selects = [
+      document.getElementById('filterLocationSelect'),
+      document.getElementById('donorsCategorySelectMobile'),
+    ].filter(Boolean);
+    if (!selects.length) return;
+    const locs = uniqueSorted(
+      donorsData.map((u) => String(u.address || '').trim()).filter(Boolean)
+    );
+    selects.forEach((sel) => {
+      const cur = sel.value || '';
+      const optionsHtml = locs
+        .map((l) => {
+          const selected = cur && cur === l ? ' selected' : '';
+          const safe = escapeHtml(l);
+          return `<option value="${safe}"${selected}>${safe}</option>`;
+        })
+        .join('');
+      sel.innerHTML = `<option value="">All</option>${optionsHtml}`;
+      if (cur && !locs.includes(cur)) {
+        sel.selectedIndex = 0;
+      }
+    });
   }
 
   function bindUI(){
@@ -463,22 +553,50 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (r==='month'){
           from = new Date(today.getFullYear(), today.getMonth(), 1);
         }
-        const fd=document.getElementById('fromDate'); const td=document.getElementById('toDate');
-        if (fd) fd.value = fmt(from); if (td) td.value = fmt(to);
+        setInputValue(['filterDateFrom','fromDate'], fmt(from));
+        setInputValue(['filterDateTo','toDate'], fmt(to));
         // Do not apply yet; wait for Apply button
       });
     }
     // Sorts: do not auto-apply; only Apply button will trigger
+    const filterApplyBtn = document.getElementById('donorsFilterApplyBtn');
+    if (filterApplyBtn){
+      filterApplyBtn.addEventListener('click', () => {
+        applyFiltersAndSort();
+        closeDropdownFromButton(filterApplyBtn);
+      });
+    }
+    const filterResetBtn = document.getElementById('donorsFilterResetBtn');
+    if (filterResetBtn){
+      filterResetBtn.addEventListener('click', () => {
+        resetFilterControls();
+      });
+    }
+    const sortApplyBtn = document.getElementById('donorsSortApplyBtn');
+    if (sortApplyBtn){
+      sortApplyBtn.addEventListener('click', () => {
+        applyFiltersAndSort();
+        closeDropdownFromButton(sortApplyBtn);
+      });
+    }
+    const sortResetBtn = document.getElementById('donorsSortResetBtn');
+    if (sortResetBtn){
+      sortResetBtn.addEventListener('click', () => {
+        resetSortControls();
+      });
+    }
     // Reset/Apply buttons within dropdowns
     document.querySelectorAll('.dropdown-menu').forEach(menu=>{
       menu.addEventListener('click', (e)=>{
         const btn = e.target.closest('button'); if (!btn) return;
+        if (btn.matches('#donorsFilterResetBtn, #donorsFilterApplyBtn, #donorsSortResetBtn, #donorsSortApplyBtn')) {
+          return;
+        }
         const label = (btn.textContent||'').trim().toLowerCase();
         if (label==='reset'){
           // Reset filters and sorts
-          const fd=document.getElementById('fromDate'); const td=document.getElementById('toDate'); if (fd) fd.value=''; if (td) td.value='';
-          ['donorsStatusSelectMobile','donorsDonationActivitySelectMobile','donorsCategorySelectMobile','recipientQuantityOrderSelectMobile','recipientSubmissionDateSelectMobile','recipientDonorOrderSelectMobile','donorsQuantityOrderSelectMobile','donorsSubmissionDateSelectMobile','donorsDonorOrderSelectMobile'].forEach(id=>{ const el = document.getElementById(id); if (el) el.selectedIndex = 0; });
-          const search = document.getElementById('donationSearch'); if (search) search.value='';
+          resetFilterControls();
+          resetSortControls();
           // Do not apply yet; wait for Apply button
         } else if (label==='apply'){
           applyFiltersAndSort();

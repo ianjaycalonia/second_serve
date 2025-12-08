@@ -829,15 +829,28 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
             if (!Array.isArray(allocs) || !allocs.length){ resolve({ applied:false }); return; }
             let sum = 0;
             const statusLabel = (String(it?.derived_status||'').toLowerCase()==='expiring soon' || String(it?.derived_status||'').toLowerCase()==='soon to expire') ? 'Soon To Expire' : '';
+            const fallback = [];
             allocs.forEach(a => {
               const n = Math.max(0, parseInt(a.allocation||0,10)||0);
               const minPerRecipient = (totalQty < 30)
                 ? Math.max(1, Math.floor(3 * fraction) || 1)
                 : 1;
-              if (n < minPerRecipient) return;
+              if (n < minPerRecipient) {
+                fallback.push(a);
+                return;
+              }
               addAllocItemToRecipient(a.id, cat, name, n, (it.unit||''), statusLabel);
               sum += n;
             });
+            let availableExtra = Math.max(0, totalQty - sum);
+            if (availableExtra > 0 && fallback.length){
+              for (const cand of fallback){
+                if (availableExtra <= 0) break;
+                addAllocItemToRecipient(cand.id, cat, name, 1, (it.unit||''), statusLabel);
+                sum += 1;
+                availableExtra -= 1;
+              }
+            }
             resolve({ applied:true, sum });
           }).catch(err=>{
             diLogError('ensurePop (single auto allocate)', err);
@@ -964,15 +977,28 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       const statusLc = String(it.derived_status || '').toLowerCase();
       const isSoon = (statusLc === 'expiring soon' || statusLc === 'soon to expire');
       const statusLabel = isSoon ? 'Soon To Expire' : '';
+      const fallback = [];
       allocs.forEach(a => {
         const n = Math.max(0, parseInt(a.allocation||0,10)||0);
         const minPerRecipient = (totalQty < 30)
           ? Math.max(1, Math.floor(3 * fraction) || 1)
           : 1;
-        if (n < minPerRecipient) return;
+        if (n < minPerRecipient) {
+          fallback.push(a);
+          return;
+        }
         addAllocItemToRecipient(a.id, category, name, n, (it.unit||''), statusLabel);
         itemUnits += n;
       });
+      let availableExtra = Math.max(0, totalQty - itemUnits);
+      if (availableExtra > 0 && fallback.length){
+        for (const cand of fallback){
+          if (availableExtra <= 0) break;
+          addAllocItemToRecipient(cand.id, category, name, 1, (it.unit||''), statusLabel);
+          itemUnits += 1;
+          availableExtra -= 1;
+        }
+      }
       if (itemUnits>0){
         totalUnits += itemUnits;
         itemsProcessed++;
