@@ -926,7 +926,12 @@ async function getValidRecipientsFromPayload(payload){
 }
 
 async function tryAutoPopulateRecipientsFromPickup(){
+  // Only auto-populate when creating a NEW event from pickup. When editing an
+  // existing calendar event (SchedulePickupUI._editing === true), we should
+  // respect the recipients already attached to that event instead of
+  // reloading the full recipient list for the run.
   if (recipientsLoadedFromPickup || !isFromPickup()) return;
+  if (typeof window !== 'undefined' && window.SchedulePickupUI && window.SchedulePickupUI._editing) return;
   const payload = getPickupPayload();
   if (!payload) return;
   const recs = await getValidRecipientsFromPayload(payload);

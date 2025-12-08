@@ -718,11 +718,29 @@
       );
       return;
     }
-    // If not exactly 10, ask for confirmation instead of blocking
-    if (ids.length !== 10) {
+    // If not at the computed target per week, ask for confirmation instead of blocking
+    const total =
+      typeof window.__rl_totalRecipients === "number" &&
+      window.__rl_totalRecipients > 0
+        ? window.__rl_totalRecipients
+        : (function () {
+            try {
+              const poolCount = qsa(
+                "#pool .rcard[data-user-id]"
+              ).length;
+              const weekCount = qsa(
+                ".dropzone .rcard[data-user-id]"
+              ).length;
+              return poolCount + weekCount;
+            } catch (_) {
+              return 0;
+            }
+          })();
+    const target = total > 0 ? Math.ceil(total / 4) : 0;
+    if (target > 0 && ids.length !== target) {
       const ok = await confirmAction(
-        `This week has ${ids.length}/10 recipients. Do you want to proceed?`,
-        "Not exactly 10"
+        `This week has ${ids.length}/${target} recipients. Do you want to proceed?`,
+        "Not exactly target per week"
       );
       if (!ok) return;
     }
@@ -738,8 +756,11 @@
         }
         lockedIds.add(Number(id));
       });
-      // Refresh plan to get updated server locks
-      await restoreFromServer();
+      // Mark this week as locked in the local locks map so buttons update
+      try {
+        window.__rl_locks = window.__rl_locks || {};
+        window.__rl_locks[weekKey] = true;
+      } catch (_) {}
       applyWeekFocusAndButtons();
       
     } catch (e) {
@@ -751,6 +772,43 @@
     const dz = qs("#" + dropId);
     const pool = qs("#pool");
     if (!dz || !pool) return;
+    // Determine dynamic target per week based on total recipients divided by 4
+    const total =
+      typeof window.__rl_totalRecipients === "number" &&
+      window.__rl_totalRecipients > 0
+        ? window.__rl_totalRecipients
+        : (function () {
+            try {
+              const poolCount = qsa(
+                "#pool .rcard[data-user-id]"
+              ).length;
+              const weekCount = qsa(
+                ".dropzone .rcard[data-user-id]"
+              ).length;
+              return poolCount + weekCount;
+            } catch (_) {
+              return 0;
+            }
+          })();
+    const target =
+      typeof count === "number" && count > 0
+        ? count
+        : total > 0
+        ? Math.ceil(total / 4)
+        : 0;
+    if (!target) {
+      toast("No recipients available to auto-assign", "warning");
+      return;
+    }
+    const currentInWeek = qsa(".rcard[data-user-id]", dz).length;
+    const remaining = Math.max(0, target - currentInWeek);
+    if (remaining <= 0) {
+      toast(
+        `Week already has ${currentInWeek}/${target} recipient(s)`,
+        "info"
+      );
+      return;
+    }
     // Visible candidates in pool
     const cards = qsa("#pool .rcard").filter(
       (el) => el.style.display !== "none"
@@ -802,19 +860,19 @@
     takeFrom(elderly, 2, selected);
     takeFrom(medicine, 1, selected);
     // Fill remaining with others (not in the three tags)
-    const need = Math.max(0, count - selected.length);
+    const need = Math.max(0, remaining - selected.length);
     const poolOthers = others.filter(
       (o) => !selected.some((s) => s.id === o.id)
     );
-    for (let i = 0; i < poolOthers.length && selected.length < count; i++)
+    for (let i = 0; i < poolOthers.length && selected.length < remaining; i++)
       selected.push(poolOthers[i]);
     // If still short, fill from any remaining candidates
-    if (selected.length < count) {
+    if (selected.length < remaining) {
       const used = new Set(selected.map((s) => s.id));
       for (const cand of any) {
         if (used.has(cand.id)) continue;
         selected.push(cand);
-        if (selected.length >= count) break;
+        if (selected.length >= remaining) break;
       }
     }
     // Commit selection to target week
@@ -828,7 +886,12 @@
       }
     }
     updateCounts();
-    toast("Auto added 10 recipient(s)", added ? "success" : "warning");
+    toast(
+      added
+        ? `Auto added ${added} recipient(s)`
+        : "No recipients were added to this week",
+      added ? "success" : "warning"
+    );
   }
 
   async function fetchRecipients() {
@@ -876,6 +939,10 @@
         const isHidden = org === "foodbank (on-site)" || /(^|[^a-z])hidden([^a-z]|$)/.test(tags);
         return !isHidden;
       });
+      // Remember total eligible recipients for dynamic per-week targets
+      try {
+        window.__rl_totalRecipients = filtered.length;
+      } catch (_) {}
       // Render cards
       filtered.forEach((u) => {
         window.__rl_usersById.set(Number(u.user_id), u);
@@ -906,10 +973,10 @@
         clearWeek("w4");
         console.info("Cleared week 4");
       });
-      qs("#autoW1")?.addEventListener("click", () => autoFill("w1", 10));
-      qs("#autoW2")?.addEventListener("click", () => autoFill("w2", 10));
-      qs("#autoW3")?.addEventListener("click", () => autoFill("w3", 10));
-      qs("#autoW4")?.addEventListener("click", () => autoFill("w4", 10));
+      qs("#autoW1")?.addEventListener("click", () => autoFill("w1"));
+      qs("#autoW2")?.addEventListener("click", () => autoFill("w2"));
+      qs("#autoW3")?.addEventListener("click", () => autoFill("w3"));
+      qs("#autoW4")?.addEventListener("click", () => autoFill("w4"));
       const reloadBtn = qs('#reloadBtn');
       if (reloadBtn) {
         try {
@@ -924,17 +991,14 @@
       qs("#saveW2")?.addEventListener("click", () => saveWeekKey("W2", "w2"));
       qs("#saveW3")?.addEventListener("click", () => saveWeekKey("W3", "w3"));
       qs("#saveW4")?.addEventListener("click", () => saveWeekKey("W4", "w4"));
-      // auto all: fill every week up to 10 (no save here)
+      // auto all: fill every week up to its dynamic target (no save here)
       qs("#autoAllBtn")?.addEventListener("click", async () => {
         try {
           toast("Auto-filling all weeks…", "info");
           const dzIds = ["w1", "w2", "w3", "w4"];
-          // Fill each week up to 10
+          // Let autoFill compute per-week targets from the total recipients
           dzIds.forEach((id) => {
-            const dz = qs("#" + id);
-            if (!dz) return;
-            const cur = qsa(".rcard[data-user-id]", dz).length;
-            if (cur < 10) autoFill(id, 10);
+            autoFill(id);
           });
           updateCounts();
           toast("Auto-filled all weeks. Click Save All to persist.", "success");

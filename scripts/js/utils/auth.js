@@ -414,18 +414,22 @@ function showError(elementId, message) {
             errorElement = document.createElement('div');
             errorElement.id = `${elementId}Error`;
             errorElement.className = 'invalid-feedback';
-            input.parentNode.insertBefore(errorElement, input.nextSibling);
+            const parent = input.parentNode;
+            if (parent && parent.classList && parent.classList.contains('input-group')) {
+                parent.insertAdjacentElement('afterend', errorElement);
+            } else {
+                input.parentNode.insertBefore(errorElement, input.nextSibling);
+            }
         }
     }
     if (errorElement) errorElement.textContent = message || '';
     const field = document.getElementById(elementId);
     field?.classList.add('is-invalid');
-    // Also show a small tooltip on the field
+    // Also show a small tooltip on the field, but do not emit a separate
+    // generic "Validation error" toast here. Callers like the login AJAX
+    // handler already show a more detailed toast, and we want to avoid
+    // duplicate banners.
     showFieldTooltip(elementId, message || 'Please correct this field');
-    const toastMsg = message || 'Please correct the highlighted field.';
-    if (toastMsg) {
-        showToast(toastMsg, { title: 'Validation error', variant: 'danger', delay: 6000 });
-    }
 }
 
 // Clear error message

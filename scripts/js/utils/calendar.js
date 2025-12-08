@@ -962,7 +962,13 @@
         return stored && Array.isArray(stored.recipients) ? stored : null;
       })();
 
-      const hasPayloadRecipients = payload && Array.isArray(payload.recipients) && payload.recipients.length > 0;
+      // When editing an existing recipient event, do NOT seed from the global
+      // pickup payload; that payload contains all recipients for the run,
+      // not just the ones attached to this specific time slot. In edit mode
+      // we want to preserve the event's own recipient list (normalized.recipients).
+      const editingRecipientEvent = Boolean(normalized?.id) && isRecipientEvent;
+
+      const hasPayloadRecipients = !editingRecipientEvent && payload && Array.isArray(payload.recipients) && payload.recipients.length > 0;
       const canUseSelect2 = typeof window.$ === 'function' && $(recipientSelect).select2;
 
       if (!hasPayloadRecipients && canUseSelect2 && !$(recipientSelect).data('select2')){
