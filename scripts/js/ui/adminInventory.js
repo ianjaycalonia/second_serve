@@ -2131,11 +2131,12 @@
     const fromDate = document.getElementById("fromDate")?.value || "";
     const toDate = document.getElementById("toDate")?.value || "";
     // Sorting selections from Sort dropdown
-    const qtyOrder = document.getElementById("quantityOrderSelectMobile")?.value || "None";
-    const submOrder = document.getElementById("submissionDateSelectMobile")?.value || "None";
-    const nameOrder = document.getElementById("donorOrderSelectMobile")?.value || "None";
+    const sortExpiration = document.getElementById("sortExpiration")?.value || "None";
+    const sortQuantity = document.getElementById("sortQuantity")?.value || "None";
+    const sortCategory = document.getElementById("sortCategory")?.value || "None";
+    const sortItemName = document.getElementById("sortItemName")?.value || "None";
     const hideExpired = !!document.getElementById("hideExpiredToggle")?.checked;
-    return { category, q, fromDate, toDate, qtyOrder, submOrder, nameOrder, hideExpired };
+    return { category, q, fromDate, toDate, sortExpiration, sortQuantity, sortCategory, sortItemName, hideExpired };
   }
 
   function applyConfig(meta = {}) {
@@ -2343,10 +2344,11 @@
         return true;
       });
     }
-    // Sorting: build one combined comparator so priority sticks
-    const qtySel = (filters.qtyOrder || "None").toLowerCase();
-    const dtSel = (filters.submOrder || "None").toLowerCase();
-    const nameSel = (filters.nameOrder || "None").toLowerCase();
+    // Sorting: use sort* fields from Sort dropdown
+    const expSel = (filters.sortExpiration || "").toLowerCase(); // "asc" | "desc" | ""
+    const qtySel = (filters.sortQuantity || "").toLowerCase();
+    const catSel = (filters.sortCategory || "").toLowerCase();
+    const nameSel = (filters.sortItemName || "").toLowerCase();
     const toQty = (r) => Number(r.total_quantity ?? r.quantity ?? 0) || 0;
     const toDate = (r) => {
       const s = r.earliest_expiry || r.added_at || r.created_at || "";
@@ -2354,22 +2356,28 @@
       return isNaN(d.getTime()) ? new Date(0) : d;
     };
     const toName = (r) => String(r.item_name || "").toLowerCase();
-    if (["high to low", "low to high", "newest first", "oldest first", "ascending", "descending"].some((v) => [qtySel, dtSel, nameSel].includes(v))) {
+    const toCat = (r) => String(r.category || "").toLowerCase();
+    if ([expSel, qtySel, catSel, nameSel].some((v) => v === "asc" || v === "desc")) {
       arr.sort((a, b) => {
-        // Quantity primary when set
-        if (["high to low", "low to high"].includes(qtySel)) {
-          const A = toQty(a), B = toQty(b);
-          if (A !== B) return qtySel === "high to low" ? B - A : A - B;
-        }
-        // Date secondary when set
-        if (["newest first", "oldest first"].includes(dtSel)) {
+        // 1) Expiration date (Soonest / Latest)
+        if (expSel === "asc" || expSel === "desc") {
           const A = toDate(a).getTime(), B = toDate(b).getTime();
-          if (A !== B) return dtSel === "newest first" ? B - A : A - B;
+          if (A !== B) return expSel === "asc" ? A - B : B - A;
         }
-        // Name tertiary when set
-        if (["ascending", "descending"].includes(nameSel)) {
+        // 2) Quantity (Lowest / Highest)
+        if (qtySel === "asc" || qtySel === "desc") {
+          const A = toQty(a), B = toQty(b);
+          if (A !== B) return qtySel === "asc" ? A - B : B - A;
+        }
+        // 3) Category (A–Z / Z–A)
+        if (catSel === "asc" || catSel === "desc") {
+          const A = toCat(a), B = toCat(b);
+          if (A !== B) return catSel === "asc" ? (A < B ? -1 : 1) : (A > B ? -1 : 1);
+        }
+        // 4) Item name (A–Z / Z–A)
+        if (nameSel === "asc" || nameSel === "desc") {
           const A = toName(a), B = toName(b);
-          if (A !== B) return nameSel === "ascending" ? (A < B ? -1 : 1) : (A > B ? -1 : 1);
+          if (A !== B) return nameSel === "asc" ? (A < B ? -1 : 1) : (A > B ? -1 : 1);
         }
         return 0;
       });
@@ -2627,12 +2635,14 @@
       if (btnReset) {
         btnReset.addEventListener("click", () => {
           try {
-            const qSel = document.getElementById("quantityOrderSelectMobile");
-            const dSel = document.getElementById("submissionDateSelectMobile");
-            const nSel = document.getElementById("donorOrderSelectMobile");
-            if (qSel) qSel.value = "None";
-            if (dSel) dSel.value = "None";
-            if (nSel) nSel.value = "None";
+            const expSel = document.getElementById("sortExpiration");
+            const qtySel = document.getElementById("sortQuantity");
+            const catSel = document.getElementById("sortCategory");
+            const nameSel = document.getElementById("sortItemName");
+            if (expSel) expSel.value = "";
+            if (qtySel) qtySel.value = "";
+            if (catSel) catSel.value = "";
+            if (nameSel) nameSel.value = "";
           } catch (_) {}
         });
       }

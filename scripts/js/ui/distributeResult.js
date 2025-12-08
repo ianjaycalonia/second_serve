@@ -921,11 +921,11 @@
             tr.dataset.itemId = String(it.item_id || "");
             tr.dataset.rec = String(rid);
             tr.dataset.status = String(status).toLowerCase();
-            // Expose grouping keys for validation
             const itemNameRaw = String(it.item_name || it.name || "");
             tr.dataset.name = itemNameRaw.trim();
             tr.dataset.category = String(it.category || a.product_category || "");
             tr.dataset.unit = String(it.unit || it.unit_label || "");
+            tr.dataset.originalQty = String(it.quantity ?? "");
 
             const statusLower = String(status || "").toLowerCase();
             const isNotified = statusLower === "notified";
@@ -1113,6 +1113,12 @@
 
   async function validateAndClamp(inputEl) {
     try {
+      const raw = (inputEl.value || '').trim();
+      // Allow field to be temporarily blank while user edits. Validation
+      // will run again once a digit is entered or on save.
+      if (raw === '') {
+        return;
+      }
       const tr = inputEl.closest('tr');
       if (!tr) return;
       const name = tr.dataset.name || '';
@@ -1122,10 +1128,10 @@
       const otherSums = groupSums(inputEl);
       const others = otherSums.get(k) || 0;
       if (!previousQuantities.has(inputEl)) {
-        const initial = parseInt(inputEl.value || '0', 10) || 0;
+        const initial = parseInt(raw || '0', 10) || 0;
         previousQuantities.set(inputEl, initial > 0 ? initial : 0);
       }
-      let val = parseInt(inputEl.value || '0', 10) || 0;
+      let val = parseInt(raw || '0', 10) || 0;
       if (val < 0) val = 0;
       if (val === 0) {
         const prior = previousQuantities.get(inputEl) || 0;
@@ -1785,15 +1791,34 @@
     const allocId =
       parseInt(tr.getAttribute("data-allocation-id") || "0", 10) || 0;
     const name = getRowName(tr);
-    const qty = Math.max(
-      0,
-      parseInt(tr.querySelector(".dr-qty")?.value || "0", 10) || 0
-    );
+    const qtyInput = tr.querySelector(".dr-qty");
+    const rawVal = qtyInput ? (qtyInput.value || "").trim() : "";
+    const origRaw =
+      tr.dataset && typeof tr.dataset.originalQty !== "undefined"
+        ? String(tr.dataset.originalQty)
+        : "";
+    const hasOrig = origRaw !== "";
+    const origQty = hasOrig
+      ? Math.max(0, parseInt(origRaw, 10) || 0)
+      : null;
     // If locked or no meaningful data, skip
     if (isLocked) return;
     try {
       if (itemId > 0) {
-        // Existing item: update
+        // Existing item: interpret blank as revert, skip update when unchanged
+        if (rawVal === "") {
+          if (qtyInput && hasOrig) {
+            qtyInput.value = String(origQty);
+            try {
+              previousQuantities.set(qtyInput, origQty);
+            } catch (_) {}
+          }
+          return;
+        }
+        const qty = Math.max(0, parseInt(rawVal, 10) || 0);
+        if (hasOrig && qty === origQty) {
+          return;
+        }
         let ok = false;
         if (
           window.AllocationsAPI &&
@@ -1826,8 +1851,11 @@
           __DR_DIRTY__ = false;
           notifySaved("Item updated.");
         }
-      } else if (allocId && name && qty > 0) {
+      } else if (allocId && name) {
         // New row: add
+        if (rawVal === "") return;
+        const qty = Math.max(0, parseInt(rawVal, 10) || 0);
+        if (qty <= 0) return;
         let newId = 0;
         let ok = false;
         if (
@@ -2027,19 +2055,46 @@
       const allocId =
         parseInt(tr.getAttribute("data-allocation-id") || "0", 10) || 0;
       const name = tr.querySelector(".dr-name")?.value?.trim() || "";
-      const qty = Math.max(
-        0,
-        parseInt(tr.querySelector(".dr-qty")?.value || "0", 10) || 0
-      );
+      const qtyInput = tr.querySelector(".dr-qty");
+      const rawVal = qtyInput ? (qtyInput.value || "").trim() : "";
+      const origRaw =
+        tr.dataset && typeof tr.dataset.originalQty !== "undefined"
+          ? String(tr.dataset.originalQty)
+          : "";
+      const hasOrig = origRaw !== "";
+      const origQty = hasOrig
+        ? Math.max(0, parseInt(origRaw, 10) || 0)
+        : null;
       // rows already removed via delete handler won't be present here
       if (itemId) {
+        // Existing item row
+        if (rawVal === "") {
+          // Treat blank as revert to original quantity: restore UI and skip update
+          if (qtyInput && hasOrig) {
+            qtyInput.value = String(origQty);
+            try {
+              previousQuantities.set(qtyInput, origQty);
+            } catch (_) {}
+          }
+          return;
+        }
+        const qty = Math.max(0, parseInt(rawVal, 10) || 0);
+        if (hasOrig && qty === origQty) {
+          // No net change, skip update
+          return;
+        }
         ops.update.push({ item_id: itemId, item_name: name, quantity: qty });
-      } else if (allocId && name && qty > 0) {
-        ops.add.push({
-          allocation_id: allocId,
-          item_name: name,
-          quantity: qty,
-        });
+      } else if (allocId && name) {
+        // New item row to be added
+        if (rawVal === "") return;
+        const qty = Math.max(0, parseInt(rawVal, 10) || 0);
+        if (qty > 0) {
+          ops.add.push({
+            allocation_id: allocId,
+            item_name: name,
+            quantity: qty,
+          });
+        }
       }
     });
     return ops;
