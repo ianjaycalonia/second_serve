@@ -554,13 +554,55 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
       if (!host) return;
       let list = host.querySelector('ul');
       if (!list){ list = document.createElement('ul'); list.className = 'list-unstyled mb-0'; host.appendChild(list); }
+      const keyCat = (cat || '').toLowerCase();
+      const keyName = (name || '').toLowerCase();
+      const existing = Array.from(list.querySelectorAll('li')).filter(li => {
+        const liCat = (li.dataset.category || '').toLowerCase();
+        const liName = (li.dataset.name || '').toLowerCase();
+        return liCat === keyCat && liName === keyName;
+      });
+      const addQty = Math.max(1, parseInt(qty || 1, 10) || 1);
+      if (existing.length){
+        const primary = existing[0];
+        const qtyInput = primary.querySelector('.alloc-qty-input');
+        if (qtyInput){
+          let base = 0;
+          existing.forEach((li, idx) => {
+            const inp = li.querySelector('.alloc-qty-input');
+            const val = Math.max(0, parseInt((inp && inp.value) || '0', 10) || 0);
+            base += val;
+            if (idx > 0){
+              try { li.remove(); } catch(_) {}
+            }
+          });
+          const prev = base;
+          let desired = base + addQty;
+          qtyInput.value = String(desired);
+          try {
+            qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+          } catch(_) {}
+          const unitSpan = primary.querySelector('.alloc-unit');
+          if (unitSpan){
+            const currentUnit = (unitSpan.textContent || '').trim();
+            if (!currentUnit && unit) unitSpan.textContent = unit;
+          }
+          const metaNode = document.getElementById('diAllocMeta');
+          try {
+            const currentVal = Math.max(0, parseInt(qtyInput.value || '0', 10) || 0);
+            if (currentVal === prev && desired > prev && metaNode){
+              metaNode.textContent = 'No more inventory available for this item.';
+            }
+          } catch(_) {}
+          return;
+        }
+      }
       const li = document.createElement('li');
       li.className = 'd-flex align-items-center border-bottom py-1 small px-2';
-      li.dataset.category = (cat || '').toLowerCase();
-      li.dataset.name = (name || '').toLowerCase();
+      li.dataset.category = keyCat;
+      li.dataset.name = keyName;
       const label = [cat||'', name||''].filter(Boolean).join(' • ');
       const statusBadge = (statusLabel && String(statusLabel).trim()) ? `<span class="badge bg-warning text-dark ms-2">${statusLabel}</span>` : '';
-      const q = Math.max(1, parseInt(qty||1,10)||1);
+      const q = addQty;
       const u = (unit||'') || '';
       li.innerHTML = `
         <span class="alloc-label flex-grow-1">${label} ${statusBadge}</span>
@@ -572,7 +614,7 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
           <i class="bi bi-x-lg text-danger"></i>
         </button>`;
       list.appendChild(li);
-      const originalQty = Math.max(1, parseInt(qty || 1, 10) || 1);
+      const originalQty = addQty;
       // Bind edit/delete handlers and prevent carousel from sliding on interaction
       const qtyInput = li.querySelector('.alloc-qty-input');
       if (qtyInput){
@@ -1223,14 +1265,17 @@ function normalizeWeeksExToMap(weeksEx){ try { return window.normalizeWeeksExToM
                     if (!seen.has(name)){
                       seen.set(name, { id: name, text: name, __qty: totalQty, __lowQty: totalQty < 20, __unit: (it?.unit||''), __category: (it?.category ?? it?.product_category ?? '').trim() });
                     } else {
-                      // Accumulate quantity if same name appears multiple times (safety)
                       const cur = seen.get(name);
                       const sum = (parseInt(cur.__qty,10)||0) + totalQty;
                       cur.__qty = sum; cur.__lowQty = sum < 20; if (!cur.__unit && it?.unit) cur.__unit = it.unit; if (!cur.__category && (it?.category || it?.product_category)) cur.__category = (it?.category ?? it?.product_category ?? '').trim();
                       seen.set(name, cur);
                     }
                   });
-                  return { results: Array.from(seen.values()) };
+                  const results = Array.from(seen.values()).filter(row => {
+                    const q = parseInt(row.__qty, 10);
+                    return Number.isFinite(q) ? q > 0 : !!row.__qty;
+                  });
+                  return { results };
                 } catch(_){ return { results: [] }; }
               }
             },
