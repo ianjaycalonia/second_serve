@@ -677,6 +677,7 @@
                     class="form-control"
                     id="addRecFirstName"
                     placeholder="First name"
+                    required
                   />
                 </div>
                 <div class="col-4 col-md-2">
@@ -694,6 +695,7 @@
                     class="form-control"
                     id="addRecLastName"
                     placeholder="Last name"
+                    required
                   />
                 </div>
                 <div class="col-4 col-md-2">
@@ -708,7 +710,14 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Position/Designation</label>
-              <input type="text" id="addRecPosition" class="form-control" placeholder="e.g., Program Coordinator" />
+              <select
+                id="addRecPosition"
+                class="form-select"
+                data-placeholder="Select position"
+                required
+              >
+                <option value=""></option>
+              </select>
             </div>
             <div class="mb-3">
               <label class="form-label">Email</label>
@@ -717,6 +726,7 @@
                 id="addRecEmail"
                 class="form-control"
                 placeholder="name@org.org"
+                required
               />
             </div>
             <div class="mb-3">

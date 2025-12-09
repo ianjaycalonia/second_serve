@@ -913,6 +913,7 @@ if (typeof window.showToast !== "function") {
 
   // Keep datasets in memory for filtering/sorting
   let recipientsData = [];
+  let positionSuggestionLower = [];
 
   async function fetchRecipients() {
     const res = await fetch(
@@ -1024,6 +1025,37 @@ if (typeof window.showToast !== "function") {
 
   function uniqueSorted(vals){
     return Array.from(new Set(vals.filter(v => v && String(v).trim()))).sort((a,b)=>String(a).localeCompare(String(b)));
+  }
+
+  function populatePositionSuggestions(){
+    const select = document.getElementById('addRecPosition');
+    if (!select) return;
+    const positions = uniqueSorted(
+      recipientsData
+        .map(u => String(u.position_designation || '').trim())
+        .filter(Boolean)
+    );
+    positionSuggestionLower = positions.map(p => p.toLowerCase());
+    const current = select.value || '';
+    const $select = window.$ && $.fn?.select2 ? window.$(select) : null;
+    if ($select && $select.data('select2')) {
+      $select.empty();
+      $select.append(new Option('', '', false, false));
+      positions.forEach((p) => {
+        $select.append(new Option(p, p, false, false));
+      });
+      const shouldSelect = positions.includes(current) ? current : '';
+      $select.val(shouldSelect || null).trigger('change.select2');
+    } else {
+      const opts = ['<option value=""></option>'];
+      positions.forEach((p) => {
+        opts.push(`<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`);
+      });
+      select.innerHTML = opts.join('');
+      if (positions.includes(current)) {
+        select.value = current;
+      }
+    }
   }
 
   function getValueFrom(ids, fallback = "") {
@@ -1737,6 +1769,7 @@ if (typeof window.showToast !== "function") {
     const recipients = await fetchRecipients();
     recipientsData = recipients;
     populateFilters();
+    populatePositionSuggestions();
     applyFiltersAndSort();
   }
 
@@ -1754,6 +1787,7 @@ if (typeof window.showToast !== "function") {
     const recipients = await fetchRecipients();
     recipientsData = recipients;
     populateFilters();
+    populatePositionSuggestions();
     applyFiltersAndSort();
   }
 
@@ -1771,6 +1805,7 @@ if (typeof window.showToast !== "function") {
     const recipients = await fetchRecipients();
     recipientsData = recipients;
     populateFilters();
+    populatePositionSuggestions();
     applyFiltersAndSort();
   }
 
@@ -1783,6 +1818,7 @@ if (typeof window.showToast !== "function") {
       const recipients = await fetchRecipients();
       recipientsData = recipients;
       populateFilters();
+      populatePositionSuggestions();
       bindUI();
       applyFiltersAndSort();
 
@@ -2020,12 +2056,15 @@ if (typeof window.showToast !== "function") {
     const addModalEl = document.getElementById('addRecipientModal');
     const addCategorySelect = document.getElementById('addRecCategory');
     initializeBeneficiaryCategorySelect(addCategorySelect, addModalEl);
+    const addPositionSelect = document.getElementById('addRecPosition');
+    ensureSelect2(addPositionSelect, addModalEl);
     syncBeneficiaryCategorySelection(addCategorySelect, '', '');
 
     if (addModalEl) {
       addModalEl.addEventListener('shown.bs.modal', () => {
         initializeBeneficiaryCategorySelect(addCategorySelect, addModalEl);
         syncBeneficiaryCategorySelection(addCategorySelect, '', '');
+        ensureSelect2(addPositionSelect, addModalEl);
       });
     }
 
@@ -2065,8 +2104,30 @@ if (typeof window.showToast !== "function") {
       const beneficiary_category_id = addCategorySelect?.value || '';
       const fb = document.getElementById('addRecFeedback');
       if (fb) fb.textContent = '';
+      if (!first || !last) {
+        const msg = 'Please provide the contact person\'s first and last names.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
       if (!org && !name) {
         if (fb) fb.textContent = 'Organization Name or Contact Person is required.';
+        return;
+      }
+      if (!position) {
+        const msg = 'Position/Designation is required.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
+      const positionLower = position.toLowerCase();
+      if (positionSuggestionLower.length && !positionSuggestionLower.includes(positionLower)) {
+        const msg = 'Please choose a position from the available list.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
         return;
       }
       if (!contact_number || !brgy || !city) {
@@ -2113,6 +2174,13 @@ if (typeof window.showToast !== "function") {
         }
         try { showToast(msg, { title: 'Duplicate recipient', variant: 'danger' }); } catch (_) {
           alert(msg);
+        }
+        return;
+      }
+      if (!email) {
+        const msg = 'Email is required.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
         }
         return;
       }

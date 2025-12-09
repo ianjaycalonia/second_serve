@@ -1,5 +1,22 @@
 (function(){
   try{
+    if (!window.jQuery) {
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', '/includes/lib/jquery/3.7.1/jquery.min.js', false);
+        xhr.send(null);
+        if (xhr.status >= 200 && xhr.status < 400 && typeof xhr.responseText === 'string') {
+          // eslint-disable-next-line no-eval
+          eval(xhr.responseText);
+          if (typeof window.jQuery !== 'undefined' && typeof window.$ === 'undefined') {
+            window.$ = window.jQuery;
+          }
+        }
+      } catch(_){ /* ignore */ }
+    }
+    if (typeof window.jQuery !== 'undefined' && typeof window.$ === 'undefined') {
+      window.$ = window.jQuery;
+    }
     if (!window.APP_VERSION) window.APP_VERSION = '20250925';
     if (!window.API_BASE_URL) window.API_BASE_URL = '/php/api';
     // Set this to the actual recipient_id of the Foodbank (must exist in Users as an approved recipient)
