@@ -771,14 +771,50 @@ document.addEventListener("DOMContentLoaded", () => {
           const donor_category_id = document.getElementById('addDonorCategory')?.value || '';
           const fb = document.getElementById('addDonorFeedback');
           if (fb) fb.textContent = '';
+          const showRequiredError = (message) => {
+            if (fb) fb.textContent = message;
+            try {
+              showToast(message, { title: 'Add Donor', variant: 'danger' });
+            } catch (_) {
+              showMessageModal('Add Donor', message);
+            }
+          };
+          if (!first) {
+            showRequiredError('First name is required.');
+            return;
+          }
+          if (!last) {
+            showRequiredError('Last name is required.');
+            return;
+          }
           if (!org && !name) {
             if (fb) fb.textContent = 'Organization Name or Contact Person is required.';
             return;
           }
-          if (email && !isValidEmail(email)) {
+          if (!email) {
+            showRequiredError('Email is required.');
+            return;
+          }
+          if (!isValidEmail(email)) {
             try { showToast('Please enter a valid email address.', 'danger'); } catch (_) {
               showMessageModal('Add Donor', 'Please enter a valid email address.');
             }
+            return;
+          }
+          if (!contact_number) {
+            showRequiredError('Contact number is required.');
+            return;
+          }
+          if (!brgy) {
+            showRequiredError('Barangay is required.');
+            return;
+          }
+          if (!city) {
+            showRequiredError('City / Municipality is required.');
+            return;
+          }
+          if (!donor_category_id) {
+            showRequiredError('Donor category is required.');
             return;
           }
           const existingDonors = Array.isArray(donorsData) ? donorsData : [];
