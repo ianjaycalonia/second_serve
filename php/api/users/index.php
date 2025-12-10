@@ -176,6 +176,7 @@ function handleAdminUpdateProfile(array $payload) {
         'position_designation' => $payload['position_designation'] ?? null,
         'contact_person' => $payload['contact_person'] ?? null,
         'beneficiary_category_id' => $payload['beneficiary_category_id'] ?? null,
+        'donor_category_id' => $payload['donor_category_id'] ?? null,
     ]);
     sendJson(['success' => true, 'message' => 'Profile updated']);
 }

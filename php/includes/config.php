@@ -42,9 +42,9 @@ if (!defined('APP_COOKIE_SECURE')) {
 
 // Database configuration (override via environment for hosting providers)
 // Default to hosting DB on SmarterASP, but use local MySQL when running on localhost.
-$defaultDbHost = 'mysql1001.site4now.net';
-$defaultDbName = 'db_ac1941_sshare';
-$defaultDbUser = 'ac1941_sshare';
+$defaultDbHost = 'mysql5036.site4now.net';
+$defaultDbName = 'db_ac1e59_sshare';
+$defaultDbUser = 'ac1e59_sshare';
 $defaultDbPass = 'NewSmart4sp!';
 
 // On local XAMPP (localhost / 127.0.0.1), prefer the local database by default.
