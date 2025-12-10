@@ -2076,6 +2076,20 @@ if (typeof window.showToast !== "function") {
       const suffix = document.getElementById('addRecSuffix')?.value.trim() || '';
       const position = document.getElementById('addRecPosition')?.value.trim() || '';
       const nameInput = document.getElementById('addRecName');
+      const FIRST_NAME_REGEX = /^[A-Za-z]+(?:[A-Za-z]*[0-9]+)?$/;
+      const MIDDLE_INITIAL_REGEX = /^[A-Za-z]{0,2}$/;
+      const LAST_NAME_REGEX = /^[A-Za-z]+(?:[ '\-][A-Za-z]+)*$/;
+      const CONTACT_NUMBER_REGEX = /^\(0\d{3}-\d{3}-\d{4}\)$/;
+      const phoneArea = document.getElementById('addRecPhoneArea')?.value.trim() || '';
+      const phonePrefix = document.getElementById('addRecPhonePrefix')?.value.trim() || '';
+      const phoneLine = document.getElementById('addRecPhoneLine')?.value.trim() || '';
+      const composedPhone = (phoneArea && phonePrefix && phoneLine)
+        ? `(${phoneArea}-${phonePrefix}-${phoneLine})`
+        : '';
+      const hiddenPhoneInput = document.getElementById('addRecPhone');
+      if (hiddenPhoneInput) {
+        hiddenPhoneInput.value = composedPhone;
+      }
       const composeFullName = () => {
         const parts = [];
         if (first) parts.push(first);
@@ -2093,10 +2107,13 @@ if (typeof window.showToast !== "function") {
       }
       const name = composedName || nameInput?.value.trim() || '';
       const email = document.getElementById('addRecEmail')?.value.trim() || '';
-      const contact_number = document.getElementById('addRecPhone')?.value.trim() || '';
+      const contact_number = composedPhone;
       const brgy = document.getElementById('addRecBarangay')?.value.trim() || '';
       const city = document.getElementById('addRecCity')?.value.trim() || '';
-      const address = [brgy, city].filter(Boolean).join(', ');
+      const addrInput = document.getElementById('addRecAddress');
+      const street = addrInput?.value.trim() || '';
+      const addressParts = [street, brgy, city].filter(Boolean);
+      const address = addressParts.join(', ');
       const total_residents = document.getElementById('addRecPopulation')?.value || '';
       const age_group = document.getElementById('addRecAgeGroup')?.value.trim() || '';
       const male_count = document.getElementById('addRecMale')?.value || '';
@@ -2106,6 +2123,27 @@ if (typeof window.showToast !== "function") {
       if (fb) fb.textContent = '';
       if (!first || !last) {
         const msg = 'Please provide the contact person\'s first and last names.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
+      if (!FIRST_NAME_REGEX.test(first)) {
+        const msg = 'First name must start with letters and may only include numbers at the end.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
+      if (middle && !MIDDLE_INITIAL_REGEX.test(middle)) {
+        const msg = 'Middle initial may only contain up to two letters.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
+      if (!LAST_NAME_REGEX.test(last)) {
+        const msg = 'Last name may only include letters, spaces, hyphens, or apostrophes.';
         try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
           if (fb) fb.textContent = msg; else alert(msg);
         }
@@ -2130,11 +2168,34 @@ if (typeof window.showToast !== "function") {
         }
         return;
       }
-      if (!contact_number || !brgy || !city) {
-        const msg = 'Contact number, barangay, and city/municipality are required.';
+      if (!phoneArea || !phonePrefix || !phoneLine) {
+        const msg = 'Complete all contact number fields.';
         try {
           showToast(msg, { title: 'Validation error', variant: 'danger' });
         } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
+      if (!CONTACT_NUMBER_REGEX.test(contact_number)) {
+        const msg = 'Contact number must follow the format (09XX-XXX-XXXX).';
+        try {
+          showToast(msg, { title: 'Validation error', variant: 'danger' });
+        } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
+      if (!brgy) {
+        const msg = 'Barangay is required.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
+          if (fb) fb.textContent = msg; else alert(msg);
+        }
+        return;
+      }
+      if (!city) {
+        const msg = 'City / Municipality is required.';
+        try { showToast(msg, { title: 'Validation error', variant: 'danger' }); } catch (_) {
           if (fb) fb.textContent = msg; else alert(msg);
         }
         return;

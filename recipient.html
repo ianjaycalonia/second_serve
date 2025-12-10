@@ -677,6 +677,8 @@
                     class="form-control"
                     id="addRecFirstName"
                     placeholder="First name"
+                    pattern="^[A-Za-z]+(?:[A-Za-z]*[0-9]+)?$"
+                    title="Start with letters; optional digits may appear at the end"
                     required
                   />
                 </div>
@@ -687,6 +689,8 @@
                     id="addRecMiddleInitial"
                     maxlength="2"
                     placeholder="M.I."
+                    pattern="^[A-Za-z]{0,2}$"
+                    title="Use letters only"
                   />
                 </div>
                 <div class="col-8 col-md-4">
@@ -695,6 +699,8 @@
                     class="form-control"
                     id="addRecLastName"
                     placeholder="Last name"
+                    pattern="^[A-Za-z]+(?:[ '-][A-Za-z]+)*$"
+                    title="Use letters only (spaces, apostrophes, and hyphens allowed)"
                     required
                   />
                 </div>
@@ -731,7 +737,58 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Contact Number</label>
-              <input type="text" id="addRecPhone" class="form-control" required />
+              <input type="hidden" id="addRecPhone" />
+              <div class="row g-2">
+                <div class="col-4">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="addRecPhoneArea"
+                    placeholder="09XX"
+                    inputmode="numeric"
+                    maxlength="4"
+                    pattern="^[0-9]{4}$"
+                    title="Enter the first four digits"
+                    required
+                  />
+                </div>
+                <div class="col-3">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="addRecPhonePrefix"
+                    placeholder="XXX"
+                    inputmode="numeric"
+                    maxlength="3"
+                    pattern="^[0-9]{3}$"
+                    title="Enter the middle three digits"
+                    required
+                  />
+                </div>
+                <div class="col-5">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="addRecPhoneLine"
+                    placeholder="XXXX"
+                    inputmode="numeric"
+                    maxlength="4"
+                    pattern="^[0-9]{4}$"
+                    title="Enter the last four digits"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="form-text">Number will be formatted as (09XX-XXX-XXXX)</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Street / Building Number</label>
+              <input
+                type="text"
+                id="addRecAddress"
+                class="form-control"
+                placeholder="Street / Building Number"
+              />
             </div>
             <div class="row g-2 mb-3">
               <div class="col-12 col-md-6">

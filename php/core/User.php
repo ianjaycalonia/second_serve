@@ -749,9 +749,34 @@ class User
                         'donor_category' => $r['donorcategory'] ?? ($r['type'] ?? null),
                         'notes' => $r['notes'] ?? null,
                     ];
-                    if (empty($data['organization_name']) && empty($data['name'])) {
+
+                    $orgName = isset($data['organization_name']) ? trim((string)$data['organization_name']) : '';
+                    $personName = isset($data['name']) ? trim((string)$data['name']) : '';
+                    $email = isset($data['email']) ? trim((string)$data['email']) : '';
+
+                    if ($orgName === '' && $personName === '') {
                         throw new Exception('Missing donor name/organization');
                     }
+
+                    // If an existing donor matches by email or organization name, skip creating a duplicate
+                    $existingUser = null;
+                    if ($email !== '') {
+                        $existingUser = $this->db->query(
+                            'SELECT u.user_id FROM users u WHERE u.role = ? AND u.email = ? LIMIT 1',
+                            ['donor', $email]
+                        )->fetch();
+                    }
+                    if (!$existingUser && $orgName !== '') {
+                        $existingUser = $this->db->query(
+                            'SELECT u.user_id FROM users u JOIN donor_profiles dp ON dp.user_id = u.user_id WHERE u.role = ? AND dp.organization_name = ? LIMIT 1',
+                            ['donor', $orgName]
+                        )->fetch();
+                    }
+                    if ($existingUser) {
+                        // Duplicate donor; treat as a no-op for import (skip without error)
+                        continue;
+                    }
+
                     $this->createDonor($data);
                     $inserted++;
                 } catch (Exception $e) {

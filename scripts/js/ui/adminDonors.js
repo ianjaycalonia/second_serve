@@ -10,49 +10,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let donationsData = [];
   let donorCategoryMap = new Map();
   let currentEditDonorId = null;
-  let confirmActionCallback = null;
-
-  function getModalInstance(id) {
-    const el = document.getElementById(id);
-    if (!el || !window.bootstrap || !bootstrap.Modal) return null;
-    return bootstrap.Modal.getOrCreateInstance(el);
-  }
-
-  function setModalContent(el, text) {
-    if (!el) return;
-    const safe = escapeHtml(String(text ?? ""));
-    el.innerHTML = safe.replace(/\n/g, "<br>");
-  }
-
-  function showMessageModal(title, message) {
-    const titleEl = document.getElementById("donorMessageModalLabel");
-    const bodyEl = document.getElementById("donorMessageModalBody");
-    if (titleEl) titleEl.textContent = String(title ?? "Notice");
-    setModalContent(bodyEl, message ?? "");
-    const modal = getModalInstance("donorMessageModal");
-    modal?.show();
-  }
-
-  function showConfirmModal({
-    title = "Confirm Action",
-    message = "Are you sure?",
-    confirmText = "Confirm",
-    confirmVariant = "primary",
-    onConfirm = null,
-  } = {}) {
-    const titleEl = document.getElementById("donorConfirmModalLabel");
-    const bodyEl = document.getElementById("donorConfirmModalBody");
-    const btn = document.getElementById("donorConfirmModalBtn");
-    if (titleEl) titleEl.textContent = String(title);
-    setModalContent(bodyEl, message);
-    if (btn) {
-      btn.textContent = String(confirmText);
-      btn.className = `btn btn-${confirmVariant}`;
-    }
-    confirmActionCallback = typeof onConfirm === "function" ? onConfirm : null;
-    const modal = getModalInstance("donorConfirmModal");
-    modal?.show();
-  }
 
   function escapeHtml(str) {
     return String(str || "").replace(
@@ -85,6 +42,33 @@ document.addEventListener("DOMContentLoaded", () => {
     ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
   }
 
+  function getModalInstance(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    if (window.bootstrap && bootstrap.Modal) {
+      return bootstrap.Modal.getOrCreateInstance(el);
+    }
+    if (window.$) {
+      // jQuery fallback
+      return {
+        show() {
+          $(el).modal('show');
+        },
+        hide() {
+          $(el).modal('hide');
+        },
+      };
+    }
+    return {
+      show() {
+        el.style.display = 'block';
+      },
+      hide() {
+        el.style.display = 'none';
+      },
+    };
+  }
+
   function formatUserStatus(status) {
     const s = String(status || "").toLowerCase();
     if (!s) return "—";
@@ -97,6 +81,69 @@ document.addEventListener("DOMContentLoaded", () => {
     if (value === undefined || value === null) return "&mdash;";
     const str = String(value).trim();
     return str ? escapeHtml(str) : "&mdash;";
+  }
+
+  // Donor import helpers (modal + loading state)
+  let donorImportInProgress = false;
+
+  function setDonorImportLoading(loading, refs) {
+    donorImportInProgress = !!loading;
+    const btn = refs && refs.importBtn ? refs.importBtn : null;
+    const modal = refs && refs.modalEl ? refs.modalEl : null;
+    if (btn) {
+      if (loading) {
+        btn.disabled = true;
+        btn.dataset._orig = btn.innerHTML;
+        btn.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Importing...';
+      } else {
+        btn.disabled = false;
+        if (btn.dataset._orig) {
+          btn.innerHTML = btn.dataset._orig;
+          delete btn.dataset._orig;
+        }
+      }
+    }
+    if (modal) {
+      const inputs = modal.querySelectorAll("input, button, select, textarea");
+      inputs.forEach((el) => {
+        if (el === btn) return;
+        if (loading) {
+          if (!el.dataset._disabled) {
+            el.dataset._disabled = el.disabled ? "1" : "";
+          }
+          el.disabled = true;
+        } else if (el.dataset._disabled !== undefined) {
+          el.disabled = el.dataset._disabled === "1";
+          delete el.dataset._disabled;
+        }
+      });
+    }
+  }
+
+  function showDonorImportModal(title, html) {
+    const body = document.getElementById("donorImportResultBody");
+    const label = document.getElementById("donorImportResultModalLabel");
+    const el = document.getElementById("donorImportResultModal");
+    if (!body || !label || !el) {
+      console.warn(
+        "Donor import result modal elements not found, falling back to alert"
+      );
+      const tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      alert(`${title}\n\n${tmp.textContent}`);
+      return;
+    }
+    label.textContent = title;
+    body.innerHTML = html;
+    if (window.bootstrap && bootstrap.Modal) {
+      const modal = bootstrap.Modal.getOrCreateInstance(el);
+      modal.show();
+    } else if (window.$) {
+      $(el).modal("show");
+    } else {
+      el.style.display = "block";
+    }
   }
 
   function loadDonorCategoryMap() {
@@ -139,6 +186,46 @@ document.addEventListener("DOMContentLoaded", () => {
     return "—";
   }
 
+  function attachNameFieldValidation(){
+    const miInput = document.getElementById('addDonorMiddleInitial');
+    const lastInput = document.getElementById('addDonorLastName');
+    const FIRST_INITIAL_REGEX = /^[A-Za-z]{0,2}$/;
+    const LAST_NAME_REGEX = /^[A-Za-z]+(?:[ '\-][A-Za-z]+)*$/;
+
+    if (miInput){
+      const validateMi = () => {
+        const val = miInput.value || '';
+        const hasVal = val.length > 0;
+        if (hasVal && !FIRST_INITIAL_REGEX.test(val)) {
+          miInput.setCustomValidity('Use up to two letters only.');
+          miInput.classList.add('is-invalid');
+        } else {
+          miInput.setCustomValidity('');
+          miInput.classList.remove('is-invalid');
+        }
+      };
+      miInput.addEventListener('input', validateMi);
+      miInput.addEventListener('blur', validateMi);
+      validateMi();
+    }
+
+    if (lastInput){
+      const validateLast = () => {
+        const val = lastInput.value || '';
+        if (!val) {
+          lastInput.setCustomValidity('Last name is required.');
+        } else if (!LAST_NAME_REGEX.test(val)) {
+          lastInput.setCustomValidity('Use letters with optional spaces, apostrophes, or hyphens.');
+        } else {
+          lastInput.setCustomValidity('');
+        }
+      };
+      lastInput.addEventListener('input', validateLast);
+      lastInput.addEventListener('blur', validateLast);
+      validateLast();
+    }
+  }
+
   function showDonorDetails(donor) {
     const categoryName = getDonorCategoryName(donor);
     const details = document.getElementById("viewDonorDetails");
@@ -160,12 +247,13 @@ document.addEventListener("DOMContentLoaded", () => {
         )
         .join("");
     }
-    const modal = getModalInstance("viewDonorModal");
-    modal?.show();
+    const modal = document.getElementById("viewDonorModal");
+    if (modal) modal.style.display = "block";
   }
 
   // Fetch donors (approved) and donations list, then render donors table
   init();
+  attachNameFieldValidation();
 
   async function fetchDonors() {
     const res = await fetch(
@@ -266,21 +354,19 @@ document.addEventListener("DOMContentLoaded", () => {
           : badge("Pending", "warning");
       const isApproved = statusLower === 'approved';
       const isInactive = statusLower === 'inactive';
-      const actionsMenu = `
-        <div class="dropdown-menu dropdown-menu-end p-2" style="min-width:auto;">
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button class="btn btn-sm btn-outline-secondary edit-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit" data-user-id="${u.user_id}">
-              <i class="bi bi-pencil-square"></i>
-            </button>
-            ${isApproved ? `
-            <button class="btn btn-sm btn-outline-danger deactivate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate" data-user-id="${u.user_id}">
-              <i class="bi bi-person-x"></i>
-            </button>` : ''}
-            ${!isApproved ? `
-            <button class="btn btn-sm btn-outline-success activate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate" data-user-id="${u.user_id}">
-              <i class="bi bi-person-check"></i>
-            </button>` : ''}
-          </div>
+      const actionsButtons = `
+        <div class="d-inline-flex align-items-center justify-content-end gap-2">
+          <button class="btn btn-sm btn-outline-secondary edit-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit" data-user-id="${u.user_id}">
+            <i class="bi bi-pencil-square"></i>
+          </button>
+          ${isApproved ? `
+          <button class="btn btn-sm btn-outline-danger deactivate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate" data-user-id="${u.user_id}">
+            <i class="bi bi-person-x"></i>
+          </button>` : ''}
+          ${!isApproved ? `
+          <button class="btn btn-sm btn-outline-success activate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate" data-user-id="${u.user_id}">
+            <i class="bi bi-person-check"></i>
+          </button>` : ''}
         </div>`;
       return `
         <tr>
@@ -292,15 +378,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <td>${last}</td>
           <td>${status}</td>
           <td class="text-end">
-            <div class="dropdown recipient-actions d-inline-flex align-items-center">
-              <a href="#" class="btn btn-outline-primary btn-sm me-1 view-btn" data-user-id="${u.user_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="View donor">
-                <i class="bi bi-eye-fill"></i>
-              </a>
-              <button class="btn btn-link p-0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
-                <i class="bi bi-three-dots-vertical" data-bs-toggle="tooltip" data-bs-placement="top" title="More actions"></i>
-              </button>
-              ${actionsMenu}
-            </div>
+            ${actionsButtons}
           </td>
         </tr>
       `;
@@ -328,6 +406,383 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     } catch (_) {}
+  }
+
+  // ---- Donor Import Preview & Edit helpers ----
+
+  function normalizeDonorImportRow(row) {
+    const out = {
+      donor: "",
+      donor_category: "",
+      contact_person: "",
+      contact_number: "",
+      address: "",
+      email: "",
+      notes: "",
+    };
+    if (!row || typeof row !== "object") return out;
+    Object.keys(row).forEach((key) => {
+      const rawVal = row[key];
+      const v = rawVal == null ? "" : String(rawVal);
+      if (!v.trim()) return;
+      const lower = String(key).toLowerCase().trim();
+      const simple = lower.replace(/\s+/g, " ");
+      const canon = lower.replace(/[\s._-]+/g, "");
+      if (
+        [
+          "donor",
+          "donorname",
+          "nameofdonor",
+          "organizationname",
+          "company",
+          "org",
+          "organisationname",
+        ].includes(canon)
+      ) {
+        if (!out.donor) out.donor = v;
+        return;
+      }
+      if (
+        [
+          "donorcategory",
+          "category",
+          "type",
+        ].includes(canon)
+      ) {
+        if (!out.donor_category) out.donor_category = v;
+        return;
+      }
+      if (
+        [
+          "contactperson",
+          "contact_person",
+          "contact",
+        ].includes(canon)
+      ) {
+        if (!out.contact_person) out.contact_person = v;
+        return;
+      }
+      if (
+        [
+          "contactnumber",
+          "contactno",
+          "contactno.",
+          "contact#",
+          "phone",
+          "mobile",
+        ].includes(canon)
+      ) {
+        if (!out.contact_number) out.contact_number = v;
+        return;
+      }
+      if (["address", "location"].includes(canon)) {
+        if (!out.address) out.address = v;
+        return;
+      }
+      if (["email", "emailaddress"].includes(canon)) {
+        if (!out.email) out.email = v;
+        return;
+      }
+      if (["notes", "remarks"].includes(canon)) {
+        if (!out.notes) out.notes = v;
+      }
+    });
+    return out;
+  }
+
+  function renderDonorPreviewTable(rows) {
+    const tbody = document.querySelector(
+      "#donorImportPreviewTable tbody"
+    );
+    if (!tbody) return;
+    const esc = (v) => escapeHtml(String(v == null ? "" : v));
+    const html = rows
+      .map((r, idx) => {
+        return `
+      <tr data-index="${idx}">
+        <td><input type="checkbox" class="form-check-input donor-row-check" checked></td>
+        <td><input type="text" class="form-control form-control-sm" name="donor" value="${esc(
+          r.donor
+        )}"></td>
+        <td><input type="text" class="form-control form-control-sm" name="donor_category" value="${esc(
+          r.donor_category
+        )}"></td>
+        <td><input type="text" class="form-control form-control-sm" name="contact_person" value="${esc(
+          r.contact_person
+        )}"></td>
+        <td><input type="text" class="form-control form-control-sm" name="contact_number" value="${esc(
+          r.contact_number
+        )}"></td>
+        <td><input type="text" class="form-control form-control-sm" name="address" value="${esc(
+          r.address
+        )}"></td>
+      </tr>`;
+      })
+      .join("");
+    tbody.innerHTML = html;
+  }
+
+  function collectDonorPreviewRow(tr) {
+    const get = (name) =>
+      tr.querySelector(`input[name="${name}"]`)?.value.trim() || "";
+    const donor = get("donor");
+    const donor_category = get("donor_category");
+    const contact_person = get("contact_person");
+    const contact_number = get("contact_number");
+    const address = get("address");
+    const obj = {
+      organization_name: donor,
+      donor_category,
+      contact_person,
+      contact_number,
+      address,
+    };
+    return obj;
+  }
+
+  function validateDonorPreviewRow(tr) {
+    if (!tr) return false;
+    const donorInp = tr.querySelector('input[name="donor"]');
+    const donorVal = donorInp?.value.trim() || "";
+    const ok = !!donorVal;
+    tr.classList.toggle("table-danger", !ok);
+    return ok;
+  }
+
+  async function showDonorPreviewAndMaybeImport(rawRows) {
+    const modalEl = document.getElementById("donorImportPreviewModal");
+    const tableBody = document.querySelector(
+      "#donorImportPreviewTable tbody"
+    );
+    const master = document.getElementById("donorPreviewMasterCheck");
+    const selAll = document.getElementById("donorPreviewSelectAllBtn");
+    const deselAll = document.getElementById("donorPreviewDeselectAllBtn");
+    const importBtn = document.getElementById("donorPreviewImportBtn");
+    const status = document.getElementById("donorPreviewStatus");
+    if (!modalEl || !tableBody || !importBtn) {
+      console.warn("Donor import preview elements missing");
+      return;
+    }
+
+    const normalized = (rawRows || [])
+      .map((r) => normalizeDonorImportRow(r))
+      .filter((r) =>
+        Object.values(r).some((v) => String(v || "").trim() !== "")
+      );
+    if (!normalized.length) {
+      showDonorImportModal(
+        "Import Error",
+        '<div class="text-danger">No data rows detected in the selected sheet.</div>'
+      );
+      return;
+    }
+
+    renderDonorPreviewTable(normalized);
+
+    function updateStatus() {
+      const total = tableBody.querySelectorAll("tr").length;
+      const selected = tableBody.querySelectorAll(
+        "input.donor-row-check:checked"
+      ).length;
+      const invalid = tableBody.querySelectorAll("tr.table-danger").length;
+      if (status) {
+        status.textContent = `${selected}/${total} selected, ${invalid} invalid`;
+      }
+    }
+
+    tableBody.querySelectorAll("tr").forEach((tr) => {
+      validateDonorPreviewRow(tr);
+    });
+
+    tableBody
+      .querySelectorAll("input.donor-row-check")
+      .forEach((cb) => cb.addEventListener("change", updateStatus));
+    tableBody.querySelectorAll('input[type="text"]').forEach((inp) => {
+      inp.addEventListener("input", (e) => {
+        const tr = e.target.closest("tr");
+        validateDonorPreviewRow(tr);
+        updateStatus();
+      });
+    });
+
+    if (master) {
+      master.checked = true;
+      master.addEventListener("change", () => {
+        tableBody
+          .querySelectorAll("input.donor-row-check")
+          .forEach((cb) => {
+            cb.checked = master.checked;
+          });
+        updateStatus();
+      });
+    }
+    if (selAll)
+      selAll.onclick = () => {
+        tableBody
+          .querySelectorAll("input.donor-row-check")
+          .forEach((cb) => (cb.checked = true));
+        if (master) master.checked = true;
+        updateStatus();
+      };
+    if (deselAll)
+      deselAll.onclick = () => {
+        tableBody
+          .querySelectorAll("input.donor-row-check")
+          .forEach((cb) => (cb.checked = false));
+        if (master) master.checked = false;
+        updateStatus();
+      };
+
+    async function doImport() {
+      if (donorImportInProgress) return;
+      setDonorImportLoading(true, { importBtn, modalEl });
+      const payload = [];
+      tableBody.querySelectorAll("tr").forEach((tr) => {
+        const checked = tr.querySelector("input.donor-row-check")?.checked;
+        if (!checked) return;
+        if (!validateDonorPreviewRow(tr)) return;
+        const obj = collectDonorPreviewRow(tr);
+        if (!String(obj.organization_name || "").trim()) return;
+        payload.push(obj);
+      });
+      if (!payload.length) {
+        setDonorImportLoading(false, { importBtn, modalEl });
+        showDonorImportModal(
+          "Import Error",
+          '<div class="text-danger">No rows selected or rows failed validation.</div>'
+        );
+        return;
+      }
+
+      let j;
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/users/index.php?action=importDonors`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({ rows: payload }),
+          }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        j = await res.json();
+        if (!j?.success) throw new Error(j?.error || "Import failed");
+      } finally {
+        setDonorImportLoading(false, { importBtn, modalEl });
+      }
+
+      const summary = j.data || {};
+      // Close preview modal
+      if (window.bootstrap && bootstrap.Modal) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+      }
+
+      if (summary.errors && summary.errors.length) {
+        const list = summary.errors
+          .slice(0, 10)
+          .map(
+            (e) =>
+              `<li><code>Row ${e.row}</code>: ${escapeHtml(e.error || "")}</li>`
+          )
+          .join("");
+        const html = `<div class="mb-2">Import completed.</div>
+          <div class="mb-2"><span class="badge bg-success me-2">Inserted: ${
+            summary.inserted || 0
+          }</span>
+          <span class="badge bg-danger">Errors: ${
+            summary.errors.length
+          }</span></div>
+          <div class="small text-muted mb-1">First errors:</div>
+          <ul class="small">${list}</ul>`;
+        showDonorImportModal("Import Result", html);
+      } else {
+        const inserted = Number(summary.inserted || 0);
+        let toastShown = false;
+        try {
+          if (typeof showToast === "function") {
+            const label = inserted === 1 ? "donor" : "donors";
+            showToast(`Imported ${inserted} ${label} successfully.`, {
+              title: "Import Donors",
+              variant: "success",
+            });
+            toastShown = true;
+          }
+        } catch (_) {
+          // fall back to modal below
+        }
+        if (!toastShown) {
+          const html = `
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+              <i class="bi bi-check-circle-fill me-2"></i>
+              <div>
+                Import completed successfully.
+              </div>
+            </div>
+            <div><span class="badge bg-success">Inserted: ${inserted}</span></div>`;
+          showDonorImportModal("Import Success", html);
+        }
+      }
+
+      // Refresh donors list
+      const [freshDonors, freshDonations] = await Promise.all([
+        fetchDonors(),
+        fetchDonations(),
+      ]);
+      donorsData = freshDonors;
+      donationsData = freshDonations;
+      populateFilters();
+      applyFiltersAndSort();
+    }
+
+    importBtn.onclick = async () => {
+      // Validate selected rows before import
+      let invalidSelected = 0;
+      let selected = 0;
+      tableBody.querySelectorAll("tr").forEach((tr) => {
+        const checked = tr.querySelector("input.donor-row-check")?.checked;
+        if (!checked) return;
+        selected++;
+        if (!validateDonorPreviewRow(tr)) invalidSelected++;
+      });
+      if (!selected) {
+        showDonorImportModal(
+          "Import Error",
+          '<div class="text-danger">Please select at least one row.</div>'
+        );
+        return;
+      }
+      if (invalidSelected) {
+        showDonorImportModal(
+          "Import Error",
+          `<div class="text-danger">${invalidSelected} selected row(s) have errors. Please fix highlighted rows.</div>`
+        );
+        return;
+      }
+      try {
+        await doImport();
+      } catch (err) {
+        showDonorImportModal(
+          "Import Error",
+          `<div class="text-danger">${escapeHtml(
+            err.message || "Import failed"
+          )}</div>`
+        );
+      }
+    };
+
+    if (window.bootstrap && bootstrap.Modal) {
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    } else if (window.$) {
+      $(modalEl).modal("show");
+    } else {
+      modalEl.style.display = "block";
+    }
+
+    updateStatus();
   }
 
   function getValueFrom(ids, fallback = "") {
@@ -651,34 +1106,139 @@ document.addEventListener("DOMContentLoaded", () => {
           if (!file) return;
           try{
             if (typeof XLSX === 'undefined'){
-              showMessageModal('Import Donors', 'XLSX library not loaded.');
+              try { showToast('XLSX library not loaded.', { title: 'Import Donors', variant: 'danger' }); } catch (_) {
+                console.error('XLSX library not loaded.');
+              }
               return;
             }
             const data = await file.arrayBuffer();
             const wb = XLSX.read(data, { type: 'array' });
-            const sheetName = wb.SheetNames[0];
-            const ws = wb.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-
-            const res = await fetch(`${API_BASE_URL}/users/index.php?action=importDonors`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ rows })
+            // Detect the header row similarly to recipient import so we handle blank top rows
+            const expected = [
+              'donor',
+              'donor name',
+              'name of donor',
+              'organization name',
+              'donor category',
+              'donorcategory',
+              'category',
+              'contact person',
+              'contact_person',
+              'contact',
+              'contact number',
+              'contact no',
+              'contact no.',
+              'contact#',
+              'phone',
+              'mobile',
+              'address',
+              'location',
+              'email',
+              'email address',
+            ];
+            let chosen = null;
+            let chosenScore = -1;
+            wb.SheetNames.forEach((sn) => {
+              const ws0 = wb.Sheets[sn];
+              const mx = XLSX.utils.sheet_to_json(ws0, {
+                header: 1,
+                defval: '',
+              });
+              let cells = 0;
+              let headerHit = 0;
+              for (let r = 0; r < Math.min(20, mx.length); r++) {
+                const row = mx[r] || [];
+                cells += row.reduce(
+                  (a, v) => a + (String(v).trim() !== '' ? 1 : 0),
+                  0
+                );
+                const rowLower = row.map((c) => String(c).toLowerCase().trim());
+                if (rowLower.some((c) => expected.includes(c))) headerHit++;
+              }
+              const score = headerHit * 1000 + cells; // prioritize header hits
+              if (score > chosenScore) {
+                chosenScore = score;
+                chosen = { name: sn, matrix: mx };
+              }
             });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const j = await res.json();
-            if (!j?.success) throw new Error(j?.error || 'Import failed');
-            const summary = j.data || {};
-            const msg = `Import completed. Inserted: ${summary.inserted || 0}${(summary.errors && summary.errors.length) ? `, Errors: ${summary.errors.length}` : ''}`;
-            showMessageModal('Import Donors', msg);
-
-            const [freshDonors, freshDonations] = await Promise.all([ fetchDonors(), fetchDonations() ]);
-            donorsData = freshDonors; donationsData = freshDonations;
-            populateFilters();
-            applyFiltersAndSort();
+            const sheetName = chosen ? chosen.name : wb.SheetNames[0];
+            const matrix = chosen
+              ? chosen.matrix
+              : XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+                  header: 1,
+                  defval: '',
+                });
+            // Find header row by looking for expected header cells and ensuring the next row has data
+            let headerRowIdx = 0;
+            const top = Math.min(10, matrix.length);
+            for (let i = 0; i < top; i++) {
+              const rowLower = (matrix[i] || []).map((c) =>
+                String(c).toLowerCase().trim()
+              );
+              const match = rowLower.some((c) => expected.includes(c));
+              if (!match) continue;
+              const next = matrix[i + 1] || [];
+              const hasDataBelow = next.some((v) => String(v).trim() !== '');
+              if (hasDataBelow) {
+                headerRowIdx = i;
+                break;
+              }
+            }
+            const headerRaw = matrix[headerRowIdx] || [];
+            const header = headerRaw.map((h) => String(h).trim());
+            const headerLower = header.map((h) => h.toLowerCase());
+            const headerHasKnown = headerLower.some((c) =>
+              expected.includes(c)
+            );
+            let rows = [];
+            if (headerHasKnown) {
+              const dataRows = matrix.slice(headerRowIdx + 1);
+              rows = dataRows
+                .map((r) => {
+                  const obj = {};
+                  for (let c = 0; c < header.length; c++) {
+                    const key = header[c];
+                    if (!key) continue;
+                    obj[key] = r[c];
+                  }
+                  return obj;
+                })
+                .filter((o) =>
+                  Object.values(o).some((v) => String(v).trim() !== '')
+                );
+            } else {
+              // Fallback: treat first non-empty row as header
+              const dataStart = matrix.findIndex((r) =>
+                (r || []).some((v) => String(v).trim() !== '')
+              );
+              if (dataStart >= 0) {
+                const hdr = matrix[dataStart] || [];
+                const dataRows = matrix.slice(dataStart + 1);
+                rows = dataRows
+                  .map((r) => {
+                    const obj = {};
+                    for (let c = 0; c < hdr.length; c++) {
+                      const key = String(hdr[c] || '').trim();
+                      if (!key) continue;
+                      obj[key] = r[c];
+                    }
+                    return obj;
+                  })
+                  .filter((o) =>
+                    Object.values(o).some((v) => String(v).trim() !== '')
+                  );
+              }
+            }
+            if (!rows.length) {
+              showDonorImportModal(
+                'Import Error',
+                '<div class="text-danger">No data rows were found in the selected sheet.</div>'
+              );
+              return;
+            }
+            await showDonorPreviewAndMaybeImport(rows);
           } catch(err){
-            try{ showToast(`Import failed: ${err.message}`, 'danger'); }catch(_){ }
+            try{ showToast(`Import failed: ${err.message}`, 'danger'); }catch(_){ console.error(err); }
           } finally {
             e.target.value = '';
           }
@@ -742,6 +1302,20 @@ document.addEventListener("DOMContentLoaded", () => {
           const last = document.getElementById('addDonorLastName')?.value.trim() || '';
           const suffix = document.getElementById('addDonorSuffix')?.value.trim() || '';
           const fullNameInput = document.getElementById('addDonorName');
+          const FIRST_NAME_REGEX = /^[A-Za-z]+(?:[A-Za-z]*[0-9]+)?$/;
+          const MIDDLE_INITIAL_REGEX = /^[A-Za-z]{0,2}$/;
+          const LAST_NAME_REGEX = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+          const CONTACT_NUMBER_REGEX = /^\(0\d{3}-\d{3}-\d{4}\)$/;
+          const phoneArea = document.getElementById('addDonorPhoneArea')?.value.trim() || '';
+          const phonePrefix = document.getElementById('addDonorPhonePrefix')?.value.trim() || '';
+          const phoneLine = document.getElementById('addDonorPhoneLine')?.value.trim() || '';
+          const composedPhone = (phoneArea && phonePrefix && phoneLine)
+            ? `(${phoneArea}-${phonePrefix}-${phoneLine})`
+            : '';
+          const hiddenPhoneInput = document.getElementById('addDonorPhone');
+          if (hiddenPhoneInput) {
+            hiddenPhoneInput.value = composedPhone;
+          }
           const composeFullName = () => {
             const parts = [];
             if (first) parts.push(first);
@@ -759,15 +1333,13 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           const name = composedName || fullNameInput?.value.trim() || '';
           const email = document.getElementById('addDonorEmail')?.value.trim() || '';
-          const contact_number = document.getElementById('addDonorPhone')?.value.trim() || '';
+          const contact_number = composedPhone;
           const brgy = document.getElementById('addDonorBarangay')?.value.trim() || '';
           const city = document.getElementById('addDonorCity')?.value.trim() || '';
           const addrInput = document.getElementById('addDonorAddress');
-          const composedAddress = [brgy, city].filter(Boolean).join(', ');
-          if (addrInput && composedAddress) {
-            addrInput.value = composedAddress;
-          }
-          const address = composedAddress || addrInput?.value.trim() || '';
+          const street = addrInput?.value.trim() || '';
+          const addressParts = [street, brgy, city].filter(Boolean);
+          const address = addressParts.join(', ');
           const donor_category_id = document.getElementById('addDonorCategory')?.value || '';
           const fb = document.getElementById('addDonorFeedback');
           if (fb) fb.textContent = '';
@@ -776,15 +1348,27 @@ document.addEventListener("DOMContentLoaded", () => {
             try {
               showToast(message, { title: 'Add Donor', variant: 'danger' });
             } catch (_) {
-              showMessageModal('Add Donor', message);
+              console.warn('Toast unavailable:', message);
             }
           };
           if (!first) {
             showRequiredError('First name is required.');
             return;
           }
+          if (!FIRST_NAME_REGEX.test(first)) {
+            showRequiredError('First name must start with letters and may only include numbers at the end.');
+            return;
+          }
+          if (middle && !MIDDLE_INITIAL_REGEX.test(middle)) {
+            showRequiredError('Middle initial may only contain up to two letters.');
+            return;
+          }
           if (!last) {
             showRequiredError('Last name is required.');
+            return;
+          }
+          if (!LAST_NAME_REGEX.test(last)) {
+            showRequiredError('Last name may only include letters, spaces, hyphens, or apostrophes.');
             return;
           }
           if (!org && !name) {
@@ -797,12 +1381,16 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           if (!isValidEmail(email)) {
             try { showToast('Please enter a valid email address.', 'danger'); } catch (_) {
-              showMessageModal('Add Donor', 'Please enter a valid email address.');
+              console.warn('Toast unavailable: invalid email');
             }
             return;
           }
-          if (!contact_number) {
-            showRequiredError('Contact number is required.');
+          if (!phoneArea || !phonePrefix || !phoneLine) {
+            showRequiredError('Complete all contact number fields.');
+            return;
+          }
+          if (!CONTACT_NUMBER_REGEX.test(contact_number)) {
+            showRequiredError('Contact number must follow the format (0991-007-1270).');
             return;
           }
           if (!brgy) {
@@ -845,7 +1433,7 @@ document.addEventListener("DOMContentLoaded", () => {
               msg += ' Please review the organization name and contact person before creating another record.';
             }
             try { showToast(msg, { title: 'Duplicate donor', variant: 'danger' }); } catch (_) {
-              showMessageModal('Add Donor', msg);
+              console.warn('Toast unavailable:', msg);
             }
             return;
           }
@@ -855,7 +1443,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (contactExists) fields.push('contact person');
             const msg = `A donor with the same ${fields.join(' and ')} already exists.`;
             try { showToast(msg, { title: 'Duplicate donor', variant: 'danger' }); } catch (_) {
-              showMessageModal('Add Donor', msg);
+              console.warn('Toast unavailable:', msg);
             }
             return;
           }
@@ -889,7 +1477,7 @@ document.addEventListener("DOMContentLoaded", () => {
             applyFiltersAndSort();
             // Show temp password
             try { showToast('Donor created successfully.', 'success'); } catch (_){
-              showMessageModal('Add Donor', 'Donor created successfully.');
+              console.log('Donor created successfully.');
             }
           } catch(err){
             if (fb) fb.textContent = err?.message || 'Failed to create donor';
@@ -911,7 +1499,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function openDonorModal(userId) {
     const donor = donorsData.find((d) => Number(d.user_id) === Number(userId));
     if (!donor) {
-      showMessageModal('View Donor', 'Donor not found.');
+      try { showToast('Donor not found.', { title: 'View Donor', variant: 'danger' }); } catch (_){ console.warn('Donor not found.'); }
       return;
     }
     try {
@@ -926,30 +1514,106 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = j?.data?.user || donor;
       showDonorDetails(data);
     } catch (err) {
-      showMessageModal('View Donor', `Failed to load donor profile: ${escapeHtml(err?.message || 'Unknown error')}`);
+      try {
+        showToast(`Failed to load donor profile: ${err?.message || 'Unknown error'}`, { title: 'View Donor', variant: 'danger' });
+      } catch (_) {
+        console.error('Failed to load donor profile:', err);
+      }
     }
   }
 
   async function openEditDonor(userId) {
     const donor = donorsData.find((d) => Number(d.user_id) === Number(userId));
     if (!donor) {
-      showMessageModal('Edit Donor', 'Donor not found.');
+      try { showToast('Donor not found.', { title: 'Edit Donor', variant: 'danger' }); } catch (_){ console.warn('Donor not found.'); }
       return;
     }
     currentEditDonorId = Number(userId);
     const orgInput = document.getElementById('editDonorOrg');
-    const nameInput = document.getElementById('editDonorName');
+    const hiddenNameInput = document.getElementById('editDonorName');
+    const firstInput = document.getElementById('editDonorFirstName');
+    const middleInput = document.getElementById('editDonorMiddleInitial');
+    const lastInput = document.getElementById('editDonorLastName');
+    const suffixInput = document.getElementById('editDonorSuffix');
     const emailInput = document.getElementById('editDonorEmail');
-    const phoneInput = document.getElementById('editDonorPhone');
-    const addrInput = document.getElementById('editDonorAddress');
+    const hiddenPhoneInput = document.getElementById('editDonorPhone');
+    const phoneAreaInput = document.getElementById('editDonorPhoneArea');
+    const phonePrefixInput = document.getElementById('editDonorPhonePrefix');
+    const phoneLineInput = document.getElementById('editDonorPhoneLine');
+    const streetInput = document.getElementById('editDonorAddress');
+    const brgyInput = document.getElementById('editDonorBarangay');
+    const citySelect = document.getElementById('editDonorCity');
     const fb = document.getElementById('editDonorFeedback');
     const categorySel = document.getElementById('editDonorCategory');
     if (fb) fb.textContent = '';
     if (orgInput) orgInput.value = donor.organization_name || '';
-    if (nameInput) nameInput.value = donor.name || '';
+    const fullName = (donor.name || '').trim();
+    if (hiddenNameInput) hiddenNameInput.value = fullName;
+    if (firstInput || middleInput || lastInput || suffixInput) {
+      let first = '';
+      let middle = '';
+      let last = '';
+      let suffix = '';
+      if (fullName) {
+        const parts = fullName.split(/\s+/).filter(Boolean);
+        if (parts.length === 1) {
+          first = parts[0];
+        } else if (parts.length >= 2) {
+          first = parts[0];
+          last = parts[parts.length - 1];
+          if (parts.length > 2) {
+            middle = parts.slice(1, -1).join(' ');
+          }
+        }
+      }
+      if (firstInput) firstInput.value = first;
+      if (lastInput) lastInput.value = last;
+      if (middleInput) {
+        const mi = middle.replace(/[^A-Za-z]/g, '').slice(0, 2);
+        middleInput.value = mi;
+      }
+      if (suffixInput) suffixInput.value = suffix;
+    }
     if (emailInput) emailInput.value = donor.email || '';
-    if (phoneInput) phoneInput.value = donor.contact_number || '';
-    if (addrInput) addrInput.value = donor.address || '';
+    const rawPhone = String(donor.contact_number || '').trim();
+    if (hiddenPhoneInput) hiddenPhoneInput.value = rawPhone;
+    const digits = rawPhone.replace(/\D/g, '');
+    let area = '';
+    let prefix = '';
+    let line = '';
+    if (digits.length === 11) {
+      area = digits.slice(0, 4);
+      prefix = digits.slice(4, 7);
+      line = digits.slice(7, 11);
+    }
+    if (phoneAreaInput) phoneAreaInput.value = area;
+    if (phonePrefixInput) phonePrefixInput.value = prefix;
+    if (phoneLineInput) phoneLineInput.value = line;
+
+    const address = String(donor.address || '').trim();
+    let street = '';
+    let brgy = '';
+    let city = '';
+    if (address) {
+      const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+      if (parts.length === 1) {
+        brgy = parts[0];
+      } else if (parts.length === 2) {
+        brgy = parts[0];
+        city = parts[1];
+      } else if (parts.length >= 3) {
+        street = parts[0];
+        brgy = parts[1];
+        city = parts.slice(2).join(', ');
+      }
+    }
+    if (streetInput) streetInput.value = street;
+    if (brgyInput) brgyInput.value = brgy;
+    if (citySelect) {
+      const options = Array.from(citySelect.options || []);
+      const match = options.find((opt) => String(opt.value).trim() === city);
+      citySelect.value = match ? city : '';
+    }
     if (categorySel && window.$ && $.fn.select2) {
       const val = donor.donor_category_id || null;
       if (val) {
@@ -978,20 +1642,21 @@ document.addEventListener("DOMContentLoaded", () => {
       donationsData = freshDonations;
       populateFilters();
       applyFiltersAndSort();
-      showMessageModal('Update Donor Status', `Donor ${status === "inactive" ? "deactivated" : "activated"} successfully.`);
+      try {
+        showToast(`Donor ${status === "inactive" ? "deactivated" : "activated"} successfully.`, { title: 'Update Donor Status', variant: 'success' });
+      } catch (_) {
+        console.log(`Donor ${status === "inactive" ? "deactivated" : "activated"} successfully.`);
+      }
     } catch (err) {
-      showMessageModal('Update Donor Status', `Failed to update donor status: ${escapeHtml(err?.message || 'Unknown error')}`);
+      try {
+        showToast(`Failed to update donor status: ${err?.message || 'Unknown error'}`, { title: 'Update Donor Status', variant: 'danger' });
+      } catch (_) {
+        console.error('Failed to update donor status:', err);
+      }
     }
   }
 
   document.addEventListener("click", (e) => {
-    const view = e.target.closest?.(".view-btn");
-    if (view) {
-      e.preventDefault();
-      const id = Number(view.getAttribute("data-user-id"));
-      if (id) openDonorModal(id);
-      return;
-    }
     const edit = e.target.closest?.(".edit-btn");
     if (edit) {
       e.preventDefault();
@@ -1004,13 +1669,7 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const id = Number(deactivate.getAttribute("data-user-id"));
       if (!id) return;
-      showConfirmModal({
-        title: 'Deactivate Donor',
-        message: 'Are you sure you want to deactivate this donor? They will remain visible but marked as inactive.',
-        confirmText: 'Deactivate',
-        confirmVariant: 'danger',
-        onConfirm: () => updateDonorStatus(id, "inactive"),
-      });
+      updateDonorStatus(id, "inactive");
       return;
     }
     const activate = e.target.closest?.(".activate-btn");
@@ -1018,29 +1677,9 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const id = Number(activate.getAttribute("data-user-id"));
       if (!id) return;
-      showConfirmModal({
-        title: 'Activate Donor',
-        message: 'Reactivate this donor and mark them as active?',
-        confirmText: 'Activate',
-        confirmVariant: 'success',
-        onConfirm: () => updateDonorStatus(id, "approved"),
-      });
+      updateDonorStatus(id, "approved");
     }
   });
-
-  const confirmBtn = document.getElementById('donorConfirmModalBtn');
-  if (confirmBtn) {
-    confirmBtn.addEventListener('click', () => {
-      if (confirmActionCallback) {
-        const fn = confirmActionCallback;
-        confirmActionCallback = null;
-        try {
-          fn();
-        } catch (_) {}
-      }
-      getModalInstance('donorConfirmModal')?.hide();
-    });
-  }
 
   const editForm = document.getElementById('editDonorForm');
   if (editForm) {
@@ -1048,21 +1687,131 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       if (!currentEditDonorId) return;
       const orgInput = document.getElementById('editDonorOrg');
-      const nameInput = document.getElementById('editDonorName');
+      const hiddenNameInput = document.getElementById('editDonorName');
+      const firstInput = document.getElementById('editDonorFirstName');
+      const middleInput = document.getElementById('editDonorMiddleInitial');
+      const lastInput = document.getElementById('editDonorLastName');
+      const suffixInput = document.getElementById('editDonorSuffix');
       const emailInput = document.getElementById('editDonorEmail');
-      const phoneInput = document.getElementById('editDonorPhone');
-      const addrInput = document.getElementById('editDonorAddress');
+      const phoneAreaInput = document.getElementById('editDonorPhoneArea');
+      const phonePrefixInput = document.getElementById('editDonorPhonePrefix');
+      const phoneLineInput = document.getElementById('editDonorPhoneLine');
+      const hiddenPhoneInput = document.getElementById('editDonorPhone');
+      const streetInput = document.getElementById('editDonorAddress');
+      const brgyInput = document.getElementById('editDonorBarangay');
+      const citySelect = document.getElementById('editDonorCity');
       const fb = document.getElementById('editDonorFeedback');
       const categorySel = document.getElementById('editDonorCategory');
       const saveBtn = document.getElementById('editDonorSaveBtn');
       if (fb) fb.textContent = '';
+
+      const FIRST_NAME_REGEX = /^[A-Za-z]+(?:[A-Za-z]*[0-9]+)?$/;
+      const MIDDLE_INITIAL_REGEX = /^[A-Za-z]{0,2}$/;
+      const LAST_NAME_REGEX = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+      const CONTACT_NUMBER_REGEX = /^\(0\d{3}-\d{3}-\d{4}\)$/;
+
+      const org = orgInput?.value.trim() || '';
+      const first = firstInput?.value.trim() || '';
+      const middle = middleInput?.value.trim() || '';
+      const last = lastInput?.value.trim() || '';
+      const suffix = suffixInput?.value.trim() || '';
+      const email = emailInput?.value.trim() || '';
+      const phoneArea = phoneAreaInput?.value.trim() || '';
+      const phonePrefix = phonePrefixInput?.value.trim() || '';
+      const phoneLine = phoneLineInput?.value.trim() || '';
+      const street = streetInput?.value.trim() || '';
+      const brgy = brgyInput?.value.trim() || '';
+      const city = citySelect?.value.trim() || '';
+
+      const showEditError = (message) => {
+        if (fb) fb.textContent = message;
+        try {
+          showToast(message, { title: 'Edit Donor', variant: 'danger' });
+        } catch (_) {
+          console.warn('Toast unavailable:', message);
+        }
+      };
+
+      const composeFullName = () => {
+        const parts = [];
+        if (first) parts.push(first);
+        if (middle) {
+          const normalized = middle.replace(/\.+$/g, '');
+          if (normalized) parts.push(`${normalized}.`);
+        }
+        if (last) parts.push(last);
+        if (suffix) parts.push(suffix);
+        return parts.join(' ').replace(/\s+/g, ' ').trim();
+      };
+
+      if (!first) {
+        showEditError('First name is required.');
+        return;
+      }
+      if (!FIRST_NAME_REGEX.test(first)) {
+        showEditError('First name must start with letters and may only include numbers at the end.');
+        return;
+      }
+      if (middle && !MIDDLE_INITIAL_REGEX.test(middle)) {
+        showEditError('Middle initial may only contain up to two letters.');
+        return;
+      }
+      if (!last) {
+        showEditError('Last name is required.');
+        return;
+      }
+      if (!LAST_NAME_REGEX.test(last)) {
+        showEditError('Last name may only include letters, spaces, hyphens, or apostrophes.');
+        return;
+      }
+
+      const composedName = composeFullName();
+      if (hiddenNameInput && composedName) {
+        hiddenNameInput.value = composedName;
+      }
+      const name = composedName || hiddenNameInput?.value.trim() || '';
+
+      if (!org && !name) {
+        showEditError('Organization Name or Contact Person is required.');
+        return;
+      }
+      if (!email) {
+        showEditError('Email is required.');
+        return;
+      }
+      if (!isValidEmail(email)) {
+        showEditError('Please enter a valid email address.');
+        return;
+      }
+      if (!phoneArea || !phonePrefix || !phoneLine) {
+        showEditError('Complete all contact number fields.');
+        return;
+      }
+      const composedPhone = `(${phoneArea}-${phonePrefix}-${phoneLine})`;
+      if (hiddenPhoneInput) hiddenPhoneInput.value = composedPhone;
+      if (!CONTACT_NUMBER_REGEX.test(composedPhone)) {
+        showEditError('Contact number must follow the format (09XX-XXX-XXXX).');
+        return;
+      }
+      if (!brgy) {
+        showEditError('Barangay is required.');
+        return;
+      }
+      if (!city) {
+        showEditError('City / Municipality is required.');
+        return;
+      }
+
+      const addressParts = [street, brgy, city].filter(Boolean);
+      const address = addressParts.join(', ');
+
       const payload = {
         user_id: Number(currentEditDonorId),
-        organization_name: orgInput?.value.trim() || null,
-        name: nameInput?.value.trim() || null,
-        email: emailInput?.value.trim() || null,
-        contact_number: phoneInput?.value.trim() || null,
-        address: addrInput?.value.trim() || null,
+        organization_name: org || null,
+        name: name || null,
+        email: email || null,
+        contact_number: composedPhone || null,
+        address: address || null,
         donor_category_id: categorySel && $(categorySel).val() ? Number($(categorySel).val()) : null,
       };
       if (saveBtn) saveBtn.disabled = true;
@@ -1082,9 +1831,18 @@ document.addEventListener("DOMContentLoaded", () => {
         donationsData = freshDonations;
         populateFilters();
         applyFiltersAndSort();
-        showMessageModal('Edit Donor', 'Donor updated successfully.');
+        try {
+          showToast('Donor updated successfully.', { title: 'Edit Donor', variant: 'success' });
+        } catch (_) {
+          console.log('Donor updated successfully.');
+        }
       } catch (err) {
         if (fb) fb.textContent = err?.message || 'Failed to update donor';
+        try {
+          showToast(err?.message || 'Failed to update donor', { title: 'Edit Donor', variant: 'danger' });
+        } catch (_) {
+          console.error('Failed to update donor:', err);
+        }
       } finally {
         if (saveBtn) saveBtn.disabled = false;
       }
