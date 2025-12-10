@@ -245,8 +245,26 @@ try {
          ORDER BY d ASC"
     )->fetchAll();
 
+    // Distribution trend (last 7 days) - product out movements excluding repack
+    $distributionRows = $db->query(
+        "SELECT DATE(im.created_at) AS d, COUNT(DISTINCT im.id) AS cnt
+         FROM inventory_movements im
+         LEFT JOIN categories cat ON cat.category_id = (
+             SELECT di.category_id FROM donation_items di 
+             WHERE di.donation_item_id = im.donation_item_id 
+             LIMIT 1
+         )
+         WHERE im.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+           AND im.direction = 'out'
+           AND (im.mode IS NULL OR im.mode <> 'repack')
+           AND (cat.primary_name IS NULL OR cat.primary_name NOT LIKE 'Non-Food%')
+         GROUP BY DATE(im.created_at)
+         ORDER BY d ASC"
+    )->fetchAll();
+
     $labels = [];
     $data = [];
+    $distributionData = [];
     for ($i = 6; $i >= 0; $i--) {
         $date = new DateTime();
         $date->setTime(0,0);
@@ -258,6 +276,13 @@ try {
             if ($r['d'] === $key) { $match = (int)$r['cnt']; break; }
         }
         $data[] = $match;
+        
+        // Process distribution data
+        $distMatch = 0;
+        foreach ($distributionRows as $r) {
+            if ($r['d'] === $key) { $distMatch = (int)$r['cnt']; break; }
+        }
+        $distributionData[] = $distMatch;
     }
 
     // Debug: counts by status to help frontend verify mappings
@@ -285,6 +310,7 @@ try {
             'trend' => [
                 'labels' => $labels,
                 'data' => $data,
+                'distribution_data' => $distributionData,
             ],
             'debug' => [
                 'status_counts' => $statusBreakdown

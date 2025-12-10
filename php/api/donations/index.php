@@ -130,8 +130,12 @@ try {
                     $row = $db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [(int)$payload['donor_id']])->fetch();
                     if ($row) {
                         $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : '');
+                    } else {
+                        error_log("Donor name lookup failed: No user found with donor_id " . (int)$payload['donor_id']);
                     }
-                } catch (Exception $e) { /* ignore */ }
+                } catch (Exception $e) { 
+                    error_log("Donor name lookup error for donor_id " . (int)$payload['donor_id'] . ": " . $e->getMessage());
+                }
                 foreach ($admins as $admin) {
                     $notif->create([
                         'user_id' => (int)$admin['user_id'],
@@ -372,8 +376,12 @@ try {
                         $row = $db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [$donorId])->fetch();
                         if ($row) {
                             $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : '');
+                        } else {
+                            error_log("Donor name lookup failed: No user found with donor_id $donorId");
                         }
-                    } catch (Exception $e) { /* ignore */ }
+                    } catch (Exception $e) { 
+                        error_log("Donor name lookup error for donor_id $donorId: " . $e->getMessage());
+                    }
                     $countItems = count($itemIds);
                     foreach ($admins as $admin) {
                         $notif->create([

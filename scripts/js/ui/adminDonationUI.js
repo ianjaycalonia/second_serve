@@ -1161,10 +1161,26 @@
       const fd = await buildCompressedFormData(form);
       fd.set("result", result);
       const receipt = getEl("fsReceipt");
-      if (
-        result === "passed" &&
-        !(receipt && receipt.files && receipt.files.length)
-      ) { showError("Receipt image is required for a Passed check."); return; }
+      const packaging = getEl("fsPackaging");
+      const spoilage = getEl("fsSpoilage");
+      
+      // Validate checkboxes for passed result
+      if (result === "passed") {
+        if (!packaging.checked) {
+          showError("Packaging must be confirmed as in good condition to pass the safety check.");
+          return;
+        }
+        if (!spoilage.checked) {
+          showError("No signs of spoilage must be confirmed to pass the safety check.");
+          return;
+        }
+        if (
+          !(receipt && receipt.files && receipt.files.length)
+        ) { 
+          showError("Receipt image is required for a Passed check."); 
+          return; 
+        }
+      }
       if (result === "failed") {
         const reason = (getEl("fsFailReasonHidden")?.value || "").trim();
         if (!reason) { showError("Failure reason is required when marking as Failed."); return; }

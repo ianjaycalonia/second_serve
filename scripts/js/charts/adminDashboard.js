@@ -77,7 +77,8 @@ async function loadDashboardData() {
         if (trend.labels && trend.data && Array.isArray(trend.labels) && Array.isArray(trend.data)) {
             const chartData = trend.labels.map((label, index) => ({
                 d: label,
-                cnt: trend.data[index] || 0
+                cnt: trend.data[index] || 0,
+                dist: trend.distribution_data ? (trend.distribution_data[index] || 0) : 0
             }));
             updateChart(chartData);
         }
@@ -98,7 +99,7 @@ async function loadDashboardData() {
 
 /**
  * Updates the chart with the weekly trend data
- * @param {Array} trendData - Array of {d: dateString, cnt: count} objects
+ * @param {Array} trendData - Array of {d: dateString, cnt: count, dist: distribution_count} objects
  */
 function updateChart(trendData) {
     const ctx = document.getElementById('lineChart');
@@ -106,7 +107,8 @@ function updateChart(trendData) {
 
     // Extract labels and data from trendData
     const labels = trendData.map(item => item.d); // Already contains day names
-    const counts = trendData.map(item => item.cnt);
+    const donationCounts = trendData.map(item => item.cnt);
+    const distributionCounts = trendData.map(item => item.dist);
 
     // Get or initialize the chart
     let chart = Chart.getChart(ctx);
@@ -114,7 +116,8 @@ function updateChart(trendData) {
     if (chart) {
         // Update existing chart data
         chart.data.labels = labels;
-        chart.data.datasets[0].data = counts;
+        chart.data.datasets[0].data = donationCounts;
+        chart.data.datasets[1].data = distributionCounts;
         chart.update();
     } else {
         // Create new chart
@@ -123,8 +126,8 @@ function updateChart(trendData) {
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Donations',
-                    data: counts,
+                    label: 'Donations (Product In)',
+                    data: donationCounts,
                     borderColor: '#00a0b0',
                     backgroundColor: 'rgba(0, 160, 176, 0.1)',
                     borderWidth: 2,
@@ -134,6 +137,18 @@ function updateChart(trendData) {
                     pointBorderColor: '#fff',
                     pointHoverBackgroundColor: '#fff',
                     pointHoverBorderColor: '#00a0b0'
+                }, {
+                    label: 'Distributions (Product Out)',
+                    data: distributionCounts,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointBackgroundColor: '#dc3545',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#dc3545'
                 }]
             },
             options: {
@@ -141,14 +156,22 @@ function updateChart(trendData) {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        display: false
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 15,
+                            font: {
+                                size: 12
+                            }
+                        }
                     },
                     tooltip: {
                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
                         titleFont: { weight: 'normal' },
                         bodyFont: { weight: 'bold' },
                         padding: 10,
-                        displayColors: false
+                        displayColors: true
                     }
                 },
                 scales: {

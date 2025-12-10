@@ -2130,13 +2130,22 @@
     // Date range filters (from/to) come from inputs inside the Filters dropdown
     const fromDate = document.getElementById("fromDate")?.value || "";
     const toDate = document.getElementById("toDate")?.value || "";
+    // Status filter
+    const status = document.getElementById("filterStatusSelect")?.value || "";
+    // Stock level filter
+    const stockLevel = document.getElementById("filterStockLevel")?.value || "";
+    // Category filter from dropdown
+    const filterCategory = document.getElementById("filterCategorySelect")?.value || "";
+    // Tag checkboxes
+    const checkRepackKit = !!document.getElementById("checkRepackKit")?.checked;
+    const checkHasTags = !!document.getElementById("checkHasTags")?.checked;
     // Sorting selections from Sort dropdown
     const sortExpiration = document.getElementById("sortExpiration")?.value || "None";
     const sortQuantity = document.getElementById("sortQuantity")?.value || "None";
     const sortCategory = document.getElementById("sortCategory")?.value || "None";
     const sortItemName = document.getElementById("sortItemName")?.value || "None";
     const hideExpired = !!document.getElementById("hideExpiredToggle")?.checked;
-    return { category, q, fromDate, toDate, sortExpiration, sortQuantity, sortCategory, sortItemName, hideExpired };
+    return { category, q, fromDate, toDate, status, stockLevel, filterCategory, checkRepackKit, checkHasTags, sortExpiration, sortQuantity, sortCategory, sortItemName, hideExpired };
   }
 
   function applyConfig(meta = {}) {
@@ -2321,6 +2330,50 @@
 
   function applyClientFiltersAndSort(items, filters) {
     let arr = Array.isArray(items) ? [...items] : [];
+    
+    // Status filter
+    const status = (filters.status || "").trim();
+    if (status) {
+      arr = arr.filter((r) => {
+        const itemStatus = String(r.derived_status || "In Stock").toLowerCase();
+        if (status === "in_stock") return itemStatus === "in stock";
+        if (status === "soon_expire") return itemStatus === "soon to expire";
+        if (status === "expired") return itemStatus === "expired";
+        return true;
+      });
+    }
+    
+    // Stock level filter
+    const stockLevel = (filters.stockLevel || "").trim();
+    if (stockLevel) {
+      arr = arr.filter((r) => {
+        const qty = Number(r.total_quantity ?? r.quantity ?? 0) || 0;
+        const totalLots = Number(r.total_lots ?? 0) || 0;
+        if (stockLevel === "low") return qty < 5;
+        if (stockLevel === "high") return qty > 50;
+        if (stockLevel === "multi_lot") return totalLots > 1;
+        return true;
+      });
+    }
+    
+    // Category filter from dropdown
+    const filterCategory = (filters.filterCategory || "").trim();
+    if (filterCategory) {
+      arr = arr.filter((r) => String(r.category || "").toLowerCase() === filterCategory.toLowerCase());
+    }
+    
+    // Tag filters
+    const checkRepackKit = filters.checkRepackKit;
+    const checkHasTags = filters.checkHasTags;
+    if (checkRepackKit || checkHasTags) {
+      arr = arr.filter((r) => {
+        const tags = String(r.tags_concat || r.tags || "").toLowerCase();
+        if (checkRepackKit && !tags.includes("repack kit")) return false;
+        if (checkHasTags && !tags.trim()) return false;
+        return true;
+      });
+    }
+    
     // Date range filter: use earliest_expiry if present
     const from = (filters.fromDate || "").trim();
     const to = (filters.toDate || "").trim();
@@ -2344,6 +2397,7 @@
         return true;
       });
     }
+    
     // Sorting: use sort* fields from Sort dropdown
     const expSel = (filters.sortExpiration || "").toLowerCase(); // "asc" | "desc" | ""
     const qtySel = (filters.sortQuantity || "").toLowerCase();
@@ -2610,6 +2664,17 @@
             const catD = document.getElementById("inventoryCategorySelectDesktop");
             if (catM) catM.value = "All";
             if (catD) catD.value = "All";
+            // Reset new filters
+            const statusSel = document.getElementById("filterStatusSelect");
+            const stockLevelSel = document.getElementById("filterStockLevel");
+            const filterCatSel = document.getElementById("filterCategorySelect");
+            const checkRepack = document.getElementById("checkRepackKit");
+            const checkHasTags = document.getElementById("checkHasTags");
+            if (statusSel) statusSel.value = "";
+            if (stockLevelSel) stockLevelSel.value = "";
+            if (filterCatSel) filterCatSel.value = "";
+            if (checkRepack) checkRepack.checked = false;
+            if (checkHasTags) checkHasTags.checked = false;
           } catch (_) {}
         });
       }
@@ -2661,6 +2726,35 @@
         if (e.key === "Enter") loadAndRender(1);
       });
     }
+
+    // Populate category dropdown for filter
+    async function populateFilterCategories() {
+      const select = document.getElementById("filterCategorySelect");
+      if (!select) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/taxonomy/index.php/categories?active=1&t=${Date.now()}`, {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        const json = await res.json().catch(() => ({}));
+        const categories = Array.isArray(json?.items) ? json.items : [];
+        const options = ['<option value="">All</option>'];
+        categories.forEach((cat) => {
+          const label = cat.secondary_name 
+            ? `${cat.primary_name || cat.name} - ${cat.secondary_name}`
+            : (cat.primary_name || cat.name || "");
+          if (label) {
+            options.push(`<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`);
+          }
+        });
+        select.innerHTML = options.join("");
+      } catch (err) {
+        console.error("Failed to load categories for filter:", err);
+      }
+    }
+
+    // Initialize categories on page load
+    populateFilterCategories();
 
     // Keep other filters/sorting on Apply; Page size select remains immediate below
     // Page size select
