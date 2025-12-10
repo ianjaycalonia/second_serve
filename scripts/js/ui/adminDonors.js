@@ -121,28 +121,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function showDonorImportModal(title, html) {
-    const body = document.getElementById("donorImportResultBody");
-    const label = document.getElementById("donorImportResultModalLabel");
-    const el = document.getElementById("donorImportResultModal");
-    if (!body || !label || !el) {
-      console.warn(
-        "Donor import result modal elements not found, falling back to alert"
-      );
-      const tmp = document.createElement("div");
-      tmp.innerHTML = html;
-      alert(`${title}\n\n${tmp.textContent}`);
-      return;
-    }
-    label.textContent = title;
-    body.innerHTML = html;
-    if (window.bootstrap && bootstrap.Modal) {
-      const modal = bootstrap.Modal.getOrCreateInstance(el);
-      modal.show();
-    } else if (window.$) {
-      $(el).modal("show");
-    } else {
-      el.style.display = "block";
+  function showDonorImportToast(title, message, variant = 'danger') {
+    try {
+      showToast(message, { title, variant });
+    } catch (_) {
+      console.error(`${title}: ${message}`);
     }
   }
 
@@ -247,8 +230,8 @@ document.addEventListener("DOMContentLoaded", () => {
         )
         .join("");
     }
-    const modal = document.getElementById("viewDonorModal");
-    if (modal) modal.style.display = "block";
+    const modalInstance = getModalInstance('viewDonorModal');
+    modalInstance?.show();
   }
 
   // Fetch donors (approved) and donations list, then render donors table
@@ -354,19 +337,31 @@ document.addEventListener("DOMContentLoaded", () => {
           : badge("Pending", "warning");
       const isApproved = statusLower === 'approved';
       const isInactive = statusLower === 'inactive';
+      const actionsMenu = `
+        <div class="dropdown-menu dropdown-menu-end p-2" style="min-width:auto;">
+          <div class="d-flex align-items-center justify-content-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary edit-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit" data-user-id="${u.user_id}">
+              <i class="bi bi-pencil-square"></i>
+            </button>
+            ${isApproved ? `
+            <button class="btn btn-sm btn-outline-danger deactivate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate" data-user-id="${u.user_id}">
+              <i class="bi bi-person-x"></i>
+            </button>` : ''}
+            ${!isApproved ? `
+            <button class="btn btn-sm btn-outline-success activate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate" data-user-id="${u.user_id}">
+              <i class="bi bi-person-check"></i>
+            </button>` : ''}
+          </div>
+        </div>`;
       const actionsButtons = `
-        <div class="d-inline-flex align-items-center justify-content-end gap-2">
-          <button class="btn btn-sm btn-outline-secondary edit-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit" data-user-id="${u.user_id}">
-            <i class="bi bi-pencil-square"></i>
+        <div class="dropdown donor-actions d-inline-flex align-items-center">
+          <a href="#" class="btn btn-outline-info btn-sm me-1 view-btn" data-user-id="${u.user_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="View donor">
+            <i class="bi bi-eye-fill"></i>
+          </a>
+          <button class="btn btn-link p-0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
+            <i class="bi bi-three-dots-vertical" data-bs-toggle="tooltip" data-bs-placement="top" title="More actions"></i>
           </button>
-          ${isApproved ? `
-          <button class="btn btn-sm btn-outline-danger deactivate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate" data-user-id="${u.user_id}">
-            <i class="bi bi-person-x"></i>
-          </button>` : ''}
-          ${!isApproved ? `
-          <button class="btn btn-sm btn-outline-success activate-btn" style="width:32px;height:32px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate" data-user-id="${u.user_id}">
-            <i class="bi bi-person-check"></i>
-          </button>` : ''}
+          ${actionsMenu}
         </div>`;
       return `
         <tr>
@@ -570,9 +565,9 @@ document.addEventListener("DOMContentLoaded", () => {
         Object.values(r).some((v) => String(v || "").trim() !== "")
       );
     if (!normalized.length) {
-      showDonorImportModal(
+      showDonorImportToast(
         "Import Error",
-        '<div class="text-danger">No data rows detected in the selected sheet.</div>'
+        "No data rows detected in the selected sheet."
       );
       return;
     }
@@ -647,9 +642,9 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       if (!payload.length) {
         setDonorImportLoading(false, { importBtn, modalEl });
-        showDonorImportModal(
+        showDonorImportToast(
           "Import Error",
-          '<div class="text-danger">No rows selected or rows failed validation.</div>'
+          "No rows selected or rows failed validation."
         );
         return;
       }
@@ -682,48 +677,22 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (summary.errors && summary.errors.length) {
-        const list = summary.errors
-          .slice(0, 10)
-          .map(
-            (e) =>
-              `<li><code>Row ${e.row}</code>: ${escapeHtml(e.error || "")}</li>`
-          )
-          .join("");
-        const html = `<div class="mb-2">Import completed.</div>
-          <div class="mb-2"><span class="badge bg-success me-2">Inserted: ${
-            summary.inserted || 0
-          }</span>
-          <span class="badge bg-danger">Errors: ${
-            summary.errors.length
-          }</span></div>
-          <div class="small text-muted mb-1">First errors:</div>
-          <ul class="small">${list}</ul>`;
-        showDonorImportModal("Import Result", html);
+        const errorCount = summary.errors.length;
+        const firstErrors = summary.errors.slice(0, 3).join(', ');
+        const message = `Import completed with ${errorCount} errors. First errors: ${firstErrors}`;
+        showDonorImportToast("Import Result", message, 'warning');
       } else {
         const inserted = Number(summary.inserted || 0);
-        let toastShown = false;
+        const message = `Import completed successfully. ${inserted} donors inserted.`;
         try {
           if (typeof showToast === "function") {
-            const label = inserted === 1 ? "donor" : "donors";
-            showToast(`Imported ${inserted} ${label} successfully.`, {
-              title: "Import Donors",
+            showToast(message, {
+              title: "Import Success",
               variant: "success",
             });
-            toastShown = true;
           }
         } catch (_) {
-          // fall back to modal below
-        }
-        if (!toastShown) {
-          const html = `
-            <div class="alert alert-success d-flex align-items-center" role="alert">
-              <i class="bi bi-check-circle-fill me-2"></i>
-              <div>
-                Import completed successfully.
-              </div>
-            </div>
-            <div><span class="badge bg-success">Inserted: ${inserted}</span></div>`;
-          showDonorImportModal("Import Success", html);
+          showDonorImportToast("Import Success", message, 'success');
         }
       }
 
@@ -749,27 +718,25 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!validateDonorPreviewRow(tr)) invalidSelected++;
       });
       if (!selected) {
-        showDonorImportModal(
+        showDonorImportToast(
           "Import Error",
-          '<div class="text-danger">Please select at least one row.</div>'
+          "Please select at least one row."
         );
         return;
       }
       if (invalidSelected) {
-        showDonorImportModal(
+        showDonorImportToast(
           "Import Error",
-          `<div class="text-danger">${invalidSelected} selected row(s) have errors. Please fix highlighted rows.</div>`
+          `${invalidSelected} selected row(s) have errors. Please fix highlighted rows.`
         );
         return;
       }
       try {
         await doImport();
       } catch (err) {
-        showDonorImportModal(
+        showDonorImportToast(
           "Import Error",
-          `<div class="text-danger">${escapeHtml(
-            err.message || "Import failed"
-          )}</div>`
+          err.message || "Import failed"
         );
       }
     };
@@ -1230,9 +1197,9 @@ document.addEventListener("DOMContentLoaded", () => {
               }
             }
             if (!rows.length) {
-              showDonorImportModal(
+              showDonorImportToast(
                 'Import Error',
-                '<div class="text-danger">No data rows were found in the selected sheet.</div>'
+                'No data rows were found in the selected sheet.'
               );
               return;
             }
@@ -1657,6 +1624,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   document.addEventListener("click", (e) => {
+    const view = e.target.closest?.(".view-btn");
+    if (view) {
+      e.preventDefault();
+      const id = Number(view.getAttribute("data-user-id"));
+      if (id) openDonorModal(id);
+      return;
+    }
+    
     const edit = e.target.closest?.(".edit-btn");
     if (edit) {
       e.preventDefault();
@@ -1664,6 +1639,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (id) openEditDonor(id);
       return;
     }
+    
     const deactivate = e.target.closest?.(".deactivate-btn");
     if (deactivate) {
       e.preventDefault();
@@ -1672,12 +1648,14 @@ document.addEventListener("DOMContentLoaded", () => {
       updateDonorStatus(id, "inactive");
       return;
     }
+    
     const activate = e.target.closest?.(".activate-btn");
     if (activate) {
       e.preventDefault();
       const id = Number(activate.getAttribute("data-user-id"));
       if (!id) return;
       updateDonorStatus(id, "approved");
+      return;
     }
   });
 

@@ -15,6 +15,18 @@
     />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="scripts/css/donors.css" />
+    <style>
+      /* Fix email overflow in donor details modal */
+      #viewDonorModal .modal-body {
+        word-wrap: break-word;
+        word-break: break-all;
+      }
+      #viewDonorModal .col-sm-8 {
+        word-wrap: break-word;
+        word-break: break-all;
+        overflow-wrap: break-word;
+      }
+    </style>
     <link
       href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
       rel="stylesheet"
@@ -1192,41 +1204,6 @@
             ></button>
           </div>
           <div class="modal-body"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Donor Import Result Modal -->
-    <div
-      class="modal fade"
-      id="donorImportResultModal"
-      tabindex="-1"
-      aria-labelledby="donorImportResultModalLabel"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="donorImportResultModalLabel">
-              Import Result
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            ></button>
-          </div>
-          <div class="modal-body" id="donorImportResultBody"></div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              data-bs-dismiss="modal"
-            >
-              Close
-            </button>
-          </div>
         </div>
       </div>
     </div>
