@@ -13,6 +13,8 @@
   let filteredRecords = [];
   let donationLineChart = null;
   let pickupBarChart = null;
+  let categoryPieChart = null;
+  let donorBarChart = null;
   let currentTimeframe = 'daily';
 
   const volumeState = {
@@ -472,6 +474,7 @@
       donor: record?.donor_org || record?.donor_name || "—",
       recipient: record?.recipient_name || "—",
       item: record?.name || "—",
+      category: record?.product_category || record?.category || record?.type || "Uncategorized",
       quantity: Number(record?.quantity ?? 0) || 0,
       status: record?.status || "Unknown",
       created_at: record?.created_at || null,
@@ -504,8 +507,9 @@
       const summaryPromise = fetchJson(
         `${API_BASE_URL}/dashboard/summary.php?${summaryParams.toString()}`
       ).catch(() => ({ data: { totals: {} } }));
+      // Get detailed donation items instead of batch data
       const donationsPromise = fetchJson(
-        `${API_BASE_URL}/donations/index.php/list?group=batch`
+        `${API_BASE_URL}/donations/index.php/list`
       );
       const [summaryResp, donationsResp] = await Promise.all([
         summaryPromise,
@@ -665,12 +669,336 @@
     }
   }
 
+  function ensureCategoryPieChart() {
+    const ctx = document.getElementById("categoryPieChart");
+    console.log('Category pie chart canvas element:', ctx);
+    if (!ctx) {
+      console.error('Category pie chart canvas not found');
+      return null;
+    }
+    if (categoryPieChart) return categoryPieChart;
+    categoryPieChart = new Chart(ctx, {
+      type: "pie",
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { 
+            position: 'bottom',
+            labels: { 
+              padding: 15,
+              usePointStyle: true
+            }
+          }
+        },
+      },
+    });
+    console.log('Category pie chart created successfully');
+    return categoryPieChart;
+  }
+
+  function ensureDonorBarChart() {
+    const ctx = document.getElementById("donorBarChart");
+    if (!ctx) return null;
+    if (donorBarChart) return donorBarChart;
+    donorBarChart = new Chart(ctx, {
+      type: "bar",
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { 
+          legend: { display: false }
+        },
+        scales: {
+          y: { 
+            beginAtZero: true, 
+            ticks: { precision: 0 }
+          },
+          x: {
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45
+            }
+          }
+        },
+      },
+    });
+    return donorBarChart;
+  }
+
+  function renderCategoryPieChart() {
+    const chart = ensureCategoryPieChart();
+    if (!chart) return;
+    
+    console.log('Rendering category pie chart, donationRecords:', donationRecords.length);
+    
+    // Aggregate data by category
+    const categoryData = {};
+    donationRecords.forEach(record => {
+      const category = record.category || 'Uncategorized';
+      const quantity = record.quantity || 1;
+      categoryData[category] = (categoryData[category] || 0) + quantity;
+    });
+    
+    console.log('Category data:', categoryData);
+    
+    const labels = Object.keys(categoryData).length ? Object.keys(categoryData) : ['No data'];
+    const values = Object.keys(categoryData).length ? Object.values(categoryData) : [0];
+    
+    console.log('Labels:', labels, 'Values:', values);
+    
+    // Generate colors for pie chart
+    const colors = [
+      '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+      '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+    ];
+    
+    chart.data.labels = labels;
+    chart.data.datasets = [
+      {
+        data: values,
+        backgroundColor: colors.slice(0, labels.length),
+        borderWidth: 2,
+        borderColor: '#fff'
+      }
+    ];
+    chart.update();
+  }
+
+  function renderDonorBarChart() {
+    const chart = ensureDonorBarChart();
+    if (!chart) return;
+    
+    console.log('Rendering donor bar chart, donationRecords:', donationRecords.length);
+    
+    // Aggregate data by donor
+    const donorData = {};
+    donationRecords.forEach(record => {
+      const donor = record.donor || 'Unknown';
+      const quantity = record.quantity || 1;
+      donorData[donor] = (donorData[donor] || 0) + quantity;
+    });
+    
+    console.log('Donor data:', donorData);
+    
+    // Sort by quantity and take top 10
+    const sortedDonors = Object.entries(donorData)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+    
+    const labels = sortedDonors.length ? sortedDonors.map(([donor]) => donor) : ['No data'];
+    const values = sortedDonors.length ? sortedDonors.map(([, quantity]) => quantity) : [0];
+    
+    console.log('Donor labels:', labels, 'Donor values:', values);
+    
+    chart.data.labels = labels;
+    chart.data.datasets = [
+      {
+        label: "Quantity Donated",
+        data: values,
+        backgroundColor: "rgba(13, 110, 253, 0.8)",
+        borderColor: "#0d6efd",
+        borderWidth: 1
+      }
+    ];
+    chart.update();
+  }
+
+  function createDetailedDonorBarChart() {
+    // Aggregate data by donor with more details
+    const donorData = {};
+    donationRecords.forEach(record => {
+      const donor = record.donor || 'Unknown';
+      const quantity = record.quantity || 1;
+      const category = record.category || 'Uncategorized';
+      
+      if (!donorData[donor]) {
+        donorData[donor] = {
+          total: 0,
+          categories: {},
+          items: []
+        };
+      }
+      donorData[donor].total += quantity;
+      donorData[donor].categories[category] = (donorData[donor].categories[category] || 0) + quantity;
+      donorData[donor].items.push({
+        item: record.item,
+        quantity: quantity,
+        category: category
+      });
+    });
+    
+    // Sort by total quantity and take top 15 for PDF
+    const sortedDonors = Object.entries(donorData)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 15);
+    
+    return sortedDonors;
+  }
+
+  async function exportChartsPDF() {
+    try {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('l', 'mm', 'a4'); // landscape orientation for proper chart display
+      
+      // Always use monthly timeframe for PDF export
+      const monthlyRange = getTimeframeRange('monthly');
+      
+      // PAGE 1: Pie Chart with Category Details
+      
+      // Add title for page 1
+      pdf.setFontSize(20);
+      pdf.text('Products by Category Analysis', 148, 20, { align: 'center' });
+      
+      // Add date range (monthly)
+      pdf.setFontSize(12);
+      pdf.text(`${monthlyRange.start} to ${monthlyRange.end}`, 148, 30, { align: 'center' });
+      
+      // Capture pie chart - centered with proper aspect ratio
+      const pieCanvas = document.getElementById('categoryPieChart');
+      if (pieCanvas) {
+        const pieImage = pieCanvas.toDataURL('image/png');
+        // Same dimensions as bar chart for consistency
+        const chartWidth = 140;
+        const chartHeight = 80;
+        const xPosition = (297 - chartWidth) / 2; // Center in landscape (297mm width)
+        pdf.addImage(pieImage, 'PNG', xPosition, 50, chartWidth, chartHeight);
+      }
+      
+      // Add category breakdown table
+      pdf.setFontSize(14);
+      pdf.text('Category Breakdown', 148, 160, { align: 'center' });
+      
+      // Aggregate category data
+      const categoryData = {};
+      donationRecords.forEach(record => {
+        const category = record.category || 'Uncategorized';
+        const quantity = record.quantity || 1;
+        categoryData[category] = (categoryData[category] || 0) + quantity;
+      });
+      
+      const sortedCategories = Object.entries(categoryData)
+        .sort((a, b) => b[1] - a[1]);
+      
+      let yPosition = 170;
+      pdf.setFontSize(10);
+      
+      // Table headers
+      pdf.text('Category', 20, yPosition);
+      pdf.text('Quantity', 130, yPosition);
+      pdf.text('Percentage', 180, yPosition);
+      yPosition += 6;
+      
+      const totalQuantity = Object.values(categoryData).reduce((sum, qty) => sum + qty, 0);
+      
+      // Table data - limit to fit on page
+      sortedCategories.slice(0, 15).forEach(([category, quantity]) => {
+        if (yPosition > 190) return; // Stop if we're running out of space
+        
+        const percentage = ((quantity / totalQuantity) * 100).toFixed(1);
+        const truncatedCategory = category.length > 45 ? category.substring(0, 42) + '...' : category;
+        
+        pdf.text(truncatedCategory, 20, yPosition);
+        pdf.text(quantity.toString(), 130, yPosition);
+        pdf.text(`${percentage}%`, 180, yPosition);
+        yPosition += 5;
+      });
+      
+      // Add category summary
+      yPosition += 5;
+      pdf.setFontSize(9);
+      pdf.text(`Total Categories: ${sortedCategories.length}`, 20, yPosition);
+      pdf.text(`Total Items: ${totalQuantity}`, 130, yPosition);
+      
+      // PAGE 2: Bar Chart with Detailed Donor Information
+      pdf.addPage();
+      
+      // Add title for page 2
+      pdf.setFontSize(20);
+      pdf.text('Top Donors Analysis', 148, 20, { align: 'center' });
+      
+      // Add date range (monthly)
+      pdf.setFontSize(12);
+      pdf.text(`${monthlyRange.start} to ${monthlyRange.end}`, 148, 30, { align: 'center' });
+      
+      // Capture bar chart - centered with proper aspect ratio
+      const barCanvas = document.getElementById('donorBarChart');
+      if (barCanvas) {
+        const barImage = barCanvas.toDataURL('image/png');
+        // Calculate centered position with landscape aspect ratio (wider than tall)
+        const chartWidth = 140;
+        const chartHeight = 80; // Landscape aspect ratio for bar chart
+        const xPosition = (297 - chartWidth) / 2; // Center in landscape (297mm width)
+        pdf.addImage(barImage, 'PNG', xPosition, 50, chartWidth, chartHeight);
+      }
+      
+      // Add detailed donor table
+      pdf.setFontSize(14);
+      pdf.text('Detailed Donor Breakdown', 148, 145, { align: 'center' });
+      
+      const detailedDonors = createDetailedDonorBarChart();
+      
+      yPosition = 155;
+      pdf.setFontSize(10);
+      
+      // Table headers
+      pdf.text('Donor', 20, yPosition);
+      pdf.text('Total', 80, yPosition);
+      pdf.text('Top Category', 110, yPosition);
+      pdf.text('Items', 180, yPosition);
+      yPosition += 6;
+      
+      // Table data - limit to fit on page
+      detailedDonors.slice(0, 15).forEach(([donor, data]) => {
+        if (yPosition > 190) return; // Stop if we're running out of space
+        
+        const topCategory = Object.entries(data.categories)
+          .sort((a, b) => b[1] - a[1])[0];
+        
+        const truncatedDonor = donor.length > 25 ? donor.substring(0, 22) + '...' : donor;
+        const truncatedCategory = topCategory[0].length > 35 ? topCategory[0].substring(0, 32) + '...' : topCategory[0];
+        
+        pdf.text(truncatedDonor, 20, yPosition);
+        pdf.text(data.total.toString(), 80, yPosition);
+        pdf.text(truncatedCategory, 110, yPosition);
+        pdf.text(data.items.length.toString(), 180, yPosition);
+        yPosition += 5;
+      });
+      
+      // Add donor summary
+      yPosition += 5;
+      pdf.setFontSize(9);
+      const uniqueDonors = new Set(donationRecords.map(record => record.donor)).size;
+      pdf.text(`Total Donors: ${uniqueDonors}`, 20, yPosition);
+      pdf.text(`Shown: Top ${Math.min(detailedDonors.length, 15)}`, 80, yPosition);
+      
+      // Save the PDF with monthly filename
+      const filename = `donation_analytics_${formatIsoDate(monthlyRange.start)}_${formatIsoDate(monthlyRange.end)}.pdf`;
+      pdf.save(filename);
+      
+      console.log('PDF exported successfully');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export PDF. Please try again.');
+    }
+  }
+
   async function refreshDashboard(timeframe) {
     try {
       await Promise.all([
         loadAnalytics(timeframe),
         loadPickupTotals(timeframe),
       ]);
+      // Render all charts after data is loaded with a small delay
+      setTimeout(() => {
+        console.log('About to render charts, donationRecords count:', donationRecords.length);
+        renderDonationChart();
+        renderPickupChart();
+        renderCategoryPieChart();
+        renderDonorBarChart();
+      }, 100);
     } catch (err) {
       console.error("Dashboard refresh failed", err);
     }
@@ -688,6 +1016,8 @@
   function init() {
     document.getElementById("exportInBtn")?.addEventListener("click", exportIn);
     document.getElementById("exportOutBtn")?.addEventListener("click", exportOut);
+    document.getElementById("exportPdfBtn")?.addEventListener("click", exportChartsPDF);
+    
     const exportModalEl = document.getElementById("exportModal");
     const exportInput = document.getElementById("exportMonthInput");
     if (exportInput && !exportInput.value) {
