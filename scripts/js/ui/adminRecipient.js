@@ -2115,6 +2115,7 @@ if (typeof window.showToast !== "function") {
       const addressParts = [street, brgy, city].filter(Boolean);
       const address = addressParts.join(', ');
       const total_residents = document.getElementById('addRecPopulation')?.value || '';
+      const advocacy = document.getElementById('addRecAdvocacy')?.value.trim() || '';
       const age_group = document.getElementById('addRecAgeGroup')?.value.trim() || '';
       const male_count = document.getElementById('addRecMale')?.value || '';
       const female_count = document.getElementById('addRecFemale')?.value || '';
@@ -2270,6 +2271,7 @@ if (typeof window.showToast !== "function") {
             address: address || null,
             position_designation: position || null,
             total_residents: total_residents ? Number(total_residents) : null,
+            advocacy: advocacy || null,
             age_group: age_group || null,
             male_count: male_count ? Number(male_count) : null,
             female_count: female_count ? Number(female_count) : null,

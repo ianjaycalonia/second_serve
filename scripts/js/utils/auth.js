@@ -73,11 +73,17 @@ document.addEventListener('DOMContentLoaded', function(){
     const addrTextareaWrap = document.getElementById('wrapAddressTextarea');
     const recipAddrPartsWrap = document.getElementById('wrapRecipientAddressParts');
     const populationWrap = document.getElementById('wrapPopulationServed');
+    const advocacyWrap = document.getElementById('wrapAdvocacy');
+    const ageGroupWrap = document.getElementById('wrapAgeGroup');
+    const genderCountsWrap = document.getElementById('wrapGenderCounts');
     const beneficiarySelect = document.getElementById('registerBeneficiaryCategory');
     const barangayInput = document.getElementById('registerBarangay');
     const citySelect = document.getElementById('registerCity');
     const addressInput = document.getElementById('registerAddress');
     const contactInput = document.getElementById('registerContact');
+    const phoneAreaInput = document.getElementById('registerPhoneArea');
+    const phonePrefixInput = document.getElementById('registerPhonePrefix');
+    const phoneLineInput = document.getElementById('registerPhoneLine');
     const detailsWrapper = document.getElementById('registerDetailsWrapper');
     const orgStep = document.getElementById('registerOrgStep');
     const repStep = document.getElementById('registerRepStep');
@@ -182,6 +188,9 @@ document.addEventListener('DOMContentLoaded', function(){
         toggleHiddenClass(addrTextareaWrap, false);
         toggleHiddenClass(recipAddrPartsWrap, true);
         toggleHiddenClass(populationWrap, isRecipient);
+        toggleHiddenClass(advocacyWrap, isRecipient);
+        toggleHiddenClass(ageGroupWrap, isRecipient);
+        toggleHiddenClass(genderCountsWrap, isRecipient);
 
         if (beneficiarySelect) {
             beneficiarySelect.required = isRecipient;
@@ -258,26 +267,61 @@ document.addEventListener('DOMContentLoaded', function(){
     barangayInput?.addEventListener('input', updateNextVisibility);
     citySelect?.addEventListener('change', updateNextVisibility);
     beneficiarySelect?.addEventListener('change', updateNextVisibility);
-    contactInput?.addEventListener('input', () => {
-        if (!contactInput) return;
-        const digits = (contactInput.value || '').replace(/\D/g, '').slice(0, 11);
-        contactInput.value = digits;
+    // Update hidden contact field when phone parts change
+    const updateContactField = () => {
+        if (!contactInput || !phoneAreaInput || !phonePrefixInput || !phoneLineInput) return;
+        const area = (phoneAreaInput.value || '').trim();
+        const prefix = (phonePrefixInput.value || '').trim();
+        const line = (phoneLineInput.value || '').trim();
+        const composedPhone = (area && prefix && line) ? `(${area}-${prefix}-${line})` : '';
+        contactInput.value = composedPhone;
+        
+        // Update validation
+        const digits = (area + prefix + line).replace(/\D/g, '');
         if (digits.length === 11) {
-            contactInput.classList.remove('is-invalid');
+            phoneAreaInput.classList.remove('is-invalid');
+            phonePrefixInput.classList.remove('is-invalid');
+            phoneLineInput.classList.remove('is-invalid');
             hideFieldTooltip('registerContact');
         }
+    };
+
+    phoneAreaInput?.addEventListener('input', () => {
+        if (!phoneAreaInput) return;
+        const digits = (phoneAreaInput.value || '').replace(/\D/g, '').slice(0, 4);
+        phoneAreaInput.value = digits;
+        updateContactField();
     });
-    contactInput?.addEventListener('blur', () => {
-        if (!contactInput) return;
-        const digits = (contactInput.value || '').trim();
-        if (!digits) return;
-        if (!/^\d{11}$/.test(digits)) {
-            contactInput.classList.add('is-invalid');
-            showFieldTooltip('registerContact', 'Contact number must be exactly 11 digits');
-        } else {
-            contactInput.classList.remove('is-invalid');
-            hideFieldTooltip('registerContact');
-        }
+    phonePrefixInput?.addEventListener('input', () => {
+        if (!phonePrefixInput) return;
+        const digits = (phonePrefixInput.value || '').replace(/\D/g, '').slice(0, 3);
+        phonePrefixInput.value = digits;
+        updateContactField();
+    });
+    phoneLineInput?.addEventListener('input', () => {
+        if (!phoneLineInput) return;
+        const digits = (phoneLineInput.value || '').replace(/\D/g, '').slice(0, 4);
+        phoneLineInput.value = digits;
+        updateContactField();
+    });
+
+    // Validate on blur
+    [phoneAreaInput, phonePrefixInput, phoneLineInput].forEach(input => {
+        input?.addEventListener('blur', () => {
+            if (!input || !phoneAreaInput || !phonePrefixInput || !phoneLineInput) return;
+            const area = (phoneAreaInput.value || '').trim();
+            const prefix = (phonePrefixInput.value || '').trim();
+            const line = (phoneLineInput.value || '').trim();
+            const digits = (area + prefix + line).replace(/\D/g, '');
+            
+            if (digits.length > 0 && digits.length < 11) {
+                input.classList.add('is-invalid');
+                showFieldTooltip('registerContact', 'Please complete all phone number fields');
+            } else if (digits.length === 11) {
+                input.classList.remove('is-invalid');
+                hideFieldTooltip('registerContact');
+            }
+        });
     });
 
     if (nextBtn) {
@@ -915,6 +959,20 @@ document.addEventListener('DOMContentLoaded', function() {
             const orgName = document.getElementById('registerOrganization').value.trim();
             const address = document.getElementById('registerAddress').value.trim();
 
+            // Compose contact number from split fields
+            {
+                const phoneArea = (document.getElementById('registerPhoneArea')?.value || '').trim();
+                const phonePrefix = (document.getElementById('registerPhonePrefix')?.value || '').trim();
+                const phoneLine = (document.getElementById('registerPhoneLine')?.value || '').trim();
+                const composedPhone = (phoneArea && phonePrefix && phoneLine)
+                    ? `(${phoneArea}-${phonePrefix}-${phoneLine})`
+                    : '';
+                const contactInput = document.getElementById('registerContact');
+                if (contactInput) {
+                    contactInput.value = composedPhone;
+                }
+            }
+
             // Compose full name from split fields (applies to all roles)
             const first = (document.getElementById('registerFirstName')?.value || '').trim();
             const middle = (document.getElementById('registerMiddleInitial')?.value || '').trim();
@@ -976,9 +1034,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 showError('registerRole', 'Please select a role');
                 return;
             }
-            // 11-digit contact number
-            if (!/^\d{11}$/.test(contactNumber)) {
-                showError('registerContact', 'Contact number must be 11 digits');
+            // Validate contact number format (09XX-XXX-XXXX)
+            if (!/^\(0\d{3}-\d{3}-\d{4}\)$/.test(contactNumber)) {
+                showError('registerContact', 'Please complete all contact number fields');
                 return;
             }
             
@@ -989,11 +1047,27 @@ document.addEventListener('DOMContentLoaded', function() {
             const beneficiaryCategoryId = role === 'recipient' ? Number(document.getElementById('registerBeneficiaryCategory')?.value || '') || undefined : undefined;
             // Recipient population (Population Served)
             let totalResidents;
+            let advocacy;
+            let ageGroup;
+            let maleCount;
+            let femaleCount;
             if (role === 'recipient') {
                 const rawPop = document.getElementById('registerPopulation')?.value || '';
                 const n = Number(rawPop);
                 if (rawPop !== '' && Number.isFinite(n) && n >= 0) {
                     totalResidents = n;
+                }
+                advocacy = document.getElementById('registerAdvocacy')?.value?.trim() || undefined;
+                ageGroup = document.getElementById('registerAgeGroup')?.value?.trim() || undefined;
+                const rawMale = document.getElementById('registerMaleCount')?.value || '';
+                const male = Number(rawMale);
+                if (rawMale !== '' && Number.isFinite(male) && male >= 0) {
+                    maleCount = male;
+                }
+                const rawFemale = document.getElementById('registerFemaleCount')?.value || '';
+                const female = Number(rawFemale);
+                if (rawFemale !== '' && Number.isFinite(female) && female >= 0) {
+                    femaleCount = female;
                 }
             }
 
@@ -1012,7 +1086,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     address,
                     donor_category_id: donorCategoryId,
                     beneficiary_category_id: beneficiaryCategoryId,
-                    total_residents: totalResidents
+                    total_residents: totalResidents,
+                    advocacy,
+                    age_group: ageGroup,
+                    male_count: maleCount,
+                    female_count: femaleCount
                 }),
                 contentType: 'application/json',
                 dataType: 'json',

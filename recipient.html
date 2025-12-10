@@ -668,6 +668,15 @@
               ></select>
             </div>
             <div class="mb-3">
+              <label class="form-label">Advocacy</label>
+              <input
+                type="text"
+                id="addRecAdvocacy"
+                class="form-control"
+                placeholder="e.g., Children's welfare, Elderly care, Community development"
+              />
+            </div>
+            <div class="mb-3">
               <label class="form-label">Contact Person</label>
               <input type="hidden" id="addRecName" />
               <div class="row g-2">
@@ -942,12 +951,12 @@
                 ></select>
               </div>
               <div>
-                <label class="form-label">Contact Person</label>
-                <input type="text" class="form-control" id="edit_name" />
+                <label class="form-label">Advocacy</label>
+                <input type="text" class="form-control" id="edit_advocacy" placeholder="e.g., Children's welfare, Elderly care, Community development" />
               </div>
               <div>
-                <label class="form-label">Address</label>
-                <input type="text" class="form-control" id="edit_address" />
+                <label class="form-label">Contact Person</label>
+                <input type="text" class="form-control" id="edit_name" />
               </div>
               <div>
                 <label class="form-label">Position/Designation</label>
@@ -960,6 +969,30 @@
               <div>
                 <label class="form-label">Email</label>
                 <input type="email" class="form-control" id="edit_email" />
+              </div>
+              <div>
+                <label class="form-label">Address</label>
+                <input type="text" class="form-control" id="edit_address" />
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">Total Residents (Population)</label>
+                  <input type="number" min="0" class="form-control" id="edit_population" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Age Group</label>
+                  <input type="text" class="form-control" id="edit_age_group" placeholder="e.g., 0-3, 4-7, 60+" />
+                </div>
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">Male Count</label>
+                  <input type="number" min="0" class="form-control" id="edit_male_count" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Female Count</label>
+                  <input type="number" min="0" class="form-control" id="edit_female_count" />
+                </div>
               </div>
             </form>
           </div>

@@ -387,6 +387,17 @@
                           <option value="">Select a category</option>
                         </select>
                       </div>
+                      <div class="mb-3 d-none" id="wrapAdvocacy">
+                        <label for="registerAdvocacy" class="form-label"
+                          >Advocacy</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="registerAdvocacy"
+                          placeholder="e.g., Children's welfare, Elderly care, Community development"
+                        />
+                      </div>
                       <div class="mb-3 d-none" id="wrapPopulationServed">
                         <label for="registerPopulation" class="form-label"
                           >Population Served</label
@@ -398,6 +409,43 @@
                           id="registerPopulation"
                           inputmode="numeric"
                         />
+                      </div>
+                      <div class="mb-3 d-none" id="wrapAgeGroup">
+                        <label for="registerAgeGroup" class="form-label"
+                          >Age Group</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="registerAgeGroup"
+                          placeholder="e.g., 0-3, 4-7, 60+"
+                        />
+                      </div>
+                      <div class="row g-2 mb-3 d-none" id="wrapGenderCounts">
+                        <div class="col-6">
+                          <label for="registerMaleCount" class="form-label"
+                            >Male Count</label
+                          >
+                          <input
+                            type="number"
+                            min="0"
+                            class="form-control"
+                            id="registerMaleCount"
+                            inputmode="numeric"
+                          />
+                        </div>
+                        <div class="col-6">
+                          <label for="registerFemaleCount" class="form-label"
+                            >Female Count</label
+                          >
+                          <input
+                            type="number"
+                            min="0"
+                            class="form-control"
+                            id="registerFemaleCount"
+                            inputmode="numeric"
+                          />
+                        </div>
                       </div>
                       <div
                         class="row g-2 mb-3 d-none"
@@ -611,17 +659,49 @@
                           >Contact Number
                           <span class="text-danger">*</span></label
                         >
-                        <input
-                          type="tel"
-                          class="form-control"
-                          id="registerContact"
-                          placeholder="e.g., 09171234567"
-                          required
-                          pattern="[0-9]{11}"
-                          inputmode="numeric"
-                          minlength="11"
-                          maxlength="11"
-                        />
+                        <input type="hidden" id="registerContact" />
+                        <div class="row g-2">
+                          <div class="col-4">
+                            <input
+                              type="text"
+                              class="form-control"
+                              id="registerPhoneArea"
+                              placeholder="09XX"
+                              inputmode="numeric"
+                              maxlength="4"
+                              pattern="^[0-9]{4}$"
+                              title="Enter the first four digits"
+                              required
+                            />
+                          </div>
+                          <div class="col-3">
+                            <input
+                              type="text"
+                              class="form-control"
+                              id="registerPhonePrefix"
+                              placeholder="XXX"
+                              inputmode="numeric"
+                              maxlength="3"
+                              pattern="^[0-9]{3}$"
+                              title="Enter the middle three digits"
+                              required
+                            />
+                          </div>
+                          <div class="col-5">
+                            <input
+                              type="text"
+                              class="form-control"
+                              id="registerPhoneLine"
+                              placeholder="XXXX"
+                              inputmode="numeric"
+                              maxlength="4"
+                              pattern="^[0-9]{4}$"
+                              title="Enter the last four digits"
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div class="form-text">Number will be formatted as (09XX-XXX-XXXX)</div>
                         <div class="invalid-feedback">
                           Please provide a valid contact number
                         </div>
@@ -694,7 +774,7 @@
                         </div>
                       </div>
                       <div
-                        class="d-flex flex-column flex-md-row gap-2 justify-content-between"
+                        class="d-flex justify-content-center gap-2"
                       >
                         <button
                           type="button"
@@ -703,7 +783,7 @@
                         >
                           Back
                         </button>
-                        <button type="submit" class="btn btn-success flex-grow-1">
+                        <button type="submit" class="btn btn-success">
                           Create Account
                         </button>
                       </div>

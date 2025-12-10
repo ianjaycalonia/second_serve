@@ -355,7 +355,7 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>`;
       const actionsButtons = `
         <div class="dropdown donor-actions d-inline-flex align-items-center">
-          <a href="#" class="btn btn-outline-info btn-sm me-1 view-btn" data-user-id="${u.user_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="View donor">
+          <a href="#" class="btn btn-outline-primary btn-sm me-1 view-btn" data-user-id="${u.user_id}" data-bs-toggle="tooltip" data-bs-placement="top" title="View donor">
             <i class="bi bi-eye-fill"></i>
           </a>
           <button class="btn btn-link p-0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
