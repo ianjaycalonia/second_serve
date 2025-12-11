@@ -602,7 +602,8 @@
       container = document.createElement('div');
       container.id = containerId;
       container.className = 'toast-container position-fixed top-0 end-0 p-3';
-      container.style.zIndex = '2000';
+      container.style.zIndex = '2147483647';
+      container.style.setProperty('z-index', '2147483647', 'important');
       document.body.appendChild(container);
     }
     const toastEl = document.createElement('div');
@@ -651,6 +652,29 @@
       const el = wrapper.firstElementChild;
       document.body.appendChild(el);
       const modal = bootstrap.Modal.getOrCreateInstance(el);
+      try {
+        const openModalEls = Array.from(document.querySelectorAll('.modal.show'));
+        let baseZ = 1050 + (openModalEls.length * 20);
+        if (openModalEls.length) {
+          const highestZ = openModalEls.reduce((max, node) => {
+            const z = Number(window.getComputedStyle(node).zIndex) || 0;
+            return z > max ? z : max;
+          }, baseZ);
+          baseZ = Math.max(baseZ, highestZ + 20);
+        }
+        // Ensure confirm modal is always above any backdrop
+        baseZ = Math.max(baseZ, 10000);
+        el.style.zIndex = String(baseZ);
+        el.style.setProperty('z-index', String(baseZ), 'important');
+        el.addEventListener('shown.bs.modal', () => {
+          const backdrops = document.querySelectorAll('.modal-backdrop');
+          const lastBackdrop = backdrops[backdrops.length - 1];
+          if (lastBackdrop) {
+            lastBackdrop.style.zIndex = String(baseZ - 5);
+            lastBackdrop.style.setProperty('z-index', String(baseZ - 5), 'important');
+          }
+        }, { once: true });
+      } catch(_){ }
       const onHide = ()=>{ el.removeEventListener('hidden.bs.modal', onHide); el.remove(); resolve(false); };
       el.addEventListener('hidden.bs.modal', onHide, { once: true });
       const okBtn = el.querySelector('[data-confirm]');
@@ -1606,6 +1630,9 @@
         const m = tstr.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
         if (m){ let hh = Number(m[1]); const mm = m[2]; const ap = m[3].toLowerCase(); if (ap==='pm' && hh<12) hh+=12; if (ap==='am' && hh===12) hh=0; tstr = `${String(hh).padStart(2,'0')}:${mm}`; }
         const startIso = (d && tstr) ? new Date(`${d}T${tstr}`).toISOString() : null;
+        const recipientIdsForUpdate = Array.isArray(recipientsUi)
+          ? recipientsUi.map(item => Number(item?.id)).filter(v => Number.isFinite(v) && v > 0)
+          : [];
         return {
           id: editingId,
           title: qs('#evTitle').value.trim(),
@@ -1616,7 +1643,8 @@
           location: qs('#evLocation').value.trim() || null,
           notes: qs('#evNotes').value.trim() || null,
           event_type: t,
-          created_for_user_id: (r==='admin') ? null : uid
+          created_for_user_id: (r==='admin') ? null : uid,
+          recipient_ids: recipientIdsForUpdate
         };
       }
     }
@@ -2075,6 +2103,13 @@
           const hasTime = Boolean(donorTime || adminStart);
           if (!hasTime) {
             calendarToast('Start time is required', 'warn');
+            return;
+          }
+          // Validate donor selection when date/time are provided
+          const donorSelect = qs('#evDonor');
+          const hasDonor = donorSelect && donorSelect.value;
+          if (!hasDonor && (hasDate || hasTime)) {
+            calendarToast('A donor must be selected when date and time are provided', 'warn');
             return;
           }
           if (needsDate) {

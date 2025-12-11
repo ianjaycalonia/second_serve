@@ -358,6 +358,12 @@
             <div class="modal-body">
               <div class="mb-2 small text-muted" id="discardItemMeta">Item</div>
               <div class="mb-3">
+                <label for="discardLot" class="form-label">Lot (optional)</label>
+                <select id="discardLot" class="form-select">
+                  <option value="">Any lot</option>
+                </select>
+              </div>
+              <div class="mb-3">
                 <label for="discardQty" class="form-label">Quantity</label>
                 <input
                   type="number"
@@ -532,7 +538,6 @@
                         <option value="" selected>All</option>
                         <option value="in_stock">In Stock</option>
                         <option value="soon_expire">Soon To Expire</option>
-                        <option value="expired">Expired</option>
                       </select>
                     </div>
 
@@ -713,16 +718,9 @@
               </select>
             </div>
 
-            <div class="d-flex align-items-center gap-2 inventory-page-control">
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="hideExpiredToggle"
-                  checked
-                />
-                <label class="fs-6" for="hideExpiredToggle">Hide expired</label>
-              </div>
+            <div class="form-check d-flex align-items-center gap-2 d-none">
+              <input type="checkbox" id="hideExpiredToggle" class="form-check-input" checked>
+              <label for="hideExpiredToggle" class="form-check-label fs-6 mb-0">Hide expired</label>
             </div>
 
             <button
@@ -1738,6 +1736,12 @@
               Item
             </div>
             <div class="mb-3">
+              <label for="onsiteLot" class="form-label">Lot *</label>
+              <select id="onsiteLot" class="form-select" required>
+                <option value="">Select a lot...</option>
+              </select>
+            </div>
+            <div class="mb-3">
               <label for="onsiteQty" class="form-label">Quantity</label>
               <input
                 type="number"
@@ -1803,7 +1807,7 @@
             <label for="tagEditInput" class="form-label"
               >Tags (comma-separated)</label
             >
-            <input id="tagEditInput" type="text" class="form-control" />
+            <input id="tagEditInput" type="text" class="form-control" required />
             <div id="tagEditFeedback" class="small text-danger mt-2"></div>
           </div>
           <div class="modal-footer">
@@ -1979,6 +1983,7 @@
                         id="donationDonorSelect"
                         class="form-select form-select-sm"
                         data-placeholder="Search donor organization"
+                        required
                       ></select>
                       <div class="form-text">
                         Optional. Select the donor to credit this batch.

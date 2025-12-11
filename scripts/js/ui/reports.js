@@ -13,7 +13,6 @@
   let filteredRecords = [];
   let donationLineChart = null;
   let pickupBarChart = null;
-  let categoryPieChart = null;
   let donorBarChart = null;
   let currentTimeframe = 'daily';
 
@@ -669,35 +668,6 @@
     }
   }
 
-  function ensureCategoryPieChart() {
-    const ctx = document.getElementById("categoryPieChart");
-    console.log('Category pie chart canvas element:', ctx);
-    if (!ctx) {
-      console.error('Category pie chart canvas not found');
-      return null;
-    }
-    if (categoryPieChart) return categoryPieChart;
-    categoryPieChart = new Chart(ctx, {
-      type: "pie",
-      data: { labels: [], datasets: [] },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { 
-            position: 'bottom',
-            labels: { 
-              padding: 15,
-              usePointStyle: true
-            }
-          }
-        },
-      },
-    });
-    console.log('Category pie chart created successfully');
-    return categoryPieChart;
-  }
-
   function ensureDonorBarChart() {
     const ctx = document.getElementById("donorBarChart");
     if (!ctx) return null;
@@ -726,45 +696,6 @@
       },
     });
     return donorBarChart;
-  }
-
-  function renderCategoryPieChart() {
-    const chart = ensureCategoryPieChart();
-    if (!chart) return;
-    
-    console.log('Rendering category pie chart, donationRecords:', donationRecords.length);
-    
-    // Aggregate data by category
-    const categoryData = {};
-    donationRecords.forEach(record => {
-      const category = record.category || 'Uncategorized';
-      const quantity = record.quantity || 1;
-      categoryData[category] = (categoryData[category] || 0) + quantity;
-    });
-    
-    console.log('Category data:', categoryData);
-    
-    const labels = Object.keys(categoryData).length ? Object.keys(categoryData) : ['No data'];
-    const values = Object.keys(categoryData).length ? Object.values(categoryData) : [0];
-    
-    console.log('Labels:', labels, 'Values:', values);
-    
-    // Generate colors for pie chart
-    const colors = [
-      '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
-      '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
-    ];
-    
-    chart.data.labels = labels;
-    chart.data.datasets = [
-      {
-        data: values,
-        backgroundColor: colors.slice(0, labels.length),
-        borderWidth: 2,
-        borderColor: '#fff'
-      }
-    ];
-    chart.update();
   }
 
   function renderDonorBarChart() {
@@ -996,7 +927,6 @@
         console.log('About to render charts, donationRecords count:', donationRecords.length);
         renderDonationChart();
         renderPickupChart();
-        renderCategoryPieChart();
         renderDonorBarChart();
       }, 100);
     } catch (err) {

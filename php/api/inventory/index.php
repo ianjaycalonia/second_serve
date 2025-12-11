@@ -471,7 +471,7 @@ try {
                 LEFT JOIN recipient_profiles alrp ON alrp.user_id = alloc.recipient_id
                 LEFT JOIN repack_outputs ro ON ro.inventory_id = im.inventory_id
                 WHERE im.direction = 'out'
-                  AND (im.mode IS NULL OR im.mode <> 'repack')
+                  AND (im.mode IS NULL OR im.mode NOT IN ('repack', 'discarded'))
                   AND im.created_at BETWEEN ? AND ?
                 GROUP BY im.id
                 ORDER BY im.created_at ASC, im.id ASC";

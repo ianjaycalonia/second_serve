@@ -56,7 +56,7 @@ try {
         )->fetchAll();
     } else {
         $rows = $db->query(
-            "SELECT created_at FROM inventory_movements WHERE direction = 'out' AND created_at BETWEEN ? AND ?",
+            "SELECT created_at FROM inventory_movements WHERE direction = 'out' AND (mode IS NULL OR mode NOT IN ('repack', 'discarded')) AND created_at BETWEEN ? AND ?",
             [$queryStart->format('Y-m-d H:i:s'), $queryEnd->format('Y-m-d H:i:s')]
         )->fetchAll();
     }

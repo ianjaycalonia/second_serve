@@ -115,7 +115,7 @@ try {
               GROUP BY di_avg.product_name
          ) metrics ON metrics.product_name = di.product_name
          WHERE im.direction = 'out'
-           AND (im.mode IS NULL OR im.mode <> 'repack')" . $movementTimeFilterClause;
+           AND (im.mode IS NULL OR im.mode NOT IN ('repack', 'discarded'))" . $movementTimeFilterClause;
 
     $metricsParams = [];
     if (!empty($timeParams)) {
@@ -256,7 +256,7 @@ try {
          )
          WHERE im.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
            AND im.direction = 'out'
-           AND (im.mode IS NULL OR im.mode <> 'repack')
+           AND (im.mode IS NULL OR im.mode NOT IN ('repack', 'discarded'))
            AND (cat.primary_name IS NULL OR cat.primary_name NOT LIKE 'Non-Food%')
          GROUP BY DATE(im.created_at)
          ORDER BY d ASC"

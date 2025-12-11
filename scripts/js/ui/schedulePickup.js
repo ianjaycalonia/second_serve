@@ -904,7 +904,10 @@ async function getValidRecipientsFromPayload(payload){
   const statusMap = await ensureRecipientStatusMap();
   for (const r of payload.recipients){
     const allocs = Array.isArray(r.allocations) ? r.allocations : [];
-    const allowedAlloc = allocs.find(a => isRecipientStatusEligible(a?.status));
+    let allowedAlloc = allocs.find(a => isRecipientStatusEligible(a?.status));
+    if (!allowedAlloc && allocs.length) {
+      allowedAlloc = allocs[0];
+    }
     if (!allowedAlloc) continue;
     let id = Number(r.recipient_id);
     const text = r.recipient_name || r.organization || (id ? `Recipient #${id}` : 'Recipient');
@@ -922,7 +925,21 @@ async function getValidRecipientsFromPayload(payload){
   }
   // Deduplicate by id
   const seen = new Set();
-  return candidates.filter(x => { if (seen.has(x.id)) return false; seen.add(x.id); return true; });
+  const uniqueCandidates = candidates.filter(x => { if (seen.has(x.id)) return false; seen.add(x.id); return true; });
+
+  if (uniqueCandidates.length === 0 && Array.isArray(payload.recipients) && payload.recipients.length) {
+    const fallbackSeen = new Set();
+    payload.recipients.forEach(raw => {
+      const rawId = Number(raw.recipient_id || raw.id);
+      const text = raw.recipient_name || raw.organization || (rawId ? `Recipient #${rawId}` : 'Recipient');
+      const finalId = Number.isFinite(rawId) && rawId > 0 ? rawId : null;
+      if (!finalId || fallbackSeen.has(finalId)) return;
+      fallbackSeen.add(finalId);
+      uniqueCandidates.push({ id: finalId, text });
+    });
+  }
+
+  return uniqueCandidates;
 }
 
 async function tryAutoPopulateRecipientsFromPickup(){
@@ -1071,17 +1088,28 @@ function initSchedulePickupUI() {
   const modalEl = document.getElementById('eventModal');
   if (modalEl) {
     modalEl.addEventListener('shown.bs.modal', () => {
+      const currentEventId = document.getElementById('evId')?.value || '';
+      const editingExisting = Boolean(currentEventId);
+      const editingFlag = Boolean(window.SchedulePickupUI && window.SchedulePickupUI._editing);
+      const isEditing = editingExisting || editingFlag;
+
       // Always show the modal; gate via disabled form + single warning toast
       if (!ensureRecipientSchedulingEligibility()) {
         // Kick off async verification and surface a single warning; do not close modal
         showScheduleEligibilityWarning();
         disableSchedulingFormForRecipient();
       }
-      if (isFromPickup()) {
-        setEventType(enforceAllowedEventType('recipient'));
+
+      if (isFromPickup() && !isEditing) {
+        const targetType = enforceAllowedEventType('recipient');
+        const currentType = (eventTypeInputEl?.value || '').toLowerCase();
+        if (currentType !== targetType) {
+          setEventType(targetType);
+        }
         // Delay to ensure select2 is fully mounted
         setTimeout(() => tryAutoPopulateRecipientsFromPickup(), 0);
       }
+
       applyActiveTimeConstraints();
     });
   }

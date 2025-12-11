@@ -1686,6 +1686,10 @@
         if (noteEl) noteEl.value = "";
         const fb = document.getElementById("onsiteIssueFeedback");
         if (fb) fb.textContent = "";
+        
+        // Load lots for this item
+        loadOnsiteLots(itemName, category);
+        
         const mEl = document.getElementById("onsiteIssueModal");
         if (mEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
           bootstrap.Modal.getOrCreateInstance(mEl).show();
@@ -2124,6 +2128,10 @@
       if (noteEl) noteEl.value = "";
       const fb = document.getElementById("discardFeedback");
       if (fb) fb.textContent = "";
+      
+      // Load lots for this item
+      loadDiscardLots(itemName, category);
+      
       const mEl = document.getElementById("discardModal");
       if (mEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
         bootstrap.Modal.getOrCreateInstance(mEl).show();
@@ -2138,6 +2146,80 @@
     } catch (_) {}
   });
 
+  // Load lots for discard modal
+  async function loadDiscardLots(itemName, category) {
+    const lotSelect = document.getElementById("discardLot");
+    if (!lotSelect) return;
+    
+    lotSelect.innerHTML = '<option value="">Loading lots...</option>';
+    lotSelect.disabled = true;
+    
+    try {
+      const url = new URL(`${API_BASE_URL}/inventory/index.php/lot-details`, window.location.origin);
+      url.searchParams.set('item_name', itemName);
+      url.searchParams.set('category', category);
+      
+      const resp = await fetch(url, { credentials: 'include' });
+      if (!resp.ok) throw new Error('Failed to load lots');
+      
+      const json = await resp.json();
+      const lots = Array.isArray(json?.data?.lots) ? json.data.lots : [];
+      
+      lotSelect.innerHTML = '<option value="">Any lot</option>';
+      lots.forEach(lot => {
+        const option = document.createElement('option');
+        option.value = lot.lot_id;
+        const qty = lot.quantity || 0;
+        const expiry = lot.expiry_date ? formatDate(lot.expiry_date) : 'No expiry';
+        option.textContent = `Lot #${lot.lot_id} — ${qty} units • ${expiry}`;
+        lotSelect.appendChild(option);
+      });
+      
+      lotSelect.disabled = false;
+    } catch (err) {
+      console.error('Failed to load discard lots:', err);
+      lotSelect.innerHTML = '<option value="">Failed to load lots</option>';
+      lotSelect.disabled = true;
+    }
+  }
+
+  // Load lots for on-site giveaway modal
+  async function loadOnsiteLots(itemName, category) {
+    const lotSelect = document.getElementById("onsiteLot");
+    if (!lotSelect) return;
+    
+    lotSelect.innerHTML = '<option value="">Loading lots...</option>';
+    lotSelect.disabled = true;
+    
+    try {
+      const url = new URL(`${API_BASE_URL}/inventory/index.php/lot-details`, window.location.origin);
+      url.searchParams.set('item_name', itemName);
+      url.searchParams.set('category', category);
+      
+      const resp = await fetch(url, { credentials: 'include' });
+      if (!resp.ok) throw new Error('Failed to load lots');
+      
+      const json = await resp.json();
+      const lots = Array.isArray(json?.data?.lots) ? json.data.lots : [];
+      
+      lotSelect.innerHTML = '<option value="">Select a lot...</option>';
+      lots.forEach(lot => {
+        const option = document.createElement('option');
+        option.value = lot.lot_id;
+        const qty = lot.quantity || 0;
+        const expiry = lot.expiry_date ? formatDate(lot.expiry_date) : 'No expiry';
+        option.textContent = `Lot #${lot.lot_id} — ${qty} units • ${expiry}`;
+        lotSelect.appendChild(option);
+      });
+      
+      lotSelect.disabled = false;
+    } catch (err) {
+      console.error('Failed to load onsite lots:', err);
+      lotSelect.innerHTML = '<option value="">Failed to load lots</option>';
+      lotSelect.disabled = true;
+    }
+  }
+
   // Submit Discard
   document.addEventListener("click", async function (e) {
     const submit = e.target.closest("#discardSubmitBtn");
@@ -2146,19 +2228,23 @@
       const ctx = window.__discardCtx || { itemName: "", category: "" };
       const qtyEl = document.getElementById("discardQty");
       const noteEl = document.getElementById("discardNote");
+      const lotEl = document.getElementById("discardLot");
       const fb = document.getElementById("discardFeedback");
       const qty = parseInt(qtyEl && qtyEl.value ? qtyEl.value : "0", 10) || 0;
       const note = (noteEl && noteEl.value ? noteEl.value : "").trim();
+      const lotId = lotEl ? lotEl.value : "";
       if (qty <= 0) { if (fb) fb.textContent = "Quantity must be at least 1."; return; }
       if (note.length === 0) { if (fb) fb.textContent = "Reason is required."; return; }
       fb && (fb.textContent = "");
       submit.disabled = true;
       // Call group move-out with mode 'discarded'
+      const payload = { item_name: ctx.itemName, category: ctx.category, quantity: qty, mode: "discarded", note };
+      if (lotId) payload.inventory_id = parseInt(lotId, 10);
       const resp = await fetch(`${API_BASE_URL}/inventory/index.php/move-out-group`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ item_name: ctx.itemName, category: ctx.category, quantity: qty, mode: "discarded", note })
+        body: JSON.stringify(payload)
       });
       const jr = await resp.json().catch(() => null);
       if (!resp.ok || jr?.success === false) {
@@ -2174,13 +2260,9 @@
         }
         document.querySelectorAll(".modal-backdrop").forEach((el)=>{ try{ el.remove(); }catch(_){} });
       } catch (_) {}
+      // Show success toast instead of modal
       try {
-        const body = document.getElementById("discardSuccessBody");
-        if (body) { body.textContent = `Discarded ${qty} × ${ctx.itemName} (${ctx.category}).`; }
-        const sm = document.getElementById("discardSuccessModal");
-        if (sm && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-          bootstrap.Modal.getOrCreateInstance(sm).show();
-        }
+        showToast(`Discarded ${qty} × ${ctx.itemName} (${ctx.category})`, 'success');
       } catch (_) {}
       // Invalidate any cached non-expired collection to avoid stale totals
       try {
@@ -3051,7 +3133,7 @@
     return parseInt(cj?.data?.run_id || 0, 10) || 0;
   }
 
-  async function createOnsiteAllocation(itemName, category, quantity, note) {
+  async function createOnsiteAllocation(itemName, category, quantity, note, lotId = null) {
     const periodKey = currentPeriodKey();
     // Prefer new atomic endpoint
     let allocationId = 0;
@@ -3066,7 +3148,7 @@
           quantity,
           note || "",
           periodKey,
-          null
+          lotId ? parseInt(lotId, 10) : null
         );
         if (j?.success === false)
           throw new Error(j?.error || "On-site issue failed");
@@ -3091,6 +3173,7 @@
             quantity,
             note: note || "",
             period_key: periodKey,
+            ...(lotId && { inventory_id: parseInt(lotId, 10) }),
           }),
         }
       );
@@ -3521,6 +3604,7 @@
       const btn = submit;
       const qtyEl = document.getElementById("onsiteQty");
       const noteEl = document.getElementById("onsiteNote");
+      const lotEl = document.getElementById("onsiteLot");
       const fb = document.getElementById("onsiteIssueFeedback");
       const modalEl = document.getElementById("onsiteIssueModal");
       const ctx = window.__onsiteCtx || {};
@@ -3528,8 +3612,13 @@
       const category = ctx.category || "";
       const quantity = parseInt(qtyEl?.value || "0", 10) || 0;
       const note = String(noteEl?.value || "").trim();
+      const lotId = lotEl ? lotEl.value : "";
       if (!itemName || !category) {
         if (fb) fb.textContent = "Invalid item context.";
+        return;
+      }
+      if (!lotId) {
+        if (fb) fb.textContent = "Please select a lot.";
         return;
       }
       if (!quantity || quantity <= 0) {
@@ -3554,7 +3643,7 @@
           bootstrap.Modal.getOrCreateInstance(modalEl).hide();
         }
         cleanup();
-        await createOnsiteAllocation(itemName, category, quantity, note);
+        await createOnsiteAllocation(itemName, category, quantity, note, lotId);
         try { window.__invNonExpiredCache = {}; } catch (_) {}
         const page = window.__inventoryLast?.pagination?.page || 1;
         await loadAndRender(page);
