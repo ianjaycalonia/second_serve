@@ -631,6 +631,28 @@ CREATE TABLE `repack_outputs` (
   CONSTRAINT `repack_outputs_category_fk` FOREIGN KEY (`category_id_snapshot`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
 
+CREATE TABLE `repack_operation_components` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `repack_id` INT NOT NULL,
+  `kit_component_id` INT DEFAULT NULL,
+  `position` SMALLINT NOT NULL DEFAULT 0,
+  `product_id_snapshot` INT DEFAULT NULL,
+  `product_name_snapshot` VARCHAR(255) NOT NULL,
+  `category_id_snapshot` INT DEFAULT NULL,
+  `unit_id_snapshot` INT DEFAULT NULL,
+  `quantity_per_kit_snapshot` DECIMAL(12,4) NOT NULL,
+  `notes_snapshot` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `roc_repack_idx` (`repack_id`),
+  KEY `roc_component_idx` (`kit_component_id`),
+  KEY `roc_category_idx` (`category_id_snapshot`),
+  KEY `roc_unit_idx` (`unit_id_snapshot`),
+  CONSTRAINT `roc_repack_fk` FOREIGN KEY (`repack_id`) REFERENCES `repack_operations`(`repack_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `roc_category_fk` FOREIGN KEY (`category_id_snapshot`) REFERENCES `categories`(`category_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `roc_unit_fk` FOREIGN KEY (`unit_id_snapshot`) REFERENCES `units`(`unit_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_GENERAL_CI;
+
 -- Minimal messages table (direct messages only) with role-based trigger
 CREATE TABLE `messages` (
   `id` INT NOT NULL AUTO_INCREMENT,

@@ -83,6 +83,86 @@ class RepackService
         return $this->normalizeTemplateRow($row);
     }
 
+    public function findTemplateForOutputItem(string $productName, ?string $categoryLabel = null): ?array
+    {
+        $productName = trim($productName);
+        $categoryLabel = $categoryLabel !== null ? trim($categoryLabel) : '';
+        if ($productName === '') {
+            return null;
+        }
+        $params = [$productName];
+        if ($categoryLabel !== '') {
+            $sql = "SELECT ro.repack_id, op.kit_template_id
+                    FROM repack_outputs ro
+                    INNER JOIN repack_operations op ON op.repack_id = ro.repack_id
+                    LEFT JOIN categories cat ON cat.category_id = ro.category_id_snapshot
+                    WHERE ro.product_name_snapshot = ?
+                      AND CONCAT(cat.primary_name, COALESCE(CONCAT(' - ', cat.secondary_name), '')) = ?
+                    ORDER BY ro.id DESC
+                    LIMIT 1";
+            $params[] = $categoryLabel;
+        } else {
+            $sql = "SELECT ro.repack_id, op.kit_template_id
+                    FROM repack_outputs ro
+                    INNER JOIN repack_operations op ON op.repack_id = ro.repack_id
+                    LEFT JOIN categories cat ON cat.category_id = ro.category_id_snapshot
+                    WHERE ro.product_name_snapshot = ?
+                      AND IFNULL(CONCAT(cat.primary_name, COALESCE(CONCAT(' - ', cat.secondary_name), '')), '') = ''
+                    ORDER BY ro.id DESC
+                    LIMIT 1";
+        }
+        $row = $this->db->query($sql, $params)->fetch();
+        if (!$row || (empty($row['kit_template_id']) && empty($row['repack_id']))) {
+            return null;
+        }
+
+        $templateId = isset($row['kit_template_id']) ? (int)$row['kit_template_id'] : 0;
+        $repackId = isset($row['repack_id']) ? (int)$row['repack_id'] : 0;
+
+        $template = $this->buildTemplateWithSnapshot($templateId, $repackId, $productName, $categoryLabel);
+
+        return $this->normalizeTemplateRow($template);
+    }
+
+    /**
+     * Resolve template + component snapshot for a specific output lot (inventory_id).
+     * This is used when viewing kit components for a selected inventory lot.
+     */
+    public function findTemplateForOutputLot(int $inventoryId): ?array
+    {
+        $inventoryId = (int)$inventoryId;
+        if ($inventoryId <= 0) {
+            return null;
+        }
+
+        $row = $this->db->query(
+            "SELECT ro.repack_id,
+                    op.kit_template_id,
+                    ro.product_name_snapshot,
+                    CONCAT(cat.primary_name, COALESCE(CONCAT(' - ', cat.secondary_name), '')) AS category_label
+             FROM repack_outputs ro
+             INNER JOIN repack_operations op ON op.repack_id = ro.repack_id
+             LEFT JOIN categories cat ON cat.category_id = ro.category_id_snapshot
+             WHERE ro.inventory_id = ?
+             ORDER BY ro.id DESC
+             LIMIT 1",
+            [$inventoryId]
+        )->fetch();
+
+        if (!$row || (empty($row['kit_template_id']) && empty($row['repack_id']))) {
+            return null;
+        }
+
+        $templateId = isset($row['kit_template_id']) ? (int)$row['kit_template_id'] : 0;
+        $repackId = isset($row['repack_id']) ? (int)$row['repack_id'] : 0;
+        $productName = trim((string)($row['product_name_snapshot'] ?? ''));
+        $categoryLabel = trim((string)($row['category_label'] ?? ''));
+
+        $template = $this->buildTemplateWithSnapshot($templateId, $repackId, $productName, $categoryLabel);
+
+        return $this->normalizeTemplateRow($template);
+    }
+
     /**
      * Create a new kit template with components.
      */
@@ -200,6 +280,8 @@ class RepackService
             if ($repackId <= 0) {
                 throw new Exception('Failed to create repack operation');
             }
+
+            $this->snapshotComponentsForRepack($repackId, $template['components'] ?? []);
 
             $totalInputWeight = 0.0;
 
@@ -440,6 +522,9 @@ class RepackService
             [$repackId]
         )->fetchAll();
 
+        $componentsSnapshotByRepack = $this->fetchOperationComponents([$repackId]);
+        $componentsSnapshot = $componentsSnapshotByRepack[$repackId] ?? [];
+
         $row['inputs'] = array_map(function ($item) {
             $item['category_label'] = $this->composeCategoryLabel($item['category_primary'] ?? null, $item['secondary_name'] ?? null);
             return $item;
@@ -449,6 +534,8 @@ class RepackService
             $item['category_label'] = $this->composeCategoryLabel($item['category_primary'] ?? null, $item['secondary_name'] ?? null);
             return $item;
         }, $outputs);
+
+        $row['components_snapshot'] = $componentsSnapshot;
 
         $row['total_input_quantity'] = array_sum(array_column($inputs, 'quantity_used'));
         $row['total_output_quantity'] = array_sum(array_column($outputs, 'quantity_produced'));
@@ -557,6 +644,60 @@ class RepackService
             }
             $this->assertIntegerQuantity($quantityPerKit, 'component quantity per kit');
 
+            $productRow = null;
+            if ($productId !== null && $productId > 0) {
+                $productRow = $this->db->query(
+                    'SELECT product_id, category_id, default_unit_id FROM products WHERE product_id = ? LIMIT 1',
+                    [$productId]
+                )->fetch();
+            } else {
+                $productRow = $this->db->query(
+                    'SELECT product_id, category_id, default_unit_id FROM products WHERE product_name = ? LIMIT 1',
+                    [$productName]
+                )->fetch();
+            }
+            if ($productRow) {
+                $productId = (int)$productRow['product_id'];
+                if (!$categoryId && isset($productRow['category_id']) && $productRow['category_id'] !== null) {
+                    $categoryId = (int)$productRow['category_id'];
+                }
+                if (!$unitId && isset($productRow['default_unit_id']) && $productRow['default_unit_id'] !== null) {
+                    $unitId = (int)$productRow['default_unit_id'];
+                }
+            }
+
+            if (!$categoryId || !$unitId) {
+                $donationRow = $this->db->query(
+                    'SELECT category_id, unit_id FROM donation_items WHERE product_name = ? ORDER BY donation_item_id DESC LIMIT 1',
+                    [$productName]
+                )->fetch();
+                if ($donationRow) {
+                    if (!$categoryId && isset($donationRow['category_id']) && $donationRow['category_id'] !== null) {
+                        $categoryId = (int)$donationRow['category_id'];
+                    }
+                    if (!$unitId && isset($donationRow['unit_id']) && $donationRow['unit_id'] !== null) {
+                        $unitId = (int)$donationRow['unit_id'];
+                    }
+                }
+            }
+
+            if (!$productRow && ($categoryId || $unitId)) {
+                $this->db->query(
+                    'INSERT INTO products (product_name, category_id, default_unit_id) VALUES (?, ?, ?)',
+                    [
+                        $productName,
+                        $categoryId ?: null,
+                        $unitId ?: null,
+                    ]
+                );
+                $productId = (int)$this->db->lastInsertId();
+            } elseif ($productRow && $productId && $unitId && (!isset($productRow['default_unit_id']) || $productRow['default_unit_id'] === null)) {
+                $this->db->query(
+                    'UPDATE products SET default_unit_id = ? WHERE product_id = ? AND (default_unit_id IS NULL OR default_unit_id = 0)',
+                    [$unitId, $productId]
+                );
+            }
+
             $this->db->query(
                 'INSERT INTO kit_components (kit_template_id, position, product_id, product_name, category_id, unit_id, quantity_per_kit, notes, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
@@ -600,6 +741,122 @@ class RepackService
             $grouped[$tid][] = $row;
         }
         return $grouped;
+    }
+
+    /**
+     * Helper to hydrate a template row and overlay component snapshot data when available.
+     */
+    private function buildTemplateWithSnapshot(int $templateId, int $repackId, string $productName, string $categoryLabel): array
+    {
+        $template = null;
+
+        if ($templateId > 0) {
+            $template = $this->getTemplate($templateId);
+        } else {
+            $productName = trim($productName);
+            $categoryLabel = trim($categoryLabel);
+            $template = [
+                'kit_template_id' => null,
+                'name' => $productName,
+                'output_product_name' => $productName,
+                'output_category_label' => $categoryLabel !== '' ? $categoryLabel : null,
+                'output_unit_label' => null,
+                'components' => [],
+            ];
+        }
+
+        if ($repackId > 0) {
+            $snapByRepack = $this->fetchOperationComponents([$repackId]);
+            $snapComponents = $snapByRepack[$repackId] ?? [];
+            if (!empty($snapComponents)) {
+                $mapped = [];
+                foreach ($snapComponents as $c) {
+                    $mapped[] = [
+                        'kit_component_id' => isset($c['kit_component_id']) ? (int)$c['kit_component_id'] : null,
+                        'product_id' => isset($c['product_id_snapshot']) && $c['product_id_snapshot'] !== null ? (int)$c['product_id_snapshot'] : null,
+                        'product_name' => $c['product_name_snapshot'],
+                        'category_id' => $c['category_id_snapshot'] ?? null,
+                        'unit_id' => $c['unit_id_snapshot'] ?? null,
+                        'quantity_per_kit' => (float)$c['quantity_per_kit_snapshot'],
+                        'notes' => $c['notes_snapshot'] ?? null,
+                        'unit_label' => $c['unit_label'] ?? null,
+                        'category_label' => $c['category_label'] ?? null,
+                    ];
+                }
+                $template['components'] = $mapped;
+            }
+        }
+
+        return $template;
+    }
+
+    private function fetchOperationComponents(array $repackIds): array
+    {
+        if (empty($repackIds)) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($repackIds), '?'));
+        $rows = $this->db->query(
+            "SELECT roc.*, cat.primary_name AS category_primary, cat.secondary_name,
+                    COALESCE(un.label, un.code) AS unit_label
+             FROM repack_operation_components roc
+             LEFT JOIN categories cat ON cat.category_id = roc.category_id_snapshot
+             LEFT JOIN units un ON un.unit_id = roc.unit_id_snapshot
+             WHERE roc.repack_id IN ({$placeholders})
+             ORDER BY roc.repack_id ASC, roc.position ASC",
+            $repackIds
+        )->fetchAll();
+
+        $grouped = [];
+        foreach ($rows as $row) {
+            $rid = (int)$row['repack_id'];
+            $row['category_label'] = $this->composeCategoryLabel($row['category_primary'] ?? null, $row['secondary_name'] ?? null);
+            $grouped[$rid][] = $row;
+        }
+        return $grouped;
+    }
+
+    private function snapshotComponentsForRepack(int $repackId, array $components): void
+    {
+        if ($repackId <= 0 || empty($components)) {
+            return;
+        }
+        $position = 1;
+        foreach ($components as $component) {
+            $productName = trim((string)($component['product_name'] ?? ''));
+            if ($productName === '') {
+                continue;
+            }
+            $quantityPerKit = isset($component['quantity_per_kit']) ? (float)$component['quantity_per_kit'] : 0.0;
+            if ($quantityPerKit <= 0) {
+                continue;
+            }
+            $this->db->query(
+                'INSERT INTO repack_operation_components (
+                    repack_id,
+                    kit_component_id,
+                    position,
+                    product_id_snapshot,
+                    product_name_snapshot,
+                    category_id_snapshot,
+                    unit_id_snapshot,
+                    quantity_per_kit_snapshot,
+                    notes_snapshot,
+                    created_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+                [
+                    $repackId,
+                    isset($component['kit_component_id']) ? (int)$component['kit_component_id'] : null,
+                    $position++,
+                    isset($component['product_id']) && $component['product_id'] !== '' ? (int)$component['product_id'] : null,
+                    $productName,
+                    isset($component['category_id']) && $component['category_id'] !== '' ? (int)$component['category_id'] : null,
+                    isset($component['unit_id']) && $component['unit_id'] !== '' ? (int)$component['unit_id'] : null,
+                    $quantityPerKit,
+                    isset($component['notes']) && $component['notes'] !== '' ? (string)$component['notes'] : null,
+                ]
+            );
+        }
     }
 
     private function fetchInputTotals(array $repackIds): array

@@ -1727,7 +1727,13 @@
     const metaEl = document.getElementById("repackInventoryViewMeta");
     const tbody = document.querySelector("#repackInventoryViewTable tbody");
     const feedbackEl = document.getElementById("repackInventoryViewFeedback");
+    const lotWrapper = document.getElementById("repackInventoryViewLotChooserWrapper");
+    const lotSelect = document.getElementById("repackInventoryViewLotSelect");
+    const lotFeedback = document.getElementById("repackInventoryViewLotFeedback");
+
     if (feedbackEl) feedbackEl.textContent = "";
+    if (lotFeedback) lotFeedback.textContent = "";
+
     if (metaEl) {
       const parts = [];
       const nameLabel = String(itemName || "").trim();
@@ -1736,56 +1742,143 @@
       if (catLabel) parts.push(catLabel);
       metaEl.textContent = parts.length ? parts.join(" · ") : "";
     }
+
     if (tbody) {
       tbody.innerHTML =
-        '<tr><td colspan="3" class="text-center text-muted">Loading components...</td></tr>';
+        '<tr><td colspan="3" class="text-center text-muted">Select a kit lot to view its components.</td></tr>';
     }
+
+    if (lotWrapper) {
+      lotWrapper.classList.remove("d-none");
+    }
+    if (lotSelect) {
+      lotSelect.disabled = true;
+      lotSelect.innerHTML = '<option value="">Loading lots...</option>';
+    }
+
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
+
     try {
-      await ensureRepackReferenceData();
-      await fetchTemplates();
-      const keyName = String(itemName || "").trim().toLowerCase();
-      const keyCat = String(category || "").trim().toLowerCase();
-      let template =
-        repackState.templates.find((tpl) => {
-          const outName = String(tpl.output_product_name || "").trim().toLowerCase();
-          const outCat = String(tpl.output_category_label || "").trim().toLowerCase();
-          return outName === keyName && outCat === keyCat;
-        }) || null;
-      if (!template && repackState.templates.length) {
-        template =
-          repackState.templates.find((tpl) => {
-            const outName = String(tpl.output_product_name || "").trim().toLowerCase();
-            return outName === keyName;
-          }) || null;
+      // Load lots for this kit item using the existing lot-details endpoint
+      const url = new URL(`${API_BASE_URL}/inventory/index.php/lot-details`, window.location.origin);
+      url.searchParams.set("item_name", itemName || "");
+      url.searchParams.set("category", category || "");
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
-      if (template && (!Array.isArray(template.components) || !template.components.length)) {
-        const id = template.kit_template_id || template.id;
-        if (id) {
-          const detail = await fetchTemplateDetail(id);
-          if (detail) template = detail;
-        }
+      const json = await res.json().catch(() => null);
+      if (!json || json.success === false) {
+        throw new Error(json?.error || "Unable to load lot details.");
       }
-      if (!template || !Array.isArray(template.components) || !template.components.length) {
-        if (tbody) {
-          tbody.innerHTML =
-            '<tr><td colspan="3" class="text-center text-muted">No component definition found for this kit.</td></tr>';
-        }
+      const lots = Array.isArray(json?.data?.lots) ? json.data.lots : [];
+
+      if (!lotSelect) {
+        return;
+      }
+
+      if (!lots.length) {
+        lotSelect.innerHTML = '<option value="">No lots found for this kit.</option>';
+        lotSelect.disabled = true;
         if (feedbackEl) {
-          feedbackEl.textContent =
-            "No repack template was found matching this inventory item.";
+          feedbackEl.textContent = "No inventory lots were found for this kit item.";
         }
         return;
       }
+
+      // Populate selector with lots
+      const options = [];
+      options.push('<option value="">Select a lot…</option>');
+      lots.forEach((lot) => {
+        const invId = lot.lot_id != null ? String(lot.lot_id) : "";
+        if (!invId) return;
+        const qty = formatWholeQuantity(lot.quantity ?? 0);
+        const unit = escapeHtml(lot.unit || "");
+        const expiry = lot.expiry_date ? formatDate(lot.expiry_date) : "No expiry";
+        const status = escapeHtml(lot.status || "");
+        const label = `Lot #${invId} — ${qty} ${unit || ""} • ${expiry} • ${status}`;
+        options.push(`<option value="${escapeAttr(invId)}">${escapeHtml(label)}</option>`);
+      });
+      lotSelect.innerHTML = options.join("");
+      lotSelect.disabled = false;
+
+      // If only one lot, auto-select and load components immediately
+      const effectiveLots = lots.filter((lot) => lot.lot_id != null);
+      if (effectiveLots.length === 1) {
+        const onlyId = String(effectiveLots[0].lot_id);
+        lotSelect.value = onlyId;
+        await loadRepackComponentsForLot(onlyId, itemName, category);
+      } else if (lotFeedback) {
+        lotFeedback.textContent = "Choose a lot to see the exact components used for that run.";
+      }
+    } catch (err) {
+      console.error("Failed to load lots for kit components view", err);
+      if (lotSelect) {
+        lotSelect.innerHTML = '<option value="">Failed to load lots</option>';
+        lotSelect.disabled = true;
+      }
+      if (feedbackEl) {
+        feedbackEl.textContent = err?.message || "Failed to load lots for this kit.";
+      }
+    }
+  }
+
+  async function loadRepackComponentsForLot(inventoryId, itemName, category) {
+    const tbody = document.querySelector("#repackInventoryViewTable tbody");
+    const feedbackEl = document.getElementById("repackInventoryViewFeedback");
+    const metaEl = document.getElementById("repackInventoryViewMeta");
+
+    if (feedbackEl) feedbackEl.textContent = "";
+    if (tbody) {
+      tbody.innerHTML =
+        '<tr><td colspan="3" class="text-center text-muted">Loading components for selected lot...</td></tr>';
+    }
+
+    try {
+      await ensureRepackReferenceData();
+      await fetchTemplates();
+
+      const url = new URL(
+        `${API_BASE_URL}/repack/index.php/lookup/template-by-output-lot`,
+        window.location.origin
+      );
+      url.searchParams.set("inventory_id", String(inventoryId || ""));
+      const res = await fetch(url.toString(), {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json || json.success === false) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      const template = (json.data && (json.data.template || json.data)) || null;
+
+      if (!template || !Array.isArray(template.components) || !template.components.length) {
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="3" class="text-center text-muted">No component definition found for this kit lot.</td></tr>';
+        }
+        if (feedbackEl) {
+          feedbackEl.textContent =
+            "No component snapshot was found for the selected kit lot.";
+        }
+        return;
+      }
+
       if (metaEl) {
         const parts = [];
-        const tmplName = String(template.name || "").trim();
-        if (tmplName) parts.push(tmplName);
+        const nameLabel = String(itemName || template.output_product_name || "").trim();
+        if (nameLabel) parts.push(nameLabel);
         const catLabel = String(template.output_category_label || category || "").trim();
         if (catLabel) parts.push(catLabel);
         metaEl.textContent = parts.length ? parts.join(" · ") : metaEl.textContent;
       }
+
       if (tbody) {
         const rows = template.components.map((component) => {
           const name = escapeHtml(component.product_name || "");
@@ -1808,13 +1901,13 @@
         tbody.innerHTML = rows.join("");
       }
     } catch (err) {
-      console.error("Failed to load repack components for inventory kit", err);
+      console.error("Failed to load repack components for selected lot", err);
       if (tbody) {
         tbody.innerHTML =
           '<tr><td colspan="3" class="text-center text-danger">Failed to load components.</td></tr>';
       }
       if (feedbackEl) {
-        feedbackEl.textContent = err?.message || "Failed to load components.";
+        feedbackEl.textContent = err?.message || "Failed to load components for selected lot.";
       }
     }
   }
@@ -1836,6 +1929,41 @@
     const totalLots = parseInt(btnLot.getAttribute("data-total-lots") || "0", 10) || 0;
     await openLotDetails(itemName, category, totalLots);
   });
+
+  // Change kit components view when a lot is selected in the Kit Components modal
+  (function bindRepackInventoryViewLotChange() {
+    try {
+      const select = document.getElementById("repackInventoryViewLotSelect");
+      if (!select) return;
+      if (select.dataset.bound === "1") return;
+      select.dataset.bound = "1";
+      select.addEventListener("change", async function () {
+        const inventoryId = this.value || "";
+        if (!inventoryId) {
+          const tbody = document.querySelector("#repackInventoryViewTable tbody");
+          if (tbody) {
+            tbody.innerHTML =
+              '<tr><td colspan="3" class="text-center text-muted">Select a kit lot to view its components.</td></tr>';
+          }
+          return;
+        }
+        try {
+          const metaEl = document.getElementById("repackInventoryViewMeta");
+          const metaText = metaEl ? metaEl.textContent || "" : "";
+          let itemName = "";
+          let category = "";
+          if (metaText) {
+            const parts = metaText.split(" · ");
+            if (parts.length > 0) itemName = parts[0];
+            if (parts.length > 1) category = parts[1];
+          }
+          await loadRepackComponentsForLot(inventoryId, itemName, category);
+        } catch (err) {
+          console.error("Lot selection change failed", err);
+        }
+      });
+    } catch (_) {}
+  })();
 
   async function openLotDetails(itemName, category, totalLots){
     const modalEl = document.getElementById("inventoryLotsModal");
@@ -2213,6 +2341,20 @@
       </span>`;
   }
 
+  // Compute available (non-expired) quantity for an inventory row.
+  // For grouped rows, this uses the status_breakdown fields so that expired
+  // quantities (already moved to expired_inventory) do not inflate the
+  // visible "Quantity" column or stock-level filters.
+  function getAvailableQuantity(row) {
+    const breakdown = row && row.status_breakdown;
+    if (breakdown && typeof breakdown === "object") {
+      const soon = Number(breakdown.soon ?? 0) || 0;
+      const inStock = Number(breakdown.in_stock ?? 0) || 0;
+      return soon + inStock;
+    }
+    return Number(row.total_quantity ?? row.quantity ?? 0) || 0;
+  }
+
   function renderTable(items, meta) {
     const tbody = document.querySelector("main .table tbody");
     if (!tbody) return;
@@ -2240,7 +2382,7 @@
       const displayItem = escapeHtml(rawItemName);
       const rawCategory = r.category || "";
       const displayCategory = escapeHtml(rawCategory);
-      const totalQty = Number(r.total_quantity ?? r.quantity ?? 0) || 0;
+      const totalQty = getAvailableQuantity(r);
       const qty = formatWholeQuantity(totalQty);
       const unit = escapeHtml(r.unit || "");
       const soonest = formatDate(r.earliest_expiry);
@@ -2337,7 +2479,10 @@
       arr = arr.filter((r) => {
         const itemStatus = String(r.derived_status || "In Stock").toLowerCase();
         if (status === "in_stock") return itemStatus === "in stock";
-        if (status === "soon_expire") return itemStatus === "soon to expire";
+        if (status === "soon_expire") {
+          // Backend uses "Expiring Soon"; support legacy label as well.
+          return itemStatus === "expiring soon" || itemStatus === "soon to expire";
+        }
         if (status === "expired") return itemStatus === "expired";
         return true;
       });
@@ -2347,7 +2492,7 @@
     const stockLevel = (filters.stockLevel || "").trim();
     if (stockLevel) {
       arr = arr.filter((r) => {
-        const qty = Number(r.total_quantity ?? r.quantity ?? 0) || 0;
+        const qty = getAvailableQuantity(r);
         const totalLots = Number(r.total_lots ?? 0) || 0;
         if (stockLevel === "low") return qty < 5;
         if (stockLevel === "high") return qty > 50;
@@ -2403,7 +2548,7 @@
     const qtySel = (filters.sortQuantity || "").toLowerCase();
     const catSel = (filters.sortCategory || "").toLowerCase();
     const nameSel = (filters.sortItemName || "").toLowerCase();
-    const toQty = (r) => Number(r.total_quantity ?? r.quantity ?? 0) || 0;
+    const toQty = (r) => getAvailableQuantity(r);
     const toDate = (r) => {
       const s = r.earliest_expiry || r.added_at || r.created_at || "";
       const d = new Date(s);
@@ -2488,12 +2633,12 @@
         cache[key] = cacheEntry;
       }
       const meta = { config: configMeta || cacheEntry?.config || {} };
-      // Client-side paginate non-expired
-      const total = items.length;
-      const pages = Math.max(1, Math.ceil(total / limit));
+      // Apply all client-side filters/sorts, then paginate the resulting set
+      const sortedFiltered = applyClientFiltersAndSort(items, filters);
+      const total = sortedFiltered.length;
+      const pages = Math.max(1, Math.ceil(Math.max(1, total) / limit));
       const cur = Math.min(Math.max(1, page), pages);
       const start = (cur - 1) * limit;
-      const sortedFiltered = applyClientFiltersAndSort(items, filters);
       const slice = sortedFiltered.slice(start, start + limit);
       window.__inventoryLast = {
         items: slice,

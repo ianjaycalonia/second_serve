@@ -172,6 +172,42 @@ try {
         sendJson(['success' => false, 'error' => 'Endpoint not found'], 404);
     }
 
+    if ($root === 'lookup') {
+        if (count($segments) === 2 && strtolower($segments[1]) === 'template-by-output') {
+            if ($method !== 'GET') {
+                sendJson(['success' => false, 'error' => 'Method not allowed'], 405);
+            }
+            $itemName = trim((string)($_GET['item_name'] ?? ''));
+            $category = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
+            if ($itemName === '') {
+                sendJson(['success' => false, 'error' => 'item_name is required'], 400);
+            }
+            $template = $service->findTemplateForOutputItem($itemName, $category === '' ? null : $category);
+            if (!$template) {
+                sendJson(['success' => true, 'data' => null]);
+            }
+            sendJson(['success' => true, 'data' => ['template' => $template]]);
+        }
+
+        if (count($segments) === 2 && strtolower($segments[1]) === 'template-by-output-lot') {
+            if ($method !== 'GET') {
+                sendJson(['success' => false, 'error' => 'Method not allowed'], 405);
+            }
+            $inventoryIdRaw = $_GET['inventory_id'] ?? ($_GET['lot_id'] ?? null);
+            $inventoryId = is_numeric($inventoryIdRaw) ? (int)$inventoryIdRaw : 0;
+            if ($inventoryId <= 0) {
+                sendJson(['success' => false, 'error' => 'inventory_id is required'], 400);
+            }
+            $template = $service->findTemplateForOutputLot($inventoryId);
+            if (!$template) {
+                sendJson(['success' => true, 'data' => null]);
+            }
+            sendJson(['success' => true, 'data' => ['template' => $template]]);
+        }
+
+        sendJson(['success' => false, 'error' => 'Endpoint not found'], 404);
+    }
+
     sendJson(['success' => false, 'error' => 'Endpoint not found'], 404);
 } catch (Exception $e) {
     $status = ($e->getCode() >= 400 && $e->getCode() <= 599) ? (int)$e->getCode() : 500;
