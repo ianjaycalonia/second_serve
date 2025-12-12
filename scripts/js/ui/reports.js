@@ -14,6 +14,7 @@
   let donationLineChart = null;
   let pickupBarChart = null;
   let donorBarChart = null;
+  let distributionPieChart = null;
   let currentTimeframe = 'daily';
 
   const volumeState = {
@@ -531,6 +532,44 @@
     }
   }
 
+  async function loadDistributionData(timeframe) {
+    try {
+      const range = getTimeframeRange(timeframe || currentTimeframe);
+      const startIso = formatIsoDate(range.start);
+      const endIso = formatIsoDate(range.end);
+      
+      // Fetch product out data (excluding discarded and repacked)
+      const productOutResp = await fetchJson(
+        `${API_BASE_URL}/inventory/index.php/report-out?start=${startIso}&end=${endIso}`
+      );
+      
+      const productOutData = Array.isArray(productOutResp?.data?.rows) 
+        ? productOutResp.data.rows 
+        : Array.isArray(productOutResp?.data)
+        ? productOutResp.data
+        : Array.isArray(productOutResp?.data?.data)
+        ? productOutResp.data.data
+        : [];
+      
+      // Transform product out data to match donation record format
+      const distributionRecords = productOutData.map(item => ({
+        id: item.MOVEMENT_ID,
+        date: item.DATE,
+        category: item['PRODUCT CATEGORY'],
+        quantity: item.QUANTITY,
+        type: 'distribution',
+        direction: 'out',
+        item_name: item['PRODUCT NAME'],
+        beneficiary: item['BENEFICIARY AGENCY']
+      }));
+      
+      return distributionRecords;
+    } catch (err) {
+      console.error("Failed to load distribution data", err);
+      return [];
+    }
+  }
+
   function updateTiles(totals, records, timeframe) {
     const totalDonationsEl = document.getElementById("totalDonations");
 
@@ -668,6 +707,32 @@
     }
   }
 
+  function ensureDistributionPieChart() {
+    const ctx = document.getElementById("distributionPieChart");
+    if (!ctx) {
+      return null;
+    }
+    if (distributionPieChart) return distributionPieChart;
+    distributionPieChart = new Chart(ctx, {
+      type: "pie",
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { 
+            position: 'bottom',
+            labels: { 
+              padding: 15,
+              usePointStyle: true
+            }
+          }
+        },
+      },
+    });
+    return distributionPieChart;
+  }
+
   function ensureDonorBarChart() {
     const ctx = document.getElementById("donorBarChart");
     if (!ctx) return null;
@@ -698,11 +763,48 @@
     return donorBarChart;
   }
 
+  function renderDistributionPieChart() {
+    const chart = ensureDistributionPieChart();
+    if (!chart) return;
+    
+    // Load distribution data separately
+    loadDistributionData(currentTimeframe).then(distributionRecords => {
+      // Aggregate distribution data by category
+      const categoryData = {};
+      distributionRecords.forEach(record => {
+        const category = record.category || 'Uncategorized';
+        const quantity = record.quantity || 1;
+        categoryData[category] = (categoryData[category] || 0) + quantity;
+      });
+      
+      const labels = Object.keys(categoryData).length ? Object.keys(categoryData) : ['No data'];
+      const values = Object.keys(categoryData).length ? Object.values(categoryData) : [0];
+      
+      // Generate colors for pie chart
+      const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+        '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+      ];
+      
+      chart.data.labels = labels;
+      chart.data.datasets = [
+        {
+          data: values,
+          backgroundColor: colors.slice(0, labels.length),
+          borderWidth: 2,
+          borderColor: '#fff',
+        }
+      ];
+      
+      chart.update();
+    }).catch(err => {
+      console.error('Failed to render distribution pie chart:', err);
+    });
+  }
+
   function renderDonorBarChart() {
     const chart = ensureDonorBarChart();
     if (!chart) return;
-    
-    console.log('Rendering donor bar chart, donationRecords:', donationRecords.length);
     
     // Aggregate data by donor
     const donorData = {};
@@ -712,17 +814,12 @@
       donorData[donor] = (donorData[donor] || 0) + quantity;
     });
     
-    console.log('Donor data:', donorData);
-    
     // Sort by quantity and take top 10
     const sortedDonors = Object.entries(donorData)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
+      .sort((a, b) => b[1] - a[1]);
     
     const labels = sortedDonors.length ? sortedDonors.map(([donor]) => donor) : ['No data'];
     const values = sortedDonors.length ? sortedDonors.map(([, quantity]) => quantity) : [0];
-    
-    console.log('Donor labels:', labels, 'Donor values:', values);
     
     chart.data.labels = labels;
     chart.data.datasets = [
@@ -924,9 +1021,9 @@
       ]);
       // Render all charts after data is loaded with a small delay
       setTimeout(() => {
-        console.log('About to render charts, donationRecords count:', donationRecords.length);
         renderDonationChart();
         renderPickupChart();
+        renderDistributionPieChart();
         renderDonorBarChart();
       }, 100);
     } catch (err) {
