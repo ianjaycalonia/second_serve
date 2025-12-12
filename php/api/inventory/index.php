@@ -931,7 +931,7 @@ try {
         }
         // Only apply mode/recipient filters when direction is out
         if ($direction !== 'in') {
-            if ($mode !== '' && in_array($mode, ['recipient','onsite'], true)) {
+            if ($mode !== '' && in_array($mode, ['recipient','onsite','donated','purchased'], true)) {
                 $where[] = 'im.mode = ?';
                 $params[] = $mode;
             }
@@ -963,6 +963,7 @@ try {
                     im.inventory_id,
                     im.direction,
                     im.quantity,
+                    im.note,
                     CASE 
                         WHEN im.direction = 'out' THEN 
                             CASE 

@@ -1049,14 +1049,27 @@ SQL);
                     $inTxn = true;
                 }
 
-                // Resolve recipient if not provided: prefer name "Foodbank (On-site)", else tag contains 'onsite'
-                if ($recipientId <= 0) {
+                // Resolve recipient (either validate provided ID or auto-detect default)
+                $recipientValid = false;
+                if ($recipientId > 0) {
+                    $chk = $db->query("SELECT u.user_id FROM users u WHERE u.user_id = ? AND u.role='recipient' AND u.status='approved' LIMIT 1", [$recipientId])->fetch();
+                    if ($chk && isset($chk['user_id'])) {
+                        $recipientValid = true;
+                    } else {
+                        // Provided id is not valid; fall back to auto-detect logic
+                        $recipientId = 0;
+                    }
+                }
+
+                if (!$recipientValid) {
+                    // Auto-detect recipient: prefer organization_name "Foodbank (On-site)", else tag contains 'onsite'
                     $row = $db->query("SELECT u.user_id FROM users u LEFT JOIN recipient_profiles rp ON u.user_id = rp.user_id WHERE u.role='recipient' AND u.status='approved' AND rp.organization_name = 'Foodbank (On-site)' LIMIT 1")->fetch();
                     if (!$row) {
                         $row = $db->query("SELECT u.user_id FROM users u LEFT JOIN recipient_profiles rp ON u.user_id = rp.user_id WHERE u.role='recipient' AND u.status='approved' AND COALESCE(rp.tags,'') LIKE '%onsite%' LIMIT 1")->fetch();
                     }
                     if (!$row) { throw new Exception('On-site recipient not found'); }
                     $recipientId = (int)$row['user_id'];
+                    $recipientValid = true;
                 }
 
                 // On-site issuances should never be attached to weekly runs

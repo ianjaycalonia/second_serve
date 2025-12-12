@@ -44,17 +44,26 @@
       const qty = Number(r.quantity||0);
       const mode = (r.mode || '').toString();
       const admin = (r.performed_by_name || '').toString();
+      const note = (r.note || '').toString();
+      const noteAttr = note ? `data-bs-toggle="tooltip" data-bs-placement="top" title="${escapeHtml(note)}"` : '';
+      const noteClass = note ? 'mov-mode-with-note' : '';
       return `<tr>
         <td>${when}</td>
         <td>${escapeHtml(dir)}</td>
         <td>${escapeHtml(item)}</td>
         <td>${escapeHtml(cat)}</td>
         <td>${qty}</td>
-        <td>${escapeHtml(mode)}</td>
+        <td class="${noteClass}" ${noteAttr}>${escapeHtml(mode)}</td>
         <td>${escapeHtml(admin)}</td>
       </tr>`;
     }).join('');
     tbody.innerHTML = html;
+    
+    // Initialize Bootstrap tooltips for mode cells with notes
+    const tooltipTriggerList = [].slice.call(tbody.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
   }
 
   function escapeHtml(s){

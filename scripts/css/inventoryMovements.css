@@ -14,3 +14,22 @@
 .mv-page-size-wrap {
   min-width: 120px;
 }
+
+/* Inventory movements mode cells with notes */
+.mov-mode-with-note {
+  cursor: help;
+  position: relative;
+}
+
+.mov-mode-with-note:hover {
+  background-color: #e3f2fd !important;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+}
+
+/* Tooltip styling for notes */
+.tooltip {
+  font-size: 0.875rem;
+  max-width: 300px;
+  white-space: pre-wrap;
+}

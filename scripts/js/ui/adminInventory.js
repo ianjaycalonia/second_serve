@@ -2172,6 +2172,7 @@
         const qty = lot.quantity || 0;
         const expiry = lot.expiry_date ? formatDate(lot.expiry_date) : 'No expiry';
         option.textContent = `Lot #${lot.lot_id} — ${qty} units • ${expiry}`;
+        try { option.dataset.qty = String(qty); } catch(_) {}
         lotSelect.appendChild(option);
       });
       
@@ -2209,6 +2210,7 @@
         const qty = lot.quantity || 0;
         const expiry = lot.expiry_date ? formatDate(lot.expiry_date) : 'No expiry';
         option.textContent = `Lot #${lot.lot_id} — ${qty} units • ${expiry}`;
+        try { option.dataset.qty = String(qty); } catch (_) {}
         lotSelect.appendChild(option);
       });
       
@@ -3622,6 +3624,23 @@
       if (!quantity || quantity <= 0) {
         if (fb) fb.textContent = "Quantity must be at least 1.";
         return;
+      }
+      if (note.length === 0) {
+        if (fb) fb.textContent = "Note is required.";
+        return;
+      }
+      // Prevent issuing more than available in the selected lot
+      try {
+        const selectedOpt = lotEl?.options?.[lotEl.selectedIndex];
+        const available = selectedOpt && selectedOpt.dataset && selectedOpt.dataset.qty
+          ? parseInt(selectedOpt.dataset.qty, 10) || 0
+          : 0;
+        if (available > 0 && quantity > available) {
+          if (fb) fb.textContent = `Quantity exceeds available stock (${available}).`;
+          return;
+        }
+      } catch (_) {
+        // If we cannot read dataset, continue to server-side validation
       }
       const cleanup = () => {
         try {
