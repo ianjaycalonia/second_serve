@@ -36,7 +36,7 @@
         cont = document.createElement('div');
         cont.id = 'globalToastContainer';
         cont.className = 'toast-container position-fixed top-0 end-0 p-3';
-        try { cont.style.zIndex = '1085'; } catch(_) {}
+        try { cont.style.zIndex = '9999'; } catch(_) {}
         document.body.appendChild(cont);
       }
       return cont;

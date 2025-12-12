@@ -707,14 +707,10 @@
       if (!canOverride) return;
       const nameVal = String($name.val() || "").trim();
       if (!nameVal) return;
-      const qtyVal = Number($qty.val() || "0");
       const unitCost = await fetchUnitCostByName(nameVal);
       if (typeof unitCost === "number" && !Number.isNaN(unitCost)) {
-        let total = unitCost;
-        if (Number.isFinite(qtyVal) && qtyVal > 0) {
-          total = unitCost * qtyVal;
-        }
-        $cost.val(total.toFixed(2));
+        // Use per-item cost from taxonomy; do not multiply by quantity
+        $cost.val(unitCost.toFixed(2));
         $cost.attr("data-auto", "1");
       }
     }
@@ -814,7 +810,7 @@
           <div class="col-12">
             <div class="row g-3">
               <div class="col-6">
-                <label class="form-label mb-1">Cost (₱)</label>
+                <label class="form-label mb-1">Cost per item (₱)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -869,8 +865,8 @@
       enforceExpiryLead($(this));
     });
     $itemsContainer.on("change blur", ".item-qty", function () {
-      const $row = $(this).closest(".item-row");
-      autoFillCostForRow($row);
+      // Quantity changes should not modify cost; cost is per item.
+      // Validation for quantity happens in validateForm().
     });
     $itemsContainer.on("input change", ".item-cost", function () {
       $(this).removeAttr("data-auto");
@@ -943,8 +939,8 @@
         // No category/unit/weight fields submitted; backend infers them by item name
         const c = $row.find(".item-cost").val();
         if (c !== null && c !== undefined && String(c) !== "")
-          fd.append("total_cost[]", c);
-        else fd.append("total_cost[]", "");
+          fd.append("unit_cost[]", c);
+        else fd.append("unit_cost[]", "");
         fd.append(
           "remarks[]",
           String($row.find(".item-remarks").val() || "").trim()

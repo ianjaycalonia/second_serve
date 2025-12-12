@@ -64,6 +64,7 @@
       cont = document.createElement("div");
       cont.id = "globalToastContainer";
       cont.className = "toast-container position-fixed top-0 end-0 p-3";
+      cont.style.zIndex = "9999";
       document.body.appendChild(cont);
     }
     return cont;
@@ -226,7 +227,7 @@
     const name = escapeHtml(it.name || "");
     const qty = (it.quantity !== undefined && it.quantity !== null && it.quantity !== '') ? it.quantity : 1;
     const expiry = escapeHtml(it.expiry_date || "");
-    const cost = (it && it.total_cost != null && it.total_cost !== "") ? Number(it.total_cost) : "";
+    const cost = (it && it.unit_cost != null && it.unit_cost !== "") ? Number(it.unit_cost) : "";
     return `
       <div class="card p-3 border batch-item-row position-relative" data-id="${
         id > 0 ? id : ""
@@ -244,7 +245,7 @@
             <input type="number" class="form-control batch-item-qty" min="1" value="${qty}" required>
           </div>
           <div class="col-6 col-md-2">
-            <label class="form-label mb-1">Cost (₱)</label>
+            <label class="form-label mb-1">Cost per item (₱)</label>
             <input type="number" class="form-control batch-item-cost" step="0.01" min="0" value="${cost}">
           </div>
           <div class="col-6 col-md-2">
@@ -371,7 +372,7 @@
           name,
           quantity: qty,
           expiry_date: expiry,
-          total_cost: cost,
+          unit_cost: cost,
         });
       }
       btn.disabled = true;
@@ -446,14 +447,19 @@
 
   function showSuccess(message) {
     try {
-      const msgEl = document.getElementById("successModalMessage");
-      if (msgEl && typeof message === "string" && message.trim() !== "") {
-        msgEl.textContent = message;
-      }
-      const modalEl = document.getElementById("successModal");
-      if (modalEl && window.bootstrap) {
-        const m = new bootstrap.Modal(modalEl);
-        m.show();
+      const cont = ensureToastContainer();
+      const toast = document.createElement("div");
+      toast.className = "toast align-items-center text-white bg-success border-0";
+      toast.setAttribute("role", "alert");
+      toast.setAttribute("aria-live", "assertive");
+      toast.setAttribute("aria-atomic", "true");
+      toast.innerHTML = `<div class="d-flex"><div class="toast-body">${(message||'').toString()}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+      cont && cont.appendChild(toast);
+      if (window.bootstrap?.Toast) { 
+        new bootstrap.Toast(toast, { delay: 3000 }).show(); 
+      } else { 
+        toast.style.display='block'; 
+        setTimeout(()=>{ try{ toast.remove(); }catch(_){} }, 3000); 
       }
     } catch (_) {
       /* no-op */
@@ -967,7 +973,7 @@
           ).trim(),
           quantity: parseInt(document.getElementById("editQuantity").value, 10),
           expiry_date: expiryVal,
-          total_cost: (function(){ const v = (document.getElementById("editCost")?.value||"").trim(); return v===""? null : Number(v); })(),
+          unit_cost: (function(){ const v = (document.getElementById("editCost")?.value||"").trim(); return v===""? null : Number(v); })(),
         };
         if (!payload.name || !payload.quantity || payload.quantity < 1 || !expiryVal) {
           showError("Please provide a valid name, quantity, and expiry date.");

@@ -190,11 +190,25 @@ class Inventory
                         if ($ur && isset($ur['unit_id'])) { $unitId = (int)$ur['unit_id']; }
                     } catch (Exception $e) { /* ignore */ }
                 }
-                $this->db->query(
-                    "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags, created_at)
-                     VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NOW())",
-                    [ (int)$id, $itemName, $categoryId, $qty, $unitId, $expiry ]
-                );
+                // Try to insert with total_weight column first
+                try {
+                    $this->db->query(
+                        "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, unit_cost, expiry_date, tags, created_at)
+                         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NOW())",
+                        [ (int)$id, $itemName, $categoryId, $qty, $unitId, $expiry ]
+                    );
+                } catch (Exception $eInsert) {
+                    // If total_weight column doesn't exist, try without it
+                    if (strpos($eInsert->getMessage(), 'total_weight') !== false) {
+                        $this->db->query(
+                            "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, unit_cost, expiry_date, tags, created_at)
+                             VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, NOW())",
+                            [ (int)$id, $itemName, $categoryId, $qty, $unitId, $expiry ]
+                        );
+                    } else {
+                        throw $eInsert;
+                    }
+                }
                 $donationItemId = (int)$this->db->lastInsertId();
             } catch (Exception $eDI) { /* fallback continue without donation_items */ }
         }
@@ -443,8 +457,10 @@ class Inventory
             $exp  = isset($r['expiry_date']) ? trim((string)$r['expiry_date']) : '';
             $tags = isset($r['tags']) ? trim((string)$r['tags']) : '';
             $unit = isset($r['unit']) ? trim((string)$r['unit']) : '';
-            $tw   = isset($r['total_weight']) && $r['total_weight'] !== '' ? (float)$r['total_weight'] : null;
-            $tc   = isset($r['total_cost']) && $r['total_cost'] !== '' ? (float)$r['total_cost'] : null;
+            $uw   = isset($r['unit_weight']) && $r['unit_weight'] !== '' ? (float)$r['unit_weight'] : null;
+            $tw   = null; // Calculate total weight from unit_weight * quantity
+            $tc   = isset($r['unit_cost']) && $r['unit_cost'] !== '' ? (float)$r['unit_cost'] : 
+                   (isset($r['total_cost']) && $r['total_cost'] !== '' ? (float)$r['total_cost'] : null);
             $batch= isset($r['source_batch_id']) ? trim((string)$r['source_batch_id']) : '';
             $donEmail = isset($r['donor_email']) ? trim((string)$r['donor_email']) : '';
             $donOrg   = isset($r['donor_org']) ? trim((string)$r['donor_org']) : (isset($r['donor_organization']) ? trim((string)$r['donor_organization']) : '');
@@ -645,12 +661,27 @@ class Inventory
                         if ($ur && isset($ur['unit_id'])) { $unitId = (int)$ur['unit_id']; }
                     } catch (Exception $e) { /* ignore */ }
                 }
-                // Create donation_item row (normalized columns)
-                $this->db->query(
-                    "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-                    [ $donationId, $item, $categoryId, $qty, $unitId, $tw, $tc, $expNorm, ($tags === '' ? NULL : $tags) ]
-                );
+                // Calculate total weight from unit_weight * quantity
+                $tw = ($uw !== null && $qty > 0) ? ($uw * $qty) : null;
+                // Try to insert with total_weight column first
+                try {
+                    $this->db->query(
+                        "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, unit_cost, expiry_date, tags, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                        [ $donationId, $item, $categoryId, $qty, $unitId, $tw, $tc, $expNorm, ($tags === '' ? NULL : $tags) ]
+                    );
+                } catch (Exception $eInsert) {
+                    // If total_weight column doesn't exist, try without it
+                    if (strpos($eInsert->getMessage(), 'total_weight') !== false) {
+                        $this->db->query(
+                            "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, unit_cost, expiry_date, tags, created_at)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                            [ $donationId, $item, $categoryId, $qty, $unitId, $tc, $expNorm, ($tags === '' ? NULL : $tags) ]
+                        );
+                    } else {
+                        throw $eInsert;
+                    }
+                }
                 $donationItemId = (int)$this->db->lastInsertId();
                 
                 // Trigger logic: Sync product category

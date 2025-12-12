@@ -173,7 +173,7 @@ try {
         $expiries = isset($_POST['expiry_date']) ? (array)$_POST['expiry_date'] : [];
         $units = isset($_POST['unit']) ? (array)$_POST['unit'] : [];
         $weights = isset($_POST['total_weight']) ? (array)$_POST['total_weight'] : [];
-        $costs = isset($_POST['total_cost']) ? (array)$_POST['total_cost'] : [];
+        $costs = isset($_POST['unit_cost']) ? (array)$_POST['unit_cost'] : [];
         $remarksItems = isset($_POST['remarks']) && is_array($_POST['remarks']) ? (array)$_POST['remarks'] : [];
         $remarks = isset($_POST['remarks']) && !is_array($_POST['remarks']) ? normalize_input((string)$_POST['remarks']) : null; // batch-level notes
         $count = max(count($names), count($quantities), count($expiries));
@@ -274,7 +274,7 @@ try {
                     'unit' => ($unitVal !== '' ? $unitVal : null),
                     'expiry_date' => $expiry,
                     'total_weight' => $wVal,
-                    'total_cost' => $cVal,
+                    'unit_cost' => $cVal,
                     'tags' => $remarksVal,
                     'category_id' => $catIdVal ?: null,
                     'unit_id' => $unitIdVal ?: null,
@@ -373,14 +373,24 @@ try {
                     // Try to get donor org name (fallback to person name) for message context
                     $donorName = '';
                     try {
-                        $row = $db->query("SELECT organization_name, name FROM users WHERE user_id = ?", [$donorId])->fetch();
-                        if ($row) {
-                            $donorName = !empty($row['organization_name']) ? $row['organization_name'] : (!empty($row['name']) ? $row['name'] : '');
+                        $row = $db->query(
+                            "SELECT COALESCE(NULLIF(dp.organization_name, ''), NULLIF(u.name, '')) AS display_name
+                             FROM users u
+                             LEFT JOIN donor_profiles dp ON dp.user_id = u.user_id
+                             WHERE u.user_id = ?
+                             LIMIT 1",
+                            [$donorId]
+                        )->fetch();
+                        if ($row && !empty($row['display_name'])) {
+                            $donorName = $row['display_name'];
                         } else {
-                            error_log("Donor name lookup failed: No user found with donor_id $donorId");
+                            error_log("Donor name lookup failed: No display name for donor_id $donorId");
                         }
-                    } catch (Exception $e) { 
+                    } catch (Exception $e) {
                         error_log("Donor name lookup error for donor_id $donorId: " . $e->getMessage());
+                    }
+                    if ($donorName === '') {
+                        $donorName = 'A donor';
                     }
                     $countItems = count($itemIds);
                     foreach ($admins as $admin) {
@@ -389,7 +399,7 @@ try {
                             'type' => 'donation_created',
                             'reference_type' => 'batch',
                             'reference_id' => null,
-                            'message' => ($donorName ? ($donorName . ' ') : '') . 'submitted a new donation batch (' . $countItems . ' items)',
+                            'message' => $donorName . ' submitted a new donation batch (' . $countItems . ' items)',
                         ]);
                     }
                 }

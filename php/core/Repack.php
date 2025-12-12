@@ -378,7 +378,7 @@ class RepackService
             }
 
             $this->db->query(
-                'INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags, created_at)
+                'INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, unit_cost, expiry_date, tags, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NOW())',
                 [
                     $donationId,

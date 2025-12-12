@@ -55,7 +55,7 @@ class Donation
                 'quantity' => (int)($payload['quantity'] ?? 0),
                 'expiry_date' => (!empty($payload['expiry_date']) ? $payload['expiry_date'] : null),
                 'total_weight' => isset($payload['total_weight']) && $payload['total_weight'] !== '' ? (float)$payload['total_weight'] : null,
-                'total_cost' => isset($payload['total_cost']) && $payload['total_cost'] !== '' ? (float)$payload['total_cost'] : null,
+                'unit_cost' => isset($payload['unit_cost']) && $payload['unit_cost'] !== '' ? (float)$payload['unit_cost'] : null,
                 'category_id' => isset($payload['category_id']) ? (int)$payload['category_id'] : null,
                 'unit_id' => isset($payload['unit_id']) ? (int)$payload['unit_id'] : null,
                 'tags' => null,
@@ -106,7 +106,7 @@ class Donation
         $qty = (int)($it['quantity'] ?? 0);
         $unitId = isset($it['unit_id']) ? ($it['unit_id'] ?: null) : null;
         $tw = isset($it['total_weight']) && $it['total_weight'] !== '' ? (float)$it['total_weight'] : null;
-        $tc = isset($it['total_cost']) && $it['total_cost'] !== '' ? (float)$it['total_cost'] : null;
+        $uc = isset($it['unit_cost']) && $it['unit_cost'] !== '' ? (float)$it['unit_cost'] : null;
         $exp = (!empty($it['expiry_date']) ? $it['expiry_date'] : null);
         $tags = isset($it['tags']) ? sanitize((string)$it['tags']) : null;
 
@@ -137,7 +137,7 @@ class Donation
         }
 
         $this->db->query(
-            "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, total_cost, expiry_date, tags)
+            "INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, unit_cost, expiry_date, tags)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (int)$donationId,
@@ -146,7 +146,7 @@ class Donation
                 $qty,
                 $unitId,
                 $tw,
-                $tc,
+                $uc,
                 $exp,
                 $tags,
             ]
@@ -306,6 +306,7 @@ class Donation
                        di.product_name AS name,
                        CONCAT(c.primary_name, COALESCE(CONCAT(' - ', c.secondary_name), '')) AS type,
                        di.quantity,
+                       di.unit_cost,
                        di.unit_id,
                        COALESCE(un.label, un.code) AS unit_label,
                        di.expiry_date,
@@ -535,7 +536,7 @@ class DonationEditor
                 $name = isset($it['name']) ? sanitize((string)$it['name']) : '';
                 $qty = isset($it['quantity']) ? (int)$it['quantity'] : 0;
                 $expiry = isset($it['expiry_date']) ? (string)$it['expiry_date'] : '';
-                $totalCost = isset($it['total_cost']) && $it['total_cost'] !== '' ? (float)$it['total_cost'] : null;
+                $totalCost = isset($it['unit_cost']) && $it['unit_cost'] !== '' ? (float)$it['unit_cost'] : null;
                 if ($name === '' || $qty < 1 || $expiry === '') { throw new Exception('Invalid item fields'); }
 
                 if ($id > 0) {
@@ -543,7 +544,7 @@ class DonationEditor
                     $submittedIds[] = $id;
                     if (!isset($byItemId[$id])) { throw new Exception('Invalid item id'); }
                     $this->db->query(
-                        "UPDATE donation_items SET product_name = ?, quantity = ?, expiry_date = ?, total_cost = ? WHERE donation_item_id = ?",
+                        "UPDATE donation_items SET product_name = ?, quantity = ?, expiry_date = ?, unit_cost = ? WHERE donation_item_id = ?",
                         [$name, $qty, $expiry, $totalCost, $id]
                     );
                 } else {
@@ -553,7 +554,7 @@ class DonationEditor
                         'product_name' => $name,
                         'quantity' => $qty,
                         'expiry_date' => $expiry,
-                        'total_cost' => $totalCost,
+                        'unit_cost' => $totalCost,
                     ]);
                     $submittedIds[] = (int)$newItemId;
                 }

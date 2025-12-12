@@ -160,7 +160,6 @@ CREATE TABLE `batches` (
   `status` enum('Pending','Acknowledged','Picked Up','Failed Safety','Cancelled','Completed') NOT NULL DEFAULT 'Pending',
   `total_items` int(11) DEFAULT NULL,
   `total_weight` decimal(14,3) DEFAULT NULL,
-  `total_cost` decimal(16,2) DEFAULT NULL,
   `notes` text DEFAULT NULL,
   PRIMARY KEY (`batch_id`),
   KEY `batches_donor_idx` (`donor_id`),
@@ -361,7 +360,8 @@ INSERT IGNORE INTO `units` (`code`, `label`) VALUES
   ('kg', 'kilogram'),
   ('g', 'gram'),
   ('bag', 'bag'),
-  ('sack', 'sack');
+  ('sack', 'sack'),
+  ('case', 'case');
 
 -- Unit conversion metadata to support repacking math (e.g., sack -> kg -> g)
 CREATE TABLE `unit_conversions` (
@@ -424,7 +424,7 @@ CREATE TABLE `donation_items` (
   `quantity` INT NOT NULL,
   `unit_id` INT(11) DEFAULT NULL,
   `total_weight` DECIMAL(14,3) DEFAULT NULL,
-  `total_cost` DECIMAL(16,2) DEFAULT NULL,
+  `unit_cost` DECIMAL(16,2) DEFAULT NULL,
   `expiry_date` DATE DEFAULT NULL,
   `tags` TEXT DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

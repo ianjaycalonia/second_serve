@@ -346,7 +346,7 @@ try {
                     im.quantity,
                     COALESCE(u.label, u.code) AS packed_by,
                     di.total_weight,
-                    di.total_cost,
+                    di.unit_cost,
                     di.expiry_date,
                     up.name AS entry_by
                 FROM inventory_movements im
@@ -388,8 +388,8 @@ try {
                 'PRODUCT CATEGORY' => $r['product_category'] ?? '',
                 'QUANTITY' => (int)($r['quantity'] ?? 0),
                 'PACKED BY' => $r['packed_by'] ?? '',
-                'TOTAL WEIGHT(KG)' => ($r['total_weight'] !== null ? (float)$r['total_weight'] : null),
-                'TOTAL COST(P)' => ($r['total_cost'] !== null ? (float)$r['total_cost'] : null),
+                'UNIT WEIGHT(KG)' => ($r['total_weight'] !== null && $r['quantity'] > 0 ? (float)($r['total_weight'] / $r['quantity']) : null),
+                'UNIT COST(P)' => ($r['unit_cost'] !== null ? (float)$r['unit_cost'] : null),
                 'EXPIRY DATE' => $r['expiry_date'] ?? '',
                 'ENTRY BY' => (isset($r['entry_by']) && $r['entry_by'] !== '' ? $r['entry_by'] : $currentAdminName),
             ];

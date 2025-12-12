@@ -187,11 +187,8 @@
       const qtyVal = Number($qty.val() || "0");
       const unitCost = await fetchUnitCostByName(nameVal);
       if (typeof unitCost === "number" && !Number.isNaN(unitCost)) {
-        let total = unitCost;
-        if (Number.isFinite(qtyVal) && qtyVal > 0) {
-          total = unitCost * qtyVal;
-        }
-        $cost.val(total.toFixed(2));
+        // unitCost is already per-item cost, so display it directly
+        $cost.val(unitCost.toFixed(2));
         $cost.attr("data-auto", "1");
       }
     }
@@ -403,7 +400,7 @@
           <div class="col-12">
             <div class="row g-3">
               <div class="col-6">
-                <label class="form-label mb-1">Cost (₱)</label>
+                <label class="form-label mb-1">Cost per item (₱)</label>
                 <input type="number" step="0.01" min="0" class="form-control form-control-sm item-cost" placeholder="e.g., 150.00" />
               </div>
               <div class="col-6">
@@ -449,9 +446,26 @@
     $itemsContainer.on("change blur", ".item-qty", function () {
       const $row = $(this).closest(".item-row");
       autoFillCostForRow($row);
+      
+      // Auto-recalculate cost when quantity changes and cost has existing value
+      const $cost = $row.find(".item-cost");
+      const $name = $row.find(".item-name-select");
+      const qtyVal = Number($(this).val() || "0");
+      
+      // Cost field now stores unit_cost, so quantity changes don't affect it
+      // Only update last-qty tracking for reference
+      if ($cost.length) {
+        $cost.data("last-qty", qtyVal);
+      }
     });
     $itemsContainer.on("input change", ".item-cost", function () {
       $(this).removeAttr("data-auto");
+    });
+    // Store last quantity for cost recalculation
+    $itemsContainer.on("focus", ".item-cost", function () {
+      const $row = $(this).closest(".item-row");
+      const $qty = $row.find(".item-qty");
+      $(this).data("last-qty", $qty.val());
     });
 
     // Removed category-dependent item suggestion handler
@@ -867,7 +881,7 @@
         fd.append("expiry_date[]", expiry);
         // Removed category/unit/weight fields
         const c = $row.find(".item-cost").val();
-        if (c !== null && c !== undefined && String(c) !== "") fd.append("total_cost[]", c); else fd.append("total_cost[]", "");
+        if (c !== null && c !== undefined && String(c) !== "") fd.append("unit_cost[]", c); else fd.append("unit_cost[]", "");
         fd.append("remarks[]", String($row.find(".item-remarks").val() || "").trim());
       });
 

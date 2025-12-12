@@ -3373,8 +3373,8 @@
         const iExpiry = ix("expiry_date");
         const iTags = ix("tags");
         const iUnit = pick("unit", "packed_by");
-        const iTW = (() => {
-          const idx = pick("total_weight", "total_weight_kg", "weight", "weight_kg");
+        const iUW = (() => {
+          const idx = pick("unit_weight", "unit_weight_kg", "weight_per_unit", "weight");
           return idx >= 0 ? idx : findBySubstring("weight");
         })();
         const iTC = (() => {
@@ -3420,9 +3420,7 @@
             item_name: item,
             category: (iCat >= 0 ? r[iCat] || "" : "").toString().trim(),
             quantity: qty,
-            expiry_date: (iExpiry >= 0 ? r[iExpiry] || "" : "")
-              .toString()
-              .trim(),
+            expiry_date: (iExpiry >= 0 ? (r[iExpiry] || "9999-12-31").toString().trim() : "9999-12-31"),
             tags: (iTags >= 0 ? r[iTags] || "" : "").toString().trim(),
           };
           // Prefer explicit unit column when present and non-empty; otherwise use unit derived from QUANTITY tail
@@ -3433,7 +3431,7 @@
           } else if (derivedUnit) {
             rowObj.unit = normalizeUnit(derivedUnit);
           }
-          if (iTW >= 0) rowObj.total_weight = (r[iTW] || "").toString().trim();
+          if (iUW >= 0) rowObj.unit_weight = (r[iUW] || "").toString().trim();
           if (iTC >= 0) rowObj.total_cost = (r[iTC] || "").toString().trim();
           if (iBatch >= 0)
             rowObj.source_batch_id = (r[iBatch] || "").toString().trim();

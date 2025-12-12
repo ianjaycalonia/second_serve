@@ -76,27 +76,55 @@ try {
         END";
     $costExpr = "CASE
             WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
-            WHEN di.quantity IS NOT NULL AND di.quantity <> 0 AND di.total_cost IS NOT NULL THEN (di.total_cost / NULLIF(di.quantity,0)) * im.quantity
+            WHEN di.quantity IS NOT NULL AND di.quantity <> 0 AND di.unit_cost IS NOT NULL THEN (di.unit_cost) * im.quantity
             WHEN metrics.avg_cost_per_unit IS NOT NULL THEN im.quantity * metrics.avg_cost_per_unit
             ELSE 0
         END";
 
-    // Simple working metrics query instead of complex one
     $metricsSql = "SELECT
-            0 AS total_weight,
-            0 AS total_cost,
-            0 AS total_quantity,
-            0 AS product_out_count
-         FROM inventory_movements im
-         WHERE 1=1" . $movementTimeFilterClause . "
-         LIMIT 1";
+            SUM(
+                CASE
+                    WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
+                    WHEN di.total_weight IS NOT NULL THEN di.total_weight
+                    WHEN weight_metrics.avg_weight_per_unit IS NOT NULL THEN di.quantity * weight_metrics.avg_weight_per_unit
+                    ELSE 0
+                END
+            ) AS total_weight,
+            SUM(
+                CASE
+                    WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
+                    WHEN di.unit_cost IS NOT NULL THEN di.unit_cost * di.quantity
+                    ELSE 0
+                END
+            ) AS total_cost,
+            SUM(
+                CASE
+                    WHEN cat.primary_name IS NOT NULL AND cat.primary_name LIKE 'Non-Food%' THEN 0
+                    ELSE di.quantity
+                END
+            ) AS total_quantity,
+            COUNT(DISTINCT CASE WHEN di.quantity IS NOT NULL AND di.quantity > 0 THEN di.donation_id END) AS product_out_count
+        FROM donation_items di
+        INNER JOIN donations d ON d.donation_id = di.donation_id
+        LEFT JOIN categories cat ON cat.category_id = di.category_id
+        LEFT JOIN (
+            SELECT di2.product_name,
+                   SUM(di2.total_weight) / NULLIF(SUM(CASE WHEN di2.total_weight IS NOT NULL THEN di2.quantity ELSE 0 END), 0) AS avg_weight_per_unit
+              FROM donation_items di2
+              INNER JOIN donations d2 ON d2.donation_id = di2.donation_id
+              LEFT JOIN categories cat2 ON cat2.category_id = di2.category_id
+             WHERE di2.total_weight IS NOT NULL
+               AND di2.quantity IS NOT NULL AND di2.quantity > 0
+               AND d2.deleted_at IS NULL
+               AND d2.status IN ('Picked Up','Completed')
+               AND (cat2.primary_name IS NULL OR cat2.primary_name NOT LIKE 'Non-Food%')
+             GROUP BY di2.product_name
+        ) weight_metrics ON weight_metrics.product_name = di.product_name
+       WHERE d.deleted_at IS NULL
+         AND d.status IN ('Picked Up','Completed')
+         AND (cat.primary_name IS NULL OR cat.primary_name NOT LIKE 'Non-Food%')" . $timeFilterClause;
 
-    $metricsParams = [];
-    if (!empty($timeParams)) {
-        // Simplified query only needs 2 parameters
-        $metricsParams = $timeParams;
-    }
-    
+    $metricsParams = $timeParams;
     $metricsRow = $db->query($metricsSql, $metricsParams)->fetch();
     $totalWeightKg = (float)($metricsRow['total_weight'] ?? 0);
     $totalDonationValue = (float)($metricsRow['total_cost'] ?? 0);
@@ -117,7 +145,7 @@ try {
              LEFT JOIN (
                  SELECT di_avg.product_name,
                         SUM(di_avg.total_weight) / NULLIF(SUM(CASE WHEN di_avg.total_weight IS NOT NULL THEN di_avg.quantity ELSE 0 END), 0) AS avg_weight_per_unit,
-                        SUM(di_avg.total_cost) / NULLIF(SUM(CASE WHEN di_avg.total_cost IS NOT NULL THEN di_avg.quantity ELSE 0 END), 0) AS avg_cost_per_unit
+                        SUM(di_avg.unit_cost) / NULLIF(SUM(CASE WHEN di_avg.unit_cost IS NOT NULL THEN di_avg.quantity ELSE 0 END), 0) AS avg_cost_per_unit
                  FROM donation_items di_avg
                  INNER JOIN donations d_avg ON d_avg.donation_id = di_avg.donation_id
                  LEFT JOIN categories cat_avg ON cat_avg.category_id = di_avg.category_id
