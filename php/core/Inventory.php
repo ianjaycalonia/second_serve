@@ -459,8 +459,20 @@ class Inventory
             $unit = isset($r['unit']) ? trim((string)$r['unit']) : '';
             $uw   = isset($r['unit_weight']) && $r['unit_weight'] !== '' ? (float)$r['unit_weight'] : null;
             $tw   = null; // Calculate total weight from unit_weight * quantity
-            $tc   = isset($r['unit_cost']) && $r['unit_cost'] !== '' ? (float)$r['unit_cost'] : 
-                   (isset($r['total_cost']) && $r['total_cost'] !== '' ? (float)$r['total_cost'] : null);
+            $rawCost = null;
+            if (isset($r['unit_cost']) && $r['unit_cost'] !== '') {
+                $rawCost = $r['unit_cost'];
+            } elseif (isset($r['total_cost']) && $r['total_cost'] !== '') {
+                $rawCost = $r['total_cost'];
+            }
+            $tc = null;
+            if ($rawCost !== null) {
+                $cs = str_replace(',', '', trim((string)$rawCost));
+                if ($cs !== '' && preg_match('/-?\d+(?:\.\d+)?/', $cs, $m)) {
+                    $tc = (float)$m[0];
+                    if ($tc < 0) { $tc = null; }
+                }
+            }
             $batch= isset($r['source_batch_id']) ? trim((string)$r['source_batch_id']) : '';
             $donEmail = isset($r['donor_email']) ? trim((string)$r['donor_email']) : '';
             $donOrg   = isset($r['donor_org']) ? trim((string)$r['donor_org']) : (isset($r['donor_organization']) ? trim((string)$r['donor_organization']) : '');
@@ -661,8 +673,8 @@ class Inventory
                         if ($ur && isset($ur['unit_id'])) { $unitId = (int)$ur['unit_id']; }
                     } catch (Exception $e) { /* ignore */ }
                 }
-                // Calculate total weight from unit_weight * quantity
-                $tw = ($uw !== null && $qty > 0) ? ($uw * $qty) : null;
+                // Store unit weight as-is; total weight is only calculated in reports
+                $tw = $uw;
                 // Try to insert with total_weight column first
                 try {
                     $this->db->query(

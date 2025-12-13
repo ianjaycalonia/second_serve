@@ -328,8 +328,6 @@ try {
                     MIN(u.code) AS unit_code,
                     MIN(u.label) AS unit_label,
                     SUM(di.quantity) AS quantity_total,
-                    SUM(CASE WHEN di.total_weight IS NOT NULL THEN di.total_weight ELSE 0 END) AS total_weight_sum,
-                    SUM(CASE WHEN di.total_weight IS NOT NULL THEN 1 ELSE 0 END) AS weight_present_count,
                     MIN(di.created_at) AS first_recorded,
                     MAX(di.created_at) AS last_restocked,
                     SUM(CASE WHEN di.category_id IS NULL THEN 1 ELSE 0 END) AS missing_category_count,
@@ -343,7 +341,15 @@ try {
                         AND di2.unit_cost IS NOT NULL AND di2.unit_cost > 0
                         AND d2.deleted_at IS NULL
                       ORDER BY di2.donation_item_id DESC
-                      LIMIT 1) AS last_unit_cost
+                      LIMIT 1) AS last_unit_cost,
+                    (SELECT di2.total_weight
+                       FROM donation_items di2
+                       INNER JOIN donations d2 ON d2.donation_id = di2.donation_id
+                      WHERE di2.product_name = di.product_name
+                        AND di2.total_weight IS NOT NULL
+                        AND d2.deleted_at IS NULL
+                      ORDER BY di2.donation_item_id DESC
+                      LIMIT 1) AS last_unit_weight
                 FROM donation_items di
                 INNER JOIN donations d ON d.donation_id = di.donation_id
                 LEFT JOIN categories cat ON cat.category_id = di.category_id
@@ -366,9 +372,8 @@ try {
             $unitCost = isset($row['last_unit_cost']) && $row['last_unit_cost'] !== null
                 ? (float)$row['last_unit_cost']
                 : null;
-            $weightCount = (int)($row['weight_present_count'] ?? 0);
-            $totalWeightKg = $weightCount > 0 && $row['total_weight_sum'] !== null
-                ? (float)$row['total_weight_sum']
+            $lastUnitWeight = isset($row['last_unit_weight']) && $row['last_unit_weight'] !== null
+                ? (float)$row['last_unit_weight']
                 : null;
             $missingCategory = (int)($row['missing_category_count'] ?? 0) > 0;
             $missingUnit = (int)($row['missing_unit_count'] ?? 0) > 0;
@@ -388,7 +393,7 @@ try {
                 'unit_code' => $row['unit_code'] ?? null,
                 'unit_label' => $row['unit_label'] ?? null,
                 'unit_cost' => $unitCost,
-                'total_weight_kg' => $totalWeightKg,
+                'total_weight_kg' => $lastUnitWeight,
                 'first_recorded' => $row['first_recorded'],
                 'last_restocked' => $row['last_restocked'],
                 'missing_category' => $missingCategory,
@@ -485,7 +490,7 @@ try {
                     di.product_name,
                     di.quantity,
                     di.total_weight,
-                    di.total_cost,
+                    di.unit_cost,
                     di.category_id,
                     di.unit_id,
                     di.expiry_date,

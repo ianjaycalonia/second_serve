@@ -284,6 +284,7 @@ class RepackService
             $this->snapshotComponentsForRepack($repackId, $template['components'] ?? []);
 
             $totalInputWeight = 0.0;
+            $totalInputCost = 0.0;
 
             foreach ($componentsMap as $componentId => $component) {
                 $requiredFloat = (float)$component['quantity_per_kit'] * $kitsProduced;
@@ -304,14 +305,16 @@ class RepackService
                         throw new Exception('Insufficient quantity in inventory lot ' . $inventoryId);
                     }
 
-                    // Accumulate input weight using donation_items.total_weight when available
-                    if (isset($snapshot['total_weight']) && isset($snapshot['donation_quantity'])) {
-                        $donQty = (float)$snapshot['donation_quantity'];
-                        $donWeight = (float)$snapshot['total_weight'];
-                        if ($donQty > 0 && $donWeight > 0) {
-                            $perUnitWeight = $donWeight / $donQty;
-                            $totalInputWeight += $perUnitWeight * $quantity;
-                        }
+                    // Accumulate input weight using donation_items.total_weight (now stores unit weight)
+                    if (isset($snapshot['total_weight']) && $snapshot['total_weight'] > 0) {
+                        $unitWeight = (float)$snapshot['total_weight'];
+                        $totalInputWeight += $unitWeight * $quantity;
+                    }
+
+                    // Accumulate input cost using donation_items.unit_cost (now stores unit cost)
+                    if (isset($snapshot['unit_cost']) && $snapshot['unit_cost'] > 0) {
+                        $unitCost = (float)$snapshot['unit_cost'];
+                        $totalInputCost += $unitCost * $quantity;
                     }
 
                     $snapshotExpiry = $snapshot['expiry_date'] ?? null;
@@ -359,7 +362,8 @@ class RepackService
                 throw new Exception('Output quantity must be positive');
             }
 
-            $totalOutputWeight = $totalInputWeight > 0 ? round($totalInputWeight, 3) : null;
+            $outputUnitWeight = $totalInputWeight > 0 && $outputQuantity > 0 ? round($totalInputWeight / $outputQuantity, 3) : null;
+            $outputUnitCost = $totalInputCost > 0 && $outputQuantity > 0 ? round($totalInputCost / $outputQuantity, 2) : null;
 
             $outputExpiry = $earliestExpiryValue;
 
@@ -379,14 +383,15 @@ class RepackService
 
             $this->db->query(
                 'INSERT INTO donation_items (donation_id, product_name, category_id, quantity, unit_id, total_weight, unit_cost, expiry_date, tags, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NOW())',
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
                 [
                     $donationId,
                     $template['output_product_name'],
                     $template['output_category_id'] ?: null,
                     $outputQuantity,
                     $template['output_unit_id'] ?: null,
-                    $totalOutputWeight,
+                    $outputUnitWeight,
+                    $outputUnitCost,
                     $outputExpiry,
                     'Repack Kit',
                 ]
@@ -910,6 +915,7 @@ class RepackService
                     di.unit_id,
                     di.expiry_date,
                     di.total_weight,
+                    di.unit_cost,
                     di.quantity AS donation_quantity,
                     cat.primary_name AS category_primary,
                     cat.secondary_name,

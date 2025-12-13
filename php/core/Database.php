@@ -41,6 +41,9 @@ class Database {
             $this->pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
             error_log("PDO connection created successfully");
 
+            // Set MySQL timezone to Asia/Manila
+            $this->pdo->query("SET time_zone = '+08:00'");
+
             // Test the connection
             $this->pdo->query("SELECT 1");
             error_log("Database connection test successful");

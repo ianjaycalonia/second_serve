@@ -1312,7 +1312,27 @@ if (typeof window.showToast !== "function") {
       // Status filter: try to match user account status
       if (statusFilter && statusFilter !== 'All'){
         const userStatus = String(u.status||'').toLowerCase();
-        if (userStatus !== statusFilter.toLowerCase()) return false;
+        const filterStatus = String(statusFilter||'').toLowerCase();
+        
+        // Map filter values to actual status values
+        let actualStatusMatch = false;
+        if (filterStatus === 'active') {
+          actualStatusMatch = userStatus === 'approved';
+        } else if (filterStatus === 'inactive') {
+          actualStatusMatch = userStatus !== 'approved';
+        } else {
+          actualStatusMatch = userStatus === filterStatus;
+        }
+        
+        console.log('Status filter debug:', { 
+          userStatus, 
+          filterStatus, 
+          actualStatusMatch,
+          originalUserStatus: u.status,
+          originalFilter: statusFilter
+        });
+        
+        if (!actualStatusMatch) return false;
       }
       if (requireEmail && !String(u.email || '').trim()) return false;
       if (requirePhone && !String(u.contact_number || '').trim()) return false;

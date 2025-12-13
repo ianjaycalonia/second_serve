@@ -15,17 +15,17 @@
   let pickupBarChart = null;
   let donorBarChart = null;
   let distributionPieChart = null;
-  let currentTimeframe = 'daily';
+  let currentTimeframe = 'monthly';
 
   const volumeState = {
     donations: {
-      timeframe: 'daily',
+      timeframe: 'monthly',
       labels: [],
       values: [],
       loading: false
     },
     pickups: {
-      timeframe: 'daily',
+      timeframe: 'monthly',
       labels: [],
       values: [],
       loading: false
@@ -871,8 +871,40 @@
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF('l', 'mm', 'a4'); // landscape orientation for proper chart display
       
+      // Show loading indicator
+      const exportBtn = document.getElementById('exportPdfBtn');
+      const originalText = exportBtn.textContent;
+      exportBtn.disabled = true;
+      exportBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating PDF...';
+      
       // Always use monthly timeframe for PDF export
       const monthlyRange = getTimeframeRange('monthly');
+      
+      // Store current timeframes to restore later
+      const originalDonationTimeframe = currentTimeframe;
+      const originalPickupTimeframe = volumeState.pickups.timeframe;
+      
+      // Temporarily switch to monthly timeframe for accurate data
+      currentTimeframe = 'monthly';
+      volumeState.donations.timeframe = 'monthly';
+      volumeState.pickups.timeframe = 'monthly';
+      
+      // Update all charts with monthly data
+      await refreshDashboard('monthly');
+      
+      // Wait longer for charts to fully render, especially pie chart
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Additional wait to ensure pie chart animation is complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Ensure pie chart is fully rendered by checking its instance
+      const pieChartInstance = Chart.getChart('distributionPieChart');
+      if (pieChartInstance) {
+        // Force a final render to ensure it's complete
+        pieChartInstance.update('none'); // Update without animation
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
       
       // PAGE 1: Pie Chart with Category Details
       
@@ -885,11 +917,11 @@
       pdf.text(`${monthlyRange.start} to ${monthlyRange.end}`, 148, 30, { align: 'center' });
       
       // Capture pie chart - centered with proper aspect ratio
-      const pieCanvas = document.getElementById('categoryPieChart');
+      const pieCanvas = document.getElementById('distributionPieChart');
       if (pieCanvas) {
         const pieImage = pieCanvas.toDataURL('image/png');
         // Same dimensions as bar chart for consistency
-        const chartWidth = 140;
+        const chartWidth = 160;
         const chartHeight = 80;
         const xPosition = (297 - chartWidth) / 2; // Center in landscape (297mm width)
         pdf.addImage(pieImage, 'PNG', xPosition, 50, chartWidth, chartHeight);
@@ -1007,9 +1039,32 @@
       pdf.save(filename);
       
       console.log('PDF exported successfully');
+      
+      // Restore original timeframes
+      currentTimeframe = originalDonationTimeframe;
+      volumeState.donations.timeframe = originalDonationTimeframe;
+      volumeState.pickups.timeframe = originalPickupTimeframe;
+      
+      // Restore charts to original state
+      await refreshDashboard(originalDonationTimeframe);
+      
+      // Restore button state
+      exportBtn.disabled = false;
+      exportBtn.textContent = originalText;
+      
     } catch (error) {
       console.error('Error exporting PDF:', error);
       alert('Failed to export PDF. Please try again.');
+      
+      // Ensure timeframes are restored even on error
+      currentTimeframe = originalDonationTimeframe;
+      volumeState.donations.timeframe = originalDonationTimeframe;
+      volumeState.pickups.timeframe = originalPickupTimeframe;
+      await refreshDashboard(originalDonationTimeframe);
+      
+      // Restore button state on error
+      exportBtn.disabled = false;
+      exportBtn.textContent = originalText;
     }
   }
 

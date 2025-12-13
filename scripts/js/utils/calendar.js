@@ -1,5 +1,9 @@
 (function(){
   'use strict';
+  
+  // DEBUG: Test if this file is loading
+  console.log('CALENDAR.JS: File loaded successfully');
+  window.CALENDAR_JS_LOADED = true;
 
   const API_BASE_URL = (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL)
     ? window.API_BASE_URL
@@ -350,6 +354,7 @@
   }
 
   function renderSelectedDay(dateStr, events){
+    console.log('renderSelectedDay called with:', { dateStr, events });
     const dateEl = qs('#selectedDayDate');
     const listEl = qs('#selectedDayList');
     selectedDayEvents = Array.isArray(events) ? events : [];
@@ -364,11 +369,13 @@
       updateEditButtonState();
       return;
     }
+    console.log('Processing', selectedDayEvents.length, 'events');
     const availableIds = selectedDayEvents.map(ev => Number(ev.id)).filter(Number.isFinite);
     if (!availableIds.includes(selectedEventId)){
       selectedEventId = availableIds.length ? availableIds[0] : null;
     }
     selectedDayEvents.forEach(ev=>{
+      console.log('Processing event:', ev);
       const item = document.createElement('li');
       const idNum = Number(ev.id);
       item.className = 'list-group-item selected-day-item' + (idNum === selectedEventId ? ' active' : '');
@@ -397,6 +404,21 @@
         }
       }
       const targetLine = targetName ? `<div class="small text-muted">${escapeHtml(targetName)}</div>` : '';
+      let actionButtons = '';
+      if (role() === 'admin' && ev.event_type === 'recipient' && Array.isArray(ev.recipients) && ev.recipients.length > 1) {
+        actionButtons = `<button type="button" class="btn btn-sm btn-outline-primary me-1 decouple-event" data-event-id="${ev.id}" title="Decouple recipients">Decouple</button>`;
+      }
+      // Debug: log recipient data
+      if (ev.event_type === 'recipient') {
+        console.log('Recipient event debug:', {
+          id: ev.id,
+          recipients: ev.recipients,
+          recipientCount: Array.isArray(ev.recipients) ? ev.recipients.length : 'not array',
+          showDecouple: role() === 'admin' && ev.event_type === 'recipient' && Array.isArray(ev.recipients) && ev.recipients.length > 1
+        });
+      }
+      actionButtons += `<button type="button" class="btn btn-sm btn-outline-secondary selected-day-open" data-event-id="${ev.id}">View</button>`;
+      
       item.innerHTML = `
         <div class="d-flex justify-content-between align-items-start gap-2">
           <div class="flex-grow-1">
@@ -405,7 +427,7 @@
             ${targetLine}
           </div>
           <div>
-            <button type="button" class="btn btn-sm btn-outline-secondary selected-day-open" data-event-id="${ev.id}">View</button>
+            ${actionButtons}
           </div>
         </div>`;
       listEl.appendChild(item);
@@ -593,6 +615,147 @@
     if (r === 'donor') return eventData.event_type === 'donor' || eventData.event_type === 'admin';
     if (r === 'recipient') return eventData.event_type === 'recipient' || eventData.event_type === 'admin';
     return false;
+  }
+
+  function showDecoupleModal(eventData) {
+    if (!eventData || !Array.isArray(eventData.recipients) || eventData.recipients.length <= 1) {
+      calendarToast('This event cannot be decoupled', 'warn');
+      return;
+    }
+    
+    const modalEl = document.getElementById('decoupleModal');
+    if (!modalEl) return;
+    
+    const recipientsList = document.getElementById('decoupleRecipientsList');
+    recipientsList.innerHTML = '';
+    
+    eventData.recipients.forEach(recipient => {
+      const div = document.createElement('div');
+      div.className = 'form-check mb-2';
+      div.innerHTML = `
+        <input class="form-check-input" type="checkbox" value="${recipient.id}" id="decouple_rec_${recipient.id}">
+        <label class="form-check-label" for="decouple_rec_${recipient.id}">
+          ${escapeHtml(recipient.display_name || recipient.name || recipient.text || `Recipient #${recipient.id}`)}
+        </label>
+      `;
+      recipientsList.appendChild(div);
+    });
+    
+    const confirmBtn = document.getElementById('confirmDecoupleBtn');
+    confirmBtn.onclick = async () => {
+      const selectedRecipients = Array.from(recipientsList.querySelectorAll('input:checked'))
+        .map(cb => Number(cb.value));
+      
+      if (selectedRecipients.length === 0) {
+        calendarToast('Please select at least one recipient to decouple', 'warn');
+        return;
+      }
+      
+      if (selectedRecipients.length === eventData.recipients.length) {
+        calendarToast('Cannot decouple all recipients. Please leave at least one recipient in the original event.', 'warn');
+        return;
+      }
+      
+      try {
+        await decoupleEvent(eventData.id, selectedRecipients);
+        calendarToast('Recipients decoupled successfully', 'success');
+        bootstrap.Modal.getInstance(modalEl).hide();
+        // Refresh calendar using a simple page reload for now
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      } catch (error) {
+        calendarToast('Failed to decouple recipients: ' + error.message, 'error');
+      }
+    };
+    
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+  }
+
+  async function decoupleEvent(eventId, recipientIds) {
+    const res = await fetch(`${API_BASE_URL}/schedule/index.php?action=decouple&id=${encodeURIComponent(eventId)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ recipient_ids: recipientIds })
+    });
+    
+    const parsed = await parseJsonSafe(res);
+    const j = parsed.ok ? parsed.data : null;
+    if (!res.ok) throw new Error((j && j.error) || `HTTP ${res.status}`);
+    if (!j || j.success !== true) throw new Error((j && j.error) || 'Failed to decouple event');
+    return j;
+  }
+
+  async function autoDecoupleRecipient(eventId, recipientId, newEventData) {
+    const res = await fetch(`${API_BASE_URL}/schedule/index.php?action=auto-decouple&id=${encodeURIComponent(eventId)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ 
+        recipient_id: recipientId,
+        new_event_data: newEventData
+      })
+    });
+    
+    const parsed = await parseJsonSafe(res);
+    const j = parsed.ok ? parsed.data : null;
+    if (!res.ok) throw new Error((j && j.error) || `HTTP ${res.status}`);
+    if (!j || j.success !== true) throw new Error((j && j.error) || 'Failed to auto-decouple event');
+    return j;
+  }
+
+  async function checkAutoCouple() {
+    // Check for recipient events with same time that can be coupled
+    try {
+      const res = await fetch(`${API_BASE_URL}/schedule/index.php?action=check-auto-couple`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        },
+        credentials: 'include'
+      });
+      
+      const parsed = await parseJsonSafe(res);
+      if (res.ok && parsed.ok && parsed.data && parsed.data.can_couple) {
+        const coupled = await autoCoupleEvents(parsed.data.couple_pairs);
+        if (coupled && coupled.coupled_count > 0) {
+          calendarToast(`Automatically coupled ${coupled.coupled_count} recipient events`, 'success');
+          if (calendarInstance && calendarInstance.view) {
+            const view = calendarInstance.view;
+            loadCalendarRange(view.activeStart.toISOString(), view.activeEnd.toISOString());
+          }
+        }
+      }
+    } catch (error) {
+      // Silently fail auto-couple checks
+      console.warn('Auto-couple check failed:', error);
+    }
+  }
+
+  async function autoCoupleEvents(couplePairs) {
+    const res = await fetch(`${API_BASE_URL}/schedule/index.php?action=auto-couple`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ couple_pairs: couplePairs })
+    });
+    
+    const parsed = await parseJsonSafe(res);
+    const j = parsed.ok ? parsed.data : null;
+    if (!res.ok) throw new Error((j && j.error) || `HTTP ${res.status}`);
+    if (!j || j.success !== true) throw new Error((j && j.error) || 'Failed to auto-couple events');
+    return j;
   }
 
   function calendarToast(message, variant = 'info'){
@@ -1857,7 +2020,7 @@
     const selectedDayList = qs('#selectedDayList');
     if (selectedDayList){
       selectedDayList.addEventListener('click', (e)=>{
-        const trigger = e.target.closest('.selected-day-open, .selected-day-item');
+        const trigger = e.target.closest('.selected-day-open, .selected-day-item, .decouple-event');
         if (!trigger) return;
         const id = Number(trigger.getAttribute('data-event-id') || trigger.dataset.eventId);
         if (!Number.isFinite(id)) return;
@@ -1872,6 +2035,10 @@
           e.preventDefault();
           const ev = normalizeEventData(match);
           if (canViewEvent(ev)) showViewModal(ev);
+        } else if (trigger.classList.contains('decouple-event')) {
+          e.preventDefault();
+          const ev = normalizeEventData(match);
+          if (canEditEvent(ev)) showDecoupleModal(ev);
         }
       });
     }
@@ -2060,9 +2227,13 @@
     });
 
     // Save
-    qs('#saveEventBtn')?.addEventListener('click', async ()=>{
+    const saveBtn = qs('#saveEventBtn');
+    console.log('Save button found:', !!saveBtn);
+    saveBtn?.addEventListener('click', async ()=>{
+      console.log('SAVE BUTTON CLICKED!');
       try{
         const data = collectForm();
+        console.log('Collected form data:', data);
         if (!data) { calendarToast('You do not have permission to save this event type', 'warn'); return; }
         // Batched recipient payloads
         if (Array.isArray(data)){
@@ -2118,8 +2289,57 @@
           }
         }
         if (data.id){
+          console.log('Saving event with data:', data);
           if (!canEditEvent(normalizeEventData(data))) { calendarToast('You do not have permission to update this event', 'warn'); return; }
+          
+          // Check for auto-decouple scenario: recipient event with multiple recipients and time changed
+          if (data.event_type === 'recipient' && Array.isArray(data.recipients) && data.recipients.length > 1) {
+            console.log('Checking auto-decouple for recipient event with', data.recipients.length, 'recipients');
+            // Get original event data from cached items
+            const originalEvent = cachedCalendarItems.find(item => Number(item.id) === Number(data.id));
+            if (originalEvent) {
+              const originalStart = new Date(originalEvent.start);
+              const newStart = new Date(data.start);
+              console.log('Time comparison:', { originalStart, newStart, same: originalStart.getTime() === newStart.getTime() });
+              
+              // If time changed, auto-decouple this recipient
+              if (originalStart.getTime() !== newStart.getTime()) {
+                const currentRecipientIds = data.recipients.map(r => r.id);
+                // Only decouple the specific recipient being edited (first one in the list)
+                const recipientToDecouple = currentRecipientIds[0];
+                
+                console.log('Attempting auto-decouple for recipient:', recipientToDecouple);
+                try {
+                  await autoDecoupleRecipient(data.id, recipientToDecouple, data);
+                  calendarToast('Recipient automatically decoupled due to time change', 'success');
+                  bootstrap.Modal.getInstance(qs('#eventModal'))?.hide();
+                  // Refresh calendar using page reload
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 500);
+                  return;
+                } catch (error) {
+                  console.error('Auto-decouple failed:', error);
+                  calendarToast('Auto-decouple failed, proceeding with normal update', 'warn');
+                }
+              } else {
+                console.log('Time unchanged, skipping auto-decouple');
+              }
+            } else {
+              console.log('Original event not found in cache');
+            }
+          } else {
+            console.log('Not a recipient event with multiple recipients:', {
+              eventType: data.event_type,
+              hasRecipients: Array.isArray(data.recipients),
+              recipientCount: Array.isArray(data.recipients) ? data.recipients.length : 0
+            });
+          }
+          
           await updateEvent(data.id, data);
+          
+          // Check for auto-couple opportunities after update
+          setTimeout(checkAutoCouple, 1000);
         } else {
           const created = await createEvent(data);
           const newId = Number(created?.id ?? created?.event_id);
@@ -2127,6 +2347,9 @@
             data.id = newId;
             selectedEventId = newId;
           }
+          
+          // Check for auto-couple opportunities after creation
+          setTimeout(checkAutoCouple, 1000);
         }
         const dateKey = getDateKey(data.start);
         if (dateKey) {

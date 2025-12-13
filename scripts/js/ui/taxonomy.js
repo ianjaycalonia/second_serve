@@ -391,8 +391,6 @@
       const costValue =
         item.unit_cost != null && item.unit_cost !== ""
           ? item.unit_cost
-          : item.total_cost != null && item.total_cost !== ""
-          ? item.total_cost
           : null;
       assignUnitCostInput.value = costValue != null ? String(costValue) : "";
     }

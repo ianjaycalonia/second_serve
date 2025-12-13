@@ -3379,9 +3379,9 @@
           const idx = pick("unit_weight", "unit_weight_kg", "weight_per_unit", "weight");
           return idx >= 0 ? idx : findBySubstring("weight");
         })();
-        const iTC = (() => {
-          const idx = pick("total_cost", "total_cost_p", "cost", "cost_php", "cost_p");
-          return idx >= 0 ? idx : findBySubstring("cost", "price");
+        const iUC = (() => {
+          const idx = pick("unit_cost", "cost", "cost_php", "cost_p", "unit_price", "price_per_unit");
+          return idx >= 0 ? idx : findBySubstring("unit cost", "unit_cost", "cost", "price");
         })();
         const iBatch = ix("source_batch_id");
         const iEntryDate = pick("entry_date", "added_at");
@@ -3434,7 +3434,7 @@
             rowObj.unit = normalizeUnit(derivedUnit);
           }
           if (iUW >= 0) rowObj.unit_weight = (r[iUW] || "").toString().trim();
-          if (iTC >= 0) rowObj.total_cost = (r[iTC] || "").toString().trim();
+          if (iUC >= 0) rowObj.unit_cost = (r[iUC] || "").toString().trim();
           if (iBatch >= 0)
             rowObj.source_batch_id = (r[iBatch] || "").toString().trim();
           if (iDonEmail >= 0)

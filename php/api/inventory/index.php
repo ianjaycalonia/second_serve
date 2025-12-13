@@ -388,7 +388,7 @@ try {
                 'PRODUCT CATEGORY' => $r['product_category'] ?? '',
                 'QUANTITY' => (int)($r['quantity'] ?? 0),
                 'PACKED BY' => $r['packed_by'] ?? '',
-                'UNIT WEIGHT(KG)' => ($r['total_weight'] !== null && $r['quantity'] > 0 ? (float)($r['total_weight'] / $r['quantity']) : null),
+                'UNIT WEIGHT(KG)' => ($r['total_weight'] !== null ? (float)$r['total_weight'] : null),
                 'UNIT COST(P)' => ($r['unit_cost'] !== null ? (float)$r['unit_cost'] : null),
                 'EXPIRY DATE' => $r['expiry_date'] ?? '',
                 'ENTRY BY' => (isset($r['entry_by']) && $r['entry_by'] !== '' ? $r['entry_by'] : $currentAdminName),
@@ -436,7 +436,7 @@ try {
         $weightSelect = "MAX(CASE
                             WHEN di.total_weight IS NULL THEN NULL
                             WHEN di.quantity IS NULL OR di.quantity = 0 THEN di.total_weight
-                            ELSE ROUND((di.total_weight / NULLIF(di.quantity,0)) * im.quantity, 3)
+                            ELSE ROUND(di.total_weight * im.quantity, 3)
                         END) AS total_weight";
         $beneficiarySelect = "COALESCE(
                                 MAX(rp.organization_name),

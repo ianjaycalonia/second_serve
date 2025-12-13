@@ -563,6 +563,32 @@
       </div>
     </div>
 
+    <!-- Decouple Recipients Modal -->
+    <div class="modal fade" id="decoupleModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Decouple Recipients</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted mb-3">Select which recipient(s) to move to a separate schedule event:</p>
+            <div id="decoupleRecipientsList" class="mb-3">
+              <!-- Recipient checkboxes will be populated here -->
+            </div>
+            <div class="alert alert-info small">
+              <i class="bi bi-info-circle me-1"></i>
+              The selected recipients will be moved to a new event with the same time and details. The remaining recipients will stay in the original event.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="confirmDecoupleBtn">Decouple Selected</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Event Modal -->
     <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog">

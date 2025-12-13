@@ -628,6 +628,248 @@ try {
         sendJson(['success'=>true,'data'=>$responseRow]);
     }
 
+    if ($method === 'POST' && $action === 'auto-decouple'){
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0; if ($id<=0) sendJson(['success'=>false,'error'=>'id required'],400);
+        $input = json_decode(file_get_contents('php://input'), true);
+        $recipientId = isset($input['recipient_id']) ? (int)$input['recipient_id'] : 0;
+        $newEventData = isset($input['new_event_data']) ? $input['new_event_data'] : [];
+        if ($recipientId <= 0) sendJson(['success'=>false,'error'=>'recipient_id required'],400);
+        
+        $db->beginTransaction();
+        try {
+            // Get original event
+            $originalEvent = $db->query('SELECT * FROM schedule_events WHERE id=?', [$id])->fetch();
+            if (!$originalEvent) sendJson(['success'=>false,'error'=>'Event not found'],404);
+            if (!canAccessEvent($originalEvent, $role, $currentId)) sendJson(['success'=>false,'error'=>'Forbidden'],403);
+            if ($originalEvent['event_type'] !== 'recipient') sendJson(['success'=>false,'error'=>'Only recipient events can be auto-decoupled'],400);
+            
+            // Get current recipients
+            $currentRecipients = $db->query('SELECT recipient_id, is_primary FROM schedule_event_recipients WHERE event_id=?', [$id])->fetchAll();
+            if (count($currentRecipients) <= 1) sendJson(['success'=>false,'error'=>'Event has only one recipient'],400);
+            
+            // Validate recipient exists in this event
+            $recipientExists = false;
+            foreach ($currentRecipients as $rec) {
+                if ($rec['recipient_id'] == $recipientId) {
+                    $recipientExists = true;
+                    break;
+                }
+            }
+            if (!$recipientExists) sendJson(['success'=>false,'error'=>'Recipient not found in event'],400);
+            
+            // Create new event with updated time
+            $newEventFields = [
+                'title' => $newEventData['title'] ?? $originalEvent['title'],
+                'event_type' => 'recipient',
+                'status' => $newEventData['status'] ?? $originalEvent['status'],
+                'start_datetime' => $newEventData['start'] ?? $originalEvent['start_datetime'],
+                'end_datetime' => $newEventData['end'] ?? $originalEvent['end_datetime'],
+                'location' => $newEventData['location'] ?? $originalEvent['location'],
+                'notes' => $newEventData['notes'] ?? $originalEvent['notes'],
+                'primary_recipient_id' => $recipientId,
+                'donor_id' => $originalEvent['donor_id'],
+                'created_by' => $currentId,
+                'created_for_user_id' => null
+            ];
+            
+            $placeholders = str_repeat('?,', count($newEventFields));
+            $placeholders = rtrim($placeholders, ',');
+            $db->query("INSERT INTO schedule_events (".implode(',', array_keys($newEventFields)).") VALUES ($placeholders)", array_values($newEventFields));
+            $newEventId = (int)$db->lastInsertId();
+            
+            // Move the specific recipient to new event
+            $db->query('INSERT INTO schedule_event_recipients (event_id, recipient_id, is_primary) VALUES (?,?,1)', [$newEventId, $recipientId]);
+            
+            // Remove recipient from original event
+            $db->query('DELETE FROM schedule_event_recipients WHERE event_id=? AND recipient_id=?', [$id, $recipientId]);
+            
+            // Update primary recipient for original event if needed
+            if ($originalEvent['primary_recipient_id'] == $recipientId) {
+                $remainingRecipients = $db->query('SELECT recipient_id FROM schedule_event_recipients WHERE event_id=? LIMIT 1', [$id])->fetch();
+                if ($remainingRecipients) {
+                    $db->query('UPDATE schedule_events SET primary_recipient_id=? WHERE id=?', [$remainingRecipients['recipient_id'], $id]);
+                }
+            }
+            
+            $db->commit();
+            sendJson(['success'=>true,'message'=>'Recipient auto-decoupled successfully']);
+        } catch (Exception $e) {
+            $db->rollback();
+            throw $e;
+        }
+    }
+
+    if ($method === 'GET' && $action === 'check-auto-couple'){
+        // Find recipient events with same time that can be coupled
+        $sql = "SELECT 
+                e1.id as event1_id,
+                e2.id as event2_id,
+                e1.start_datetime,
+                e1.end_datetime,
+                e1.location,
+                e1.title,
+                e1.donor_id,
+                GROUP_CONCAT(DISTINCT ser1.recipient_id) as recipients1,
+                GROUP_CONCAT(DISTINCT ser2.recipient_id) as recipients2
+            FROM schedule_events e1
+            INNER JOIN schedule_event_recipients ser1 ON ser1.event_id = e1.id
+            INNER JOIN schedule_events e2 ON e2.start_datetime = e1.start_datetime 
+                AND e2.end_datetime = e1.end_datetime 
+                AND e2.location = e1.location
+                AND e2.id < e1.id  -- Avoid duplicates
+            INNER JOIN schedule_event_recipients ser2 ON ser2.event_id = e2.id
+            WHERE e1.event_type = 'recipient' 
+                AND e2.event_type = 'recipient'
+                AND e1.status = 'scheduled'
+                AND e2.status = 'scheduled'
+            GROUP BY e1.id, e2.id
+            HAVING COUNT(DISTINCT ser1.recipient_id) > 0 AND COUNT(DISTINCT ser2.recipient_id) > 0";
+        
+        $potentialCouples = $db->query($sql)->fetchAll();
+        $couplePairs = [];
+        
+        foreach ($potentialCouples as $couple) {
+            // Check if user can access both events
+            $event1 = ['id' => $couple['event1_id']];
+            $event2 = ['id' => $couple['event2_id']];
+            if (canAccessEvent($event1, $role, $currentId) && canAccessEvent($event2, $role, $currentId)) {
+                $couplePairs[] = [
+                    'event1_id' => $couple['event1_id'],
+                    'event2_id' => $couple['event2_id'],
+                    'recipients1' => explode(',', $couple['recipients1']),
+                    'recipients2' => explode(',', $couple['recipients2'])
+                ];
+            }
+        }
+        
+        sendJson(['success'=>true, 'data' => ['can_couple' => !empty($couplePairs), 'couple_pairs' => $couplePairs]]);
+    }
+
+    if ($method === 'POST' && $action === 'auto-couple'){
+        $input = json_decode(file_get_contents('php://input'), true);
+        $couplePairs = isset($input['couple_pairs']) ? $input['couple_pairs'] : [];
+        if (!is_array($couplePairs) || empty($couplePairs)) sendJson(['success'=>false,'error'=>'couple_pairs required'],400);
+        
+        $db->beginTransaction();
+        $coupledCount = 0;
+        try {
+            foreach ($couplePairs as $pair) {
+                $event1Id = (int)$pair['event1_id'];
+                $event2Id = (int)$pair['event2_id'];
+                
+                // Get both events
+                $event1 = $db->query('SELECT * FROM schedule_events WHERE id=?', [$event1Id])->fetch();
+                $event2 = $db->query('SELECT * FROM schedule_events WHERE id=?', [$event2Id])->fetch();
+                
+                if (!$event1 || !$event2) continue;
+                if (!canAccessEvent($event1, $role, $currentId) || !canAccessEvent($event2, $role, $currentId)) continue;
+                
+                // Move all recipients from event2 to event1
+                $recipients2 = $db->query('SELECT recipient_id FROM schedule_event_recipients WHERE event_id=?', [$event2Id])->fetchAll();
+                foreach ($recipients2 as $rec) {
+                    $db->query('INSERT INTO schedule_event_recipients (event_id, recipient_id, is_primary) VALUES (?,?,0)', [$event1Id, $rec['recipient_id']]);
+                }
+                
+                // Delete event2
+                $db->query('DELETE FROM schedule_events WHERE id=?', [$event2Id]);
+                
+                $coupledCount++;
+            }
+            
+            $db->commit();
+            sendJson(['success'=>true, 'message' => 'Events auto-coupled successfully', 'coupled_count' => $coupledCount]);
+        } catch (Exception $e) {
+            $db->rollback();
+            throw $e;
+        }
+    }
+
+    if ($method === 'POST' && $action === 'decouple'){
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0; if ($id<=0) sendJson(['success'=>false,'error'=>'id required'],400);
+        $input = json_decode(file_get_contents('php://input'), true);
+        $recipientIds = isset($input['recipient_ids']) ? $input['recipient_ids'] : [];
+        if (!is_array($recipientIds) || empty($recipientIds)) sendJson(['success'=>false,'error'=>'recipient_ids required'],400);
+        
+        $db->beginTransaction();
+        try {
+            // Get original event
+            $originalEvent = $db->query('SELECT * FROM schedule_events WHERE id=?', [$id])->fetch();
+            if (!$originalEvent) sendJson(['success'=>false,'error'=>'Event not found'],404);
+            if (!canAccessEvent($originalEvent, $role, $currentId)) sendJson(['success'=>false,'error'=>'Forbidden'],403);
+            if ($originalEvent['event_type'] !== 'recipient') sendJson(['success'=>false,'error'=>'Only recipient events can be decoupled'],400);
+            
+            // Get current recipients
+            $currentRecipients = $db->query('SELECT recipient_id, is_primary FROM schedule_event_recipients WHERE event_id=?', [$id])->fetchAll();
+            if (count($currentRecipients) <= 1) sendJson(['success'=>false,'error'=>'Event has only one recipient'],400);
+            
+            // Validate that we're not removing all recipients
+            $remainingRecipients = array_filter($currentRecipients, fn($r) => !in_array($r['recipient_id'], $recipientIds));
+            if (empty($remainingRecipients)) sendJson(['success'=>false,'error'=>'Cannot decouple all recipients'],400);
+            
+            // Create new event with same details
+            $newEventFields = [
+                'title' => $originalEvent['title'],
+                'event_type' => 'recipient',
+                'status' => $originalEvent['status'],
+                'start_datetime' => $originalEvent['start_datetime'],
+                'end_datetime' => $originalEvent['end_datetime'],
+                'location' => $originalEvent['location'],
+                'notes' => $originalEvent['notes'],
+                'primary_recipient_id' => null, // Will be set below
+                'donor_id' => $originalEvent['donor_id'],
+                'created_by' => $currentId,
+                'created_for_user_id' => null
+            ];
+            
+            $placeholders = str_repeat('?,', count($newEventFields));
+            $placeholders = rtrim($placeholders, ',');
+            $db->query("INSERT INTO schedule_events (".implode(',', array_keys($newEventFields)).") VALUES ($placeholders)", array_values($newEventFields));
+            $newEventId = (int)$db->lastInsertId();
+            
+            // Determine primary recipient for new event (first selected recipient)
+            $primaryRecipientId = null;
+            foreach ($currentRecipients as $rec) {
+                if (in_array($rec['recipient_id'], $recipientIds)) {
+                    $primaryRecipientId = $rec['recipient_id'];
+                    break;
+                }
+            }
+            
+            // Move selected recipients to new event
+            $insertSql = 'INSERT INTO schedule_event_recipients (event_id, recipient_id, is_primary) VALUES (?,?,?)';
+            foreach ($currentRecipients as $rec) {
+                if (in_array($rec['recipient_id'], $recipientIds)) {
+                    $isPrimary = $rec['recipient_id'] === $primaryRecipientId ? 1 : 0;
+                    $db->query($insertSql, [$newEventId, $rec['recipient_id'], $isPrimary]);
+                }
+            }
+            
+            // Remove selected recipients from original event
+            $placeholders = str_repeat('?,', count($recipientIds));
+            $placeholders = rtrim($placeholders, ',');
+            $db->query("DELETE FROM schedule_event_recipients WHERE event_id=? AND recipient_id IN ($placeholders)", array_merge([$id], $recipientIds));
+            
+            // Update primary recipient for original event if needed
+            $originalPrimaryRemoved = false;
+            foreach ($recipientIds as $rid) {
+                if ($rid == $originalEvent['primary_recipient_id']) {
+                    $originalPrimaryRemoved = true;
+                    break;
+                }
+            }
+            if ($originalPrimaryRemoved && !empty($remainingRecipients)) {
+                $newPrimary = $remainingRecipients[0]['recipient_id'];
+                $db->query('UPDATE schedule_events SET primary_recipient_id=? WHERE id=?', [$newPrimary, $id]);
+            }
+            
+            $db->commit();
+            sendJson(['success'=>true,'message'=>'Recipients decoupled successfully']);
+        } catch (Exception $e) {
+            $db->rollback();
+            throw $e;
+        }
+    }
+
     if ($method === 'DELETE' && $action === 'delete'){
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0; if ($id<=0) sendJson(['success'=>false,'error'=>'id required'],400);
         $row = $db->query('SELECT * FROM schedule_events WHERE id=?', [$id])->fetch();
