@@ -248,11 +248,14 @@ try {
          ORDER BY d ASC"
     )->fetchAll();
 
-    // Distribution trend (last 7 days) - simplified query
+    // Distribution trend (last 7 days) - count distinct recipient orgs served per day (exclude repack/discarded)
     $distributionRows = $db->query(
-        "SELECT DATE(im.created_at) AS d, 0 AS cnt
+        "SELECT DATE(im.created_at) AS d, COUNT(DISTINCT im.recipient_id) AS cnt
          FROM inventory_movements im
          WHERE im.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+           AND im.direction = 'out'
+           AND (im.mode IS NULL OR im.mode NOT IN ('repack','discarded'))
+           AND im.recipient_id IS NOT NULL
          GROUP BY DATE(im.created_at)
          ORDER BY d ASC"
     )->fetchAll();
