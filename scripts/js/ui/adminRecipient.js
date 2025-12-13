@@ -1153,7 +1153,7 @@ if (typeof window.showToast !== "function") {
       const seg = parts[i];
       if (!isStreety.test(seg)) return seg.replace(/\s+/g,' ').trim();
     }
-    return parts[0].replace(/\s+/g,' ').trim();
+    return parts[0] ? parts[0].replace(/\s+/g,' ').trim() : '';
   }
 
   // Consolidate labels: if two labels include each other (>=9 chars), keep the shorter

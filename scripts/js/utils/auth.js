@@ -959,13 +959,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const orgName = document.getElementById('registerOrganization').value.trim();
             const address = document.getElementById('registerAddress').value.trim();
 
-            // Compose contact number from split fields
+            // Compose contact number from split fields (normalized format without dashes/parentheses)
             {
                 const phoneArea = (document.getElementById('registerPhoneArea')?.value || '').trim();
                 const phonePrefix = (document.getElementById('registerPhonePrefix')?.value || '').trim();
                 const phoneLine = (document.getElementById('registerPhoneLine')?.value || '').trim();
                 const composedPhone = (phoneArea && phonePrefix && phoneLine)
-                    ? `(${phoneArea}-${phonePrefix}-${phoneLine})`
+                    ? `${phoneArea}${phonePrefix}${phoneLine}`
                     : '';
                 const contactInput = document.getElementById('registerContact');
                 if (contactInput) {
