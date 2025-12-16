@@ -801,14 +801,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 loginTab.show();
             }
 
-            // Preselect role when provided
-            if (preRole) {
-                const roleSelect = document.getElementById('loginRole');
-                if (roleSelect) {
-                    roleSelect.value = preRole;
-                }
-            }
-
             // Populate donor/beneficiary categories lazily on modal open
             try {
                 const donorSel = document.getElementById('registerDonorCategory');
@@ -859,11 +851,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
-            const role = document.getElementById('loginRole').value;
             const submitBtn = this.querySelector('button[type="submit"]');
             
             // Clear previous errors
-            ['loginEmail', 'loginPassword', 'loginRole'].forEach(clearError);
+            ['loginEmail', 'loginPassword'].forEach(clearError);
             
             // Basic validation
             if (!email) {
@@ -874,10 +865,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 showError('loginPassword', 'Password is required');
                 return;
             }
-            if (!role) {
-                showError('loginRole', 'Please select a role');
-                return;
-            }
             
             setLoading(submitBtn, true);
             
@@ -885,7 +872,7 @@ document.addEventListener('DOMContentLoaded', function() {
             $.ajax({
                 url: `${AUTH_API_URL}?action=login`,
                 type: 'POST',
-                data: JSON.stringify({ email, password, role }),
+                data: JSON.stringify({ email, password }),
                 contentType: 'application/json',
                 dataType: 'json',
                 success: function(response) {

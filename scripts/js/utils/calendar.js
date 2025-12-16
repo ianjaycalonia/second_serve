@@ -36,10 +36,17 @@
   }
 
   function getSelectedEventData(){
-    if (!selectedDayEvents || !selectedDayEvents.length) return null;
     if (Number.isFinite(selectedEventId)){
-      const found = selectedDayEvents.find(ev => Number(ev.id) === selectedEventId);
-      if (found) return found;
+      // First try to find in grouped display events
+      if (window._displayEvents) {
+        const found = window._displayEvents.find(ev => Number(ev.id) === selectedEventId);
+        if (found) return found;
+      }
+      // Fall back to original events
+      if (selectedDayEvents && selectedDayEvents.length) {
+        const found = selectedDayEvents.find(ev => Number(ev.id) === selectedEventId);
+        if (found) return found;
+      }
     }
     return null;
   }
@@ -370,11 +377,61 @@
       return;
     }
     console.log('Processing', selectedDayEvents.length, 'events');
-    const availableIds = selectedDayEvents.map(ev => Number(ev.id)).filter(Number.isFinite);
+    
+    // Group events by time and location for sidebar display
+    const timeGroups = new Map();
+    selectedDayEvents.forEach(event => {
+      const start = new Date(event.start);
+      const dateStr = start.toISOString().split('T')[0]; // YYYY-MM-DD
+      const timeStr = start.toTimeString().slice(0,5); // HH:MM
+      const location = event.location || '';
+      const key = `${dateStr}T${timeStr}|${location}`;
+      
+      if (!timeGroups.has(key)) {
+        timeGroups.set(key, []);
+      }
+      timeGroups.get(key).push(event);
+    });
+    
+    // Create grouped events for sidebar display
+    const displayEvents = [];
+    timeGroups.forEach((events, key) => {
+      if (events.length > 1) {
+        // Group multiple events with same time
+        const firstEvent = events[0];
+        const allRecipients = [];
+        events.forEach(event => {
+          if (Array.isArray(event.recipients)) {
+            allRecipients.push(...event.recipients);
+          } else if (event.recipient_id) {
+            allRecipients.push({ id: event.recipient_id, display_name: event.recipient_display || event.recipient_name });
+          }
+        });
+        
+        // Create a grouped event for sidebar display
+        const groupedEvent = {
+          ...firstEvent,
+          recipients: allRecipients,
+          recipient_ids: allRecipients.map(r => r.id),
+          _isGrouped: true,
+          _originalEventIds: events.map(e => e.id)
+        };
+        displayEvents.push(groupedEvent);
+        console.log(`Grouped ${events.length} events with ${allRecipients.length} total recipients for sidebar`);
+      } else {
+        // Single event, add as-is
+        displayEvents.push(events[0]);
+      }
+    });
+    
+    // Store display events for click handlers to access
+    window._displayEvents = displayEvents;
+    
+    const availableIds = displayEvents.map(ev => Number(ev.id)).filter(Number.isFinite);
     if (!availableIds.includes(selectedEventId)){
       selectedEventId = availableIds.length ? availableIds[0] : null;
     }
-    selectedDayEvents.forEach(ev=>{
+    displayEvents.forEach(ev=>{
       console.log('Processing event:', ev);
       const item = document.createElement('li');
       const idNum = Number(ev.id);
@@ -405,16 +462,12 @@
       }
       const targetLine = targetName ? `<div class="small text-muted">${escapeHtml(targetName)}</div>` : '';
       let actionButtons = '';
-      if (role() === 'admin' && ev.event_type === 'recipient' && Array.isArray(ev.recipients) && ev.recipients.length > 1) {
-        actionButtons = `<button type="button" class="btn btn-sm btn-outline-primary me-1 decouple-event" data-event-id="${ev.id}" title="Decouple recipients">Decouple</button>`;
-      }
       // Debug: log recipient data
       if (ev.event_type === 'recipient') {
         console.log('Recipient event debug:', {
           id: ev.id,
           recipients: ev.recipients,
-          recipientCount: Array.isArray(ev.recipients) ? ev.recipients.length : 'not array',
-          showDecouple: role() === 'admin' && ev.event_type === 'recipient' && Array.isArray(ev.recipients) && ev.recipients.length > 1
+          recipientCount: Array.isArray(ev.recipients) ? ev.recipients.length : 'not array'
         });
       }
       actionButtons += `<button type="button" class="btn btn-sm btn-outline-secondary selected-day-open" data-event-id="${ev.id}">View</button>`;
@@ -691,6 +744,117 @@
     return j;
   }
 
+  function mergeEventsWithSameTime() {
+    // Frontend-only merging: group events with same time in the UI
+    // Backend keeps events separate, we just display them grouped
+    
+    try {
+      // Get current calendar events from cache
+      const events = cachedCalendarItems || [];
+      if (!events.length) {
+        console.log('No events in cache to merge');
+        return;
+      }
+      
+      const recipientEvents = events.filter(ev => ev.event_type === 'recipient' && ev.status === 'scheduled');
+      console.log(`Found ${recipientEvents.length} recipient events to check for merging`);
+      
+      // Filter out already grouped events
+      const ungroupedEvents = recipientEvents.filter(ev => !ev._isGrouped);
+      console.log(`Found ${ungroupedEvents.length} ungrouped recipient events`);
+      
+      // Group events by time and location
+      const timeGroups = new Map();
+      ungroupedEvents.forEach(event => {
+        const start = new Date(event.start);
+        const dateStr = start.toISOString().split('T')[0]; // YYYY-MM-DD
+        const timeStr = start.toTimeString().slice(0,5); // HH:MM
+        const location = event.location || '';
+        const key = `${dateStr}T${timeStr}|${location}`;
+        
+        if (!timeGroups.has(key)) {
+          timeGroups.set(key, []);
+        }
+        timeGroups.get(key).push(event);
+      });
+      
+      // Group all events with same time (regardless of how many recipients)
+      const mergeCandidates = [];
+      timeGroups.forEach((events, key) => {
+        if (events.length > 1) {
+          mergeCandidates.push(events);
+        }
+      });
+      
+      if (mergeCandidates.length === 0) {
+        console.log('No events to merge');
+        return;
+      }
+      
+      console.log(`Found ${mergeCandidates.length} groups of events with same time to auto-group in UI`);
+      
+      // Update calendar display to show grouped events
+      if (calendarInstance) {
+        // Remove existing grouped events and add merged ones
+        mergeCandidates.forEach(eventGroup => {
+          const firstEvent = eventGroup[0];
+          const otherEvents = eventGroup.slice(1);
+          
+          // Collect all recipients from all events
+          const allRecipients = [];
+          eventGroup.forEach(event => {
+            if (Array.isArray(event.recipients)) {
+              allRecipients.push(...event.recipients);
+            } else if (event.recipient_id) {
+              allRecipients.push({ id: event.recipient_id, display_name: event.recipient_display || event.recipient_name });
+            }
+          });
+          
+          console.log(`Merging ${eventGroup.length} events with ${allRecipients.length} total recipients`);
+          
+          // Remove individual events from calendar
+          eventGroup.forEach(event => {
+            const calendarEvent = calendarInstance.getEventById(String(event.id));
+            if (calendarEvent) {
+              calendarEvent.remove();
+            }
+          });
+          
+          // Add merged event to calendar display
+          const mergedEvent = {
+            ...firstEvent,
+            recipients: allRecipients,
+            recipient_ids: allRecipients.map(r => r.id),
+            _isGrouped: true, // Mark as frontend-grouped
+            _originalEventIds: eventGroup.map(e => e.id) // Track original events
+          };
+          
+          const mine = eventIsForCurrentUser(mergedEvent) || Number(mergedEvent.created_by_user_id) === userId();
+          const cls = [ mine ? 'event-owned' : 'event-assigned', 'event-grouped' ];
+          let textColor = '#ed3f34'; // recipient color
+          
+          calendarInstance.addEvent({
+            id: `grouped_${firstEvent.id}`, // Use special ID for grouped events
+            title: firstEvent.title, // Preserve original title
+            start: firstEvent.start,
+            end: firstEvent.end || undefined,
+            extendedProps: mergedEvent,
+            classNames: cls,
+            textColor
+          });
+        });
+      }
+      
+      // Update selected day display if needed
+      if (lastSelectedDate) {
+        renderDateFromCache(lastSelectedDate);
+      }
+      
+    } catch (error) {
+      console.error('Error during frontend event grouping:', error);
+    }
+  }
+
   async function autoDecoupleRecipient(eventId, recipientId, newEventData) {
     const res = await fetch(`${API_BASE_URL}/schedule/index.php?action=auto-decouple&id=${encodeURIComponent(eventId)}`, {
       method: 'POST',
@@ -712,52 +876,8 @@
     return j;
   }
 
-  async function checkAutoCouple() {
-    // Check for recipient events with same time that can be coupled
-    try {
-      const res = await fetch(`${API_BASE_URL}/schedule/index.php?action=check-auto-couple`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        },
-        credentials: 'include'
-      });
-      
-      const parsed = await parseJsonSafe(res);
-      if (res.ok && parsed.ok && parsed.data && parsed.data.can_couple) {
-        const coupled = await autoCoupleEvents(parsed.data.couple_pairs);
-        if (coupled && coupled.coupled_count > 0) {
-          calendarToast(`Automatically coupled ${coupled.coupled_count} recipient events`, 'success');
-          if (calendarInstance && calendarInstance.view) {
-            const view = calendarInstance.view;
-            loadCalendarRange(view.activeStart.toISOString(), view.activeEnd.toISOString());
-          }
-        }
-      }
-    } catch (error) {
-      // Silently fail auto-couple checks
-      console.warn('Auto-couple check failed:', error);
-    }
-  }
-
-  async function autoCoupleEvents(couplePairs) {
-    const res = await fetch(`${API_BASE_URL}/schedule/index.php?action=auto-couple`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify({ couple_pairs: couplePairs })
-    });
-    
-    const parsed = await parseJsonSafe(res);
-    const j = parsed.ok ? parsed.data : null;
-    if (!res.ok) throw new Error((j && j.error) || `HTTP ${res.status}`);
-    if (!j || j.success !== true) throw new Error((j && j.error) || 'Failed to auto-couple events');
-    return j;
-  }
-
+  
+  
   function calendarToast(message, variant = 'info'){
     const containerId = 'calendarToastContainer';
     let container = document.getElementById(containerId);
@@ -1043,6 +1163,59 @@
       try {
         window.SchedulePickupUI?.resetRecipientFields({ date: '', time: '', clearAdditional: true });
       } catch (_) { /* ignore reset errors */ }
+    } else if (existingRecipients.length && normalized?.id && isRecipientEvent && isAdmin) {
+      // When editing an existing recipient event, populate the recipient selection UI
+      // with all existing recipients to prevent duplication issues
+      try {
+        const recipientData = existingRecipients.map(rec => ({
+          id: rec.id,
+          date: startDate ? formatDateInput(startDate) : '',
+          time: startTimeStr
+        }));
+        
+        // Clear existing recipient selections first
+        window.SchedulePickupUI?.resetRecipientFields({ date: '', time: '', clearAdditional: true });
+        
+        // Add each existing recipient to the UI
+        recipientData.forEach((rec, index) => {
+          if (index === 0) {
+            // First recipient - populate the main recipient selection
+            const firstBlock = document.querySelector('.recipient-selection');
+            if (firstBlock) {
+              const select = firstBlock.querySelector('.recipient-select');
+              const dateInput = firstBlock.querySelector('.recipient-date');
+              const timeInput = firstBlock.querySelector('.recipient-time');
+              
+              if (select) select.value = rec.id;
+              if (dateInput) dateInput.value = rec.date;
+              if (timeInput) timeInput.value = rec.time;
+              
+              // Trigger change event to update UI
+              select?.dispatchEvent(new Event('change'));
+            }
+          } else {
+            // Additional recipients - add new selection blocks
+            window.SchedulePickupUI?.addRecipientField();
+            const blocks = document.querySelectorAll('.recipient-selection');
+            const block = blocks[index];
+            if (block) {
+              const select = block.querySelector('.recipient-select');
+              const dateInput = block.querySelector('.recipient-date');
+              const timeInput = block.querySelector('.recipient-time');
+              
+              if (select) select.value = rec.id;
+              if (dateInput) dateInput.value = rec.date;
+              if (timeInput) timeInput.value = rec.time;
+              
+              // Trigger change event to update UI
+              select?.dispatchEvent(new Event('change'));
+            }
+          }
+        });
+        
+        // Update the UI to reflect the added recipients
+        window.SchedulePickupUI?.updateRecipientSelections();
+      } catch (_) { /* ignore population errors */ }
     }
     qs('#evDonor').value = donorUserId || '';
     qs('#evLocation').value = donorAddress || '';
@@ -1784,31 +1957,85 @@
           }
         } catch(_){ }
       }
-      // If editing an existing recipient event, update it (single payload) instead of creating new ones
-      if (editingId) {
-        const first = Array.isArray(recipientsUi) && recipientsUi.length ? recipientsUi[0] : null;
-        const rid = first && Number(first.id) > 0 ? Number(first.id) : (recipientId || null);
-        const d = (first && first.date) ? String(first.date).trim() : (qs('#evDate')?.value || '');
-        let tstr = (first && first.time) ? String(first.time).trim() : '';
-        const m = tstr.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
-        if (m){ let hh = Number(m[1]); const mm = m[2]; const ap = m[3].toLowerCase(); if (ap==='pm' && hh<12) hh+=12; if (ap==='am' && hh===12) hh=0; tstr = `${String(hh).padStart(2,'0')}:${mm}`; }
-        const startIso = (d && tstr) ? new Date(`${d}T${tstr}`).toISOString() : null;
-        const recipientIdsForUpdate = Array.isArray(recipientsUi)
-          ? recipientsUi.map(item => Number(item?.id)).filter(v => Number.isFinite(v) && v > 0)
-          : [];
-        return {
-          id: editingId,
-          title: qs('#evTitle').value.trim(),
-          start: startIso,
-          end: null,
-          recipient_id: rid,
-          donor_id: null,
-          location: qs('#evLocation').value.trim() || null,
-          notes: qs('#evNotes').value.trim() || null,
-          event_type: t,
-          created_for_user_id: (r==='admin') ? null : uid,
-          recipient_ids: recipientIdsForUpdate
-        };
+      // If editing an existing recipient event, create a single payload with all recipient data
+      if (editingId && recipientsUi.length > 0) {
+        const titleVal = qs('#evTitle').value.trim();
+        const locationVal = qs('#evLocation').value.trim() || null;
+        const notesVal = qs('#evNotes').value.trim() || null;
+        
+        // Group recipients by their pickup times
+        const timeGroups = new Map();
+        recipientsUi.forEach(item => {
+          const date = (item.date || '').trim();
+          let time = (item.time || '').trim();
+          if (date && time) {
+            // normalize 12h to 24h if needed
+            const m = time.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
+            if (m){
+              let hh = Number(m[1]); const mm = m[2]; const ap = m[3].toLowerCase();
+              if (ap === 'pm' && hh < 12) hh += 12; if (ap === 'am' && hh === 12) hh = 0;
+              time = `${String(hh).padStart(2,'0')}:${mm}`;
+            }
+            const timeKey = `${date}T${time}`;
+            if (!timeGroups.has(timeKey)) {
+              timeGroups.set(timeKey, []);
+            }
+            timeGroups.get(timeKey).push(Number(item.id));
+          }
+        });
+        
+        // If all recipients have the same time, update the existing event
+        if (timeGroups.size === 1) {
+          const firstRecipient = recipientsUi[0];
+          const date = (firstRecipient.date || '').trim();
+          let time = (firstRecipient.time || '').trim();
+          const m = time.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
+          if (m){
+            let hh = Number(m[1]); const mm = m[2]; const ap = m[3].toLowerCase();
+            if (ap === 'pm' && hh < 12) hh += 12; if (ap === 'am' && hh === 12) hh = 0;
+            time = `${String(hh).padStart(2,'0')}:${mm}`;
+          }
+          
+          return {
+            id: editingId,
+            title: titleVal,
+            start: new Date(`${date}T${time}`).toISOString(),
+            end: null,
+            recipient_id: Number(firstRecipient.id),
+            donor_id: null,
+            location: locationVal,
+            notes: notesVal,
+            event_type: t,
+            created_for_user_id: (r==='admin') ? null : uid,
+            recipient_ids: recipientsUi.map(item => Number(item.id)).filter(v => Number.isFinite(v) && v > 0)
+          };
+        } else {
+          // Recipients have different times - split into multiple events
+          // Create payloads for new events and mark the original for deletion
+          const payloads = [];
+          
+          timeGroups.forEach((recipientIds, timeKey) => {
+            const [date, time] = timeKey.split('T');
+            const primaryRecipientId = recipientIds[0];
+            
+            payloads.push({
+              id: null, // Create new events
+              title: titleVal,
+              start: new Date(`${date}T${time}`).toISOString(),
+              end: null,
+              recipient_id: primaryRecipientId,
+              donor_id: null,
+              location: locationVal,
+              notes: notesVal,
+              event_type: t,
+              created_for_user_id: (r==='admin') ? null : uid,
+              recipient_ids: recipientIds,
+              originalEventId: editingId // Mark these as replacements for the original
+            });
+          });
+          
+          return payloads;
+        }
       }
     }
     // Enforce per role
@@ -2020,25 +2247,29 @@
     const selectedDayList = qs('#selectedDayList');
     if (selectedDayList){
       selectedDayList.addEventListener('click', (e)=>{
-        const trigger = e.target.closest('.selected-day-open, .selected-day-item, .decouple-event');
+        const trigger = e.target.closest('.selected-day-open, .selected-day-item');
         if (!trigger) return;
         const id = Number(trigger.getAttribute('data-event-id') || trigger.dataset.eventId);
         if (!Number.isFinite(id)) return;
-        const match = cachedCalendarItems.find(item => Number(item.id) === id || Number(item.event_id) === id);
+        // First try to find in grouped display events, then fall back to original events
+        let match = window._displayEvents?.find(ev => Number(ev.id) === id);
+        if (!match) {
+          match = selectedDayEvents.find(ev => Number(ev.id) === id);
+        }
         if (!match) return;
-        selectedEventId = id;
-        // Reset any previously viewed event so edits reflect the current selection
-        lastViewedEvent = null;
-        updateSelectedListActive();
-        updateEditButtonState();
-        if (trigger.classList.contains('selected-day-open')){
+        
+        // Always select the event when clicking on the item
+        if (trigger.classList.contains('selected-day-item')) {
+          selectedEventId = id;
+          updateSelectedListActive();
+          updateEditButtonState();
+        }
+        
+        // Only open modal when clicking View button
+        if (trigger.classList.contains('selected-day-open')) {
           e.preventDefault();
           const ev = normalizeEventData(match);
           if (canViewEvent(ev)) showViewModal(ev);
-        } else if (trigger.classList.contains('decouple-event')) {
-          e.preventDefault();
-          const ev = normalizeEventData(match);
-          if (canEditEvent(ev)) showDecoupleModal(ev);
         }
       });
     }
@@ -2123,6 +2354,13 @@
           });
         });
         rerenderSelectedDayFromCache();
+        
+        // Apply frontend-only grouping for same-time events
+        setTimeout(() => {
+          console.log('=== Starting frontend merge check ===');
+          mergeEventsWithSameTime();
+          console.log('=== Merge check completed ===');
+        }, 500);
       } catch (e) {
         if (token === rangeRequestId) {
           calendarToast(e.message || 'Failed to load events', 'error');
@@ -2179,6 +2417,8 @@
         updateEditButtonState();
       },
       eventClick: (arg)=>{
+        // Event click disabled - modal only shows on View button
+        // Just select the event for the View button functionality
         const raw = { ...(arg.event.extendedProps || {}),
           id: Number(arg.event.id),
           title: arg.event.title,
@@ -2186,22 +2426,11 @@
           end: arg.event.end?.toISOString() || null
         };
         const ev = normalizeEventData(raw);
-        if (!canViewEvent(ev)) { calendarToast('You do not have permission to view this event', 'warn'); return; }
-        const dateKey = getDateKey(ev.start);
-        if (dateKey){
-          lastSelectedDate = dateKey;
-          highlightSelectedDate(dateKey);
-          renderDateFromCache(dateKey);
-          const idNum = Number(ev.id);
-          if (Number.isFinite(idNum)){
-            selectedEventId = idNum;
-            updateSelectedListActive();
-          }
+        if (Number.isFinite(ev.id)){
+          selectedEventId = ev.id;
+          updateSelectedListActive();
         }
-        // Clicking a different event should not keep an old lastViewedEvent
-        lastViewedEvent = null;
-        updateEditButtonState();
-      }
+      },
     });
     calendarInstance = calendar;
     calendar.render();
@@ -2239,13 +2468,67 @@
         if (Array.isArray(data)){
           const payloads = data.filter(p => p && p.title && p.start && Array.isArray(p.recipient_ids) && p.recipient_ids.length);
           if (!payloads.length) { calendarToast('Add at least one recipient with a date and time', 'warn'); return; }
-          let minStart = null;
-          for (const p of payloads){
-            await createEvent(p);
-            const st = new Date(p.start); if (!minStart || st < minStart) minStart = st;
+          
+          // Check if this is an edit operation (all payloads have the same ID)
+          const editingId = payloads[0]?.id;
+          const originalEventId = payloads[0]?.originalEventId;
+          
+          if (editingId) {
+            // This is an edit operation - update the existing event with the first payload
+            // The backend will handle updating all recipients in the event
+            const updatePayload = payloads[0];
+            await updateEvent(updatePayload.id, updatePayload);
+            calendarToast('Event updated', 'success');
+          } else if (originalEventId) {
+            // This is a split operation - create new events and delete the original
+            let minStart = null;
+            for (const p of payloads){
+              await createEvent(p);
+              const st = new Date(p.start); if (!minStart || st < minStart) minStart = st;
+            }
+            
+            // Delete the original event(s) from the database
+            try {
+              // Check if this is a grouped event - if so, delete all original events
+              const groupedEvent = window._displayEvents?.find(ev => Number(ev.id) === originalEventId);
+              if (groupedEvent?._isGrouped && Array.isArray(groupedEvent._originalEventIds)) {
+                // Delete all original events that were merged into this group
+                for (const eventId of groupedEvent._originalEventIds) {
+                  await deleteEvent(eventId);
+                }
+                console.log(`Deleted ${groupedEvent._originalEventIds.length} original events from grouped split`);
+              } else {
+                // Single event deletion
+                await deleteEvent(originalEventId);
+              }
+              calendarToast(`Event split into ${payloads.length} separate events`, 'success');
+            } catch (error) {
+              console.error('Failed to delete original event(s) during split:', error);
+              calendarToast('Event split but original event(s) could not be removed', 'warn');
+            }
+            
+            // Skip auto-merge after splitting events to avoid re-merging intentionally split events
+            console.log('Event split completed - skipping auto-merge to preserve separation');
+          } else {
+            // This is a regular create operation
+            let minStart = null;
+            for (const p of payloads){
+              await createEvent(p);
+              const st = new Date(p.start); if (!minStart || st < minStart) minStart = st;
+            }
+            
+            calendarToast('Events created', 'success');
+            
+            // Check for grouping opportunities after creating events
+            setTimeout(() => {
+              console.log('=== Starting merge check after event creation ===');
+              mergeEventsWithSameTime();
+              console.log('=== Merge check after event creation completed ===');
+            }, 1000);
           }
-          if (minStart){
-            const dateKey = getDateKey(minStart.toISOString());
+          
+          if (payloads.length > 0){
+            const dateKey = getDateKey(payloads[0].start);
             if (dateKey) {
               lastSelectedDate = dateKey;
               const startDate = new Date(`${dateKey}T00:00:00`);
@@ -2253,7 +2536,6 @@
             }
           }
           bootstrap.Modal.getInstance(qs('#eventModal'))?.hide();
-          calendarToast('Events saved', 'success');
           refreshVisibleRange();
           return;
         }
@@ -2337,19 +2619,12 @@
           }
           
           await updateEvent(data.id, data);
-          
-          // Check for auto-couple opportunities after update
-          setTimeout(checkAutoCouple, 1000);
         } else {
           const created = await createEvent(data);
           const newId = Number(created?.id ?? created?.event_id);
-          if (Number.isFinite(newId)) {
-            data.id = newId;
+          if (Number.isFinite(newId)){
             selectedEventId = newId;
           }
-          
-          // Check for auto-couple opportunities after creation
-          setTimeout(checkAutoCouple, 1000);
         }
         const dateKey = getDateKey(data.start);
         if (dateKey) {

@@ -273,8 +273,10 @@ function deleteEvent(eventId) {
 }
 
 function getSelectedEvent() {
-  // This function should return the currently selected event
-  // You'll need to implement this based on how you track selected events
+  // Return the currently selected event from the calendar's selected event data
+  if (typeof window.getSelectedEventData === 'function') {
+    return window.getSelectedEventData();
+  }
   return null;
 }
 

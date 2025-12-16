@@ -16,12 +16,12 @@ class Auth {
      * Handle login from request payload (validates and manages session/CSRF)
      */
     public function loginWithRequest(array $data): array {
-        // Basic validation (keep same behavior as before: only required fields)
-        if (empty($data['email']) || empty($data['password']) || empty($data['role'])) {
-            throw new Exception('All fields are required');
+        // Basic validation - only email and password required now
+        if (empty($data['email']) || empty($data['password'])) {
+            throw new Exception('Email and password are required');
         }
 
-        $user = $this->login($data['email'], $data['password'], $data['role']);
+        $user = $this->login($data['email'], $data['password']);
 
         // Session handling and CSRF generation
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -40,9 +40,8 @@ class Auth {
         ];
     }
 
-    public function login(string $email, string $password, string $role): array {
-        // Provide granular feedback: check email first, then role, then password
-        // Try to include optional must_change_password; if column is missing, fall back
+    public function login(string $email, string $password): array {
+        // Get user by email and auto-detect role
         try {
             $userAnyRole = $this->db->query(
                 "SELECT user_id, name, email, password_hash, role, status, created_at, last_login, must_change_password
@@ -62,11 +61,8 @@ class Auth {
             throw new Exception('Email not found');
         }
 
-        if (strtolower((string)$userAnyRole['role']) !== strtolower($role)) {
-            throw new Exception('Selected role does not match this account');
-        }
-
-        $user = $userAnyRole; // role matches; no need to re-query
+        // Role is now auto-detected from the user record
+        $user = $userAnyRole;
 
         if (!password_verify($password, (string)$user['password_hash'])) {
             throw new Exception('Incorrect password');
