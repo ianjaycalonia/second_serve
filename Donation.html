@@ -768,7 +768,7 @@
                 <th>Quantity</th>
                 <th>Submission Date</th>
                 <th>Status</th>
-                <th>Receipt</th>
+                <th>Proofs</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -899,6 +899,31 @@
               id="imageViewerInfo"
               class="small text-muted mt-2 pickup-image-viewer-info"
             ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stacked Expiry Images Modal -->
+    <div
+      class="modal fade"
+      id="stackedExpiryModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Expiry Date Images</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <!-- Stacked images will be inserted here -->
           </div>
         </div>
       </div>
@@ -1192,6 +1217,7 @@
 
     <!-- Admin Donations: old-school API + consolidated UI -->
     <script src="scripts/js/api/adminDonationApi.js"></script>
+    <script src="scripts/js/ui/stackedExpiryViewer.js"></script>
     <script src="scripts/js/ui/adminDonationUI.js"></script>
     <script src="scripts/js/ui/adminDonationInit.js"></script>
   </body>

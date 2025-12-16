@@ -31,8 +31,8 @@ try {
         if (!isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
             throw new Exception('Upload error');
         }
-        // Allow larger raw uploads from phones; we'll compress server-side
-        $maxBytes = 15 * 1024 * 1024; // 15 MB
+        // Allow moderate uploads for faster processing
+        $maxBytes = 8 * 1024 * 1024; // Reduced from 15 MB to 8 MB for faster uploads
         if (isset($file['size']) && $file['size'] > $maxBytes) {
             throw new Exception('Image too large');
         }
@@ -110,7 +110,7 @@ try {
         }
         $w = imagesx($src);
         $h = imagesy($src);
-        $maxDim = 1600; // cap long edge
+        $maxDim = 1200; // Reduced from 1600 for faster processing
         $scale = 1.0;
         $maxSide = max($w, $h);
         if ($maxSide > $maxDim) {
@@ -118,17 +118,37 @@ try {
         }
         $nw = max(1, (int)round($w * $scale));
         $nh = max(1, (int)round($h * $scale));
-        $dst = imagecreatetruecolor($nw, $nh);
-        // Fill background white for formats with transparency when converting to JPEG
-        $white = imagecolorallocate($dst, 255, 255, 255);
-        imagefill($dst, 0, 0, $white);
-        imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
-        imagedestroy($src);
+        
+        // Use faster resampling for large images
+        if ($maxSide > 2000) {
+            // For very large images, use faster but lower quality resize first
+            $tempW = max(1, (int)round($w * 0.5));
+            $tempH = max(1, (int)round($h * 0.5));
+            $temp = imagecreatetruecolor($tempW, $tempH);
+            $white = imagecolorallocate($temp, 255, 255, 255);
+            imagefill($temp, 0, 0, $white);
+            imagecopyresized($temp, $src, 0, 0, 0, 0, $tempW, $tempH, $w, $h);
+            imagedestroy($src);
+            
+            // Then high-quality resize to final size
+            $dst = imagecreatetruecolor($nw, $nh);
+            $white = imagecolorallocate($dst, 255, 255, 255);
+            imagefill($dst, 0, 0, $white);
+            imagecopyresampled($dst, $temp, 0, 0, 0, 0, $nw, $nh, $tempW, $tempH);
+            imagedestroy($temp);
+        } else {
+            // For smaller images, use direct high-quality resize
+            $dst = imagecreatetruecolor($nw, $nh);
+            $white = imagecolorallocate($dst, 255, 255, 255);
+            imagefill($dst, 0, 0, $white);
+            imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+            imagedestroy($src);
+        }
 
-        // Save as JPEG for size efficiency
+        // Save as JPEG with optimized quality for speed
         $filename = $subdir . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.jpg';
         $dest = $dir . '/' . $filename;
-        if (!imagejpeg($dst, $dest, 80)) { // quality 80
+        if (!imagejpeg($dst, $dest, 75)) { // Reduced quality from 80 to 75 for faster save
             imagedestroy($dst);
             throw new Exception('Failed to save image');
         }
@@ -182,16 +202,67 @@ try {
         }
     }
 
-    // Optional: expiry_date_image (single file)
-    if (!empty($_FILES['expiry_date_image']) && is_uploaded_file($_FILES['expiry_date_image']['tmp_name'])) {
-        try {
-            $expiryDateImageUrl = $saveImage($_FILES['expiry_date_image'], 'food_safety');
-        } catch (Exception $ex) {
-            $msg = $ex->getMessage();
-            if (preg_match('/exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD/i', $msg)) {
-                sendJson(['success' => false, 'error' => $msg], 400);
+    // Optional: expiry_date_images (multiple files)
+    if (!empty($_FILES['expiry_date_images']) && is_array($_FILES['expiry_date_images']['tmp_name'])) {
+        $expiryTmp = $_FILES['expiry_date_images']['tmp_name'];
+        $expiryErr = $_FILES['expiry_date_images']['error'];
+        $expiryName = $_FILES['expiry_date_images']['name'];
+        $expiryType = $_FILES['expiry_date_images']['type'];
+        $expirySize = $_FILES['expiry_date_images']['size'];
+
+        foreach ($expiryTmp as $index => $tmpPath) {
+            if ($tmpPath === null || $tmpPath === '' || (isset($expiryErr[$index]) && $expiryErr[$index] !== UPLOAD_ERR_OK)) {
+                continue; // no file for this index
             }
-            throw $ex;
+            
+            // Build a file-like array to pass through $saveImage
+            $fileArr = [
+                'tmp_name' => $tmpPath,
+                'error' => $expiryErr[$index] ?? UPLOAD_ERR_OK,
+                'name' => $expiryName[$index] ?? ('expiry_' . $index . '.jpg'),
+                'type' => $expiryType[$index] ?? 'image/jpeg',
+                'size' => $expirySize[$index] ?? 0,
+            ];
+            
+            try {
+                $expiryImageUrl = $saveImage($fileArr, 'food_safety');
+            } catch (Exception $ex) {
+                $msg = $ex->getMessage();
+                if (preg_match('/exceeds 2 MB|Unsupported image type|Image too large|Failed to read image|Failed to save image|Image processing not available|not supported by GD/i', $msg)) {
+                    sendJson(['success' => false, 'error' => $msg], 400);
+                }
+                throw $ex;
+            }
+            
+            // Save to batch_expiry_images junction table if this is a batch
+            if (!empty($batchId)) {
+                try {
+                    $db->query(
+                        "INSERT INTO batch_expiry_images (batch_id, image_path, created_by) VALUES (?, ?, ?)",
+                        [$batchId, $expiryImageUrl, currentUserId()]
+                    );
+                } catch (Exception $e) {
+                    // Log error but don't fail the request
+                    error_log("Failed to save expiry image to batch_expiry_images: " . $e->getMessage());
+                }
+            } else if (!empty($donationId)) {
+                // For non-batch donations, create a temporary batch_id for junction table
+                $tempBatchId = 'single-' . $donationId;
+                try {
+                    $db->query(
+                        "INSERT INTO batch_expiry_images (batch_id, image_path, created_by) VALUES (?, ?, ?)",
+                        [$tempBatchId, $expiryImageUrl, currentUserId()]
+                    );
+                } catch (Exception $e) {
+                    // Log error but don't fail the request
+                    error_log("Failed to save expiry image to batch_expiry_images for single donation: " . $e->getMessage());
+                }
+            }
+            
+            // Also save the first one to food_safety_checks for backward compatibility
+            if ($index === 0) {
+                $expiryDateImageUrl = $expiryImageUrl;
+            }
         }
     }
 
@@ -249,6 +320,31 @@ try {
                     sendJson(['success' => false, 'error' => $msg], 400);
                 }
                 throw $ex;
+            }
+            
+            // Also save to batch_expiry_images junction table if this is a batch
+            if (!empty($batchId)) {
+                try {
+                    $db->query(
+                        "INSERT INTO batch_expiry_images (batch_id, image_path, created_by) VALUES (?, ?, ?)",
+                        [$batchId, $perItemUrl, currentUserId()]
+                    );
+                } catch (Exception $e) {
+                    // Log error but don't fail the request
+                    error_log("Failed to save per-item expiry image to batch_expiry_images: " . $e->getMessage());
+                }
+            } else if (!empty($donationId)) {
+                // For non-batch donations, create a temporary batch_id for junction table
+                $tempBatchId = 'single-' . $donationId;
+                try {
+                    $db->query(
+                        "INSERT INTO batch_expiry_images (batch_id, image_path, created_by) VALUES (?, ?, ?)",
+                        [$tempBatchId, $perItemUrl, currentUserId()]
+                    );
+                } catch (Exception $e) {
+                    // Log error but don't fail the request
+                    error_log("Failed to save per-item expiry image to batch_expiry_images for single donation: " . $e->getMessage());
+                }
             }
             // Insert a row for this specific donation item with the same receipt reference
             $db->query(

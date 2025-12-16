@@ -476,6 +476,58 @@ try {
             $it['image_full_url'] = $receiptFull;
             // Always include explicit receipt_full_url for front-end
             if ($receiptFull !== '') { $it['receipt_full_url'] = $receiptFull; }
+            
+            // Also include expiry_date_image separately for expiry button
+            $it['expiry_date_image_url'] = '';
+            if ($row && !empty($row['expiry_date_image'])) {
+                $it['expiry_date_image_url'] = buildImageFullUrl($row['expiry_date_image']);
+            }
+            
+            // For batches, include all expiry images for stacked viewing
+            if (!empty($it['batch_id'])) {
+                $allExpiryImages = $db->query(
+                    "SELECT image_path FROM batch_expiry_images WHERE batch_id = ? ORDER BY created_at DESC",
+                    [$it['batch_id']]
+                )->fetchAll();
+                $expiryUrls = [];
+                foreach ($allExpiryImages as $img) {
+                    if (!empty($img['image_path'])) {
+                        $expiryUrls[] = buildImageFullUrl($img['image_path']);
+                    }
+                }
+                $it['expiry_date_images'] = $expiryUrls; // Array of all expiry images
+            } else {
+                // For non-batch donations, get expiry images from both junction table and food_safety_checks
+                $expiryUrls = [];
+                
+                // First check junction table with temp batch_id
+                $tempBatchId = 'single-' . $it['id'];
+                $junctionImages = $db->query(
+                    "SELECT image_path FROM batch_expiry_images WHERE batch_id = ? ORDER BY created_at DESC",
+                    [$tempBatchId]
+                )->fetchAll();
+                foreach ($junctionImages as $img) {
+                    if (!empty($img['image_path'])) {
+                        $expiryUrls[] = buildImageFullUrl($img['image_path']);
+                    }
+                }
+                
+                // Also check food_safety_checks for backward compatibility
+                $fsImages = $db->query(
+                    "SELECT expiry_date_image FROM food_safety_checks WHERE donation_id = ? AND expiry_date_image IS NOT NULL AND expiry_date_image != '' ORDER BY created_at DESC",
+                    [$it['id']]
+                )->fetchAll();
+                foreach ($fsImages as $img) {
+                    if (!empty($img['expiry_date_image'])) {
+                        $url = buildImageFullUrl($img['expiry_date_image']);
+                        if (!in_array($url, $expiryUrls)) {
+                            $expiryUrls[] = $url;
+                        }
+                    }
+                }
+                
+                $it['expiry_date_images'] = $expiryUrls; // Array of all expiry images
+            }
 
             // Attach latest food safety result and fail reason (if any)
             $reason = null; $result = null;
@@ -706,16 +758,18 @@ try {
             'input' => ['id' => $id, 'batch' => $batch],
             'latest_receipt' => null,
             'receipt_full_url' => '',
+            'expiry_date_image_url' => '',
             'fs' => [ 'receipt_image_exists' => null ],
         ];
         if ($id) {
             $row = $db->query(
-                "SELECT receipt_image, created_at FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                "SELECT receipt_image, expiry_date_image, created_at FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
                 [$id]
             )->fetch();
             if ($row) {
                 $out['latest_receipt'] = $row;
                 $out['receipt_full_url'] = buildImageFullUrl($row['receipt_image'] ?? '');
+                $out['expiry_date_image_url'] = buildImageFullUrl($row['expiry_date_image'] ?? '');
                 if (!empty($row['receipt_image'])) {
                     $rel = ltrim($row['receipt_image'], '/');
                     $path = __DIR__ . '/../../../' . $rel;
@@ -726,12 +780,13 @@ try {
         }
         if ($batch) {
             $row = $db->query(
-                "SELECT receipt_image, created_at FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
+                "SELECT receipt_image, expiry_date_image, created_at FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
                 [$batch]
             )->fetch();
             if ($row) {
                 $out['latest_receipt'] = $row;
                 $out['receipt_full_url'] = buildImageFullUrl($row['receipt_image'] ?? '');
+                $out['expiry_date_image_url'] = buildImageFullUrl($row['expiry_date_image'] ?? '');
                 if (!empty($row['receipt_image'])) {
                     $rel = ltrim($row['receipt_image'], '/');
                     $path = __DIR__ . '/../../../' . $rel;
@@ -754,12 +809,15 @@ try {
         try {
             $db = Database::getInstance();
             $r = $db->query(
-                "SELECT receipt_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
+                "SELECT receipt_image, expiry_date_image FROM food_safety_checks WHERE donation_id = ? ORDER BY created_at DESC LIMIT 1",
                 [$id]
             )->fetch();
             if ($r && !empty($r['receipt_image'])) {
                 $row['image_full_url'] = buildImageFullUrl($r['receipt_image']);
                 $row['receipt_full_url'] = $row['image_full_url'];
+            }
+            if ($r && !empty($r['expiry_date_image'])) {
+                $row['expiry_date_image_url'] = buildImageFullUrl($r['expiry_date_image']);
             }
             // Also attach latest food safety result and fail reason for this donation id
             $fs = $db->query(
@@ -905,16 +963,39 @@ try {
         // Attach latest receipt URL for the batch (same for each item for convenience)
         try {
             $db = Database::getInstance();
+            // Get all expiry images for the batch from junction table
+            $allExpiryImages = $db->query(
+                "SELECT image_path, created_at FROM batch_expiry_images WHERE batch_id = ? ORDER BY created_at DESC",
+                [$batchId]
+            )->fetchAll();
+            
+            $expiryUrls = [];
+            foreach ($allExpiryImages as $img) {
+                if (!empty($img['image_path'])) {
+                    $expiryUrls[] = buildImageFullUrl($img['image_path']);
+                }
+            }
+            
+            // Get latest receipt image
             $r = $db->query(
-                "SELECT receipt_image FROM food_safety_checks WHERE batch_id = ? ORDER BY created_at DESC LIMIT 1",
+                "SELECT receipt_image FROM food_safety_checks WHERE batch_id = ? AND receipt_image IS NOT NULL AND receipt_image != '' ORDER BY created_at DESC LIMIT 1",
                 [$batchId]
             )->fetch();
             $full = '';
             if ($r && !empty($r['receipt_image'])) { $full = buildImageFullUrl($r['receipt_image']); }
+            
+            // Apply to all items in the batch
             if ($full !== '') {
                 foreach ($items as &$it) { $it['image_full_url'] = $full; $it['receipt_full_url'] = $full; }
             }
-        } catch (Exception $e) { /* ignore */ }
+            if (!empty($expiryUrls)) {
+                foreach ($items as &$it) { 
+                    $it['expiry_date_image_url'] = $expiryUrls[0] ?? ''; // Latest expiry image
+                    $it['expiry_date_images'] = $expiryUrls; // All expiry images
+                }
+            }
+            
+                    } catch (Exception $e) { /* ignore */ }
         // Attach cancellation reason for each Cancelled item
         try {
             $db = Database::getInstance();

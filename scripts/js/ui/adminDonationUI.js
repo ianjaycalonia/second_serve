@@ -14,20 +14,20 @@
   function getEl(id) {
     return document.getElementById(id);
   }
-  function notifyToast(message, type){
-    try{
+  function notifyToast(message, type) {
+    try {
       const cont = ensureToastContainer();
       const toast = document.createElement('div');
       const bg = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : type === 'info' ? 'bg-info' : 'bg-danger';
       const textClass = (type === 'warning' || type === 'info') ? 'text-dark' : 'text-white';
       const closeClass = textClass === 'text-white' ? 'btn-close btn-close-white' : 'btn-close';
       toast.className = 'toast align-items-center ' + textClass + ' border-0 ' + bg;
-      toast.setAttribute('role','alert'); toast.setAttribute('aria-live','assertive'); toast.setAttribute('aria-atomic','true');
-      toast.innerHTML = `<div class="d-flex"><div class="toast-body">${(message||'').toString()}</div><button type="button" class="${closeClass} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+      toast.setAttribute('role', 'alert'); toast.setAttribute('aria-live', 'assertive'); toast.setAttribute('aria-atomic', 'true');
+      toast.innerHTML = `<div class="d-flex"><div class="toast-body">${(message || '').toString()}</div><button type="button" class="${closeClass} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
       cont && cont.appendChild(toast);
       if (window.bootstrap?.Toast) { new bootstrap.Toast(toast, { delay: 2500 }).show(); }
-      else { toast.style.display='block'; setTimeout(()=>{ try{ toast.remove(); }catch(_){} }, 3000); }
-    } catch(_) { }
+      else { toast.style.display = 'block'; setTimeout(() => { try { toast.remove(); } catch (_) { } }, 3000); }
+    } catch (_) { }
   }
   function ensureToastContainer() {
     try {
@@ -36,23 +36,23 @@
         cont = document.createElement('div');
         cont.id = 'globalToastContainer';
         cont.className = 'toast-container position-fixed top-0 end-0 p-3';
-        try { cont.style.zIndex = '9999'; } catch(_) {}
+        try { cont.style.zIndex = '9999'; } catch (_) { }
         document.body.appendChild(cont);
       }
       return cont;
     } catch (_) { return null; }
   }
-  function showError(message){
-    try{
+  function showError(message) {
+    try {
       const cont = ensureToastContainer();
       const toast = document.createElement('div');
       toast.className = 'toast align-items-center text-white bg-danger border-0';
-      toast.setAttribute('role','alert'); toast.setAttribute('aria-live','assertive'); toast.setAttribute('aria-atomic','true');
-      toast.innerHTML = `<div class="d-flex"><div class="toast-body">${(message||'').toString()}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+      toast.setAttribute('role', 'alert'); toast.setAttribute('aria-live', 'assertive'); toast.setAttribute('aria-atomic', 'true');
+      toast.innerHTML = `<div class="d-flex"><div class="toast-body">${(message || '').toString()}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
       cont && cont.appendChild(toast);
       if (window.bootstrap?.Toast) { new bootstrap.Toast(toast, { delay: 2500 }).show(); }
-      else { toast.style.display='block'; setTimeout(()=>{ try{ toast.remove(); }catch(_){} }, 3000); }
-    } catch(_) { try { console.error(message); } catch(_){} }
+      else { toast.style.display = 'block'; setTimeout(() => { try { toast.remove(); } catch (_) { } }, 3000); }
+    } catch (_) { try { console.error(message); } catch (_) { } }
   }
   // debounce helper
   function debounce(fn, wait) {
@@ -68,7 +68,7 @@
       document.body.classList.remove("modal-open");
       document.body.style.removeProperty("overflow");
       document.body.style.removeProperty("padding-right");
-    } catch (_) {}
+    } catch (_) { }
   }
   // Date helpers: format to yyyy-mm-dd for <input type=date>
   function toISODate(d) {
@@ -142,11 +142,11 @@
           if (backs.length > 1) {
             backs.slice(0, backs.length - 1).forEach((n) => n.remove());
           }
-        } catch (_) {}
+        } catch (_) { }
       },
       true
     );
-  } catch (_) {}
+  } catch (_) { }
   function badge(status) {
     switch (status) {
       case "Pending":
@@ -162,22 +162,21 @@
       case "Cancelled":
         return '<span class="badge bg-dark">Cancelled</span>';
       default:
-        return `<span class="badge bg-light text-dark">${
-          status || "Unknown"
-        }</span>`;
+        return `<span class="badge bg-light text-dark">${status || "Unknown"
+          }</span>`;
     }
   }
   function escapeHtml(s) {
     return (s || "").replace(
       /[&<>"']/g,
       (c) =>
-        ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        }[c])
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[c])
     );
   }
   function decodeHtml(s) {
@@ -209,9 +208,29 @@
           batch_id: r.batch_id || null,
           items: [],
           created_at: r.created_at,
+          expiry_date_images: [],
+          expiry_date_image_url: '',
         });
       m.get(k).items.push(r);
       const g = m.get(k);
+
+      // Aggregate expiry images from all items in the batch
+      if (r.expiry_date_images && Array.isArray(r.expiry_date_images)) {
+        r.expiry_date_images.forEach(img => {
+          if (img && !g.expiry_date_images.includes(img)) {
+            g.expiry_date_images.push(img);
+          }
+        });
+      }
+      if (r.expiry_date_image_url && !g.expiry_date_images.includes(r.expiry_date_image_url)) {
+        g.expiry_date_images.push(r.expiry_date_image_url);
+      }
+
+      // Set the latest expiry image URL
+      if (r.expiry_date_image_url && !g.expiry_date_image_url) {
+        g.expiry_date_image_url = r.expiry_date_image_url;
+      }
+
       if (!g.created_at || (r.created_at && r.created_at > g.created_at))
         g.created_at = r.created_at;
     }
@@ -323,13 +342,12 @@
           donor = escapeHtml(decodeHtml(first.donor_org || "—")),
           created = fmtDateTime(gr.created_at),
           statusHtml = badge(first.status || "");
-        const da = `data-batch="${gr.batch_id}" data-status="${
-          first.status ?? ""
-        }"`;
+        const da = `data-batch="${gr.batch_id}" data-status="${first.status ?? ""
+          }"`;
         const fwi =
-            gr.items.find(
-              (it) => it && (it.receipt_full_url || it.image_full_url)
-            ) || first,
+          gr.items.find(
+            (it) => it && (it.receipt_full_url || it.image_full_url)
+          ) || first,
           img = fwi.receipt_full_url || fwi.image_full_url || "",
           hasReceiptImage = gr.items.some(
             (it) => ((it?.receipt_full_url || it?.image_full_url || "").trim().length) > 0
@@ -349,8 +367,12 @@
           : "Imported by an admin";
         const canAttemptView = hasReceiptImage;
         const viewBtnHtml = canAttemptView
-          ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da} title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
+          ? `<div class="d-flex justify-content-center" style="gap:5px;">
+               <button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" ${da} title="View receipt image" data-bs-toggle="tooltip"><i class="bi bi-receipt"></i></button>
+               <button class="btn btn-sm btn-outline-secondary view-expiry-btn" data-img="${gr.expiry_date_image_url || ''}" data-expiry-images="${JSON.stringify(gr.expiry_date_images || [])}" ${da} title="View expiry date" data-bs-toggle="tooltip"><i class="bi bi-calendar-event"></i></button>
+             </div>`
           : "";
+
         let imgCell = '';
         if (isCancelled && cancel) {
           imgCell = `<div class="small text-muted text-center">${escapeHtml(decodeHtml(cancel))}</div>`;
@@ -384,16 +406,15 @@
         rows.push(`
           <tr class="table-active group-row" data-batch-id="${gr.batch_id}">
             <td class="py-2 align-middle">${donor}</td>
-            <td class="py-2"><div class="fw-semibold">Batch • ${
-              gr.items.length
-            } item${gr.items.length > 1 ? "s" : ""}</div></td>
+            <td class="py-2"><div class="fw-semibold">Batch • ${gr.items.length
+          } item${gr.items.length > 1 ? "s" : ""}</div></td>
             <td class="py-2 align-middle">—</td>
             <td class="py-2 align-middle">${created}</td>
             <td class="py-2 align-middle">${statusHtml}</td>
             <td class="py-2 align-middle">${imgCell}</td>
             <td class="py-2 align-middle"><div class="d-flex justify-content-center" style="gap:5px;">${actions.join(
-              ""
-            )}</div></td>
+            ""
+          )}</div></td>
           </tr>
           <tr class="child-container d-none" data-batch-id="${gr.batch_id}">
             <td colspan="7" class="p-0">
@@ -401,17 +422,17 @@
                 <thead><tr class="table-light"><th>Item</th><th>Type</th><th>Qty</th><th>Expiry</th><th>Status</th></tr></thead>
                 <tbody>
                   ${gr.items
-                    .map(
-                      (r) =>
-                        `<tr><td>${escapeHtml(
-                          decodeHtml(r.name || "")
-                        )}</td><td>${escapeHtml(
-                          decodeHtml(capFirst(r.type || ""))
-                        )}</td><td>${r.quantity ?? ""}</td><td>${escapeHtml(
-                          decodeHtml(r.expiry_date || "")
-                        )}</td><td>${badge(r.status)}</td></tr>`
-                    )
-                    .join("")}
+            .map(
+              (r) =>
+                `<tr><td>${escapeHtml(
+                  decodeHtml(r.name || "")
+                )}</td><td>${escapeHtml(
+                  decodeHtml(capFirst(r.type || ""))
+                )}</td><td>${r.quantity ?? ""}</td><td>${escapeHtml(
+                  decodeHtml(r.expiry_date || "")
+                )}</td><td>${badge(r.status)}</td></tr>`
+            )
+            .join("")}
                 </tbody>
               </table>
             </td>
@@ -438,15 +459,18 @@
             : "Imported by an admin";
         const canAttemptViewSingle = hasReceiptImage;
         const viewBtnHtmlSingle = canAttemptViewSingle
-          ? `<div class="d-flex justify-content-center" style="gap:5px;"><button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" data-id="${
-              r.id ?? ""
-            }" data-batch="${batch}" data-status="${
-              r.status ?? ""
-            }" title="View receipt image" data-bs-toggle="tooltip">View</button></div>`
+          ? `<div class="d-flex justify-content-center" style="gap:5px;">
+               <button class="btn btn-sm btn-outline-secondary view-image-btn" data-img="${img}" data-id="${r.id ?? ""
+          }" data-batch="${batch}" data-status="${r.status ?? ""
+          }" title="View receipt image" data-bs-toggle="tooltip"><i class="bi bi-receipt"></i></button>
+               <button class="btn btn-sm btn-outline-secondary view-expiry-btn" data-img="${r.expiry_date_image_url || ''}" data-expiry-images="${JSON.stringify(r.expiry_date_images || [])}" data-id="${r.id ?? ""
+          }" data-batch="${batch}" data-status="${r.status ?? ""
+          }" title="View expiry date" data-bs-toggle="tooltip"><i class="bi bi-calendar-event"></i></button>
+             </div>`
           : "";
-        const failHtml = `<div class="small text-danger text-center" ${
-          needFail ? `data-need-fail-reason="1" data-id="${r.id ?? ""}"` : ""
-        }>${escapeHtml(decodeHtml(fail || "Failed safety check"))}</div>`;
+
+        const failHtml = `<div class="small text-danger text-center" ${needFail ? `data-need-fail-reason="1" data-id="${r.id ?? ""}"` : ""
+          }>${escapeHtml(decodeHtml(fail || "Failed safety check"))}</div>`;
         let imgCell = '';
         if (isCancelled && cancel) {
           imgCell = `<div class="small text-muted text-center">${escapeHtml(decodeHtml(cancel))}</div>`;
@@ -459,9 +483,8 @@
         } else {
           imgCell = '<div class="d-flex justify-content-center">—</div>';
         }
-        const da = `data-id="${
-          r.id ?? ""
-        }" data-batch="${batch}" data-status="${r.status ?? ""}"`;
+        const da = `data-id="${r.id ?? ""
+          }" data-batch="${batch}" data-status="${r.status ?? ""}"`;
         const actions = [];
         if (r.status === "Pending")
           actions.push(
@@ -501,9 +524,9 @@
             const reason =
               row && row.fail_reason ? String(row.fail_reason).trim() : "";
             if (reason) el.textContent = reason;
-          } catch (_) {}
+          } catch (_) { }
         });
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function updatePagination(totalCount) {
@@ -549,7 +572,7 @@
       pager.appendChild(
         makeLi(nextDisabled, currentPage + 1, "»", "Next", "Next page")
       );
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // Filters
@@ -655,7 +678,7 @@
         if (
           fFrom &&
           created <
-            new Date(fFrom.getFullYear(), fFrom.getMonth(), fFrom.getDate())
+          new Date(fFrom.getFullYear(), fFrom.getMonth(), fFrom.getDate())
         )
           return false;
         if (fTo) {
@@ -895,10 +918,10 @@
       window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
       try {
         await populateCategorySelects(window.__adminDonationRaw);
-      } catch (_) {}
+      } catch (_) { }
       try {
         populateOrgFilter(window.__adminDonationRaw);
-      } catch (_) {}
+      } catch (_) { }
       const filtered = applyFilters(window.__adminDonationRaw);
       const s = sig(filtered);
       if (s === __lastSig || anyModalOpen()) return;
@@ -906,7 +929,7 @@
       renderTable(filtered);
       restoreExpanded(open);
       __lastSig = s;
-    } catch (_) {}
+    } catch (_) { }
   }
   function startDonationAutoRefresh() {
     if (__pollTimer) return;
@@ -924,88 +947,194 @@
     try {
       (async () =>
         (await Api.getUserPref("ackNextStepsDontShow")) === "1")().then(
-        (skip) => {
-          if (skip) return;
-          const el = getEl("ackNextStepsModal"),
-            msg = getEl("messagesModal");
-          if (!el || typeof bootstrap === "undefined" || !bootstrap.Modal)
-            return;
-          try {
-            document
-              .querySelectorAll(".modal-backdrop")
-              .forEach((n) => n.remove());
-            document.body.classList.remove("modal-open");
-            document.body.style.removeProperty("overflow");
-            document.body.style.removeProperty("padding-right");
-          } catch (_) {}
-          const m = bootstrap.Modal.getOrCreateInstance(el),
-            open = getEl("ackOpenMessagesBtn"),
-            schedule = getEl("ackSchedulePickupBtn"),
-            chk = getEl("ackDontShowAgain");
-          if (chk) chk.checked = false;
-          if (open) {
-            open.onclick = async () => {
-              try {
-                if (chk?.checked) {
-                  await Api.setUserPref("ackNextStepsDontShow", "1");
+          (skip) => {
+            if (skip) return;
+            const el = getEl("ackNextStepsModal"),
+              msg = getEl("messagesModal");
+            if (!el || typeof bootstrap === "undefined" || !bootstrap.Modal)
+              return;
+            try {
+              document
+                .querySelectorAll(".modal-backdrop")
+                .forEach((n) => n.remove());
+              document.body.classList.remove("modal-open");
+              document.body.style.removeProperty("overflow");
+              document.body.style.removeProperty("padding-right");
+            } catch (_) { }
+            const m = bootstrap.Modal.getOrCreateInstance(el),
+              open = getEl("ackOpenMessagesBtn"),
+              schedule = getEl("ackSchedulePickupBtn"),
+              chk = getEl("ackDontShowAgain");
+            if (chk) chk.checked = false;
+            if (open) {
+              open.onclick = async () => {
+                try {
+                  if (chk?.checked) {
+                    await Api.setUserPref("ackNextStepsDontShow", "1");
+                  }
+                  if (msg && bootstrap?.Modal) {
+                    bootstrap.Modal.getOrCreateInstance(msg).show();
+                  }
+                  m.hide();
+                } catch (_) {
+                  // Fallback: open modal only
+                  if (msg && bootstrap?.Modal) {
+                    bootstrap.Modal.getOrCreateInstance(msg).show();
+                  }
                 }
-                if (msg && bootstrap?.Modal) {
-                  bootstrap.Modal.getOrCreateInstance(msg).show();
+              };
+            }
+            if (schedule)
+              schedule.onclick = async () => {
+                try {
+                  if (chk && chk.checked)
+                    await Api.setUserPref("ackNextStepsDontShow", "1");
+                } catch (_) { }
+                const params = new URLSearchParams({ from: "donation" });
+                if (Number.isFinite(Number(donorId)) && Number(donorId) > 0) {
+                  params.set("donorId", String(donorId));
                 }
-                m.hide();
-              } catch (_) {
-                // Fallback: open modal only
-                if (msg && bootstrap?.Modal) {
-                  bootstrap.Modal.getOrCreateInstance(msg).show();
+                if (donorTitle) {
+                  params.set("donorName", donorTitle);
                 }
-              }
-            };
+                try {
+                  m.hide();
+                } catch (_) { }
+                window.location.href = `schedule.html?${params.toString()}`;
+              };
+            m.show();
           }
-          if (schedule)
-            schedule.onclick = async () => {
-              try {
-                if (chk && chk.checked)
-                  await Api.setUserPref("ackNextStepsDontShow", "1");
-              } catch (_) {}
-              const params = new URLSearchParams({ from: "donation" });
-              if (Number.isFinite(Number(donorId)) && Number(donorId) > 0) {
-                params.set("donorId", String(donorId));
-              }
-              if (donorTitle) {
-                params.set("donorName", donorTitle);
-              }
-              try {
-                m.hide();
-              } catch (_) {}
-              window.location.href = `schedule.html?${params.toString()}`;
-            };
-          m.show();
-        }
-      );
-    } catch (_) {}
+        );
+    } catch (_) { }
   }
 
-  // Bindings
-  function bindImageViewer() {
-    document.addEventListener("click", async (e) => {
-      const btn = e.target.closest(".view-image-btn");
-      if (!btn) return;
-      const modalEl = getEl("imageViewerModal"),
-        img = getEl("imageViewerImg"),
-        info = getEl("imageViewerInfo");
-      if (!(modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal))
-        return;
-      const m = bootstrap.Modal.getOrCreateInstance(modalEl);
-      if (img) {
-        img.style.transform = "scale(1)";
-        img.src = "";
-        img.alt = "Loading receipt...";
-      }
-      if (info) info.textContent = "Loading image...";
-      m.show();
-      const batch = btn.getAttribute("data-batch") || "",
-        id = btn.getAttribute("data-id") || "";
+  // Function to display stacked expiry images for batches
+
+  // Function to handle expiry images - Refactored to mirror handleSingleImage
+  async function handleExpiryImages(btn) {
+    const batch = btn.getAttribute("data-batch") || "";
+    const id = btn.getAttribute("data-id") || "";
+    const titleText = "Expiry Date";
+    const originalHtml = btn.innerHTML;
+
+    // Immediate Feedback
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+    try {
       let src = btn.getAttribute("data-img") || "";
+
+      // 1. Try to get from data-expiry-images attribute first
+      const expiryImagesAttr = btn.getAttribute("data-expiry-images");
+      if (expiryImagesAttr) {
+        try {
+          const expiryImages = JSON.parse(expiryImagesAttr);
+          if (expiryImages && expiryImages.length > 0) src = expiryImages[0];
+        } catch (_) { }
+      }
+
+      // 2. Try to get image from cache
+      if (!src && (batch || id)) {
+        try {
+          if (batch && donationCache.byBatch.has(batch)) {
+            const arr = donationCache.byBatch.get(batch) || [];
+            const any = arr.find((it) => it && (it.expiry_date_images || it.expiry_date_image_url || it.receipt_full_url || it.image_full_url || it.image_url));
+            if (any) {
+              src = (any.expiry_date_images && any.expiry_date_images[0]) ||
+                any.expiry_date_image_url ||
+                any.receipt_full_url ||
+                any.image_full_url ||
+                any.image_url ||
+                "";
+            }
+          } else if (id && donationCache.byId.has(String(id))) {
+            const it = donationCache.byId.get(String(id));
+            if (it) {
+              src = (it.expiry_date_images && it.expiry_date_images[0]) ||
+                it.expiry_date_image_url ||
+                it.receipt_full_url ||
+                it.image_full_url ||
+                it.image_url ||
+                "";
+            }
+          }
+        } catch (_) { }
+      }
+
+      // 3. OPTIMIZATION: Try to get from donation detail (Fast, O(1)) BEFORE list (Slow, O(N))
+      if (!src && id) {
+        try {
+          const row = await Api.fetchDonationDetail(id);
+          if (row) {
+            src = (row.expiry_date_images && row.expiry_date_images[0]) ||
+              row.expiry_date_image_url ||
+              row.receipt_full_url ||
+              row.image_full_url ||
+              row.image_url ||
+              "";
+          }
+        } catch (_) { }
+      }
+
+      // 4. Try to get from API list (Fallback, Slow) - only if no ID or detail failed
+      if (!src && (batch || id)) {
+        try {
+          const items = await Api.fetchAdminList();
+          if (batch) {
+            const any = items.find(
+              (it) => it.batch_id === batch && (it.expiry_date_images || it.expiry_date_image_url || it.receipt_full_url || it.image_full_url || it.image_url)
+            );
+            if (any) {
+              src = (any.expiry_date_images && any.expiry_date_images[0]) ||
+                any.expiry_date_image_url ||
+                any.receipt_full_url ||
+                any.image_full_url ||
+                any.image_url ||
+                "";
+            }
+          } else if (id) {
+            const it = items.find((it) => String(it.id) === String(id));
+            if (it) {
+              src = (it.expiry_date_images && it.expiry_date_images[0]) ||
+                it.expiry_date_image_url ||
+                it.receipt_full_url ||
+                it.image_full_url ||
+                it.image_url ||
+                "";
+            }
+          }
+        } catch (_) { }
+      }
+
+      // Show the image
+      if (src) {
+        showSingleImage(btn, src, titleText);
+      } else {
+        showNoImageMessage(titleText);
+      }
+    } finally {
+      // Restore button state
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+    }
+  }
+
+  // Separate function to handle single images (receipts and single expiry images)
+  async function handleSingleImage(btn) {
+    const batch = btn.getAttribute("data-batch") || "";
+    const id = btn.getAttribute("data-id") || "";
+    const isReceipt = btn.classList.contains("view-image-btn");
+    const titleText = isReceipt ? "Receipt Image" : "Expiry Date";
+    const originalHtml = btn.innerHTML;
+
+    // Immediate Feedback
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+    try {
+      let src = btn.getAttribute("data-img") || "";
+
+      // Try to get image from cache
       if (!src && (batch || id)) {
         try {
           if (batch && donationCache.byBatch.has(batch)) {
@@ -1016,11 +1145,20 @@
             if (any) src = any.receipt_full_url || any.image_full_url || "";
           } else if (id && donationCache.byId.has(String(id))) {
             const it = donationCache.byId.get(String(id));
-            src =
-              it.receipt_full_url || it.image_full_url || it.image_url || "";
+            src = it.receipt_full_url || it.image_full_url || it.image_url || "";
           }
-        } catch (_) {}
+        } catch (_) { }
       }
+
+      // OPTIMIZATION: Try to get from donation detail (Fast) BEFORE list (Slow)
+      if (!src && id) {
+        try {
+          const row = await Api.fetchDonationDetail(id);
+          if (row) src = row.receipt_full_url || row.image_full_url || "";
+        } catch (_) { }
+      }
+
+      // Try to get from API list (Fallback, Slow)
       if (!src && (batch || id)) {
         try {
           const items = await Api.fetchAdminList();
@@ -1035,47 +1173,145 @@
             const it = items.find((it) => String(it.id) === String(id));
             if (it) src = it.receipt_full_url || it.image_full_url || "";
           }
-        } catch (_) {}
+        } catch (_) { }
       }
-      if (!src && id) {
-        try {
-          const row = await Api.fetchDonationDetail(id);
-          if (row) src = row.receipt_full_url || row.image_full_url || "";
-        } catch (_) {}
+
+      // Show the image
+      if (src) {
+        showSingleImage(btn, src, titleText);
+      } else {
+        showNoImageMessage(titleText);
       }
-      if (!src) {
-        if (img) {
-          img.alt = "No receipt uploaded yet";
-          img.removeAttribute("src");
+    } finally {
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+    }
+  }
+
+  // Function to show single image in main modal
+  function showSingleImage(btn, src, titleText) {
+    const modalEl = getEl("imageViewerModal");
+    const img = getEl("imageViewerImg");
+    const info = getEl("imageViewerInfo");
+
+    if (!(modalEl && img && info)) {
+      return;
+    }
+
+    const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    // Reset modal state
+    img.style.display = "block"; // Ensure it is visible
+    img.style.transform = "scale(1)";
+    img.src = "";
+    img.alt = "Loading image...";
+    info.textContent = "Loading image...";
+
+    // Set title
+    try {
+      const t = modalEl.querySelector(".modal-title");
+      if (t) t.textContent = titleText;
+    } catch (e) { }
+
+    // Load image with proper error handling
+    img.onload = () => {
+      info.textContent = titleText;
+      img.alt = titleText;
+    };
+
+    img.onerror = () => {
+      info.textContent = "Failed to load image";
+      img.alt = "Failed to load image";
+    };
+
+    img.src = src;
+    m.show();
+  }
+
+  // Function to show no expiry images message
+  function showNoExpiryImagesMessage() {
+    const modalEl = getEl("imageViewerModal");
+    const img = getEl("imageViewerImg");
+    const info = getEl("imageViewerInfo");
+
+    if (!(modalEl && img && info)) return;
+
+    const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    img.style.display = "none"; // Hide broken image
+    img.style.transform = "scale(1)";
+    img.src = "";
+    img.alt = "No expiry image uploaded";
+    img.removeAttribute("src");
+    info.textContent = "Expiry images must be uploaded through the food safety check interface.";
+
+    try {
+      const t = modalEl.querySelector(".modal-title");
+      if (t) t.textContent = "Expiry Date (not uploaded)";
+    } catch (_) { }
+
+    m.show();
+  }
+
+  // Function to show no image message
+  // Function to show no image message
+  function showNoImageMessage(titleText) {
+    const modalEl = getEl("imageViewerModal");
+    const img = getEl("imageViewerImg");
+    const info = getEl("imageViewerInfo");
+
+    if (!(modalEl && img && info)) {
+      return;
+    }
+
+    const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    img.style.display = "none"; // Hide broken image
+    img.style.transform = "scale(1)";
+    img.src = "";
+    img.alt = "No image uploaded";
+    img.removeAttribute("src");
+    info.textContent = "No image available for this donation/batch.";
+
+    try {
+      const t = modalEl.querySelector(".modal-title");
+      if (t) {
+        t.textContent = `${titleText} (none available)`;
+      }
+    } catch (e) { }
+
+    m.show();
+  }
+
+
+  // Bindings
+  function bindImageViewer() {
+    document.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".view-image-btn, .view-expiry-btn");
+      if (!btn) return;
+
+      const isReceipt = btn.classList.contains("view-image-btn");
+
+      // Route to appropriate handler based on button type
+      if (isReceipt) {
+        // Handle receipt images (single image logic)
+        await handleSingleImage(btn);
+      } else {
+        // Handle expiry images - check if it's a batch first
+        const batch = btn.getAttribute("data-batch") || "";
+        const id = btn.getAttribute("data-id") || "";
+
+        if (batch) {
+          // Always use multiple handler for batched donations to get ALL images
+          await handleBatchedExpiryImages(btn);
+        } else {
+          // Non-batch donation - use simplified single flow
+          await handleExpiryImages(btn);
         }
-        try {
-          const t = modalEl.querySelector(".modal-title");
-          if (t) t.textContent = "Receipt Image (none available)";
-        } catch (_) {}
-        if (info)
-          info.textContent = "No image available for this donation/batch.";
-        return;
       }
-      const tmp = new Image();
-      tmp.onload = () => {
-        img.src = src;
-        img.alt = "Receipt";
-        try {
-          const t = modalEl.querySelector(".modal-title");
-          if (t) t.textContent = "Receipt Image";
-        } catch (_) {}
-        if (info) info.textContent = ""; // Do not show the URL
-      };
-      tmp.onerror = () => {
-        img.alt = "Failed to load receipt image";
-        try {
-          const t = modalEl.querySelector(".modal-title");
-          if (t) t.textContent = "Receipt Image (failed to load)";
-        } catch (_) {}
-        if (info) info.textContent = "Failed to load image."; // Generic message, no URL
-      };
-      tmp.src = src;
     });
+
+    // Zoom controls
     const img = getEl("imageViewerImg"),
       zin = getEl("imgZoomInBtn"),
       zout = getEl("imgZoomOutBtn"),
@@ -1147,7 +1383,7 @@
             body.innerHTML = `<div class="text-danger">Failed to delete: ${escapeHtml(
               err.message || "Unknown error"
             )}</div>`;
-        } catch (_) {}
+        } catch (_) { }
       }
     });
   }
@@ -1163,7 +1399,7 @@
       const receipt = getEl("fsReceipt");
       const packaging = getEl("fsPackaging");
       const spoilage = getEl("fsSpoilage");
-      
+
       // Validate checkboxes for passed result
       if (result === "passed") {
         if (!packaging.checked) {
@@ -1176,9 +1412,9 @@
         }
         if (
           !(receipt && receipt.files && receipt.files.length)
-        ) { 
-          showError("Receipt image is required for a Passed check."); 
-          return; 
+        ) {
+          showError("Receipt image is required for a Passed check.");
+          return;
         }
       }
       if (result === "failed") {
@@ -1207,14 +1443,14 @@
           const fm = getEl("fsFailReasonModal");
           if (fm && bootstrap?.Modal)
             bootstrap.Modal.getOrCreateInstance(fm).hide();
-        } catch (_) {}
+        } catch (_) { }
         try {
           const successMsg =
             result === "passed"
               ? "Items updated. Status set to Picked Up."
               : "Food safety recorded as Failed.";
           notifyToast(successMsg, result === "passed" ? "success" : "warning");
-        } catch (_) {}
+        } catch (_) { }
         const newStatus = result === "passed" ? "Picked Up" : "Failed Safety",
           failVal =
             result === "failed"
@@ -1303,7 +1539,7 @@
           const items = await Api.fetchAdminList();
           window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
           renderTable(applyFilters(window.__adminDonationRaw));
-        } catch (_) {}
+        } catch (_) { }
       } catch (err) {
         console.error("Food safety submit failed:", err);
         showError("Failed to submit food safety check: " + err.message);
@@ -1349,7 +1585,7 @@
               () => {
                 try {
                   if (baseModal) baseModal.show();
-                } catch (_) {}
+                } catch (_) { }
               },
               { once: true }
             );
@@ -1367,7 +1603,7 @@
             await handle("failed");
           });
           m.show();
-        } catch (_) {}
+        } catch (_) { }
       });
   }
   function bindActions() {
@@ -1412,7 +1648,7 @@
                   ""
                 ).trim();
               }
-            } catch (_) {}
+            } catch (_) { }
             // fallback: fetch from list if cache lacks donor_id/title
             if (!donorId || !donorTitle) {
               try {
@@ -1429,7 +1665,7 @@
                       ""
                     ).trim();
                 }
-              } catch (_) {}
+              } catch (_) { }
             }
             showAckNextStepsModal(donorId, donorTitle);
           } else if (id) {
@@ -1440,8 +1676,8 @@
               donationCache.byId.set(String(id), it);
             }
             const ref =
-                document.querySelector(`.action-ack[data-id="${id}"]`) ||
-                document.querySelector(`.action-delete[data-id="${id}"]`),
+              document.querySelector(`.action-ack[data-id="${id}"]`) ||
+              document.querySelector(`.action-delete[data-id="${id}"]`),
               tr = ref ? ref.closest("tr") : null;
             if (tr) {
               const st = tr.querySelector("td:nth-child(5)");
@@ -1470,7 +1706,7 @@
                   ""
                 ).trim();
               }
-            } catch (_) {}
+            } catch (_) { }
             // fallback: fetch exact donation to resolve donor_id/title
             if (!donorId || !donorTitle) {
               try {
@@ -1484,7 +1720,7 @@
                       ""
                     ).trim();
                 }
-              } catch (_) {}
+              } catch (_) { }
             }
             showAckNextStepsModal(donorId, donorTitle);
           }
@@ -1512,7 +1748,7 @@
           }
           try {
             bootstrap.Modal.getOrCreateInstance(modal).show();
-          } catch (_) {}
+          } catch (_) { }
         }
         return;
       }
@@ -1547,8 +1783,8 @@
                      </div>
                    </div>
                    <input type="hidden" name="item_ids[]" value="${did}">
-                   <label class="form-label mb-1">Expiry date photo (one per item)</label>
-                   <input type="file" class="form-control" name="expiry_item_photo[${did}]" accept="image/*" capture="environment">
+                   <label class="form-label mb-1">Expiry date photos (multiple allowed)</label>
+                   <input type="file" class="form-control" name="expiry_date_images[]" accept="image/*" multiple capture="environment">
                  </div>`
               );
             })
@@ -1630,7 +1866,7 @@
         const items = await Api.fetchAdminList();
         window.__adminDonationRaw = Array.isArray(items) ? items.slice() : [];
         renderTable(applyFilters(window.__adminDonationRaw));
-      } catch (_) {}
+      } catch (_) { }
     } catch (err) {
       console.error("Failed to update status:", err);
       showError("Failed to update status: " + (err?.message || "Unknown error"));
@@ -1650,7 +1886,7 @@
         await completeDonation({ id, batch });
         try {
           bootstrap.Modal.getOrCreateInstance(modal).hide();
-        } catch (_) {}
+        } catch (_) { }
       } finally {
         this.disabled = false;
         this.textContent = t;
@@ -1705,7 +1941,7 @@
               }
             }
           );
-        } catch (_) {}
+        } catch (_) { }
       });
     }
 
@@ -1743,7 +1979,7 @@
         try {
           const form = document.getElementById("filterForm");
           if (form && typeof form.reset === "function") form.reset();
-        } catch (_) {}
+        } catch (_) { }
         clearQuickRangeState();
         __page = 1;
         renderTable(applyFilters(window.__adminDonationRaw || []));
@@ -1810,7 +2046,7 @@
     restore.addEventListener("click", async function (e) {
       try {
         if (e && typeof e.preventDefault === "function") e.preventDefault();
-      } catch (_) {}
+      } catch (_) { }
       try {
         await Api.setUserPref("ackNextStepsDontShow", "");
         notifyToast("Acknowledge prompt will show again next time.", "success");
@@ -1840,7 +2076,7 @@
           const el = getEl(id);
           if (el && el.options && el.options.length) el.selectedIndex = 0;
         });
-      } catch (_) {}
+      } catch (_) { }
       await populateDonorSelects(window.__adminDonationRaw);
       await populateCategorySelects(window.__adminDonationRaw);
       populateOrgFilter(window.__adminDonationRaw);

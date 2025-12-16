@@ -166,6 +166,20 @@ CREATE TABLE `batches` (
   CONSTRAINT `batches_donor_fk` FOREIGN KEY (`donor_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- batch_expiry_images (junction table for batch expiry images)
+CREATE TABLE `batch_expiry_images` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `batch_id` varchar(36) NOT NULL,
+  `image_path` varchar(255) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `created_by` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `batch_expiry_images_batch_idx` (`batch_id`),
+  KEY `batch_expiry_images_created_idx` (`created_at`),
+  CONSTRAINT `batch_expiry_images_batch_fk` FOREIGN KEY (`batch_id`) REFERENCES `batches`(`batch_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `batch_expiry_images_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users`(`user_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Stores expiry date images for batches';
+
 -- (Legacy messaging schema removed: conversations, conversation_participants)
 
 -- recipient_plans (weekly planning; normalized order and source)
