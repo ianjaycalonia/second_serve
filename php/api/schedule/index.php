@@ -148,6 +148,16 @@ function finalizeEventRows(array $rows, $role, $currentId){
                 'address' => $row['recipient_address'] ?? null
             ];
         }
+
+        // --- NEW LOGIC: Privacy filter for Recipient view ---
+        // If the viewer is a recipient, they should only see themselves in the list.
+        if ($role === 'recipient') {
+            $row['recipients'] = array_values(array_filter($row['recipients'], function($r) use ($currentId) {
+                return (int)$r['id'] === $currentId;
+            }));
+        }
+        // ----------------------------------------------------
+
         // Provide compatibility aliases
         $row['recipient_id'] = $primaryId;
         $roleType = $row['event_type'] ?? null;
